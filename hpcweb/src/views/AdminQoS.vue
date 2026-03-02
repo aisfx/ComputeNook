@@ -243,7 +243,9 @@ const formData = ref({
   max_cpus_pu: 0,
   max_wall_pj: 0,
   max_wall_pu: 0,
-  max_tres_pu: ''
+  max_tres_pu: '',
+  grp_tres_mins: '',
+  grp_tres: ''
 })
 
 // 加载 QoS 列表
@@ -301,7 +303,9 @@ const openAddModal = () => {
     max_cpus_pu: 0,
     max_wall_pj: 0,
     max_wall_pu: 0,
-    max_tres_pu: ''
+    max_tres_pu: '',
+    grp_tres_mins: '',
+    grp_tres: ''
   }
   showModal.value = true
 }
@@ -318,7 +322,9 @@ const editQoS = (qos: any) => {
     max_cpus_pu: extractNumber(qos.max_cpus_pu) || 0,
     max_wall_pj: extractNumber(qos.max_wall_pj) || 0,
     max_wall_pu: extractNumber(qos.max_wall_pu) || 0,
-    max_tres_pu: qos.max_tres_pu || ''
+    max_tres_pu: qos.max_tres_pu || '',
+    grp_tres_mins: qos.grp_tres_mins || '',
+    grp_tres: qos.grp_tres || ''
   }
   showModal.value = true
 }
@@ -398,6 +404,23 @@ const formatWallTime = (value: any) => {
     return `${hours}小时${mins > 0 ? mins + '分钟' : ''}`
   }
   return `${mins}分钟`
+}
+
+// 格式化 TRES Minutes（总机时）
+const formatTRESMins = (value: string) => {
+  if (!value || value === '') return '-'
+  // 格式: cpu=100000 或 gres/gpu=10000
+  // 显示为: 100000 CPU-分钟 或 10000 GPU-分钟
+  const parts = value.split(',')
+  return parts.map(part => {
+    const [resource, mins] = part.split('=')
+    if (resource && mins) {
+      const resourceName = resource.includes('gpu') ? 'GPU' : 
+                          resource.includes('cpu') ? 'CPU' : resource
+      return `${mins} ${resourceName}-分钟`
+    }
+    return part
+  }).join(', ')
 }
 
 // 获取优先级样式
