@@ -44,7 +44,7 @@ type JobResponse struct {
 // endTime: 结束时间（Unix时间戳，为0则不限制）
 func (c *Client) GetJobs(username string, startTime, endTime int64) ([]Job, error) {
 	// 构建查询参数
-	path := c.buildSlurmAPIPath("/jobs")
+	path := c.buildAPIPath("/jobs")
 	
 	// 添加查询参数
 	hasParams := false
@@ -108,7 +108,7 @@ func (c *Client) GetJobs(username string, startTime, endTime int64) ([]Job, erro
 
 // GetJob 获取单个作业
 func (c *Client) GetJob(jobID int64) (*Job, error) {
-	path := c.buildSlurmAPIPath(fmt.Sprintf("/job/%d", jobID))
+	path := c.buildAPIPath(fmt.Sprintf("/job/%d", jobID))
 	
 	logger.Debug("GetJob API request: GET %s", path)
 	
@@ -137,7 +137,7 @@ func (c *Client) GetJob(jobID int64) (*Job, error) {
 
 // CancelJob 取消作业
 func (c *Client) CancelJob(jobID int64) error {
-	path := c.buildSlurmAPIPath(fmt.Sprintf("/job/%d", jobID))
+	path := c.buildAPIPath(fmt.Sprintf("/job/%d", jobID))
 	
 	logger.Debug("CancelJob API request: DELETE %s", path)
 	
@@ -238,7 +238,7 @@ type PartitionsResponse struct {
 
 // GetPartitions 获取分区列表
 func (c *Client) GetPartitions() ([]Partition, error) {
-	path := c.buildSlurmAPIPath("/partitions")
+	path := c.buildAPIPath("/partitions")
 	
 	logger.Debug("GetPartitions API request: GET %s", path)
 	logger.Debug("Full URL: %s%s", c.baseURL, path)
@@ -350,10 +350,10 @@ func (c *Client) SubmitJob(params JobSubmitParams) (int64, error) {
 	}
 	
 	bodyJSON, _ := json.Marshal(body)
-	logger.Debug("SubmitJob API request: POST %s", c.buildSlurmAPIPath("/job/submit"))
+	logger.Debug("SubmitJob API request: POST %s", c.buildAPIPath("/job/submit"))
 	logger.Debug("Request body: %s", string(bodyJSON))
 	
-	respBody, err := c.doRequest("POST", c.buildSlurmAPIPath("/job/submit"), body)
+	respBody, err := c.doRequest("POST", c.buildAPIPath("/job/submit"), body)
 	if err != nil {
 		logger.Error("Job submission failed: %v", err)
 		

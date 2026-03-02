@@ -14,14 +14,13 @@
           <tr>
             <th>名称</th>
             <th>描述</th>
-            <th>优先级</th>
-            <th>最大作业数</th>
-            <th>最大节点数</th>
-            <th>最大 CPU 核心</th>
-            <th>最大作业运行时间</th>
-            <th>最大用户运行时间</th>
+            <th>最大运行作业数</th>
+            <th>最大提交作业数</th>
+            <th>CPU 核心</th>
+            <th>GPU 数量</th>
+            <th>节点数</th>
+            <th>运行时间</th>
             <th>总机时限制</th>
-            <th>绑定用户/组</th>
             <th>操作</th>
           </tr>
         </thead>
@@ -29,22 +28,13 @@
           <tr v-for="qos in qosList" :key="qos.name">
             <td><strong>{{ qos.name }}</strong></td>
             <td>{{ qos.description || '-' }}</td>
-            <td>
-              <span class="priority-badge" :class="getPriorityClass(qos.priority)">
-                {{ formatValue(qos.priority) }}
-              </span>
-            </td>
             <td>{{ formatValue(qos.max_jobs_pu) }}</td>
-            <td>{{ formatValue(qos.max_nodes_pu) }}</td>
+            <td>{{ formatValue(qos.max_submit_pu) }}</td>
             <td>{{ formatValue(qos.max_cpus_pu) }}</td>
+            <td>{{ extractGPUCount(qos.max_tres_pu) || '-' }}</td>
+            <td>{{ formatValue(qos.max_nodes_pu) }}</td>
             <td>{{ formatWallTime(qos.max_wall_pj) }}</td>
-            <td>{{ formatWallTime(qos.max_wall_pu) }}</td>
             <td>{{ formatTRESMins(qos.grp_tres_mins) }}</td>
-            <td>
-              <button class="btn-link-small" @click="viewBindings(qos)">
-                👥 查看绑定
-              </button>
-            </td>
             <td>
               <div class="action-buttons">
                 <button class="btn-link" @click="editQoS(qos)">✏️ 编辑</button>
@@ -74,62 +64,55 @@
             <label>描述</label>
             <input v-model="formData.description" placeholder="QoS 描述" />
           </div>
-          <div class="form-group">
-            <label>优先级</label>
-            <input type="number" v-model.number="formData.priority" placeholder="100" />
-            <small class="form-hint">数值越大优先级越高</small>
-          </div>
           
+          <div class="info-box">
+            <strong>💡 资源限制说明</strong>
+            <p>设置每个用户可使用的最大资源（MaxTRESPerUser），超过限制时提交作业会被拒绝（DenyOnLimit）</p>
+          </div>
+
           <div class="form-row">
             <div class="form-group">
-              <label>每用户最大作业数</label>
+              <label>CPU 核心数</label>
+              <input type="number" v-model.number="formData.max_cpus" placeholder="128" />
+              <small class="form-hint">每用户最多使用的 CPU 核心数</small>
+            </div>
+            <div class="form-group">
+              <label>GPU 数量</label>
+              <input type="number" v-model.number="formData.max_gpus" placeholder="4" />
+              <small class="form-hint">每用户最多使用的 GPU 数量</small>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>节点数</label>
+              <input type="number" v-model.number="formData.max_nodes" placeholder="2" />
+              <small class="form-hint">每用户最多使用的节点数</small>
+            </div>
+            <div class="form-group">
+              <label>运行时间（天）</label>
+              <input type="number" v-model.number="formData.max_wall_days" placeholder="30" />
+              <small class="form-hint">单个作业最长运行时间（天）</small>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>最大运行作业数</label>
               <input type="number" v-model.number="formData.max_jobs_pu" placeholder="100" />
+              <small class="form-hint">同时运行的最大作业数</small>
             </div>
             <div class="form-group">
-              <label>每用户最大提交数</label>
+              <label>最大提交作业数</label>
               <input type="number" v-model.number="formData.max_submit_pu" placeholder="200" />
-            </div>
-          </div>
-
-          <div class="form-row">
-            <div class="form-group">
-              <label>每用户最大节点数</label>
-              <input type="number" v-model.number="formData.max_nodes_pu" placeholder="10" />
-            </div>
-            <div class="form-group">
-              <label>每用户最大 CPU 核心数</label>
-              <input type="number" v-model.number="formData.max_cpus_pu" placeholder="128" />
+              <small class="form-hint">可提交的最大作业数</small>
             </div>
           </div>
 
           <div class="form-group">
-            <label>每作业最大运行时间（分钟）</label>
-            <input type="number" v-model.number="formData.max_wall_pj" placeholder="1440" />
-            <small class="form-hint">1440 分钟 = 24 小时，限制单个作业的最长运行时间</small>
-          </div>
-
-          <div class="form-group">
-            <label>每用户最大运行时间（分钟）</label>
-            <input type="number" v-model.number="formData.max_wall_pu" placeholder="10080" />
-            <small class="form-hint">10080 分钟 = 7 天，限制用户所有作业的总运行时间</small>
-          </div>
-
-          <div class="form-group">
-            <label>总机时限制（GrpTRESMins）</label>
-            <input v-model="formData.grp_tres_mins" placeholder="例如: cpu=100000" />
-            <small class="form-hint">格式: cpu=100000 表示总共 100000 CPU-分钟，gres/gpu=10000 表示 10000 GPU-分钟</small>
-          </div>
-
-          <div class="form-group">
-            <label>组总 TRES 限制（GrpTRES）</label>
-            <input v-model="formData.grp_tres" placeholder="例如: cpu=1000,gres/gpu=10" />
-            <small class="form-hint">限制该 QoS 下所有用户同时使用的总资源</small>
-          </div>
-
-          <div class="form-group">
-            <label>最大 TRES 资源（每用户）</label>
-            <input v-model="formData.max_tres_pu" placeholder="例如: gres/gpu=4" />
-            <small class="form-hint">格式: gres/gpu=4 表示最多 4 张 GPU 卡</small>
+            <label>总机时限制（数字）</label>
+            <input type="number" v-model.number="formData.grp_tres_mins" placeholder="100000" />
+            <small class="form-hint">输入数字即可，系统会自动添加 billing= 前缀</small>
           </div>
         </div>
         <div class="modal-footer">
@@ -236,16 +219,13 @@ const bindingsError = ref('')
 const formData = ref({
   name: '',
   description: '',
-  priority: 100,
   max_jobs_pu: 0,
   max_submit_pu: 0,
-  max_nodes_pu: 0,
-  max_cpus_pu: 0,
-  max_wall_pj: 0,
-  max_wall_pu: 0,
-  max_tres_pu: '',
-  grp_tres_mins: '',
-  grp_tres: ''
+  max_cpus: 0,
+  max_gpus: 0,
+  max_nodes: 0,
+  max_wall_days: 0,
+  grp_tres_mins: 0
 })
 
 // 加载 QoS 列表
@@ -296,16 +276,13 @@ const openAddModal = () => {
   formData.value = {
     name: '',
     description: '',
-    priority: 100,
     max_jobs_pu: 0,
     max_submit_pu: 0,
-    max_nodes_pu: 0,
-    max_cpus_pu: 0,
-    max_wall_pj: 0,
-    max_wall_pu: 0,
-    max_tres_pu: '',
-    grp_tres_mins: '',
-    grp_tres: ''
+    max_cpus: 0,
+    max_gpus: 0,
+    max_nodes: 0,
+    max_wall_days: 0,
+    grp_tres_mins: 0
   }
   showModal.value = true
 }
@@ -315,18 +292,31 @@ const editQoS = (qos: any) => {
   formData.value = {
     name: qos.name,
     description: qos.description || '',
-    priority: extractNumber(qos.priority) || 100,
     max_jobs_pu: extractNumber(qos.max_jobs_pu) || 0,
     max_submit_pu: extractNumber(qos.max_submit_pu) || 0,
-    max_nodes_pu: extractNumber(qos.max_nodes_pu) || 0,
-    max_cpus_pu: extractNumber(qos.max_cpus_pu) || 0,
-    max_wall_pj: extractNumber(qos.max_wall_pj) || 0,
-    max_wall_pu: extractNumber(qos.max_wall_pu) || 0,
-    max_tres_pu: qos.max_tres_pu || '',
-    grp_tres_mins: qos.grp_tres_mins || '',
-    grp_tres: qos.grp_tres || ''
+    max_cpus: extractNumber(qos.max_cpus_pu) || 0,
+    max_gpus: extractGPUCount(qos.max_tres_pu) || 0,
+    max_nodes: extractNumber(qos.max_nodes_pu) || 0,
+    max_wall_days: Math.floor(extractNumber(qos.max_wall_pj) / 1440) || 0, // 转换分钟为天
+    grp_tres_mins: extractBillingMins(qos.grp_tres_mins) || 0
   }
   showModal.value = true
+}
+
+// 从 grp_tres_mins 中提取 billing 数值
+const extractBillingMins = (value: string): number => {
+  if (!value || value === '') return 0
+  // 格式: billing=100000
+  const match = value.match(/billing=(\d+)/)
+  return match ? parseInt(match[1]) : 0
+}
+
+// 从 max_tres_pu 中提取 GPU 数量
+const extractGPUCount = (value: string): number => {
+  if (!value || value === '') return 0
+  // 格式: gres/gpu=4 或 gres/gpu:a100=2
+  const match = value.match(/gres\/gpu[^=]*=(\d+)/)
+  return match ? parseInt(match[1]) : 0
 }
 
 // 提取数值（处理可能是对象的情况）
@@ -360,11 +350,28 @@ const saveQoS = async () => {
   saving.value = true
   
   try {
+    // 构建提交数据，将前端字段映射到后端字段
+    const qosData: any = {
+      name: formData.value.name,
+      description: formData.value.description,
+      max_jobs_pu: formData.value.max_jobs_pu,
+      max_submit_pu: formData.value.max_submit_pu,
+      max_cpus_pu: formData.value.max_cpus,
+      max_nodes_pu: formData.value.max_nodes,
+      max_wall_pj: formData.value.max_wall_days * 1440, // 转换天为分钟
+      grp_tres_mins: formData.value.grp_tres_mins.toString() // 转换为字符串
+    }
+    
+    // 如果设置了 GPU 数量，添加到 max_tres_pu
+    if (formData.value.max_gpus > 0) {
+      qosData.max_tres_pu = `gres/gpu=${formData.value.max_gpus}`
+    }
+    
     if (isEdit.value) {
-      await qosAPI.updateQoS(formData.value.name, formData.value)
+      await qosAPI.updateQoS(formData.value.name, qosData)
       alert('QoS 更新成功！')
     } else {
-      await qosAPI.createQoS(formData.value)
+      await qosAPI.createQoS(qosData)
       alert('QoS 创建成功！')
     }
     
@@ -673,6 +680,27 @@ onMounted(() => {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1rem;
+}
+
+.info-box {
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.info-box strong {
+  color: #0369a1;
+  display: block;
+  margin-bottom: 0.5rem;
+}
+
+.info-box p {
+  margin: 0;
+  color: #0c4a6e;
+  font-size: 0.9rem;
+  line-height: 1.5;
 }
 
 .modal-large {
