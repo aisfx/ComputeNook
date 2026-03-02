@@ -55,23 +55,31 @@
         </div>
         <div class="modal-body">
           <div class="form-group">
-            <label>User *</label>
-            <input v-model="formData.name" :disabled="isEditing" placeholder="例如: user1" />
-            <small>Slurm 用户名（通常与系统用户名相同）</small>
+            <label>User (LDAP 系统用户) *</label>
+            <select v-model="formData.name" :disabled="isEditing" v-if="!isEditing">
+              <option value="">-- 选择 LDAP 系统用户 --</option>
+              <option v-for="user in ldapUsers" :key="user.uid" :value="user.username">
+                {{ user.username }} ({{ user.cnName }}, UID: {{ user.uid }})
+              </option>
+            </select>
+            <input v-else v-model="formData.name" disabled />
+            <small>选择一个已存在的 LDAP 系统用户</small>
           </div>
+          
           <div class="form-group">
-            <label>Def Acct</label>
-            <select v-model="formData.default_account" :disabled="isEditing">
+            <label>Def Acct (默认账户)</label>
+            <select v-model="formData.default_account">
               <option value="">-- 请选择默认账户 --</option>
               <option v-for="account in slurmAccounts" :key="account.name" :value="account.name">
                 {{ account.name }}
               </option>
             </select>
-            <small v-if="!isEditing">可选：选择默认账户（需要在"资源绑定"中手动创建绑定）</small>
-            <small v-else>默认账户通过"资源绑定"管理，此处仅显示</small>
+            <small v-if="!isEditing">选择默认账户（将自动创建用户关联）</small>
+            <small v-else>默认账户通过"资源绑定"管理</small>
           </div>
+          
           <div class="form-group">
-            <label>Admin</label>
+            <label>Admin Level</label>
             <select v-model="formData.admin_level">
               <option value="None">None - 普通用户</option>
               <option value="Operator">Operator - 操作员</option>
@@ -93,11 +101,12 @@
 
 <script setup lang="ts">
 import { ref, onMounted, watch } from 'vue'
-import { slurmUserAPI, slurmAccountAPI, createAssociation } from '../api'
+import { slurmUserAPI, slurmAccountAPI, userAPI } from '../api'
 import { showSuccess, showError } from '../utils/notification'
 
 const users = ref<any[]>([])
 const slurmAccounts = ref<any[]>([])
+const ldapUsers = ref<any[]>([])
 const loading = ref(false)
 const error = ref('')
 const saving = ref(false)
@@ -107,7 +116,13 @@ const isEditing = ref(false)
 const formData = ref({
   name: '',
   default_account: '',
-  admin_level: 'None'
+  admin_level: 'None',
+  password: '',
+  cn_name: '',
+  email: '',
+  phone: '',
+  shell: '/bin/bash',
+  home_dir: ''
 })
 
 const loadUsers = async () => {
@@ -131,13 +146,31 @@ const loadSlurmAccounts = async () => {
   }
 }
 
-const openAddModal = () => {
+// 加载 LDAP 系统用户列表
+const loadLdapUsers = async () => {
+  try {
+    ldapUsers.value = await userAPI.getUsers()
+  } catch (err: any) {
+    console.error('加载 LDAP 用户失败:', err)
+    showError('加载 LDAP 用户失败')
+  }
+}
+
+const openAddModal = async () => {
   isEditing.value = false
   formData.value = {
     name: '',
     default_account: '',
-    admin_level: 'None'
+    admin_level: 'None',
+    password: '',
+    cn_name: '',
+    email: '',
+    phone: '',
+    shell: '/bin/bash',
+    home_dir: ''
   }
+  // 加载 LDAP 用户列表
+  await loadLdapUsers()
   showModal.value = true
 }
 
@@ -146,7 +179,13 @@ const editUser = (user: any) => {
   formData.value = {
     name: user.name,
     default_account: user.default_account || '',
-    admin_level: user.admin_level || 'None'
+    admin_level: user.admin_level || 'None',
+    password: '',
+    cn_name: '',
+    email: '',
+    phone: '',
+    shell: '/bin/bash',
+    home_dir: ''
   }
   showModal.value = true
 }
@@ -167,12 +206,21 @@ const saveUser = async () => {
       })
       showSuccess('用户更新成功')
     } else {
-      // 创建用户
-      await slurmUserAPI.createUser({
+      // 创建 Slurm 用户（关联已存在的 LDAP 用户）
+      const userData: any = {
         name: formData.value.name,
-        admin_level: formData.value.admin_level
-      })
-      showSuccess('用户创建成功')
+        admin_level: formData.value.admin_level,
+        default_account: formData.value.default_account || undefined
+      }
+      
+      const response = await slurmUserAPI.createUser(userData)
+      
+      // 显示成功信息
+      if (formData.value.default_account) {
+        showSuccess(`Slurm 用户创建成功！已关联到账户 ${formData.value.default_account}`)
+      } else {
+        showSuccess('Slurm 用户创建成功')
+      }
     }
     closeModal()
     await loadUsers()
@@ -204,7 +252,13 @@ const closeModal = () => {
   formData.value = {
     name: '',
     default_account: '',
-    admin_level: 'None'
+    admin_level: 'None',
+    password: '',
+    cn_name: '',
+    email: '',
+    phone: '',
+    shell: '/bin/bash',
+    home_dir: ''
   }
 }
 

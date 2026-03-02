@@ -53,9 +53,15 @@
         </div>
         <div class="modal-body">
           <div class="form-group">
-            <label>Account *</label>
-            <input v-model="formData.name" :disabled="isEditing" placeholder="例如: research" />
-            <small>账户名称，必须唯一</small>
+            <label>Account (OpenLDAP 用户组) *</label>
+            <select v-model="formData.name" :disabled="isEditing" v-if="!isEditing">
+              <option value="">-- 选择 LDAP 用户组 --</option>
+              <option v-for="group in ldapGroups" :key="group.gid" :value="group.groupName">
+                {{ group.groupName }} (GID: {{ group.gid }})
+              </option>
+            </select>
+            <input v-else v-model="formData.name" disabled />
+            <small>选择一个 LDAP 用户组作为 Slurm 账户名称</small>
           </div>
           <div class="form-group">
             <label>Descr</label>
@@ -81,10 +87,11 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
-import { slurmAccountAPI } from '../api'
+import { slurmAccountAPI, groupAPI } from '../api'
 import { showSuccess, showError } from '../utils/notification'
 
 const accounts = ref<any[]>([])
+const ldapGroups = ref<any[]>([])
 const loading = ref(false)
 const error = ref('')
 const saving = ref(false)
@@ -99,6 +106,16 @@ const formData = ref({
   coordinators: [] as string[]
 })
 
+// 加载 LDAP 用户组列表
+const loadLdapGroups = async () => {
+  try {
+    ldapGroups.value = await groupAPI.getGroups()
+  } catch (err: any) {
+    console.error('加载 LDAP 用户组失败:', err)
+    showError('加载 LDAP 用户组失败')
+  }
+}
+
 const loadAccounts = async () => {
   loading.value = true
   error.value = ''
@@ -112,7 +129,7 @@ const loadAccounts = async () => {
   }
 }
 
-const openAddModal = () => {
+const openAddModal = async () => {
   isEditing.value = false
   formData.value = {
     name: '',
@@ -121,6 +138,8 @@ const openAddModal = () => {
     parent: '',
     coordinators: []
   }
+  // 加载 LDAP 用户组
+  await loadLdapGroups()
   showModal.value = true
 }
 
@@ -156,8 +175,13 @@ const saveAccount = async () => {
       await slurmAccountAPI.updateAccount(formData.value.name, formData.value)
       showSuccess('账户更新成功')
     } else {
-      await slurmAccountAPI.createAccount(formData.value)
-      showSuccess('账户创建成功')
+      const response = await slurmAccountAPI.createAccount(formData.value)
+      // 显示创建的 LDAP 组信息
+      if (response.data?.ldap_group) {
+        showSuccess(`账户创建成功！已自动创建 LDAP 用户组 (GID: ${response.data.ldap_group.gid})`)
+      } else {
+        showSuccess('账户创建成功')
+      }
     }
     closeModal()
     await loadAccounts()

@@ -20,6 +20,7 @@
             <th>最大 CPU 核心</th>
             <th>最大作业运行时间</th>
             <th>最大用户运行时间</th>
+            <th>总机时限制</th>
             <th>绑定用户/组</th>
             <th>操作</th>
           </tr>
@@ -38,6 +39,7 @@
             <td>{{ formatValue(qos.max_cpus_pu) }}</td>
             <td>{{ formatWallTime(qos.max_wall_pj) }}</td>
             <td>{{ formatWallTime(qos.max_wall_pu) }}</td>
+            <td>{{ formatTRESMins(qos.grp_tres_mins) }}</td>
             <td>
               <button class="btn-link-small" @click="viewBindings(qos)">
                 👥 查看绑定
@@ -110,6 +112,18 @@
             <label>每用户最大运行时间（分钟）</label>
             <input type="number" v-model.number="formData.max_wall_pu" placeholder="10080" />
             <small class="form-hint">10080 分钟 = 7 天，限制用户所有作业的总运行时间</small>
+          </div>
+
+          <div class="form-group">
+            <label>总机时限制（GrpTRESMins）</label>
+            <input v-model="formData.grp_tres_mins" placeholder="例如: cpu=100000" />
+            <small class="form-hint">格式: cpu=100000 表示总共 100000 CPU-分钟，gres/gpu=10000 表示 10000 GPU-分钟</small>
+          </div>
+
+          <div class="form-group">
+            <label>组总 TRES 限制（GrpTRES）</label>
+            <input v-model="formData.grp_tres" placeholder="例如: cpu=1000,gres/gpu=10" />
+            <small class="form-hint">限制该 QoS 下所有用户同时使用的总资源</small>
           </div>
 
           <div class="form-group">

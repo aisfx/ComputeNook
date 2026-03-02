@@ -5,6 +5,8 @@ import (
 	"os"
 
 	"github.com/gin-gonic/gin"
+	"hpc-backend/ldap"
+	"hpc-backend/models"
 	"hpc-backend/slurm"
 )
 
@@ -90,6 +92,8 @@ func GetSlurmAccount(c *gin.Context) {
 }
 
 // CreateSlurmAccount 创建 Slurm 账户
+// CreateSlurmAccount 创建 Slurm 账户
+// 使用已存在的 LDAP 用户组名称
 func CreateSlurmAccount(c *gin.Context) {
 	var account slurm.Account
 	if err := c.ShouldBindJSON(&account); err != nil {
@@ -120,46 +124,65 @@ func CreateSlurmAccount(c *gin.Context) {
 		return
 	}
 
-	client, err := slurm.NewClient()
+	// 创建 LDAP 客户端，验证组是否存在
+	ldapClient, err := ldap.NewClient()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法连接到 LDAP: " + err.Error()})
+		return
+	}
+	defer ldapClient.Close()
+
+	// 验证 LDAP 组是否存在
+	groups, err := ldapClient.GetGroups()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "获取 LDAP 组列表失败: " + err.Error()})
+		return
+	}
+
+	groupExists := false
+	var ldapGroup *models.Group
+	for _, g := range groups {
+		if g.GroupName == account.Name {
+			groupExists = true
+			ldapGroup = g
+			break
+		}
+	}
+
+	if !groupExists {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "LDAP 用户组不存在，请先在用户组管理中创建: " + account.Name})
+		return
+	}
+
+	// 创建 Slurm 客户端
+	slurmClient, err := slurm.NewClient()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法连接到 Slurm API: " + err.Error()})
 		return
 	}
 
-	// 先检查账户是否已存在
-	existingAccount, err := client.GetAccount(account.Name)
+	// 检查 Slurm 账户是否已存在
+	existingAccount, err := slurmClient.GetAccount(account.Name)
 	if err == nil && existingAccount != nil {
-		c.JSON(http.StatusConflict, gin.H{"error": "账户已存在"})
+		c.JSON(http.StatusConflict, gin.H{"error": "Slurm 账户已存在"})
 		return
 	}
 
-	// 1. 创建账户
-	if err := client.CreateAccount(&account); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建账户失败: " + err.Error()})
-		return
-	}
-
-	// 2. 创建root用户到账户的关联
-	// 这是 sacctmgr add account 的标准行为
-	rootAssoc := &slurm.Association{
-		Account: account.Name,
-		User:    "root",
-		Cluster: "cluster", // 使用默认集群名
-	}
-	
-	if err := client.CreateAssociation(rootAssoc); err != nil {
-		// root关联创建失败不影响账户创建成功
-		// 只记录警告信息
-		c.JSON(http.StatusCreated, gin.H{
-			"message": "账户创建成功，但root用户关联创建失败: " + err.Error(),
-			"data":    account,
-		})
+	// 创建 Slurm 账户
+	if err := slurmClient.CreateAccount(&account); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建 Slurm 账户失败: " + err.Error()})
 		return
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
-		"message": "账户创建成功",
-		"data":    account,
+		"message": "Slurm 账户创建成功（已关联到 LDAP 用户组）",
+		"data": gin.H{
+			"slurm_account": account,
+			"ldap_group": gin.H{
+				"name": ldapGroup.GroupName,
+				"gid":  ldapGroup.GID,
+			},
+		},
 	})
 }
 
@@ -295,52 +318,88 @@ func GetSlurmUser(c *gin.Context) {
 }
 
 // CreateSlurmUser 创建 Slurm 用户
+// 使用已存在的 LDAP 系统用户
 func CreateSlurmUser(c *gin.Context) {
-	var user slurm.SlurmUser
-	if err := c.ShouldBindJSON(&user); err != nil {
+	var req struct {
+		Name           string `json:"name"`
+		AdminLevel     string `json:"admin_level"`
+		DefaultAccount string `json:"default_account"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "请求数据格式错误: " + err.Error()})
 		return
 	}
 
 	// 验证必填字段
-	if user.Name == "" {
+	if req.Name == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "用户名不能为空"})
 		return
 	}
 
 	// 设置默认值
-	if user.AdminLevel == "" {
-		user.AdminLevel = "None"
+	if req.AdminLevel == "" {
+		req.AdminLevel = "None"
 	}
 
 	// 开发模式：模拟创建成功
 	if os.Getenv("DEV_MODE") == "true" {
-		c.JSON(http.StatusCreated, gin.H{"message": "用户创建成功 (开发模式)", "data": user})
+		c.JSON(http.StatusCreated, gin.H{"message": "用户创建成功 (开发模式)"})
 		return
 	}
 
-	client, err := slurm.NewClient()
+	// 创建 LDAP 客户端，验证用户是否存在
+	ldapClient, err := ldap.NewClient()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法连接到 LDAP: " + err.Error()})
+		return
+	}
+	defer ldapClient.Close()
+
+	// 验证 LDAP 用户是否存在
+	ldapUser, err := ldapClient.GetUser(req.Name)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "LDAP 用户不存在，请先在用户管理中创建: " + req.Name})
+		return
+	}
+
+	// 创建 Slurm 客户端
+	slurmClient, err := slurm.NewClient()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法连接到 Slurm API: " + err.Error()})
 		return
 	}
 
-	// 先检查用户是否已存在
-	existingUser, err := client.GetSlurmUser(user.Name)
-	if err == nil && existingUser != nil {
-		c.JSON(http.StatusConflict, gin.H{"error": "用户已存在"})
+	// 检查 Slurm 用户是否已存在
+	existingSlurmUser, err := slurmClient.GetSlurmUser(req.Name)
+	if err == nil && existingSlurmUser != nil {
+		c.JSON(http.StatusConflict, gin.H{"error": "Slurm 用户已存在"})
 		return
 	}
 
-	// 创建用户
-	if err := client.CreateSlurmUser(&user); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建用户失败: " + err.Error()})
+	// 创建 Slurm 用户
+	slurmUser := &slurm.SlurmUser{
+		Name:           req.Name,
+		AdminLevel:     req.AdminLevel,
+		DefaultAccount: req.DefaultAccount,
+	}
+
+	if err := slurmClient.CreateSlurmUser(slurmUser); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建 Slurm 用户失败: " + err.Error()})
 		return
 	}
 
 	c.JSON(http.StatusCreated, gin.H{
-		"message": "用户创建成功",
-		"data":    user,
+		"message": "Slurm 用户创建成功（已关联到 LDAP 系统用户）",
+		"data": gin.H{
+			"slurm_user": slurmUser,
+			"ldap_user": gin.H{
+				"username": ldapUser.Username,
+				"uid":      ldapUser.UID,
+				"gid":      ldapUser.GID,
+				"cn_name":  ldapUser.CNName,
+			},
+		},
 	})
 }
 
@@ -490,6 +549,11 @@ func CreateAssociation(c *gin.Context) {
 		return
 	}
 
+	// 设置默认 cluster
+	if assoc.Cluster == "" {
+		assoc.Cluster = "cluster"
+	}
+
 	// 开发模式：模拟创建成功
 	if os.Getenv("DEV_MODE") == "true" {
 		c.JSON(http.StatusCreated, gin.H{"message": "资源绑定创建成功 (开发模式)", "data": assoc})
@@ -502,7 +566,14 @@ func CreateAssociation(c *gin.Context) {
 		return
 	}
 
-	// 1. 检查账户是否存在，如果不存在则创建
+	// 1. 检查用户是否存在于 Slurm 中
+	_, err = client.GetSlurmUser(assoc.User)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "用户不存在于 Slurm 中，请先创建 Slurm 用户: " + assoc.User})
+		return
+	}
+
+	// 2. 检查账户是否存在，如果不存在则创建
 	_, err = client.GetAccount(assoc.Account)
 	if err != nil {
 		// 账户不存在，创建账户
@@ -523,19 +594,14 @@ func CreateAssociation(c *gin.Context) {
 			User:    "root",
 			Cluster: assoc.Cluster,
 		}
-		if assoc.Cluster == "" {
-			rootAssoc.Cluster = "cluster"
-		}
 		
 		if err := client.CreateAssociation(rootAssoc); err != nil {
 			// root绑定失败不影响后续操作，只记录日志
-			c.JSON(http.StatusCreated, gin.H{
-				"message": "账户创建成功，但root用户绑定失败: " + err.Error(),
-			})
+			// 继续创建用户的绑定
 		}
 	}
 
-	// 2. 创建用户到账户的资源绑定
+	// 3. 创建用户到账户的资源绑定
 	if err := client.CreateAssociation(&assoc); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建资源绑定失败: " + err.Error()})
 		return
@@ -559,11 +625,21 @@ func UpdateAssociation(c *gin.Context) {
 		return
 	}
 
+	// 设置默认 cluster
+	if cluster == "" {
+		cluster = "cluster"
+	}
+
 	var assoc slurm.Association
 	if err := c.ShouldBindJSON(&assoc); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "请求数据格式错误: " + err.Error()})
 		return
 	}
+
+	// 确保 body 中的字段与查询参数一致
+	assoc.Account = account
+	assoc.User = user
+	assoc.Cluster = cluster
 
 	// 开发模式：模拟更新成功
 	if os.Getenv("DEV_MODE") == "true" {

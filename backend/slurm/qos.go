@@ -18,15 +18,28 @@ type QoS struct {
 	Priority    interface{} `json:"priority"`      // 优先级（可能是对象或整数）
 	Flags       interface{} `json:"flags"`         // 标志（可能是数组或字符串）
 	GraceTime   interface{} `json:"grace_time"`    // 宽限时间（秒）
+	
+	// 每用户限制
 	MaxJobs     interface{} `json:"max_jobs_pu"`   // 每用户最大作业数
 	MaxSubmit   interface{} `json:"max_submit_pu"` // 每用户最大提交数
-	MaxWall     interface{} `json:"max_wall_pj"`   // 每作业最大运行时间（分钟）
 	MaxWallPU   interface{} `json:"max_wall_pu"`   // 每用户最大运行时间（分钟）
 	MaxNodes    interface{} `json:"max_nodes_pu"`  // 每用户最大节点数
 	MaxCPUs     interface{} `json:"max_cpus_pu"`   // 每用户最大 CPU 核心数
 	MaxTRES     string      `json:"max_tres_pu"`   // 每用户最大 TRES (包含 GPU 等资源)
+	
+	// 每作业限制
+	MaxWall     interface{} `json:"max_wall_pj"`   // 每作业最大运行时间（分钟）
 	MaxTRESPJ   string      `json:"max_tres_pj"`   // 每作业最大 TRES
 	MinTRES     string      `json:"min_tres_pj"`   // 每作业最小 TRES
+	
+	// 组限制（总机时等）
+	GrpTRES     string      `json:"grp_tres"`      // 组总 TRES 限制
+	GrpTRESMins string      `json:"grp_tres_mins"` // 组总机时（TRES-minutes）
+	GrpJobs     interface{} `json:"grp_jobs"`      // 组总作业数
+	GrpSubmit   interface{} `json:"grp_submit"`    // 组总提交数
+	GrpWall     interface{} `json:"grp_wall"`      // 组总运行时间
+	
+	// 抢占相关
 	Preempt     interface{} `json:"preempt"`       // 可抢占的 QoS（可能是数组或字符串）
 	PreemptMode interface{} `json:"preempt_mode"`  // 抢占模式（可能是数组或字符串）
 }
