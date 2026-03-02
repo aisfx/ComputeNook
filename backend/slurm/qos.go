@@ -95,6 +95,19 @@ func (c *Client) GetQoS(name string) (*QoS, error) {
 
 // CreateQoS 创建 QoS
 func (c *Client) CreateQoS(qos *QoS) error {
+	// 确保 flags 是空数组而不是 null
+	if qos.Flags == nil {
+		qos.Flags = []string{}
+	}
+	
+	// 确保 preempt 和 preempt_mode 也是空数组
+	if qos.Preempt == nil {
+		qos.Preempt = []string{}
+	}
+	if qos.PreemptMode == nil {
+		qos.PreemptMode = []string{}
+	}
+	
 	body := map[string]interface{}{
 		"qos": []QoS{*qos},
 	}
@@ -118,6 +131,19 @@ func (c *Client) CreateQoS(qos *QoS) error {
 
 // UpdateQoS 更新 QoS
 func (c *Client) UpdateQoS(name string, qos *QoS) error {
+	// 确保 flags 是空数组而不是 null
+	if qos.Flags == nil {
+		qos.Flags = []string{}
+	}
+	
+	// 确保 preempt 和 preempt_mode 也是空数组
+	if qos.Preempt == nil {
+		qos.Preempt = []string{}
+	}
+	if qos.PreemptMode == nil {
+		qos.PreemptMode = []string{}
+	}
+	
 	body := map[string]interface{}{
 		"qos": []QoS{*qos},
 	}
