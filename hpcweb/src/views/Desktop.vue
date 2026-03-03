@@ -349,6 +349,7 @@ const createDesktop = async () => {
       id: Date.now(),
       name: createForm.value.name,
       type: createForm.value.type,
+      protocol: createForm.value.protocol,
       address: 'hpc01_login01',
       createTime: new Date().toISOString()
     }
@@ -357,16 +358,17 @@ const createDesktop = async () => {
     showCreateModal.value = false
     submitting.value = false
     
-    alert(`远程桌面已创建！\n名称: ${newSession.name}\n类型: ${newSession.type}`)
+    alert(`远程桌面已创建！\n名称: ${newSession.name}\n类型: ${newSession.type}\n协议: ${newSession.protocol.toUpperCase()}`)
     
     // 重置表单
     createForm.value = {
       name: '',
       type: '',
+      protocol: 'vnc',
       nodeType: 'standard',
       duration: 4,
       resolution: '1920x1080',
-      vncPort: null,
+      port: null,
       purpose: ''
     }
   }, 1000)
@@ -463,6 +465,78 @@ password=${sessionCredentials.value.password}`
   a.click()
   URL.revokeObjectURL(url)
 }
+
+const downloadRDPFile = () => {
+  const rdpContent = `full address:s:${selectedSession.value?.address}:${sessionCredentials.value.rdpPort}
+username:s:${sessionCredentials.value.username}
+screen mode id:i:2
+use multimon:i:0
+desktopwidth:i:1920
+desktopheight:i:1080
+session bpp:i:32
+compression:i:1
+keyboardhook:i:2
+audiocapturemode:i:0
+videoplaybackmode:i:1
+connection type:i:7
+networkautodetect:i:1
+bandwidthautodetect:i:1
+displayconnectionbar:i:1
+enableworkspacereconnect:i:0
+disable wallpaper:i:0
+allow font smoothing:i:0
+allow desktop composition:i:0
+disable full window drag:i:1
+disable menu anims:i:1
+disable themes:i:0
+disable cursor setting:i:0
+bitmapcachepersistenable:i:1
+audiomode:i:0
+redirectprinters:i:1
+redirectcomports:i:0
+redirectsmartcards:i:1
+redirectclipboard:i:1
+redirectposdevices:i:0
+autoreconnection enabled:i:1
+authentication level:i:2
+prompt for credentials:i:0
+negotiate security layer:i:1
+remoteapplicationmode:i:0
+alternate shell:s:
+shell working directory:s:
+gatewayhostname:s:
+gatewayusagemethod:i:4
+gatewaycredentialssource:i:4
+gatewayprofileusagemethod:i:0
+promptcredentialonce:i:0
+gatewaybrokeringtype:i:0
+use redirection server name:i:0
+rdgiskdcproxy:i:0
+kdcproxyname:s:`
+
+  const blob = new Blob([rdpContent], { type: 'application/x-rdp' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${selectedSession.value?.name}.rdp`
+  a.click()
+  URL.revokeObjectURL(url)
+  alert('RDP 文件已下载，双击打开即可连接\n首次连接时请输入密码: ' + sessionCredentials.value.password)
+}
+
+const copyRDPConnection = () => {
+  const connectionInfo = `主机: ${selectedSession.value?.address}
+端口: ${sessionCredentials.value.rdpPort}
+用户名: ${sessionCredentials.value.username}
+密码: ${sessionCredentials.value.password}`
+  
+  navigator.clipboard.writeText(connectionInfo)
+  alert('连接信息已复制到剪贴板')
+}
+
+const openGuacamole = () => {
+  window.open(sessionCredentials.value.guacamoleUrl, '_blank')
+}
 </script>
 
 <style scoped>
@@ -529,6 +603,41 @@ password=${sessionCredentials.value.password}`
 
 .desktop-table tbody tr:hover {
   background: #f9fafb;
+}
+
+.protocol-badge {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.protocol-badge.vnc {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.protocol-badge.rdp {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.connection-string {
+  font-family: 'Courier New', monospace;
+  background: #f3f4f6;
+  padding: 0.5rem;
+  border-radius: 4px;
+  margin-top: 0.5rem;
+  font-weight: 600;
+  color: #667eea;
+}
+
+.help-text {
+  font-size: 0.85rem;
+  color: #666;
+  margin-top: 0.5rem;
+  font-style: italic;
 }
 
 .action-buttons {
