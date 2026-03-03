@@ -55,8 +55,44 @@
       </div>
     </div>
 
-    <!-- 汇总统计 -->
-    <div class="card" v-if="summary">
+    <!-- 账户机时状态 -->
+    <div class="card" v-if="queryType === 'account' && accountUsage">
+      <h4>💰 账户机时状态</h4>
+      <div class="billing-status">
+        <div class="billing-card" :class="getBillingStatusClass(accountUsage.status)">
+          <div class="billing-header">
+            <h5>{{ accountUsage.account }}</h5>
+            <span class="status-badge" :class="getBillingStatusClass(accountUsage.status)">
+              {{ getBillingStatusText(accountUsage.status) }}
+            </span>
+          </div>
+          <div class="billing-details">
+            <div class="billing-item">
+              <span class="label">总分配机时:</span>
+              <span class="value">{{ formatMinutes(accountUsage.total_billing) }}</span>
+            </div>
+            <div class="billing-item">
+              <span class="label">已使用机时:</span>
+              <span class="value">{{ formatMinutes(accountUsage.used_billing) }}</span>
+            </div>
+            <div class="billing-item">
+              <span class="label">剩余机时:</span>
+              <span class="value">{{ formatMinutes(accountUsage.remaining_billing) }}</span>
+            </div>
+            <div class="billing-item">
+              <span class="label">使用率:</span>
+              <span class="value">{{ accountUsage.usage_percent.toFixed(1) }}%</span>
+            </div>
+          </div>
+          <div class="progress-bar">
+            <div class="progress-fill" 
+                 :style="{ width: Math.min(accountUsage.usage_percent, 100) + '%' }"
+                 :class="getBillingStatusClass(accountUsage.status)">
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
       <h4>📈 使用汇总</h4>
       <div class="summary-grid">
         <div class="summary-item">
@@ -122,23 +158,23 @@
         </thead>
         <tbody>
           <tr v-for="record in filteredRecords" :key="getRecordKey(record)">
-            <td v-if="queryType !== 'user'"><strong>{{ record.user }}</strong></td>
+            <td v-if="queryType !== 'user'"><strong>{{ record.user || '-' }}</strong></td>
             <td v-if="queryType !== 'account'">{{ record.account }}</td>
             <td>{{ record.cluster }}</td>
-            <td>{{ record.partition }}</td>
+            <td>{{ record.partition || '-' }}</td>
             <td>
-              <span class="qos-badge" :class="getQoSClass(record.qos)">
-                {{ record.qos }}
+              <span class="qos-badge" :class="getQoSClass(record.qos || 'default')">
+                {{ record.qos || '-' }}
               </span>
             </td>
-            <td>{{ record.job_count || record.total_jobs || 1 }}</td>
-            <td>{{ formatHours(record.cpu_hours || record.total_cpu_hours) }}</td>
-            <td>{{ formatHours(record.node_hours || record.total_node_hours) }}</td>
-            <td>{{ formatHours(record.gpu_hours || record.total_gpu_hours) }}</td>
-            <td>{{ formatHours(record.memory_hours || record.total_memory_hours) }}</td>
+            <td>{{ record.job_count || 1 }}</td>
+            <td>{{ formatHours(record.cpu_hours) }}</td>
+            <td>{{ formatHours(record.node_hours) }}</td>
+            <td>{{ formatHours(record.gpu_hours) }}</td>
+            <td>{{ formatHours(record.memory_hours) }}</td>
             <td>
-              <span class="state-badge" :class="getStateClass(record.state)">
-                {{ record.state || 'SUMMARY' }}
+              <span class="state-badge" :class="getStateClass(record.state || record.status)">
+                {{ record.state || record.status || 'SUMMARY' }}
               </span>
             </td>
             <td>{{ formatTimeRange(record) }}</td>
@@ -172,6 +208,7 @@ const endDate = ref('')
 
 // 数据
 const usageRecords = ref<any[]>([])
+const accountUsage = ref<any>(null)
 const summary = ref<any>(null)
 
 // 初始化日期
@@ -248,29 +285,40 @@ const queryUsage = async () => {
       summary.value = summaryResponse.data
       
     } else if (queryType.value === 'account') {
-      // 获取账户使用情况
-      response = await usageAPI.getAccountUsage(queryAccount.value, startDate.value, endDate.value)
-      usageRecords.value = response.data
+      // 获取账户机时使用情况（包含 billing 限制）
+      const accountResponse = await usageAPI.getAccountUsage(queryAccount.value, startDate.value, endDate.value)
+      accountUsage.value = accountResponse.data
       
-      // 获取账户汇总
-      const summaryResponse = await usageAPI.getUsageSummary('', queryAccount.value, startDate.value, endDate.value)
-      summary.value = summaryResponse.data
+      // 对于账户查询，显示账户汇总信息而不是详细记录
+      usageRecords.value = accountUsage.value ? [accountUsage.value] : []
+      
+      // 设置汇总数据
+      if (accountUsage.value) {
+        summary.value = {
+          total_jobs: accountUsage.value.job_count,
+          total_cpu_hours: accountUsage.value.cpu_hours,
+          total_node_hours: accountUsage.value.node_hours,
+          total_gpu_hours: accountUsage.value.gpu_hours,
+          total_memory_hours: accountUsage.value.memory_hours,
+          period: `${startDate.value} - ${endDate.value}`
+        }
+      }
       
     } else if (queryType.value === 'cluster') {
       // 获取集群使用情况
-      response = await usageAPI.getClusterUsage(startDate.value, endDate.value)
+      const clusterResponse = await usageAPI.getAllAccountsUsage(startDate.value, endDate.value)
       
       // 转换为数组格式
-      const clusterData = response.data
+      const clusterData = clusterResponse.data
       usageRecords.value = Object.values(clusterData)
       
       // 计算总汇总
       summary.value = {
-        total_jobs: usageRecords.value.reduce((sum, record) => sum + (record.total_jobs || 0), 0),
-        total_cpu_hours: usageRecords.value.reduce((sum, record) => sum + (record.total_cpu_hours || 0), 0),
-        total_node_hours: usageRecords.value.reduce((sum, record) => sum + (record.total_node_hours || 0), 0),
-        total_gpu_hours: usageRecords.value.reduce((sum, record) => sum + (record.total_gpu_hours || 0), 0),
-        total_memory_hours: usageRecords.value.reduce((sum, record) => sum + (record.total_memory_hours || 0), 0),
+        total_jobs: usageRecords.value.reduce((sum, record) => sum + (record.job_count || 0), 0),
+        total_cpu_hours: usageRecords.value.reduce((sum, record) => sum + (record.cpu_hours || 0), 0),
+        total_node_hours: usageRecords.value.reduce((sum, record) => sum + (record.node_hours || 0), 0),
+        total_gpu_hours: usageRecords.value.reduce((sum, record) => sum + (record.gpu_hours || 0), 0),
+        total_memory_hours: usageRecords.value.reduce((sum, record) => sum + (record.memory_hours || 0), 0),
         period: `${startDate.value} - ${endDate.value}`
       }
     }
@@ -347,7 +395,10 @@ const formatTimeRange = (record: any): string => {
     const end = new Date(record.end_time).toLocaleDateString()
     return `${start} - ${end}`
   }
-  return '-'
+  if (record.last_updated) {
+    return `截至 ${new Date(record.last_updated).toLocaleDateString()}`
+  }
+  return `${startDate.value} - ${endDate.value}`
 }
 
 // 获取记录键
@@ -373,6 +424,34 @@ const getStateClass = (state: string): string => {
     case 'CANCELLED': return 'state-cancelled'
     case 'TIMEOUT': return 'state-timeout'
     default: return 'state-default'
+  }
+}
+
+// 格式化分钟数为小时
+const formatMinutes = (minutes: number): string => {
+  if (!minutes || minutes === 0) return '0 小时'
+  const hours = minutes / 60
+  if (hours < 1) return `${minutes} 分钟`
+  return `${hours.toFixed(1)} 小时`
+}
+
+// 获取计费状态样式
+const getBillingStatusClass = (status: string): string => {
+  switch (status?.toUpperCase()) {
+    case 'NORMAL': return 'billing-normal'
+    case 'WARNING': return 'billing-warning'
+    case 'EXCEEDED': return 'billing-exceeded'
+    default: return 'billing-normal'
+  }
+}
+
+// 获取计费状态文本
+const getBillingStatusText = (status: string): string => {
+  switch (status?.toUpperCase()) {
+    case 'NORMAL': return '正常'
+    case 'WARNING': return '警告'
+    case 'EXCEEDED': return '超额'
+    default: return '正常'
   }
 }
 
@@ -578,6 +657,115 @@ onMounted(() => {
 .state-default {
   background: #f3f4f6;
   color: #6b7280;
+}
+
+.billing-status {
+  margin-bottom: 1rem;
+}
+
+.billing-card {
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 1.5rem;
+  background: white;
+}
+
+.billing-card.billing-normal {
+  border-color: #10b981;
+  background: #f0fdf4;
+}
+
+.billing-card.billing-warning {
+  border-color: #f59e0b;
+  background: #fffbeb;
+}
+
+.billing-card.billing-exceeded {
+  border-color: #ef4444;
+  background: #fef2f2;
+}
+
+.billing-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.billing-header h5 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.status-badge {
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.status-badge.billing-normal {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.status-badge.billing-warning {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.status-badge.billing-exceeded {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.billing-details {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.billing-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.billing-item .label {
+  font-weight: 500;
+  color: #6b7280;
+}
+
+.billing-item .value {
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  background: #e5e7eb;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+.progress-fill.billing-normal {
+  background: #10b981;
+}
+
+.progress-fill.billing-warning {
+  background: #f59e0b;
+}
+
+.progress-fill.billing-exceeded {
+  background: #ef4444;
 }
 
 .btn-primary {

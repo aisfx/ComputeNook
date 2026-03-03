@@ -37,6 +37,12 @@ func AuthMiddleware() gin.HandlerFunc {
 
 			isAdmin := os.Getenv("DEV_USER_IS_ADMIN") == "true"
 
+			// 设置用户对象和单独的字段（兼容两种访问方式）
+			c.Set("user", map[string]interface{}{
+				"username": username,
+				"uid":      strconv.Itoa(uid),
+				"isAdmin":  isAdmin,
+			})
 			c.Set("username", username)
 			c.Set("uid", uid)
 			c.Set("isAdmin", isAdmin)
@@ -110,9 +116,18 @@ func AuthMiddleware() gin.HandlerFunc {
 				return
 			}
 
+			uid := int(claims["uid"].(float64))
+			isAdmin := claims["isAdmin"].(bool)
+			
+			// 设置用户对象和单独的字段（兼容两种访问方式）
+			c.Set("user", map[string]interface{}{
+				"username": username,
+				"uid":      strconv.Itoa(uid),
+				"isAdmin":  isAdmin,
+			})
 			c.Set("username", username)
-			c.Set("uid", int(claims["uid"].(float64)))
-			c.Set("isAdmin", claims["isAdmin"])
+			c.Set("uid", uid)
+			c.Set("isAdmin", isAdmin)
 		}
 
 		c.Next()

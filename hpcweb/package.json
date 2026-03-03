@@ -10,7 +10,10 @@
   "dependencies": {
     "axios": "^1.6.0",
     "vue": "^3.4.0",
-    "vue-router": "^4.2.0"
+    "vue-router": "^4.2.0",
+    "xterm": "^5.3.0",
+    "xterm-addon-fit": "^0.8.0",
+    "xterm-addon-web-links": "^0.9.0"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.0",

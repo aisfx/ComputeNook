@@ -429,10 +429,26 @@ export const usageAPI = {
     return response.data
   },
 
-  // 获取账户机时使用情况
+  // 获取账户机时使用情况（包含 billing 限制）
   getAccountUsage: async (account: string, startTime: string, endTime: string) => {
     const response = await axios.get('/usage/account', {
       params: { account, start_time: startTime, end_time: endTime }
+    })
+    return response.data
+  },
+
+  // 获取用户在特定账户下的机时使用情况
+  getUserUsageByAccount: async (user: string, account: string, startTime: string, endTime: string) => {
+    const response = await axios.get('/usage/account/user', {
+      params: { user, account, start_time: startTime, end_time: endTime }
+    })
+    return response.data
+  },
+
+  // 获取所有账户的机时使用情况
+  getAllAccountsUsage: async (startTime: string, endTime: string) => {
+    const response = await axios.get('/usage/accounts', {
+      params: { start_time: startTime, end_time: endTime }
     })
     return response.data
   },

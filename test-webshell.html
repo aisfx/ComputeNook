@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebShell API Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+        pre { background: #f5f5f5; padding: 10px; overflow-x: auto; }
+        .success { color: green; }
+        .error { color: red; }
+    </style>
+</head>
+<body>
+    <h1>WebShell API Test</h1>
+    
+    <div class="test-section">
+        <h2>1. Test Get Nodes</h2>
+        <button onclick="testGetNodes()">Test Get Nodes</button>
+        <pre id="nodes-result"></pre>
+    </div>
+    
+    <div class="test-section">
+        <h2>2. Test Upload Key</h2>
+        <input type="file" id="keyFile" />
+        <button onclick="testUploadKey()">Upload Key</button>
+        <pre id="upload-result"></pre>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8080/api';
+        
+        async function testGetNodes() {
+            const resultEl = document.getElementById('nodes-result');
+            resultEl.textContent = 'Loading...';
+            
+            try {
+                const response = await fetch(`${API_BASE}/webshell/nodes`);
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultEl.className = 'success';
+                    resultEl.textContent = JSON.stringify(data, null, 2);
+                } else {
+                    resultEl.className = 'error';
+                    resultEl.textContent = `Error: ${JSON.stringify(data, null, 2)}`;
+                }
+            } catch (error) {
+                resultEl.className = 'error';
+                resultEl.textContent = `Error: ${error.message}`;
+            }
+        }
+        
+        async function testUploadKey() {
+            const resultEl = document.getElementById('upload-result');
+            const fileInput = document.getElementById('keyFile');
+            
+            if (!fileInput.files[0]) {
+                resultEl.className = 'error';
+                resultEl.textContent = 'Please select a file first';
+                return;
+            }
+            
+            resultEl.textContent = 'Uploading...';
+            
+            try {
+                const formData = new FormData();
+                formData.append('private_key', fileInput.files[0]);
+                
+                const response = await fetch(`${API_BASE}/webshell/keys/upload`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultEl.className = 'success';
+                    resultEl.textContent = JSON.stringify(data, null, 2);
+                } else {
+                    resultEl.className = 'error';
+                    resultEl.textContent = `Error: ${JSON.stringify(data, null, 2)}`;
+                }
+            } catch (error) {
+                resultEl.className = 'error';
+                resultEl.textContent = `Error: ${error.message}`;
+            }
+        }
+    </script>
+</body>
+</html>

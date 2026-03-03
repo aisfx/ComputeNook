@@ -154,6 +154,44 @@ func main() {
 			audit.GET("/stats", handlers.GetAuditStats)
 			audit.GET("/export", handlers.ExportAuditLogs)
 		}
+
+		// 机时管理 API
+		usage := auth.Group("/usage")
+		{
+			// 普通用户可以查看自己的使用情况
+			usage.GET("/user", handlers.GetUserUsage)
+			
+			// 管理员可以查看所有使用情况
+			usage.GET("/account", middleware.AdminMiddleware(), handlers.GetAccountUsageWithBilling)
+			usage.GET("/account/user", middleware.AdminMiddleware(), handlers.GetUserUsageByAccount)
+			usage.GET("/accounts", middleware.AdminMiddleware(), handlers.GetAllAccountsUsage)
+			usage.GET("/summary", middleware.AdminMiddleware(), handlers.GetUsageSummary)
+			usage.GET("/cluster", middleware.AdminMiddleware(), handlers.GetClusterUsage)
+		}
+
+		// Web Shell API
+		webshell := auth.Group("/webshell")
+		{
+			// 获取可用节点
+			webshell.GET("/nodes", handlers.GetNodes)
+			
+			// WebSocket连接
+			webshell.GET("/connect", handlers.ConnectWebShell)
+			
+			// 会话管理
+			webshell.GET("/sessions", handlers.GetSessions)
+			webshell.DELETE("/sessions/:session_id", handlers.CloseSession)
+			
+			// 日志管理
+			webshell.GET("/logs", handlers.GetSessionLogs)
+			webshell.GET("/logs/:log_file/download", handlers.DownloadSessionLog)
+			
+			// 私钥管理
+			webshell.POST("/keys/upload", handlers.UploadPrivateKey)
+			
+			// 连接测试
+			webshell.POST("/nodes/:node_name/test", handlers.TestNodeConnection)
+		}
 	}
 
 	port := os.Getenv("SERVER_PORT")
