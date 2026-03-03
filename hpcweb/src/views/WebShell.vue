@@ -201,12 +201,17 @@
     <!-- 主工作区：左侧主机列表 + 右侧终端 -->
     <div class="main-workspace">
       <!-- 左侧主机列表 -->
-      <div class="hosts-sidebar">
+      <div class="hosts-sidebar" :class="{ collapsed: sidebarCollapsed }">
         <div class="sidebar-header">
-          <h4>主机列表</h4>
-          <button class="btn-icon" @click="loadNodes" title="刷新">🔄</button>
+          <h4 v-if="!sidebarCollapsed">主机列表</h4>
+          <div class="sidebar-controls">
+            <button class="btn-icon" @click="loadNodes" title="刷新" v-if="!sidebarCollapsed">🔄</button>
+            <button class="btn-icon" @click="sidebarCollapsed = !sidebarCollapsed" :title="sidebarCollapsed ? '展开' : '折叠'">
+              {{ sidebarCollapsed ? '▶' : '◀' }}
+            </button>
+          </div>
         </div>
-        <div class="hosts-list">
+        <div class="hosts-list" v-if="!sidebarCollapsed">
           <div v-if="loading" class="loading-small">加载中...</div>
           <div v-else-if="nodes.length === 0" class="empty-state">
             <p>暂无可用主机</p>
@@ -235,7 +240,7 @@
       </div>
 
       <!-- 右侧终端区域 -->
-      <div class="terminal-area">
+      <div class="terminal-area" :class="{ fullscreen: isFullscreen }">
         <div v-if="connected" class="terminal-container">
           <div class="terminal-header">
             <div class="terminal-info">
@@ -243,6 +248,9 @@
               <span class="connection-status" :class="connectionStatus">{{ connectionStatus }}</span>
             </div>
             <div class="terminal-actions">
+              <button class="btn-small btn-secondary" @click="toggleFullscreen" :title="isFullscreen ? '退出全屏' : '全屏'">
+                {{ isFullscreen ? '🗗' : '🗖' }}
+              </button>
               <button class="btn-small btn-secondary" @click="clearTerminal">清屏</button>
               <button class="btn-small btn-danger" @click="disconnect">断开连接</button>
             </div>
@@ -286,6 +294,7 @@ const error = ref('')
 const connected = ref(false)
 const connectionStatus = ref('disconnected')
 const sidebarCollapsed = ref(false)
+const isFullscreen = ref(false)
 
 const nodes = ref<any[]>([])
 const selectedNode = ref<any>(null)
@@ -952,6 +961,34 @@ const disconnect = () => {
   currentNode.value = null
 }
 
+// 切换全屏
+const toggleFullscreen = () => {
+  isFullscreen.value = !isFullscreen.value
+  
+  // 全屏时自动折叠侧边栏
+  if (isFullscreen.value) {
+    sidebarCollapsed.value = true
+  }
+  
+  // 延迟调整终端大小以适应新布局
+  setTimeout(() => {
+    if (fitAddon && terminal) {
+      fitAddon.fit()
+      
+      // 通知服务器终端大小变化
+      if (websocket && websocket.readyState === WebSocket.OPEN) {
+        websocket.send(JSON.stringify({
+          type: 'resize',
+          data: {
+            rows: terminal.rows,
+            cols: terminal.cols
+          }
+        }))
+      }
+    }
+  }, 100)
+}
+
 // 测试连接
 const testConnection = async (node: any) => {
   try {
@@ -1036,18 +1073,24 @@ const handleKeyUpload = async (event: Event) => {
 .main-workspace {
   flex: 1;
   display: flex;
-  gap: 1rem;
+  gap: 0.5rem;
   overflow: hidden;
 }
 
 .hosts-sidebar {
-  width: 280px;
+  width: 220px;
   background: #f9fafb;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.hosts-sidebar.collapsed {
+  width: 50px;
+  min-width: 50px;
 }
 
 .sidebar-header {
@@ -1063,6 +1106,14 @@ const handleKeyUpload = async (event: Event) => {
   margin: 0;
   font-size: 1rem;
   color: #374151;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.sidebar-controls {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
 }
 
 .btn-icon {
@@ -1179,6 +1230,17 @@ const handleKeyUpload = async (event: Event) => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.terminal-area.fullscreen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
+  background: #1e1e1e;
 }
 
 .terminal-container {

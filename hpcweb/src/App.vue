@@ -252,7 +252,7 @@ onMounted(() => {
 }
 
 .sidebar {
-  width: 250px;
+  width: 320px;
   background: linear-gradient(180deg, #667eea 0%, #764ba2 100%);
   color: white;
   display: flex;
@@ -472,6 +472,7 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  margin-left: -15px;
 }
 
 .top-header {
@@ -589,6 +590,11 @@ onMounted(() => {
   flex: 1;
   overflow-y: auto;
   background: #f5f7fa;
+}
+
+/* 全局调整所有页面容器的右侧padding */
+.content-area > * {
+  padding-right: 0 !important;
 }
 
 .no-permission {

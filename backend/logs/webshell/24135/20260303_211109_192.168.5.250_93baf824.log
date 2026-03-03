@@ -1,0 +1,30 @@
+{"timestamp":"2026-03-03T21:11:09.262191+08:00","type":"event","event":"session_start","data":{"host":"192.168.5.250","session_id":"93baf824-fc08-495b-9219-49b2a14193d7","user_id":"24135","username":"sunfx"}}
+{"timestamp":"2026-03-03T21:11:09.26303+08:00","type":"event","event":"session_created","data":{"host":"192.168.5.250","port":31277}}
+{"timestamp":"2026-03-03T21:11:09.416826+08:00","type":"event","event":"connection_established"}
+{"timestamp":"2026-03-03T21:11:09.417246+08:00","type":"output","content":"Activate the web console with: systemctl enable --now cockpit.socket\r\n\r\nLast login: Tue Mar  3 19:11:31 2026 from 192.168.0.11\r\r\n"}
+{"timestamp":"2026-03-03T21:11:09.459147+08:00","type":"output","content":"\u001b]0;sunfx@mn0:~\u0007[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T21:11:10.114588+08:00","type":"command","content":"\r"}
+{"timestamp":"2026-03-03T21:11:10.146264+08:00","type":"output","content":"\r\n\u001b]0;sunfx@mn0:~\u0007[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T21:11:10.298117+08:00","type":"command","content":"l"}
+{"timestamp":"2026-03-03T21:11:10.308435+08:00","type":"output","content":"l"}
+{"timestamp":"2026-03-03T21:11:10.412287+08:00","type":"command","content":"s"}
+{"timestamp":"2026-03-03T21:11:10.420022+08:00","type":"output","content":"s"}
+{"timestamp":"2026-03-03T21:11:10.496216+08:00","type":"command","content":"\r"}
+{"timestamp":"2026-03-03T21:11:10.503669+08:00","type":"output","content":"\r\n"}
+{"timestamp":"2026-03-03T21:11:10.505416+08:00","type":"output","content":"\u001b[0m\u001b[38;5;33m111\u001b[0m  LdapAdmin.exe  \u001b[38;5;33mtest\u001b[0m  \u001b[38;5;40mtest.sh\u001b[0m\r\n\u001b]0;sunfx@mn0:~\u0007[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T21:11:10.713457+08:00","type":"command","content":"s"}
+{"timestamp":"2026-03-03T21:11:10.72232+08:00","type":"output","content":"s"}
+{"timestamp":"2026-03-03T21:11:10.795462+08:00","type":"command","content":"i"}
+{"timestamp":"2026-03-03T21:11:10.804028+08:00","type":"output","content":"i"}
+{"timestamp":"2026-03-03T21:11:10.961891+08:00","type":"command","content":"n"}
+{"timestamp":"2026-03-03T21:11:10.971346+08:00","type":"output","content":"n"}
+{"timestamp":"2026-03-03T21:11:10.997086+08:00","type":"command","content":"f"}
+{"timestamp":"2026-03-03T21:11:11.00471+08:00","type":"output","content":"f"}
+{"timestamp":"2026-03-03T21:11:11.113426+08:00","type":"command","content":"\t"}
+{"timestamp":"2026-03-03T21:11:11.128827+08:00","type":"output","content":"o "}
+{"timestamp":"2026-03-03T21:11:11.245207+08:00","type":"command","content":"\r"}
+{"timestamp":"2026-03-03T21:11:11.254072+08:00","type":"output","content":"\r\n"}
+{"timestamp":"2026-03-03T21:11:11.258894+08:00","type":"output","content":"PARTITION     AVAIL  TIMELIMIT  NODES  STATE NODELIST\r\n"}
+{"timestamp":"2026-03-03T21:11:11.259015+08:00","type":"output","content":"slurm-bridge*    up   infinite      2   idle cn[1-2]\r\n"}
+{"timestamp":"2026-03-03T21:11:11.259127+08:00","type":"output","content":"\u001b]0;sunfx@mn0:~\u0007"}
+{"timestamp":"2026-03-03T21:11:11.259526+08:00","type":"output","content":"[sunfx@mn0 ~]$ "}

@@ -415,15 +415,20 @@ const submitJob = async () => {
       }
     }
     
-    // 确保工作目录是绝对路径
-    let workdir = form.value.workdir
-    if (workdir && workdir[0] !== '/') {
-      const homeDir = currentUser.value?.homeDir || `/home/${currentUser.value?.username || ''}`
-      workdir = `${homeDir}/${workdir}`
+    // 确保工作目录是绝对路径（如果指定了的话）
+    let workdir = form.value.workdir?.trim()
+    if (workdir) {
+      if (workdir[0] !== '/') {
+        const homeDir = currentUser.value?.homeDir || `/home/${currentUser.value?.username || ''}`
+        workdir = `${homeDir}/${workdir}`
+      }
+    } else {
+      // 如果没有指定工作目录，使用空字符串（让Slurm使用默认值）
+      workdir = ''
     }
     
     // 构建提交数据
-    const submitData = {
+    const submitData: any = {
       name: form.value.name,
       partition: form.value.partition,
       script: scriptContent,  // 发送脚本内容而不是路径
@@ -432,14 +437,19 @@ const submitJob = async () => {
       memory: form.value.memory || 0,  // 0 表示不限制
       gpus: form.value.gpus || 0,
       time: form.value.time || 0,  // 0 表示不限制
-      workdir: workdir,
       output: form.value.output || 'slurm-%j.out',  // 默认输出文件
       error: form.value.error || 'slurm-%j.err',    // 默认错误文件
       priority: form.value.priority,
       extra_params: form.value.extraParams
     }
     
+    // 只有明确指定了工作目录时才添加
+    if (workdir) {
+      submitData.workdir = workdir
+    }
+    
     console.log('Submitting job with script content length:', scriptContent.length)
+    console.log('Working directory:', workdir || '(using Slurm default)')
     
     const response = await fetch('http://localhost:8080/api/jobs', {
       method: 'POST',
@@ -470,25 +480,58 @@ const submitJob = async () => {
 // 初始化
 onMounted(() => {
   currentUser.value = getUser()
-  const homeDir = currentUser.value?.homeDir || `/home/${currentUser.value?.username || ''}`
-  form.value.workdir = homeDir
+  // 不自动设置workdir，让Slurm使用默认值
+  // 用户可以根据需要手动填写
   loadPartitions()
   loadScriptFiles()
 })
 </script>
 
 <style scoped>
+.job-submit {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 180px);
+  overflow: hidden;
+}
+
 .submit-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 2rem;
-  padding-bottom: 1rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
   border-bottom: 2px solid #e5e7eb;
+  flex-shrink: 0;
 }
 
 .submit-header h2 {
   margin: 0;
+  font-size: 1.3rem;
+}
+
+.submit-form {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 0.5rem;
+}
+
+.submit-form::-webkit-scrollbar {
+  width: 6px;
+}
+
+.submit-form::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.submit-form::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 3px;
+}
+
+.submit-form::-webkit-scrollbar-thumb:hover {
+  background: #555;
 }
 
 .template-selector {
@@ -598,6 +641,11 @@ onMounted(() => {
   display: flex;
   gap: 1rem;
   margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e5e7eb;
+  position: sticky;
+  bottom: 0;
+  background: white;
 }
 
 .form-actions button {

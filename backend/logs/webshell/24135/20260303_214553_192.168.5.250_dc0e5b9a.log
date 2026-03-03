@@ -1,0 +1,18 @@
+{"timestamp":"2026-03-03T21:45:53.302581+08:00","type":"event","event":"session_start","data":{"host":"192.168.5.250","session_id":"dc0e5b9a-2114-48a5-9f91-71fd426bd0fb","user_id":"24135","username":"sunfx"}}
+{"timestamp":"2026-03-03T21:45:53.303237+08:00","type":"event","event":"session_created","data":{"host":"192.168.5.250","port":31277}}
+{"timestamp":"2026-03-03T21:45:53.451551+08:00","type":"event","event":"connection_established"}
+{"timestamp":"2026-03-03T21:45:53.451732+08:00","type":"output","content":"Activate the web console with: systemctl enable --now cockpit.socket\r\n\r\nLast login: Tue Mar  3 21:37:03 2026 from 192.168.0.11\r\r\n"}
+{"timestamp":"2026-03-03T21:45:53.488906+08:00","type":"output","content":"\u001b]0;sunfx@mn0:~\u0007[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T21:45:54.426758+08:00","type":"command","content":"\r"}
+{"timestamp":"2026-03-03T21:45:54.43464+08:00","type":"output","content":"\r\n\u001b]0;sunfx@mn0:~\u0007[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T21:45:54.560431+08:00","type":"command","content":"l"}
+{"timestamp":"2026-03-03T21:45:54.569069+08:00","type":"output","content":"l"}
+{"timestamp":"2026-03-03T21:45:54.641563+08:00","type":"command","content":"s"}
+{"timestamp":"2026-03-03T21:45:54.648852+08:00","type":"output","content":"s"}
+{"timestamp":"2026-03-03T21:45:54.731714+08:00","type":"command","content":"\r"}
+{"timestamp":"2026-03-03T21:45:54.740171+08:00","type":"output","content":"\r\n"}
+{"timestamp":"2026-03-03T21:45:54.742331+08:00","type":"output","content":"\u001b[0m\u001b[38;5;33m111\u001b[0m  LdapAdmin.exe  \u001b[38;5;33mtest\u001b[0m  \u001b[38;5;40mtest.sh\u001b[0m\r\n\u001b]0;sunfx@mn0:~\u0007[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T21:45:54.914644+08:00","type":"command","content":"\r"}
+{"timestamp":"2026-03-03T21:45:54.923657+08:00","type":"output","content":"\r\n\u001b]0;sunfx@mn0:~\u0007[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T21:46:45.943057+08:00","type":"event","event":"session_closed"}
+{"timestamp":"2026-03-03T21:46:45.943107+08:00","type":"event","event":"session_end","data":{"duration":52.640667083}}

@@ -410,8 +410,13 @@ func (c *Client) SubmitJob(params JobSubmitParams) (int64, error) {
 		return 0, fmt.Errorf("script is required")
 	}
 	
-	logger.Info("Submitting job: name=%s, partition=%s, nodes=%d, cpus=%d, script_length=%d", 
-		params.Name, params.Partition, params.Nodes, params.CPUs, len(params.Script))
+	// 如果没有指定工作目录，不设置（让Slurm使用默认值）
+	if params.WorkDir == "" {
+		logger.Warn("No working directory specified, Slurm will use default")
+	}
+	
+	logger.Info("Submitting job: name=%s, partition=%s, nodes=%d, cpus=%d, workdir=%s, script_length=%d", 
+		params.Name, params.Partition, params.Nodes, params.CPUs, params.WorkDir, len(params.Script))
 	
 	// 构建最小化的作业描述
 	job := map[string]interface{}{
@@ -436,26 +441,31 @@ func (c *Client) SubmitJob(params JobSubmitParams) (int64, error) {
 		job["time_limit"] = params.TimeLimit * 60 // 分钟
 	}
 	
-	// 工作目录（必须是绝对路径）
+	// 工作目录（只有明确指定时才设置）
 	if params.WorkDir != "" {
 		job["current_working_directory"] = params.WorkDir
+		logger.Debug("Setting working directory: %s", params.WorkDir)
 	}
 	
-	// 输出文件（使用绝对路径）
+	// 输出文件（只有明确指定时才设置）
 	if params.Output != "" {
+		// 如果是相对路径且有工作目录，转换为绝对路径
 		if params.Output[0] != '/' && params.WorkDir != "" {
 			job["standard_output"] = params.WorkDir + "/" + params.Output
 		} else {
 			job["standard_output"] = params.Output
 		}
+		logger.Debug("Setting standard output: %s", job["standard_output"])
 	}
 	
 	if params.Error != "" {
+		// 如果是相对路径且有工作目录，转换为绝对路径
 		if params.Error[0] != '/' && params.WorkDir != "" {
 			job["standard_error"] = params.WorkDir + "/" + params.Error
 		} else {
 			job["standard_error"] = params.Error
 		}
+		logger.Debug("Setting standard error: %s", job["standard_error"])
 	}
 	
 	// QoS
@@ -503,6 +513,7 @@ func (c *Client) SubmitJob(params JobSubmitParams) (int64, error) {
 		return 0, fmt.Errorf("slurm API error: %s", response.Errors[0].Error)
 	}
 	
+	logger.Info("Job submitted successfully: job_id=%d", response.JobID)
 	return response.JobID, nil
 }
 

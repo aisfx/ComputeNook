@@ -44,7 +44,7 @@ export const simpleTemplates: JobTemplate[] = [
     gpus: 4,
     time: 24,
     priority: 'normal',
-    workdir: '/home/user/jobs/gpu_training',
+    workdir: '',  // 留空，让Slurm使用默认工作目录
     script: '/home/user/scripts/train.sh',
     output: 'train_output_%j.log',
     error: 'train_error_%j.log',
@@ -65,7 +65,7 @@ export const simpleTemplates: JobTemplate[] = [
     gpus: 0,
     time: 12,
     priority: 'normal',
-    workdir: '/home/user/jobs/compute',
+    workdir: '',  // 留空，让Slurm使用默认工作目录
     script: '/home/user/scripts/compute.sh',
     output: 'compute_output_%j.log',
     error: 'compute_error_%j.log',
@@ -86,7 +86,7 @@ export const simpleTemplates: JobTemplate[] = [
     gpus: 0,
     time: 6,
     priority: 'normal',
-    workdir: '/home/user/jobs/analysis',
+    workdir: '',  // 留空，让Slurm使用默认工作目录
     script: '/home/user/scripts/analyze.sh',
     output: 'analysis_output_%j.log',
     error: 'analysis_error_%j.log',
@@ -107,7 +107,7 @@ export const simpleTemplates: JobTemplate[] = [
     gpus: 0,
     time: 1,
     priority: 'high',
-    workdir: '/home/user/jobs/debug',
+    workdir: '',  // 留空，让Slurm使用默认工作目录
     script: '/home/user/scripts/debug.sh',
     output: 'debug_output_%j.log',
     error: 'debug_error_%j.log',

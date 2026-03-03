@@ -21,6 +21,7 @@
             <th>序号</th>
             <th>桌面名称</th>
             <th>桌面类型</th>
+            <th>协议</th>
             <th>地址</th>
             <th>创建时间</th>
             <th>操作</th>
@@ -31,6 +32,11 @@
             <td>{{ index + 1 }}</td>
             <td>{{ session.name }}</td>
             <td>{{ session.type }}</td>
+            <td>
+              <span class="protocol-badge" :class="session.protocol">
+                {{ session.protocol.toUpperCase() }}
+              </span>
+            </td>
             <td>{{ session.address }}</td>
             <td>{{ session.createTime }}</td>
             <td>
@@ -74,6 +80,18 @@
               </select>
             </div>
 
+            <div class="form-group">
+              <label>连接协议 *</label>
+              <select v-model="createForm.protocol" required>
+                <option value="vnc">VNC (浏览器访问)</option>
+                <option value="rdp">RDP (远程桌面协议)</option>
+              </select>
+              <div class="help-text">
+                <span v-if="createForm.protocol === 'vnc'">VNC 支持浏览器直接访问，无需安装客户端</span>
+                <span v-if="createForm.protocol === 'rdp'">RDP 需要使用远程桌面客户端连接，性能更好</span>
+              </div>
+            </div>
+
             <div class="form-row">
               <div class="form-group">
                 <label>节点类型 *</label>
@@ -100,8 +118,8 @@
                 </select>
               </div>
               <div class="form-group">
-                <label>VNC 端口</label>
-                <input v-model.number="createForm.vncPort" type="number" placeholder="自动分配" disabled />
+                <label>{{ createForm.protocol === 'rdp' ? 'RDP 端口' : 'VNC 端口' }}</label>
+                <input v-model.number="createForm.port" type="number" placeholder="自动分配" disabled />
               </div>
             </div>
 
@@ -193,22 +211,55 @@
                 <div class="connection-methods">
                   <h5>连接方式</h5>
                   <div class="method-list">
-                    <div class="method-item">
-                      <span class="method-icon">🌐</span>
-                      <div class="method-content">
-                        <strong>Web 浏览器</strong>
-                        <p>直接在浏览器中访问: <a :href="sessionCredentials.webUrl" target="_blank">{{ sessionCredentials.webUrl }}</a></p>
+                    <!-- VNC 连接方式 -->
+                    <template v-if="selectedSession?.protocol === 'vnc'">
+                      <div class="method-item">
+                        <span class="method-icon">🌐</span>
+                        <div class="method-content">
+                          <strong>Web 浏览器</strong>
+                          <p>直接在浏览器中访问: <a :href="sessionCredentials.webUrl" target="_blank">{{ sessionCredentials.webUrl }}</a></p>
+                        </div>
+                        <button class="btn-secondary" @click="openInBrowser">打开</button>
                       </div>
-                      <button class="btn-secondary" @click="openInBrowser">打开</button>
-                    </div>
-                    <div class="method-item">
-                      <span class="method-icon">💻</span>
-                      <div class="method-content">
-                        <strong>VNC 客户端</strong>
-                        <p>使用 VNC Viewer 连接到 {{ selectedSession?.address }}:{{ sessionCredentials.vncPort }}</p>
+                      <div class="method-item">
+                        <span class="method-icon">💻</span>
+                        <div class="method-content">
+                          <strong>VNC 客户端</strong>
+                          <p>使用 VNC Viewer 连接到 {{ selectedSession?.address }}:{{ sessionCredentials.vncPort }}</p>
+                        </div>
+                        <button class="btn-secondary" @click="downloadVNCFile">下载配置</button>
                       </div>
-                      <button class="btn-secondary" @click="downloadVNCFile">下载配置</button>
-                    </div>
+                    </template>
+                    
+                    <!-- RDP 连接方式 -->
+                    <template v-else-if="selectedSession?.protocol === 'rdp'">
+                      <div class="method-item">
+                        <span class="method-icon">🖥️</span>
+                        <div class="method-content">
+                          <strong>Windows 远程桌面</strong>
+                          <p>使用 Windows 自带的"远程桌面连接"工具</p>
+                          <p class="connection-string">{{ selectedSession?.address }}:{{ sessionCredentials.rdpPort }}</p>
+                        </div>
+                        <button class="btn-secondary" @click="downloadRDPFile">下载 RDP 文件</button>
+                      </div>
+                      <div class="method-item">
+                        <span class="method-icon">🍎</span>
+                        <div class="method-content">
+                          <strong>macOS / Linux</strong>
+                          <p>使用 Microsoft Remote Desktop 或 Remmina 等 RDP 客户端</p>
+                          <p class="connection-string">{{ selectedSession?.address }}:{{ sessionCredentials.rdpPort }}</p>
+                        </div>
+                        <button class="btn-secondary" @click="copyRDPConnection">复制连接信息</button>
+                      </div>
+                      <div class="method-item">
+                        <span class="method-icon">🌐</span>
+                        <div class="method-content">
+                          <strong>Web 浏览器 (Apache Guacamole)</strong>
+                          <p>通过浏览器访问 RDP 桌面: <a :href="sessionCredentials.guacamoleUrl" target="_blank">{{ sessionCredentials.guacamoleUrl }}</a></p>
+                        </div>
+                        <button class="btn-secondary" @click="openGuacamole">打开</button>
+                      </div>
+                    </template>
                   </div>
                 </div>
               </div>
@@ -241,10 +292,11 @@ const selectedSession = ref<any>(null)
 const createForm = ref({
   name: '',
   type: '',
+  protocol: 'vnc',
   nodeType: 'standard',
   duration: 4,
   resolution: '1920x1080',
-  vncPort: null,
+  port: null,
   purpose: ''
 })
 
@@ -253,6 +305,7 @@ const sessions = ref([
     id: 1,
     name: 'desktop-20250206-173123',
     type: 'xfce',
+    protocol: 'vnc',
     address: 'hpc01_login01',
     createTime: '2025-02-06T18:15:24'
   },
@@ -260,6 +313,7 @@ const sessions = ref([
     id: 4,
     name: 'desktop-20231114-213706',
     type: 'kde',
+    protocol: 'rdp',
     address: 'hpc01_login01',
     createTime: '2023-11-14T22:14:09'
   },
@@ -267,6 +321,7 @@ const sessions = ref([
     id: 6,
     name: 'desktop-20260204-172952',
     type: 'kde',
+    protocol: 'vnc',
     address: 'hpc01_login01',
     createTime: '2026-02-04T18:32:09'
   }
@@ -276,7 +331,9 @@ const sessionCredentials = ref({
   username: '',
   password: '',
   vncPort: 5901,
-  webUrl: ''
+  rdpPort: 3389,
+  webUrl: '',
+  guacamoleUrl: ''
 })
 
 const filteredSessions = computed(() => {
@@ -330,11 +387,24 @@ const startSession = (session: any) => {
       startingStatus.value = 'ready'
       
       // 生成临时凭据
-      sessionCredentials.value = {
-        username: 'vncuser_' + Math.random().toString(36).substr(2, 6),
-        password: generatePassword(),
-        vncPort: 5900 + Math.floor(Math.random() * 100),
-        webUrl: `https://hpc.example.com/vnc/${session.id}`
+      if (session.protocol === 'rdp') {
+        sessionCredentials.value = {
+          username: 'rdpuser_' + Math.random().toString(36).substr(2, 6),
+          password: generatePassword(),
+          vncPort: 0,
+          rdpPort: 3389 + Math.floor(Math.random() * 100),
+          webUrl: '',
+          guacamoleUrl: `https://hpc.example.com/guacamole/#/client/${session.id}`
+        }
+      } else {
+        sessionCredentials.value = {
+          username: 'vncuser_' + Math.random().toString(36).substr(2, 6),
+          password: generatePassword(),
+          vncPort: 5900 + Math.floor(Math.random() * 100),
+          rdpPort: 0,
+          webUrl: `https://hpc.example.com/vnc/${session.id}`,
+          guacamoleUrl: ''
+        }
       }
     }
   }, 600)
