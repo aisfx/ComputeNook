@@ -14,12 +14,13 @@
           <tr>
             <th>名称</th>
             <th>描述</th>
-            <th>最大运行作业数</th>
-            <th>最大提交作业数</th>
+            <th>运行作业数</th>
+            <th>提交作业数</th>
             <th>CPU 核心</th>
+            <th>内存 (GB)</th>
             <th>GPU 数量</th>
             <th>节点数</th>
-            <th>运行时间</th>
+            <th>作业运行时间</th>
             <th>总机时限制</th>
             <th>操作</th>
           </tr>
@@ -28,13 +29,14 @@
           <tr v-for="qos in qosList" :key="qos.name">
             <td><strong>{{ qos.name }}</strong></td>
             <td>{{ qos.description || '-' }}</td>
-            <td>{{ formatValue(qos.max_jobs_pu) }}</td>
-            <td>{{ formatValue(qos.max_submit_pu) }}</td>
-            <td>{{ formatValue(qos.max_cpus_pu) }}</td>
-            <td>{{ extractGPUCount(qos.max_tres_pu) || '-' }}</td>
-            <td>{{ formatValue(qos.max_nodes_pu) }}</td>
-            <td>{{ formatWallTime(qos.max_wall_pj) }}</td>
-            <td>{{ formatTRESMins(qos.grp_tres_mins) }}</td>
+            <td>{{ formatLimitValue(extractJobsLimit(qos)) }}</td>
+            <td>{{ formatLimitValue(extractSubmitLimit(qos)) }}</td>
+            <td>{{ formatLimitValue(extractCPULimit(qos)) }}</td>
+            <td>{{ formatLimitValue(extractMemoryLimit(qos)) }}</td>
+            <td>{{ formatLimitValue(extractGPULimit(qos)) }}</td>
+            <td>{{ formatLimitValue(extractNodeLimit(qos)) }}</td>
+            <td>{{ formatWallTimeLimit(extractWallTimeLimit(qos)) }}</td>
+            <td>{{ formatLimitValue(extractBillingLimit(qos)) }}</td>
             <td>
               <div class="action-buttons">
                 <button class="btn-link" @click="editQoS(qos)">✏️ 编辑</button>
@@ -77,22 +79,22 @@
               <small class="form-hint">每用户最多使用的 CPU 核心数</small>
             </div>
             <div class="form-group">
-              <label>GPU 数量</label>
-              <input type="number" v-model.number="formData.max_gpus" placeholder="4" />
-              <small class="form-hint">每用户最多使用的 GPU 数量</small>
+              <label>内存容量 (GB)</label>
+              <input type="number" v-model.number="formData.max_memory" placeholder="256" />
+              <small class="form-hint">每用户最多使用的内存容量</small>
             </div>
           </div>
 
           <div class="form-row">
             <div class="form-group">
+              <label>GPU 数量</label>
+              <input type="number" v-model.number="formData.max_gpus" placeholder="4" />
+              <small class="form-hint">每用户最多使用的 GPU 数量</small>
+            </div>
+            <div class="form-group">
               <label>节点数</label>
               <input type="number" v-model.number="formData.max_nodes" placeholder="2" />
               <small class="form-hint">每用户最多使用的节点数</small>
-            </div>
-            <div class="form-group">
-              <label>运行时间（天）</label>
-              <input type="number" v-model.number="formData.max_wall_days" placeholder="30" />
-              <small class="form-hint">单个作业最长运行时间（天）</small>
             </div>
           </div>
 
@@ -222,6 +224,7 @@ const formData = ref({
   max_jobs_pu: 0,
   max_submit_pu: 0,
   max_cpus: 0,
+  max_memory: 0,
   max_gpus: 0,
   max_nodes: 0,
   max_wall_days: 0,
@@ -279,6 +282,7 @@ const openAddModal = () => {
     max_jobs_pu: 0,
     max_submit_pu: 0,
     max_cpus: 0,
+    max_memory: 0,
     max_gpus: 0,
     max_nodes: 0,
     max_wall_days: 0,
@@ -288,34 +292,217 @@ const openAddModal = () => {
 }
 
 const editQoS = (qos: any) => {
+  console.log('Editing QoS:', qos)
+  console.log('CPU limit:', extractCPULimit(qos))
+  console.log('Node limit:', extractNodeLimit(qos))
+  console.log('GPU limit:', extractGPULimit(qos))
+  console.log('Memory limit:', extractMemoryLimit(qos))
+  console.log('Billing limit:', extractBillingLimit(qos))
+  
   isEdit.value = true
   formData.value = {
     name: qos.name,
     description: qos.description || '',
-    max_jobs_pu: extractNumber(qos.max_jobs_pu) || 0,
-    max_submit_pu: extractNumber(qos.max_submit_pu) || 0,
-    max_cpus: extractNumber(qos.max_cpus_pu) || 0,
-    max_gpus: extractGPUCount(qos.max_tres_pu) || 0,
-    max_nodes: extractNumber(qos.max_nodes_pu) || 0,
-    max_wall_days: Math.floor(extractNumber(qos.max_wall_pj) / 1440) || 0, // 转换分钟为天
-    grp_tres_mins: extractBillingMins(qos.grp_tres_mins) || 0
+    max_jobs_pu: extractJobsLimit(qos) || 0,
+    max_submit_pu: extractSubmitLimit(qos) || 0,
+    max_cpus: extractCPULimit(qos) || 0,
+    max_memory: extractMemoryLimit(qos) || 0,
+    max_gpus: extractGPULimit(qos) || 0,
+    max_nodes: extractNodeLimit(qos) || 0,
+    max_wall_days: Math.floor(extractWallTimeLimit(qos) / 1440) || 0, // 转换分钟为天
+    grp_tres_mins: extractBillingLimit(qos) || 0
   }
+  
+  console.log('Form data:', formData.value)
   showModal.value = true
 }
 
-// 从 grp_tres_mins 中提取 billing 数值
-const extractBillingMins = (value: string): number => {
-  if (!value || value === '') return 0
-  // 格式: billing=100000
-  const match = value.match(/billing=(\d+)/)
-  return match ? parseInt(match[1]) : 0
+// 从新的API结构中提取CPU限制
+const extractCPULimit = (qos: any): number => {
+  // 检查新的嵌套结构 - 优先从 tres.total 获取
+  if (qos.limits?.max?.tres?.total) {
+    const totalTres = qos.limits.max.tres.total
+    const cpuTres = totalTres.find((tres: any) => tres.type === 'cpu' && tres.id === 1)
+    if (cpuTres) return cpuTres.count
+  }
+  
+  // 备选：从 tres.per.user 获取
+  if (qos.limits?.max?.tres?.per?.user) {
+    const userTres = qos.limits.max.tres.per.user
+    const cpuTres = userTres.find((tres: any) => tres.type === 'cpu' && tres.id === 1)
+    if (cpuTres) return cpuTres.count
+  }
+  
+  // 兼容旧结构
+  if (qos.max_cpus_pu) return extractNumber(qos.max_cpus_pu)
+  if (qos.MaxCPUs) return extractNumber(qos.MaxCPUs)
+  
+  return 0
 }
 
-// 从 max_tres_pu 中提取 GPU 数量
+// 从新的API结构中提取GPU限制
+const extractGPULimit = (qos: any): number => {
+  // 检查新的嵌套结构 - 优先从 tres.total 获取
+  if (qos.limits?.max?.tres?.total) {
+    const totalTres = qos.limits.max.tres.total
+    const gpuTres = totalTres.find((tres: any) => tres.type === 'gres/gpu' && tres.id === 6)
+    if (gpuTres) return gpuTres.count
+  }
+  
+  // 备选：从 tres.per.user 获取
+  if (qos.limits?.max?.tres?.per?.user) {
+    const userTres = qos.limits.max.tres.per.user
+    const gpuTres = userTres.find((tres: any) => tres.type === 'gres/gpu' && tres.id === 6)
+    if (gpuTres) return gpuTres.count
+  }
+  
+  // 兼容旧结构
+  if (qos.max_tres_pu) return extractGPUCount(qos.max_tres_pu)
+  if (qos.MaxTRES) return extractGPUCount(qos.MaxTRES)
+  
+  return 0
+}
+
+// 从新的API结构中提取节点限制
+const extractNodeLimit = (qos: any): number => {
+  // 检查新的嵌套结构 - 优先从 tres.total 获取
+  if (qos.limits?.max?.tres?.total) {
+    const totalTres = qos.limits.max.tres.total
+    const nodeTres = totalTres.find((tres: any) => tres.type === 'node' && tres.id === 4)
+    if (nodeTres) return nodeTres.count
+  }
+  
+  // 备选：从 tres.per.user 获取
+  if (qos.limits?.max?.tres?.per?.user) {
+    const userTres = qos.limits.max.tres.per.user
+    const nodeTres = userTres.find((tres: any) => tres.type === 'node' && tres.id === 4)
+    if (nodeTres) return nodeTres.count
+  }
+  
+  // 兼容旧结构
+  if (qos.max_nodes_pu) return extractNumber(qos.max_nodes_pu)
+  if (qos.MaxNodes) return extractNumber(qos.MaxNodes)
+  
+  return 0
+}
+
+// 从新的API结构中提取内存限制（MB转GB）
+const extractMemoryLimit = (qos: any): number => {
+  // 检查新的嵌套结构 - 优先从 tres.total 获取
+  if (qos.limits?.max?.tres?.total) {
+    const totalTres = qos.limits.max.tres.total
+    const memTres = totalTres.find((tres: any) => tres.type === 'mem' && tres.id === 2)
+    if (memTres) return Math.floor(memTres.count / 1024) // MB 转 GB
+  }
+  
+  // 备选：从 tres.per.user 获取
+  if (qos.limits?.max?.tres?.per?.user) {
+    const userTres = qos.limits.max.tres.per.user
+    const memTres = userTres.find((tres: any) => tres.type === 'mem' && tres.id === 2)
+    if (memTres) return Math.floor(memTres.count / 1024) // MB 转 GB
+  }
+  
+  return 0
+}
+
+// 从新的API结构中提取作业数限制
+const extractJobsLimit = (qos: any): number => {
+  // 检查新的嵌套结构
+  if (qos.limits?.max?.jobs?.per?.user) {
+    const jobsLimit = qos.limits.max.jobs.per.user
+    return jobsLimit.set && !jobsLimit.infinite ? jobsLimit.number : 0
+  }
+  
+  // 检查 active_jobs 结构
+  if (qos.limits?.max?.active_jobs?.count) {
+    const jobsLimit = qos.limits.max.active_jobs.count
+    return jobsLimit.set && !jobsLimit.infinite ? jobsLimit.number : 0
+  }
+  
+  // 兼容旧结构
+  if (qos.max_jobs_pu) return extractNumber(qos.max_jobs_pu)
+  if (qos.MaxJobs) return extractNumber(qos.MaxJobs)
+  
+  return 0
+}
+
+// 从新的API结构中提取提交作业数限制
+const extractSubmitLimit = (qos: any): number => {
+  // 检查新的嵌套结构
+  if (qos.limits?.max?.jobs?.count) {
+    const submitLimit = qos.limits.max.jobs.count
+    return submitLimit.set && !submitLimit.infinite ? submitLimit.number : 0
+  }
+  
+  // 兼容旧结构
+  if (qos.max_submit_pu) return extractNumber(qos.max_submit_pu)
+  if (qos.MaxSubmit) return extractNumber(qos.MaxSubmit)
+  
+  return 0
+}
+
+// 从新的API结构中提取运行时间限制（分钟）
+const extractWallTimeLimit = (qos: any): number => {
+  // 检查新的嵌套结构
+  if (qos.limits?.max?.tres?.minutes?.per?.qos) {
+    const qosTres = qos.limits.max.tres.minutes.per.qos
+    const billingTres = qosTres.find((tres: any) => tres.type === 'billing')
+    if (billingTres) return billingTres.count
+  }
+  
+  // 兼容旧结构
+  if (qos.max_wall_pj) return extractNumber(qos.max_wall_pj)
+  if (qos.MaxWall) return extractNumber(qos.MaxWall)
+  
+  return 0
+}
+
+// 从新的API结构中提取总机时限制
+const extractBillingLimit = (qos: any): number => {
+  // 检查新的嵌套结构
+  if (qos.limits?.max?.tres?.minutes?.total) {
+    const totalTres = qos.limits.max.tres.minutes.total
+    const billingTres = totalTres.find((tres: any) => tres.type === 'billing')
+    if (billingTres) return billingTres.count
+  }
+  
+  // 兼容旧结构
+  if (qos.grp_tres_mins) return extractBillingMins(qos.grp_tres_mins)
+  if (qos.GrpTRESMins) return extractBillingMins(qos.GrpTRESMins)
+  
+  return 0
+}
+
+// 格式化限制值显示
+const formatLimitValue = (value: number): string => {
+  if (!value || value === 0) return '无限制'
+  return value.toString()
+}
+
+// 格式化运行时间限制
+const formatWallTimeLimit = (minutes: number): string => {
+  if (!minutes || minutes === 0) return '无限制'
+  const hours = Math.floor(minutes / 60)
+  const mins = minutes % 60
+  if (hours > 0) {
+    return `${hours}小时${mins > 0 ? mins + '分钟' : ''}`
+  }
+  return `${mins}分钟`
+}
+
+// 从 max_tres_pu 中提取 GPU 数量（兼容旧格式）
 const extractGPUCount = (value: string): number => {
   if (!value || value === '') return 0
   // 格式: gres/gpu=4 或 gres/gpu:a100=2
   const match = value.match(/gres\/gpu[^=]*=(\d+)/)
+  return match ? parseInt(match[1]) : 0
+}
+
+// 从 grp_tres_mins 中提取 billing 数值（兼容旧格式）
+const extractBillingMins = (value: string): number => {
+  if (!value || value === '') return 0
+  // 格式: billing=100000
+  const match = value.match(/billing=(\d+)/)
   return match ? parseInt(match[1]) : 0
 }
 
@@ -356,29 +543,45 @@ const saveQoS = async () => {
       description: formData.value.description,
       max_jobs_pu: formData.value.max_jobs_pu,
       max_submit_pu: formData.value.max_submit_pu,
-      max_cpus_pu: formData.value.max_cpus,
-      max_nodes_pu: formData.value.max_nodes,
+      max_cpus_pu: formData.value.max_cpus,  // 映射到 MaxCPUs
+      max_nodes_pu: formData.value.max_nodes, // 映射到 MaxNodes
       max_wall_pj: formData.value.max_wall_days * 1440, // 转换天为分钟
       grp_tres_mins: formData.value.grp_tres_mins.toString() // 转换为字符串
     }
     
+    // 构建 TRES 字符串，包含 GPU 和内存限制
+    let tresComponents = []
+    
     // 如果设置了 GPU 数量，添加到 max_tres_pu
     if (formData.value.max_gpus > 0) {
-      qosData.max_tres_pu = `gres/gpu=${formData.value.max_gpus}`
+      tresComponents.push(`gres/gpu=${formData.value.max_gpus}`)
     }
+    
+    // 如果设置了内存限制，添加到 max_tres_pu
+    if (formData.value.max_memory > 0) {
+      tresComponents.push(`mem=${formData.value.max_memory}G`)
+    }
+    
+    // 组合 TRES 字符串
+    if (tresComponents.length > 0) {
+      qosData.max_tres_pu = tresComponents.join(',')
+    }
+    
+    console.log('Submitting QoS data:', qosData)
     
     if (isEdit.value) {
       await qosAPI.updateQoS(formData.value.name, qosData)
-      alert('QoS 更新成功！')
+      notification.success('QoS 更新成功！')
     } else {
       await qosAPI.createQoS(qosData)
-      alert('QoS 创建成功！')
+      notification.success('QoS 创建成功！')
     }
     
     closeModal()
     await loadQoSList()
   } catch (err: any) {
-    modalError.value = err.response?.data?.error || '保存失败'
+    console.error('Save QoS error:', err)
+    modalError.value = err.response?.data?.error || err.message || '保存失败'
   } finally {
     saving.value = false
   }
@@ -399,18 +602,6 @@ const confirmDelete = async (qos: any) => {
 const closeModal = () => {
   showModal.value = false
   modalError.value = ''
-}
-
-// 格式化运行时间
-const formatWallTime = (value: any) => {
-  const minutes = extractNumber(value)
-  if (!minutes) return '-'
-  const hours = Math.floor(minutes / 60)
-  const mins = minutes % 60
-  if (hours > 0) {
-    return `${hours}小时${mins > 0 ? mins + '分钟' : ''}`
-  }
-  return `${mins}分钟`
 }
 
 // 格式化 TRES Minutes（总机时）

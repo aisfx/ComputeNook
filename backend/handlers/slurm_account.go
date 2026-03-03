@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"os"
 
@@ -668,8 +669,12 @@ func DeleteAssociation(c *gin.Context) {
 	cluster := c.Query("cluster")
 	partition := c.Query("partition")
 
+	// 添加详细的参数日志
+	fmt.Printf("DeleteAssociation called with: account='%s', user='%s', cluster='%s', partition='%s'\n", 
+		account, user, cluster, partition)
+
 	if account == "" || user == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "账户和用户参数不能为空"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("账户和用户参数不能为空 - account: '%s', user: '%s'", account, user)})
 		return
 	}
 

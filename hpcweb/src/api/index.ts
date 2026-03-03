@@ -419,6 +419,43 @@ export const deleteAssociation = async (account: string, user: string, cluster: 
   return await axios.delete(`/slurm/associations?${params.toString()}`)
 }
 
+// 机时管理 API
+export const usageAPI = {
+  // 获取用户机时使用情况
+  getUserUsage: async (user: string, startTime: string, endTime: string) => {
+    const response = await axios.get('/usage/user', {
+      params: { user, start_time: startTime, end_time: endTime }
+    })
+    return response.data
+  },
+
+  // 获取账户机时使用情况
+  getAccountUsage: async (account: string, startTime: string, endTime: string) => {
+    const response = await axios.get('/usage/account', {
+      params: { account, start_time: startTime, end_time: endTime }
+    })
+    return response.data
+  },
+
+  // 获取机时使用汇总
+  getUsageSummary: async (user: string, account: string, startTime: string, endTime: string) => {
+    const params: any = { start_time: startTime, end_time: endTime }
+    if (user) params.user = user
+    if (account) params.account = account
+    
+    const response = await axios.get('/usage/summary', { params })
+    return response.data
+  },
+
+  // 获取集群整体机时使用情况
+  getClusterUsage: async (startTime: string, endTime: string) => {
+    const response = await axios.get('/usage/cluster', {
+      params: { start_time: startTime, end_time: endTime }
+    })
+    return response.data
+  }
+}
+
 export default {
   auth: authAPI,
   user: userAPI,
@@ -427,5 +464,6 @@ export default {
   job: jobAPI,
   audit: auditAPI,
   slurmAccount: slurmAccountAPI,
-  slurmUser: slurmUserAPI
+  slurmUser: slurmUserAPI,
+  usage: usageAPI
 }

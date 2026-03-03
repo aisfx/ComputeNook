@@ -237,6 +237,14 @@ const saveAssociation = async () => {
 }
 
 const deleteAssociation = async (assoc: Association) => {
+  // 添加参数验证和日志
+  console.log('Deleting association:', assoc)
+  
+  if (!assoc.account || !assoc.user) {
+    showError(`参数错误: account='${assoc.account}', user='${assoc.user}'`)
+    return
+  }
+  
   // 检查是否是默认账户
   const userAssociations = associations.value.filter(a => a.user === assoc.user)
   const isOnlyAssociation = userAssociations.length === 1
@@ -255,10 +263,18 @@ const deleteAssociation = async (assoc: Association) => {
   }
 
   try {
+    console.log('Calling apiDeleteAssociation with:', {
+      account: assoc.account,
+      user: assoc.user,
+      cluster: assoc.cluster || '',
+      partition: assoc.partition || ''
+    })
+    
     await apiDeleteAssociation(assoc.account, assoc.user, assoc.cluster || '', assoc.partition || '')
     showSuccess('资源绑定删除成功')
     await loadAssociations()
   } catch (error: any) {
+    console.error('Delete association error:', error)
     const errorMsg = error.response?.data?.error || error.message
     
     // 检查是否是"不能删除默认账户"的错误
