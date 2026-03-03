@@ -189,6 +189,9 @@ func main() {
 			
 			// 恢复作业
 			jobs.POST("/:id/resume", handlers.ResumeJob)
+			
+			// 获取分区列表
+			jobs.GET("/partitions/list", handlers.GetPartitions)
 		}
 
 		// Web Shell API

@@ -410,24 +410,16 @@ func (c *Client) SubmitJob(params JobSubmitParams) (int64, error) {
 		return 0, fmt.Errorf("script is required")
 	}
 	
-	logger.Info("Submitting job: name=%s, partition=%s, nodes=%d, cpus=%d", 
-		params.Name, params.Partition, params.Nodes, params.CPUs)
+	logger.Info("Submitting job: name=%s, partition=%s, nodes=%d, cpus=%d, script_length=%d", 
+		params.Name, params.Partition, params.Nodes, params.CPUs, len(params.Script))
 	
-	// 构建作业描述 - 只包含必需和有效的字段
+	// 构建最小化的作业描述
 	job := map[string]interface{}{
-		"name":   params.Name,
-		"script": params.Script,
+		"name":      params.Name,
+		"partition": params.Partition,
 	}
 	
-	// 分区是必需的
-	job["partition"] = params.Partition
-	
-	// QoS配置（可选）
-	if params.QoS != "" {
-		job["qos"] = params.QoS
-	}
-	
-	// 资源配置（可选，但建议设置）
+	// 资源配置
 	if params.Nodes > 0 {
 		job["nodes"] = params.Nodes
 	}
@@ -435,67 +427,64 @@ func (c *Client) SubmitJob(params JobSubmitParams) (int64, error) {
 		job["cpus_per_task"] = params.CPUs
 	}
 	if params.Memory > 0 {
-		job["memory_per_node"] = params.Memory * 1024 // 转换为MB
+		job["memory_per_node"] = params.Memory * 1024 // MB
 	}
 	if params.GPUs > 0 {
 		job["gres"] = fmt.Sprintf("gpu:%d", params.GPUs)
 	}
-	
-	// 时间限制（转换为分钟）
 	if params.TimeLimit > 0 {
-		job["time_limit"] = params.TimeLimit * 60
+		job["time_limit"] = params.TimeLimit * 60 // 分钟
 	}
 	
-	// 工作目录和输出文件（可选）
+	// 工作目录（必须是绝对路径）
 	if params.WorkDir != "" {
 		job["current_working_directory"] = params.WorkDir
 	}
-	if params.Output != "" {
-		job["standard_output"] = params.Output
-	}
-	if params.Error != "" {
-		job["standard_error"] = params.Error
-	}
 	
-	// 优先级（可选）
-	if params.Priority != "" {
-		switch params.Priority {
-		case "high":
-			job["priority"] = 1000
-		case "low":
-			job["priority"] = 100
-		default:
-			job["priority"] = 500
+	// 输出文件（使用绝对路径）
+	if params.Output != "" {
+		if params.Output[0] != '/' && params.WorkDir != "" {
+			job["standard_output"] = params.WorkDir + "/" + params.Output
+		} else {
+			job["standard_output"] = params.Output
 		}
 	}
 	
-	// 构建请求体
+	if params.Error != "" {
+		if params.Error[0] != '/' && params.WorkDir != "" {
+			job["standard_error"] = params.WorkDir + "/" + params.Error
+		} else {
+			job["standard_error"] = params.Error
+		}
+	}
+	
+	// QoS
+	if params.QoS != "" {
+		job["qos"] = params.QoS
+	}
+	
+	// 构建请求体 - 使用最简单的格式
 	body := map[string]interface{}{
-		"job": job,
+		"script": params.Script,
+		"job":    job,
 	}
 	
 	bodyJSON, _ := json.Marshal(body)
 	path := fmt.Sprintf("/slurm/%s/job/submit", c.apiVersion)
 	logger.Debug("SubmitJob API request: POST %s", path)
 	logger.Debug("Full URL: %s%s", c.baseURL, path)
-	logger.Debug("Request body: %s", string(bodyJSON))
+	
+	// 只记录请求体的前500个字符，避免日志过长
+	bodyStr := string(bodyJSON)
+	if len(bodyStr) > 500 {
+		logger.Debug("Request body (first 500 chars): %s...", bodyStr[:500])
+	} else {
+		logger.Debug("Request body: %s", bodyStr)
+	}
 	
 	respBody, err := c.doRequest("POST", path, body)
 	if err != nil {
 		logger.Error("Job submission failed: %v", err)
-		
-		// 如果是分区错误，尝试获取可用分区列表并提示
-		if contains(err.Error(), "Invalid partition") {
-			partitions, pErr := c.GetPartitions()
-			if pErr == nil && len(partitions) > 0 {
-				availablePartitions := []string{}
-				for _, p := range partitions {
-					availablePartitions = append(availablePartitions, p.Name)
-				}
-				return 0, fmt.Errorf("invalid partition '%s'. Available partitions: %v", params.Partition, availablePartitions)
-			}
-		}
-		
 		return 0, fmt.Errorf("API request failed: %w", err)
 	}
 	

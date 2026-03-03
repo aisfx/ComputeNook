@@ -13,76 +13,6 @@ import (
 	"hpc-backend/slurm"
 )
 
-// GetPartitions 获取分区列表
-func GetPartitions(c *gin.Context) {
-	// 开发模式：返回模拟数据
-	if os.Getenv("DEV_MODE") == "true" {
-		mockPartitions := []map[string]interface{}{
-			{
-				"name":         "compute",
-				"state":        "UP",
-				"max_time":     86400,  // 24小时
-				"default_time": 3600,   // 1小时
-				"max_nodes":    32,
-				"min_nodes":    1,
-			},
-			{
-				"name":         "gpu",
-				"state":        "UP",
-				"max_time":     172800, // 48小时
-				"default_time": 7200,   // 2小时
-				"max_nodes":    8,
-				"min_nodes":    1,
-			},
-			{
-				"name":         "memory",
-				"state":        "UP",
-				"max_time":     43200,  // 12小时
-				"default_time": 3600,   // 1小时
-				"max_nodes":    16,
-				"min_nodes":    1,
-			},
-			{
-				"name":         "debug",
-				"state":        "UP",
-				"max_time":     3600,   // 1小时
-				"default_time": 600,    // 10分钟
-				"max_nodes":    4,
-				"min_nodes":    1,
-			},
-		}
-		c.JSON(http.StatusOK, gin.H{"data": mockPartitions})
-		return
-	}
-	
-	client, err := slurm.NewClient()
-	if err != nil {
-		logger.Error("Failed to create Slurm client: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法连接到 Slurm API: " + err.Error()})
-		return
-	}
-	
-	partitions, err := client.GetPartitions()
-	if err != nil {
-		logger.Error("Failed to get partitions: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "获取分区列表失败: " + err.Error()})
-		return
-	}
-	
-	// 转换为前端需要的格式
-	result := make([]map[string]interface{}, 0, len(partitions))
-	for _, p := range partitions {
-		result = append(result, map[string]interface{}{
-			"name":  p.GetPartitionName(),
-			"state": p.GetPartitionState(),
-			"nodes": p.GetNodesConfigured(),
-		})
-	}
-	
-	logger.Info("Successfully retrieved %d partitions", len(result))
-	c.JSON(http.StatusOK, gin.H{"data": result})
-}
-
 // GetJobs 获取作业列表
 func GetJobs(c *gin.Context) {
 	// 获取当前用户信息
@@ -657,4 +587,37 @@ func SubmitJob(c *gin.Context) {
 		"message": "作业提交成功",
 		"job_id":  jobID,
 	})
+}
+
+// GetPartitions 获取分区列表
+func GetPartitions(c *gin.Context) {
+	// 创建 Slurm 客户端
+	client, err := slurm.NewClient()
+	if err != nil {
+		logger.Error("Failed to create Slurm client: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to connect to Slurm"})
+		return
+	}
+	
+	// 获取分区列表
+	partitions, err := client.GetPartitions()
+	if err != nil {
+		logger.Error("Failed to get partitions: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get partitions: " + err.Error()})
+		return
+	}
+	
+	// 转换为前端格式
+	partitionList := make([]map[string]interface{}, 0, len(partitions))
+	for _, partition := range partitions {
+		partitionInfo := map[string]interface{}{
+			"name":  partition.GetPartitionName(),
+			"state": partition.GetPartitionState(),
+			"nodes": partition.GetNodesConfigured(),
+		}
+		partitionList = append(partitionList, partitionInfo)
+	}
+	
+	logger.Info("Retrieved %d partitions", len(partitionList))
+	c.JSON(http.StatusOK, gin.H{"data": partitionList})
 }

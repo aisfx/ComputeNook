@@ -137,6 +137,11 @@ func GetDashboardStats(c *gin.Context) {
 	}
 	
 	logger.Info("Dashboard stats retrieved successfully for user: %s (admin: %v)", username, isAdmin)
+	logger.Info("Stats: nodes=%d/%d, cpus=%d/%d, memory=%.2fGB/%.2fTB, gpus=%d/%d", 
+		stats.OnlineNodes, stats.TotalNodes,
+		stats.AllocatedCPUs, stats.TotalCPUs,
+		stats.TotalMemoryGB, stats.TotalMemoryTB,
+		stats.AllocatedGPUs, stats.TotalGPUs)
 	c.JSON(http.StatusOK, gin.H{"data": stats})
 }
 
@@ -255,7 +260,7 @@ func GetDashboardNodes(c *gin.Context) {
 		nodeInfo := NodeInfo{
 			Name:               node.Name,
 			State:              node.GetNodeState(),
-			CPUTotal:           node.CPUs.Total,
+			CPUTotal:           node.GetTotalCPUs(),
 			CPUAllocated:       node.AllocCPUs,
 			CPUUsagePercent:    node.GetCPUUsagePercent(),
 			MemoryTotalMB:      node.RealMemory,

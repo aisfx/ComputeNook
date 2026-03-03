@@ -13,10 +13,8 @@ type Node struct {
 	State       []string `json:"state,omitempty"`
 	Reason      string   `json:"reason,omitempty"`
 	
-	// CPU 信息
-	CPUs struct {
-		Total int `json:"total"`
-	} `json:"cpus,omitempty"`
+	// CPU 信息 - 可能是数字或对象
+	CPUsRaw     interface{} `json:"cpus,omitempty"`
 	
 	// 内存信息（MB）
 	RealMemory int64 `json:"real_memory,omitempty"`
@@ -35,6 +33,27 @@ type Node struct {
 	Comment     string `json:"comment,omitempty"`
 }
 
+// GetTotalCPUs 获取总CPU数量
+func (n *Node) GetTotalCPUs() int {
+	if n.CPUsRaw == nil {
+		return 0
+	}
+	
+	// 尝试作为数字解析
+	if cpuNum, ok := n.CPUsRaw.(float64); ok {
+		return int(cpuNum)
+	}
+	
+	// 尝试作为对象解析
+	if cpuObj, ok := n.CPUsRaw.(map[string]interface{}); ok {
+		if total, ok := cpuObj["total"].(float64); ok {
+			return int(total)
+		}
+	}
+	
+	return 0
+}
+
 // GetNodeState 获取节点状态
 func (n *Node) GetNodeState() string {
 	if len(n.State) > 0 {
@@ -45,10 +64,11 @@ func (n *Node) GetNodeState() string {
 
 // GetCPUUsagePercent 计算CPU使用率
 func (n *Node) GetCPUUsagePercent() float64 {
-	if n.CPUs.Total == 0 {
+	totalCPUs := n.GetTotalCPUs()
+	if totalCPUs == 0 {
 		return 0
 	}
-	return float64(n.AllocCPUs) / float64(n.CPUs.Total) * 100
+	return float64(n.AllocCPUs) / float64(totalCPUs) * 100
 }
 
 // GetMemoryUsagePercent 计算内存使用率
@@ -177,7 +197,7 @@ func (c *Client) GetClusterStatistics() (*ClusterStatistics, error) {
 		}
 		
 		// CPU 统计
-		stats.TotalCPUs += node.CPUs.Total
+		stats.TotalCPUs += node.GetTotalCPUs()
 		stats.AllocatedCPUs += node.AllocCPUs
 		
 		// 内存统计
@@ -349,7 +369,7 @@ func (c *Client) GetUserAvailableResources(username string) (*UserResourceStatis
 		}
 		
 		// CPU 统计
-		stats.TotalCPUs += node.CPUs.Total
+		stats.TotalCPUs += node.GetTotalCPUs()
 		stats.AllocatedCPUs += node.AllocCPUs
 		
 		// 内存统计

@@ -33,8 +33,8 @@
         <div class="stat-icon">💾</div>
         <div class="stat-content">
           <div class="stat-label">内存总量</div>
-          <div class="stat-value">{{ stats.memory }} TB</div>
-          <div class="stat-detail">可用: {{ stats.memoryFree }} TB</div>
+          <div class="stat-value">{{ formatMemory(stats.memory) }}</div>
+          <div class="stat-detail">可用: {{ formatMemory(stats.memoryFree) }}</div>
         </div>
       </div>
     </div>
@@ -271,6 +271,19 @@ const storageQuota = ref({
   }
 })
 
+// 格式化内存显示（自动选择合适的单位）
+const formatMemory = (memoryTB: number) => {
+  if (!memoryTB || memoryTB === 0) {
+    return '0 GB'
+  }
+  if (memoryTB >= 1) {
+    return `${memoryTB.toFixed(1)} TB`
+  } else {
+    const memoryGB = memoryTB * 1024
+    return `${memoryGB.toFixed(1)} GB`
+  }
+}
+
 // 计算作业统计百分比
 const jobStatsTotal = computed(() => {
   return jobStats.value.running + jobStats.value.pending + 
@@ -313,15 +326,17 @@ const loadDashboardStats = async () => {
     
     // 更新统计数据
     stats.value = {
-      nodes: data.total_nodes,
-      nodesOnline: data.online_nodes,
-      cpuCores: data.total_cpus,
-      cpuUsage: Math.round(data.cpu_usage_percent),
-      gpuCards: data.total_gpus,
-      gpuInUse: data.allocated_gpus,
-      memory: parseFloat(data.total_memory_tb.toFixed(1)),
-      memoryFree: parseFloat(data.free_memory_tb.toFixed(1))
+      nodes: data.total_nodes || 0,
+      nodesOnline: data.online_nodes || 0,
+      cpuCores: data.total_cpus || 0,
+      cpuUsage: Math.round(data.cpu_usage_percent || 0),
+      gpuCards: data.total_gpus || 0,
+      gpuInUse: data.allocated_gpus || 0,
+      memory: data.total_memory_tb || 0,
+      memoryFree: data.free_memory_tb || 0
     }
+    
+    console.log('Dashboard stats loaded:', stats.value)
   } catch (err: any) {
     console.error('Failed to load dashboard stats:', err)
     // 静默处理错误，不显示通知

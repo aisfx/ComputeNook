@@ -1,0 +1,585 @@
+{"timestamp":"2026-03-03T19:11:32.3342549+08:00","type":"event","event":"session_start","data":{"host":"192.168.5.250","session_id":"70343f1c-fbdb-4528-b036-ea40af3bcb04","user_id":"24135","username":"sunfx"}}
+{"timestamp":"2026-03-03T19:11:32.3353353+08:00","type":"event","event":"session_created","data":{"host":"192.168.5.250","port":31277}}
+{"timestamp":"2026-03-03T19:11:32.4883299+08:00","type":"event","event":"connection_established"}
+{"timestamp":"2026-03-03T19:11:32.4883299+08:00","type":"output","content":"Activate the web console with: systemctl enable --now cockpit.socket\r\n\r\nLast login: Tue Mar  3 17:55:20 2026 from 192.168.0.11\r\r\n"}
+{"timestamp":"2026-03-03T19:11:32.5327384+08:00","type":"output","content":"\u001b]0;sunfx@mn0:~\u0007"}
+{"timestamp":"2026-03-03T19:11:32.5333567+08:00","type":"output","content":"[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T19:11:34.0001296+08:00","type":"command","content":"\r"}
+{"timestamp":"2026-03-03T19:11:34.0068336+08:00","type":"output","content":"\r\n"}
+{"timestamp":"2026-03-03T19:11:34.0074063+08:00","type":"output","content":"\u001b]0;sunfx@mn0:~\u0007[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T19:11:34.1645307+08:00","type":"command","content":"l"}
+{"timestamp":"2026-03-03T19:11:34.1717926+08:00","type":"output","content":"l"}
+{"timestamp":"2026-03-03T19:11:34.2559908+08:00","type":"command","content":"s"}
+{"timestamp":"2026-03-03T19:11:34.2625058+08:00","type":"output","content":"s"}
+{"timestamp":"2026-03-03T19:11:34.3351485+08:00","type":"command","content":"\r"}
+{"timestamp":"2026-03-03T19:11:34.3408489+08:00","type":"output","content":"\r\n"}
+{"timestamp":"2026-03-03T19:11:34.3429007+08:00","type":"output","content":"\u001b[0m\u001b[38;5;33m111\u001b[0m  LdapAdmin.exe  \u001b[38;5;33mtest\u001b[0m  \u001b[38;5;40mtest.sh\u001b[0m\r\n"}
+{"timestamp":"2026-03-03T19:11:34.3429007+08:00","type":"output","content":"\u001b]0;sunfx@mn0:~\u0007[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T19:11:34.578425+08:00","type":"command","content":"s"}
+{"timestamp":"2026-03-03T19:11:34.5846362+08:00","type":"output","content":"s"}
+{"timestamp":"2026-03-03T19:11:35.0429288+08:00","type":"command","content":""}
+{"timestamp":"2026-03-03T19:11:35.0501198+08:00","type":"output","content":"\b\u001b[K"}
+{"timestamp":"2026-03-03T19:11:35.1364093+08:00","type":"command","content":"s"}
+{"timestamp":"2026-03-03T19:11:35.1425869+08:00","type":"output","content":"s"}
+{"timestamp":"2026-03-03T19:11:35.1801255+08:00","type":"command","content":"r"}
+{"timestamp":"2026-03-03T19:11:35.1863809+08:00","type":"output","content":"r"}
+{"timestamp":"2026-03-03T19:11:35.2577119+08:00","type":"command","content":"u"}
+{"timestamp":"2026-03-03T19:11:35.2635551+08:00","type":"output","content":"u"}
+{"timestamp":"2026-03-03T19:11:35.370742+08:00","type":"command","content":"\t"}
+{"timestamp":"2026-03-03T19:11:35.3791821+08:00","type":"output","content":"n "}
+{"timestamp":"2026-03-03T19:11:35.5019988+08:00","type":"command","content":" "}
+{"timestamp":"2026-03-03T19:11:35.5080663+08:00","type":"output","content":" "}
+{"timestamp":"2026-03-03T19:11:35.6664726+08:00","type":"command","content":"-"}
+{"timestamp":"2026-03-03T19:11:35.6725585+08:00","type":"output","content":"-"}
+{"timestamp":"2026-03-03T19:11:35.9052971+08:00","type":"command","content":"N"}
+{"timestamp":"2026-03-03T19:11:35.9119856+08:00","type":"output","content":"N"}
+{"timestamp":"2026-03-03T19:11:36.0034692+08:00","type":"command","content":" "}
+{"timestamp":"2026-03-03T19:11:36.0099254+08:00","type":"output","content":" "}
+{"timestamp":"2026-03-03T19:11:36.1212134+08:00","type":"command","content":"1"}
+{"timestamp":"2026-03-03T19:11:36.1278087+08:00","type":"output","content":"1"}
+{"timestamp":"2026-03-03T19:11:36.2378085+08:00","type":"command","content":" "}
+{"timestamp":"2026-03-03T19:11:36.2439202+08:00","type":"output","content":" "}
+{"timestamp":"2026-03-03T19:11:36.405805+08:00","type":"command","content":"-"}
+{"timestamp":"2026-03-03T19:11:36.4119031+08:00","type":"output","content":"-"}
+{"timestamp":"2026-03-03T19:11:36.73806+08:00","type":"command","content":""}
+{"timestamp":"2026-03-03T19:11:36.745973+08:00","type":"output","content":"\b\u001b[K"}
+{"timestamp":"2026-03-03T19:11:36.8705804+08:00","type":"command","content":"\u0003"}
+{"timestamp":"2026-03-03T19:11:36.8795247+08:00","type":"output","content":"^C"}
+{"timestamp":"2026-03-03T19:11:36.8795247+08:00","type":"output","content":"\r\n\u001b]0;sunfx@mn0:~\u0007"}
+{"timestamp":"2026-03-03T19:11:36.8800297+08:00","type":"output","content":"[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T19:11:37.0898476+08:00","type":"command","content":"s"}
+{"timestamp":"2026-03-03T19:11:37.0978613+08:00","type":"output","content":"s"}
+{"timestamp":"2026-03-03T19:11:37.547964+08:00","type":"command","content":"b"}
+{"timestamp":"2026-03-03T19:11:37.5548548+08:00","type":"output","content":"b"}
+{"timestamp":"2026-03-03T19:11:37.6372045+08:00","type":"command","content":"a"}
+{"timestamp":"2026-03-03T19:11:37.6440485+08:00","type":"output","content":"a"}
+{"timestamp":"2026-03-03T19:11:37.8376535+08:00","type":"command","content":"\t"}
+{"timestamp":"2026-03-03T19:11:37.8449833+08:00","type":"output","content":"tch "}
+{"timestamp":"2026-03-03T19:11:38.5957422+08:00","type":"command","content":"-"}
+{"timestamp":"2026-03-03T19:11:38.6017697+08:00","type":"output","content":"-"}
+{"timestamp":"2026-03-03T19:11:38.9346132+08:00","type":"command","content":"N"}
+{"timestamp":"2026-03-03T19:11:38.9422634+08:00","type":"output","content":"N"}
+{"timestamp":"2026-03-03T19:11:39.0872132+08:00","type":"command","content":" "}
+{"timestamp":"2026-03-03T19:11:39.0945116+08:00","type":"output","content":" "}
+{"timestamp":"2026-03-03T19:11:39.2519955+08:00","type":"command","content":"1"}
+{"timestamp":"2026-03-03T19:11:39.2710342+08:00","type":"output","content":"1"}
+{"timestamp":"2026-03-03T19:11:39.3510561+08:00","type":"command","content":" "}
+{"timestamp":"2026-03-03T19:11:39.3571144+08:00","type":"output","content":" "}
+{"timestamp":"2026-03-03T19:11:39.558674+08:00","type":"command","content":"."}
+{"timestamp":"2026-03-03T19:11:39.5660197+08:00","type":"output","content":"."}
+{"timestamp":"2026-03-03T19:11:39.7165716+08:00","type":"command","content":"/"}
+{"timestamp":"2026-03-03T19:11:39.7237699+08:00","type":"output","content":"/"}
+{"timestamp":"2026-03-03T19:11:40.0026988+08:00","type":"command","content":"t"}
+{"timestamp":"2026-03-03T19:11:40.0100318+08:00","type":"output","content":"t"}
+{"timestamp":"2026-03-03T19:11:40.0266394+08:00","type":"command","content":"e"}
+{"timestamp":"2026-03-03T19:11:40.0326958+08:00","type":"output","content":"e"}
+{"timestamp":"2026-03-03T19:11:40.1797374+08:00","type":"command","content":"\t"}
+{"timestamp":"2026-03-03T19:11:40.2320394+08:00","type":"output","content":"\u0007st"}
+{"timestamp":"2026-03-03T19:11:40.339196+08:00","type":"command","content":"\r"}
+{"timestamp":"2026-03-03T19:11:40.3452766+08:00","type":"output","content":"\r\n"}
+{"timestamp":"2026-03-03T19:11:40.3499879+08:00","type":"output","content":"sbatch: error: Batch script is empty!\r\n"}
+{"timestamp":"2026-03-03T19:11:40.3505205+08:00","type":"output","content":"\u001b]0;sunfx@mn0:~\u0007[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T19:11:40.6408182+08:00","type":"command","content":"s"}
+{"timestamp":"2026-03-03T19:11:40.6468892+08:00","type":"output","content":"s"}
+{"timestamp":"2026-03-03T19:11:41.7803897+08:00","type":"command","content":"\u001b[A"}
+{"timestamp":"2026-03-03T19:11:41.7858979+08:00","type":"output","content":"batch -N 1 ./test"}
+{"timestamp":"2026-03-03T19:11:42.3551412+08:00","type":"command","content":"\u001b[D"}
+{"timestamp":"2026-03-03T19:11:42.3616655+08:00","type":"output","content":"\b"}
+{"timestamp":"2026-03-03T19:11:42.8639808+08:00","type":"command","content":"\u001b[D"}
+{"timestamp":"2026-03-03T19:11:42.8722534+08:00","type":"output","content":"\b"}
+{"timestamp":"2026-03-03T19:11:42.8948331+08:00","type":"command","content":"\u001b[D"}
+{"timestamp":"2026-03-03T19:11:42.9024586+08:00","type":"output","content":"\b"}
+{"timestamp":"2026-03-03T19:11:42.9253857+08:00","type":"command","content":"\u001b[D"}
+{"timestamp":"2026-03-03T19:11:42.9339306+08:00","type":"output","content":"\b"}
+{"timestamp":"2026-03-03T19:11:42.9577207+08:00","type":"command","content":"\u001b[D"}
+{"timestamp":"2026-03-03T19:11:42.9650563+08:00","type":"output","content":"\b"}
+{"timestamp":"2026-03-03T19:11:43.0004304+08:00","type":"command","content":"\u001b[D"}
+{"timestamp":"2026-03-03T19:11:43.0068044+08:00","type":"output","content":"\b"}
+{"timestamp":"2026-03-03T19:11:43.8289933+08:00","type":"command","content":"\u001b[C"}
+{"timestamp":"2026-03-03T19:11:43.835627+08:00","type":"output","content":"\u001b[C"}
+{"timestamp":"2026-03-03T19:11:44.356328+08:00","type":"command","content":"\u001b[C"}
+{"timestamp":"2026-03-03T19:11:44.3628103+08:00","type":"output","content":"\u001b[C"}
+{"timestamp":"2026-03-03T19:11:45.9505773+08:00","type":"command","content":"\u001b[F"}
+{"timestamp":"2026-03-03T19:11:45.9595957+08:00","type":"output","content":"\u001b[C\u001b[C\u001b[C\u001b[C"}
+{"timestamp":"2026-03-03T19:11:46.2874742+08:00","type":"command","content":"."}
+{"timestamp":"2026-03-03T19:11:46.2960495+08:00","type":"output","content":"."}
+{"timestamp":"2026-03-03T19:11:46.397592+08:00","type":"command","content":"s"}
+{"timestamp":"2026-03-03T19:11:46.4039139+08:00","type":"output","content":"s"}
+{"timestamp":"2026-03-03T19:11:46.5184788+08:00","type":"command","content":"\t"}
+{"timestamp":"2026-03-03T19:11:46.5611555+08:00","type":"output","content":"h"}
+{"timestamp":"2026-03-03T19:11:46.7578752+08:00","type":"command","content":"\r"}
+{"timestamp":"2026-03-03T19:11:46.7638077+08:00","type":"output","content":"\r\n"}
+{"timestamp":"2026-03-03T19:11:46.7719373+08:00","type":"output","content":"Submitted batch job 314\r\n"}
+{"timestamp":"2026-03-03T19:11:46.7719373+08:00","type":"output","content":"\u001b]0;sunfx@mn0:~\u0007"}
+{"timestamp":"2026-03-03T19:11:46.7726852+08:00","type":"output","content":"[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T19:11:47.4584145+08:00","type":"command","content":"l"}
+{"timestamp":"2026-03-03T19:11:47.4671619+08:00","type":"output","content":"l"}
+{"timestamp":"2026-03-03T19:11:47.5460113+08:00","type":"command","content":"s"}
+{"timestamp":"2026-03-03T19:11:47.5527975+08:00","type":"output","content":"s"}
+{"timestamp":"2026-03-03T19:11:47.7016845+08:00","type":"command","content":"\r"}
+{"timestamp":"2026-03-03T19:11:47.7076721+08:00","type":"output","content":"\r\n"}
+{"timestamp":"2026-03-03T19:11:47.7100483+08:00","type":"output","content":"\u001b[0m\u001b[38;5;33m111\u001b[0m  LdapAdmin.exe  \u001b[38;5;33mtest\u001b[0m  \u001b[38;5;40mtest.sh\u001b[0m\r\n"}
+{"timestamp":"2026-03-03T19:11:47.7100483+08:00","type":"output","content":"\u001b]0;sunfx@mn0:~\u0007"}
+{"timestamp":"2026-03-03T19:11:47.7100483+08:00","type":"output","content":"[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T19:11:47.8150406+08:00","type":"command","content":"s"}
+{"timestamp":"2026-03-03T19:11:47.8229796+08:00","type":"output","content":"s"}
+{"timestamp":"2026-03-03T19:11:47.9888089+08:00","type":"command","content":"q"}
+{"timestamp":"2026-03-03T19:11:47.9958979+08:00","type":"output","content":"q"}
+{"timestamp":"2026-03-03T19:11:48.0929969+08:00","type":"command","content":"u"}
+{"timestamp":"2026-03-03T19:11:48.0998431+08:00","type":"output","content":"u"}
+{"timestamp":"2026-03-03T19:11:48.1605268+08:00","type":"command","content":"e"}
+{"timestamp":"2026-03-03T19:11:48.1667235+08:00","type":"output","content":"e"}
+{"timestamp":"2026-03-03T19:11:48.2897833+08:00","type":"command","content":"\t"}
+{"timestamp":"2026-03-03T19:11:48.2967759+08:00","type":"output","content":"ue "}
+{"timestamp":"2026-03-03T19:11:48.3329369+08:00","type":"command","content":"\r"}
+{"timestamp":"2026-03-03T19:11:48.3390509+08:00","type":"output","content":"\r\n"}
+{"timestamp":"2026-03-03T19:11:48.3446181+08:00","type":"output","content":"             JOBID PARTITION     NAME     USER ST       TIME  NODES NODELIST(REASON)\r\n"}
+{"timestamp":"2026-03-03T19:11:48.3471363+08:00","type":"output","content":"\u001b]0;sunfx@mn0:~\u0007[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T19:11:49.5451408+08:00","type":"command","content":"c"}
+{"timestamp":"2026-03-03T19:11:49.5511503+08:00","type":"output","content":"c"}
+{"timestamp":"2026-03-03T19:11:49.6320521+08:00","type":"command","content":"a"}
+{"timestamp":"2026-03-03T19:11:49.6369533+08:00","type":"output","content":"a"}
+{"timestamp":"2026-03-03T19:11:49.713499+08:00","type":"command","content":"t"}
+{"timestamp":"2026-03-03T19:11:49.7197201+08:00","type":"output","content":"t"}
+{"timestamp":"2026-03-03T19:11:49.7565063+08:00","type":"command","content":" "}
+{"timestamp":"2026-03-03T19:11:49.7628809+08:00","type":"output","content":" "}
+{"timestamp":"2026-03-03T19:11:49.8678445+08:00","type":"command","content":"t"}
+{"timestamp":"2026-03-03T19:11:49.8749169+08:00","type":"output","content":"t"}
+{"timestamp":"2026-03-03T19:11:49.8839847+08:00","type":"command","content":"e"}
+{"timestamp":"2026-03-03T19:11:49.8943283+08:00","type":"output","content":"e"}
+{"timestamp":"2026-03-03T19:11:50.0173795+08:00","type":"command","content":"\t"}
+{"timestamp":"2026-03-03T19:11:50.0284332+08:00","type":"output","content":"\u0007st"}
+{"timestamp":"2026-03-03T19:11:50.1714331+08:00","type":"command","content":"\r"}
+{"timestamp":"2026-03-03T19:11:50.1777139+08:00","type":"output","content":"\r\n"}
+{"timestamp":"2026-03-03T19:11:50.1797231+08:00","type":"output","content":"cat: test: Is a directory\r\n"}
+{"timestamp":"2026-03-03T19:11:50.1797231+08:00","type":"output","content":"\u001b]0;sunfx@mn0:~\u0007"}
+{"timestamp":"2026-03-03T19:11:50.1802303+08:00","type":"output","content":"[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T19:11:50.7561054+08:00","type":"command","content":"\u001b[A"}
+{"timestamp":"2026-03-03T19:11:50.7626413+08:00","type":"output","content":"cat test"}
+{"timestamp":"2026-03-03T19:11:50.9723967+08:00","type":"command","content":"."}
+{"timestamp":"2026-03-03T19:11:50.9789086+08:00","type":"output","content":"."}
+{"timestamp":"2026-03-03T19:11:51.0790569+08:00","type":"command","content":"\t"}
+{"timestamp":"2026-03-03T19:11:51.0911648+08:00","type":"output","content":"sh "}
+{"timestamp":"2026-03-03T19:11:51.246476+08:00","type":"command","content":"\r"}
+{"timestamp":"2026-03-03T19:11:51.2527501+08:00","type":"output","content":"\r\n"}
+{"timestamp":"2026-03-03T19:11:51.2549428+08:00","type":"output","content":"#!/bin/bash\r\n\r\nsleep 10\r\n"}
+{"timestamp":"2026-03-03T19:11:51.2549428+08:00","type":"output","content":"\u001b]0;sunfx@mn0:~\u0007"}
+{"timestamp":"2026-03-03T19:11:51.2549428+08:00","type":"output","content":"[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T19:11:52.1764953+08:00","type":"command","content":"l"}
+{"timestamp":"2026-03-03T19:11:52.1836965+08:00","type":"output","content":"l"}
+{"timestamp":"2026-03-03T19:11:52.2142193+08:00","type":"command","content":"s"}
+{"timestamp":"2026-03-03T19:11:52.2201922+08:00","type":"output","content":"s"}
+{"timestamp":"2026-03-03T19:11:52.285835+08:00","type":"command","content":" "}
+{"timestamp":"2026-03-03T19:11:52.2920597+08:00","type":"output","content":" "}
+{"timestamp":"2026-03-03T19:11:52.4117536+08:00","type":"command","content":"t"}
+{"timestamp":"2026-03-03T19:11:52.4183462+08:00","type":"output","content":"t"}
+{"timestamp":"2026-03-03T19:11:52.4312889+08:00","type":"command","content":"e"}
+{"timestamp":"2026-03-03T19:11:52.4372421+08:00","type":"output","content":"e"}
+{"timestamp":"2026-03-03T19:11:52.5801106+08:00","type":"command","content":"\t"}
+{"timestamp":"2026-03-03T19:11:52.592255+08:00","type":"output","content":"\u0007st"}
+{"timestamp":"2026-03-03T19:11:52.9501427+08:00","type":"command","content":"\r"}
+{"timestamp":"2026-03-03T19:11:52.9567517+08:00","type":"output","content":"\r\n"}
+{"timestamp":"2026-03-03T19:11:52.9582777+08:00","type":"output","content":"\u001b]0;sunfx@mn0:~\u0007"}
+{"timestamp":"2026-03-03T19:11:52.9589829+08:00","type":"output","content":"[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T19:11:54.8563108+08:00","type":"command","content":"\u001b[A"}
+{"timestamp":"2026-03-03T19:11:54.8628259+08:00","type":"output","content":"ls test"}
+{"timestamp":"2026-03-03T19:11:55.0271749+08:00","type":"command","content":"\u001b[A"}
+{"timestamp":"2026-03-03T19:11:55.0331563+08:00","type":"output","content":"\b\b\b\b\b\b\bcat test.sh "}
+{"timestamp":"2026-03-03T19:11:55.203163+08:00","type":"command","content":"\u001b[A"}
+{"timestamp":"2026-03-03T19:11:55.210943+08:00","type":"output","content":"\b\b\b\b\u001b[K"}
+{"timestamp":"2026-03-03T19:11:55.7311543+08:00","type":"command","content":"\u001b[A"}
+{"timestamp":"2026-03-03T19:11:55.7389955+08:00","type":"output","content":"\b\b\b\b\b\b\b\b\u001b[1Psqueue "}
+{"timestamp":"2026-03-03T19:11:56.692603+08:00","type":"command","content":"\u001b[A"}
+{"timestamp":"2026-03-03T19:11:56.69913+08:00","type":"output","content":"\b\b\b\b\b\b\bls\u001b[K"}
+{"timestamp":"2026-03-03T19:11:57.5904886+08:00","type":"command","content":"\f"}
+{"timestamp":"2026-03-03T19:11:57.5974726+08:00","type":"output","content":"\u001b[H\u001b[2J[sunfx@mn0 ~]$ ls"}
+{"timestamp":"2026-03-03T19:11:58.1874071+08:00","type":"command","content":"\u0003"}
+{"timestamp":"2026-03-03T19:11:58.1939183+08:00","type":"output","content":"^C\r\n"}
+{"timestamp":"2026-03-03T19:11:58.1945328+08:00","type":"output","content":"\u001b]0;sunfx@mn0:~\u0007[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T19:11:58.3785517+08:00","type":"command","content":"l"}
+{"timestamp":"2026-03-03T19:11:58.3853999+08:00","type":"output","content":"l"}
+{"timestamp":"2026-03-03T19:11:58.4884847+08:00","type":"command","content":"s"}
+{"timestamp":"2026-03-03T19:11:58.4941764+08:00","type":"output","content":"s"}
+{"timestamp":"2026-03-03T19:11:58.5962973+08:00","type":"command","content":"\r"}
+{"timestamp":"2026-03-03T19:11:58.6029409+08:00","type":"output","content":"\r\n"}
+{"timestamp":"2026-03-03T19:11:58.6054622+08:00","type":"output","content":"\u001b[0m\u001b[38;5;33m111\u001b[0m  LdapAdmin.exe  \u001b[38;5;33mtest\u001b[0m  \u001b[38;5;40mtest.sh\u001b[0m\r\n\u001b]0;sunfx@mn0:~\u0007"}
+{"timestamp":"2026-03-03T19:11:58.6054622+08:00","type":"output","content":"[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T19:12:00.4565104+08:00","type":"command","content":"s"}
+{"timestamp":"2026-03-03T19:12:00.4627333+08:00","type":"output","content":"s"}
+{"timestamp":"2026-03-03T19:12:00.5467392+08:00","type":"command","content":"b"}
+{"timestamp":"2026-03-03T19:12:00.5538323+08:00","type":"output","content":"b"}
+{"timestamp":"2026-03-03T19:12:00.6702387+08:00","type":"command","content":"a"}
+{"timestamp":"2026-03-03T19:12:00.6765763+08:00","type":"output","content":"a"}
+{"timestamp":"2026-03-03T19:12:00.8304075+08:00","type":"command","content":"\t"}
+{"timestamp":"2026-03-03T19:12:00.8377868+08:00","type":"output","content":"tch "}
+{"timestamp":"2026-03-03T19:12:01.5337694+08:00","type":"command","content":"-"}
+{"timestamp":"2026-03-03T19:12:01.5404299+08:00","type":"output","content":"-"}
+{"timestamp":"2026-03-03T19:12:01.8108069+08:00","type":"command","content":"N"}
+{"timestamp":"2026-03-03T19:12:01.8172987+08:00","type":"output","content":"N"}
+{"timestamp":"2026-03-03T19:12:01.9407986+08:00","type":"command","content":" "}
+{"timestamp":"2026-03-03T19:12:01.9483068+08:00","type":"output","content":" "}
+{"timestamp":"2026-03-03T19:12:02.0912362+08:00","type":"command","content":"1"}
+{"timestamp":"2026-03-03T19:12:02.0971954+08:00","type":"output","content":"1"}
+{"timestamp":"2026-03-03T19:12:02.1702937+08:00","type":"command","content":" "}
+{"timestamp":"2026-03-03T19:12:02.1758122+08:00","type":"output","content":" "}
+{"timestamp":"2026-03-03T19:12:02.5708501+08:00","type":"command","content":"-"}
+{"timestamp":"2026-03-03T19:12:02.5792486+08:00","type":"output","content":"-"}
+{"timestamp":"2026-03-03T19:12:02.7945828+08:00","type":"command","content":"n"}
+{"timestamp":"2026-03-03T19:12:02.8009701+08:00","type":"output","content":"n"}
+{"timestamp":"2026-03-03T19:12:02.9368881+08:00","type":"command","content":" "}
+{"timestamp":"2026-03-03T19:12:02.9434527+08:00","type":"output","content":" "}
+{"timestamp":"2026-03-03T19:12:03.0381695+08:00","type":"command","content":"2"}
+{"timestamp":"2026-03-03T19:12:03.0440234+08:00","type":"output","content":"2"}
+{"timestamp":"2026-03-03T19:12:03.1319774+08:00","type":"command","content":" "}
+{"timestamp":"2026-03-03T19:12:03.1383911+08:00","type":"output","content":" "}
+{"timestamp":"2026-03-03T19:12:03.3237712+08:00","type":"command","content":"."}
+{"timestamp":"2026-03-03T19:12:03.3305507+08:00","type":"output","content":"."}
+{"timestamp":"2026-03-03T19:12:03.4946875+08:00","type":"command","content":"/"}
+{"timestamp":"2026-03-03T19:12:03.5010242+08:00","type":"output","content":"/"}
+{"timestamp":"2026-03-03T19:12:03.6683471+08:00","type":"command","content":"t"}
+{"timestamp":"2026-03-03T19:12:03.6742786+08:00","type":"output","content":"t"}
+{"timestamp":"2026-03-03T19:12:03.6945548+08:00","type":"command","content":"e"}
+{"timestamp":"2026-03-03T19:12:03.7009934+08:00","type":"output","content":"e"}
+{"timestamp":"2026-03-03T19:12:03.8462917+08:00","type":"command","content":"\t"}
+{"timestamp":"2026-03-03T19:12:03.8895319+08:00","type":"output","content":"\u0007st"}
+{"timestamp":"2026-03-03T19:12:04.5113452+08:00","type":"command","content":"."}
+{"timestamp":"2026-03-03T19:12:04.5179527+08:00","type":"output","content":"."}
+{"timestamp":"2026-03-03T19:12:04.5483303+08:00","type":"command","content":"/"}
+{"timestamp":"2026-03-03T19:12:04.5543576+08:00","type":"output","content":"/"}
+{"timestamp":"2026-03-03T19:12:04.6211432+08:00","type":"command","content":"\t"}
+{"timestamp":"2026-03-03T19:12:04.6665917+08:00","type":"output","content":"\u0007"}
+{"timestamp":"2026-03-03T19:12:05.1869023+08:00","type":"command","content":""}
+{"timestamp":"2026-03-03T19:12:05.1934311+08:00","type":"output","content":"\b\u001b[K"}
+{"timestamp":"2026-03-03T19:12:05.3593982+08:00","type":"command","content":"\t"}
+{"timestamp":"2026-03-03T19:12:05.3995981+08:00","type":"output","content":"sh"}
+{"timestamp":"2026-03-03T19:12:05.7098606+08:00","type":"command","content":"\r"}
+{"timestamp":"2026-03-03T19:12:05.7160963+08:00","type":"output","content":"\r\n"}
+{"timestamp":"2026-03-03T19:12:05.7224926+08:00","type":"output","content":"Submitted batch job 315\r\n"}
+{"timestamp":"2026-03-03T19:12:05.7247186+08:00","type":"output","content":"\u001b]0;sunfx@mn0:~\u0007[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T19:12:06.0455974+08:00","type":"command","content":"s"}
+{"timestamp":"2026-03-03T19:12:06.0524402+08:00","type":"output","content":"s"}
+{"timestamp":"2026-03-03T19:12:06.1935017+08:00","type":"command","content":"q"}
+{"timestamp":"2026-03-03T19:12:06.2004115+08:00","type":"output","content":"q"}
+{"timestamp":"2026-03-03T19:12:06.3256622+08:00","type":"command","content":"u"}
+{"timestamp":"2026-03-03T19:12:06.332089+08:00","type":"output","content":"u"}
+{"timestamp":"2026-03-03T19:12:06.3799555+08:00","type":"command","content":"e"}
+{"timestamp":"2026-03-03T19:12:06.3860311+08:00","type":"output","content":"e"}
+{"timestamp":"2026-03-03T19:12:06.5069278+08:00","type":"command","content":"\t"}
+{"timestamp":"2026-03-03T19:12:06.5140993+08:00","type":"output","content":"ue "}
+{"timestamp":"2026-03-03T19:12:06.6620637+08:00","type":"command","content":"\r"}
+{"timestamp":"2026-03-03T19:12:06.6687157+08:00","type":"output","content":"\r\n"}
+{"timestamp":"2026-03-03T19:12:06.6733693+08:00","type":"output","content":"             JOBID PARTITION     NAME     USER ST       TIME  NODES NODELIST(REASON)\r\n"}
+{"timestamp":"2026-03-03T19:12:06.6738809+08:00","type":"output","content":"\u001b]0;sunfx@mn0:~\u0007"}
+{"timestamp":"2026-03-03T19:12:06.6738809+08:00","type":"output","content":"[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T19:12:07.3272969+08:00","type":"command","content":"v"}
+{"timestamp":"2026-03-03T19:12:07.334015+08:00","type":"output","content":"v"}
+{"timestamp":"2026-03-03T19:12:07.3852863+08:00","type":"command","content":"i"}
+{"timestamp":"2026-03-03T19:12:07.3914837+08:00","type":"output","content":"i"}
+{"timestamp":"2026-03-03T19:12:07.54432+08:00","type":"command","content":"m"}
+{"timestamp":"2026-03-03T19:12:07.5499615+08:00","type":"output","content":"m"}
+{"timestamp":"2026-03-03T19:12:07.6107834+08:00","type":"command","content":" "}
+{"timestamp":"2026-03-03T19:12:07.6163596+08:00","type":"output","content":" "}
+{"timestamp":"2026-03-03T19:12:07.6821644+08:00","type":"command","content":"s"}
+{"timestamp":"2026-03-03T19:12:07.6882646+08:00","type":"output","content":"s"}
+{"timestamp":"2026-03-03T19:12:08.1030135+08:00","type":"command","content":""}
+{"timestamp":"2026-03-03T19:12:08.1084846+08:00","type":"output","content":"\b\u001b[K"}
+{"timestamp":"2026-03-03T19:12:08.170869+08:00","type":"command","content":"t"}
+{"timestamp":"2026-03-03T19:12:08.1785054+08:00","type":"output","content":"t"}
+{"timestamp":"2026-03-03T19:12:08.199373+08:00","type":"command","content":"e"}
+{"timestamp":"2026-03-03T19:12:08.2056405+08:00","type":"output","content":"e"}
+{"timestamp":"2026-03-03T19:12:08.3380165+08:00","type":"command","content":"\t"}
+{"timestamp":"2026-03-03T19:12:08.3545271+08:00","type":"output","content":"\u0007st"}
+{"timestamp":"2026-03-03T19:12:08.6377317+08:00","type":"command","content":"\r"}
+{"timestamp":"2026-03-03T19:12:08.6440271+08:00","type":"output","content":"\r\n"}
+{"timestamp":"2026-03-03T19:12:08.6583504+08:00","type":"output","content":"\u001b[?2004h\u001b[?1049h\u001b[22;0;0t\u001b[?1h\u001b=\u001b[?2004h"}
+{"timestamp":"2026-03-03T19:12:08.6601893+08:00","type":"output","content":"\u001b[1;37r\u001b[?12h\u001b[?12l\u001b[27m\u001b[23m\u001b[29m\u001b[m\u001b[H\u001b[2J\u001b[?25l\u001b[37;1H\"test\" is a directory"}
+{"timestamp":"2026-03-03T19:12:08.6601893+08:00","type":"output","content":"\u001b[2;1H▽\u001b[6n\u001b[2;1H  \u001b[1;1H\u001b[\u003ec"}
+{"timestamp":"2026-03-03T19:12:08.6607012+08:00","type":"output","content":"\u001b]10;?\u0007\u001b]11;?\u0007"}
+{"timestamp":"2026-03-03T19:12:08.6638803+08:00","type":"command","content":"\u001b[2;2R"}
+{"timestamp":"2026-03-03T19:12:08.6638803+08:00","type":"command","content":"\u001b[\u003e0;276;0c"}
+{"timestamp":"2026-03-03T19:12:08.6638803+08:00","type":"command","content":"\u001b]10;rgb:ffff/ffff/ffff\u001b\\"}
+{"timestamp":"2026-03-03T19:12:08.6638803+08:00","type":"command","content":"\u001b]11;rgb:1e1e/1e1e/1e1e\u001b\\"}
+{"timestamp":"2026-03-03T19:12:08.6801984+08:00","type":"output","content":"\u001b[1;1H\u001b[34m\" ============================================================================\r\n\" Netrw Directory Listing                                        \u001b[m\u001b[36m(netrw v156)\u001b[m\r\n\u001b[34m\"   /fs/home/sunfx/test\r\n\"   Sorted by\u001b[m\u001b[38;5;130m      name\u001b[m\r\n\u001b[34m\"   Sort sequence:\u001b[m\u001b[38;5;130m [\\/]$\u001b[m\u001b[34m,\u001b[m\u001b[38;5;130m\\\u003ccore\\%(\\.\\d\\+\\)\\=\\\u003e\u001b[m\u001b[34m,\u001b[m\u001b[38;5;130m\\.h$\u001b[m\u001b[34m,\u001b[m\u001b[38;5;130m\\.c$\u001b[m\u001b[34m,\u001b[m\u001b[38;5;130m\\.cpp$\u001b[m\u001b[34m,\u001b[m\u001b[38;5;130m\\~\\=\\*$\u001b[m\u001b[34m,\u001b[m\u001b[38;5;130m*\u001b[m\u001b[34m,\u001b[m\u001b[38;5;130m\\.o$\u001b[m\u001b[34m,\u001b[m\u001b[38;5;130m\\.obj$\u001b[m\u001b[34m,\u001b[m\u001b[38;5;130m\\.info$\u001b[m\u001b[34m,\u001b[m\u001b[38;5;130m\\.swp$\u001b[m\u001b[34m,\u001b[m\u001b[38;5;130m\\.bak$\u001b[m\u001b[34m,\u001b[m\u001b[38;5;130m\\~$\u001b[m\r\n\u001b[34m\"   Quick Help: \u001b[m\u001b[36m\u003cF1\u003e\u001b[m\u001b[35m:\u001b[mhelp  \u001b[36m-\u001b[m\u001b[35m:\u001b[mgo up dir  \u001b[36mD\u001b[m\u001b[35m:\u001b[mdelete  \u001b[36mR\u001b[m\u001b[35m:\u001b[mrename  \u001b[36ms\u001b[m\u001b[35m:\u001b[msort-by  \u001b[36mx\u001b[m\u001b[35m:\u001b[mspecial\r\n\u001b[34m\" ==============================================================================\u001b[m\r\n\u001b[4m\u001b[34m..\u001b[m\u001b[4m\u001b[36m/\u001b[m\u001b[4m                                                                 "}
+{"timestamp":"2026-03-03T19:12:08.6801984+08:00","type":"output","content":"                                                                \u001b[m\u001b[9;1H\u001b[34m.\u001b[m\u001b[36m/\u001b[m\r\n\u001b[94m~                                                                                                                                   \u001b[11;1H~                                                                                                                                   \u001b[12;1H~                                                                                                                                   \u001b[13;1H~                                                                                                                                   \u001b[14;1H~                                                                                                                                   \u001b[15;1H~                                                                                                                                   \u001b[16;1H~                                                                                           "}
+{"timestamp":"2026-03-03T19:12:08.6801984+08:00","type":"output","content":"                                        \u001b[17;1H~                                                                                                                                   \u001b[18;1H~                                                                                                                                   \u001b[19;1H~                                                                                                                                   \u001b[20;1H~                                                                                                                                   \u001b[21;1H~                                                                                                                                   \u001b[22;1H~                                                                                                                                   \u001b[23;1H~                                                                                                                                   \u001b[24;1H~   "}
+{"timestamp":"2026-03-03T19:12:08.6801984+08:00","type":"output","content":"                                                                                                                                \u001b[25;1H~                                                                                                                                   \u001b[26;1H~                                                                                                                                   \u001b[27;1H~                                                                                                                                   \u001b[28;1H~                                                                                                                                   \u001b[29;1H~                                                                                                                                   \u001b[30;1H~                                                                                                                                   \u001b[31;1H~                                                      "}
+{"timestamp":"2026-03-03T19:12:08.6807462+08:00","type":"output","content":"                                                                             \u001b[32;1H~                                                                                                                                   \u001b[33;1H~                                                                                                                                   \u001b[34;1H~                                                                                                                                   \u001b[35;1H~                                                                                                                                   \u001b[36;1H~                                                                                                                                   \u001b[m\u001b[37;115H8,1\u001b[11CAll\u001b[8;1H\u001b[?25h\u001bP+q436f\u001b\\\u001bP+q6b75\u001b\\\u001bP+q6b64\u001b\\\u001bP+q6b72\u001b\\\u001bP+q6b6c\u001b\\\u001bP+q2332\u001b\\\u001bP+q2334\u001b\\\u001bP+q2569\u001b\\\u001bP+q2a37\u001b\\\u001bP+q6b31\u001b\\\u001b[?12$p"}
+{"timestamp":"2026-03-03T19:12:08.6807462+08:00","type":"output","content":"\u001b[27m\u001b[23m\u001b[29m\u001b[m\u001b[H\u001b[2J\u001b[?25l\u001b[1;1H\u001b[96m\" ============================================================================\r\n\" Netrw Directory Listing                                        \u001b[m\u001b[1m\u001b[96m(netrw v156)\u001b[m\r\n\u001b[96m\"   /fs/home/sunfx/test\r\n\"   Sorted by\u001b[m\u001b[93m      name\u001b[m\r\n\u001b[96m\"   Sort sequence:\u001b[m\u001b[93m [\\/]$\u001b[m\u001b[96m,\u001b[m\u001b[93m\\\u003ccore\\%(\\.\\d\\+\\)\\=\\\u003e\u001b[m\u001b[96m,\u001b[m\u001b[93m\\.h$\u001b[m\u001b[96m,\u001b[m\u001b[93m\\.c$\u001b[m\u001b[96m,\u001b[m\u001b[93m\\.cpp$\u001b[m\u001b[96m,\u001b[m\u001b[93m\\~\\=\\*$\u001b[m\u001b[96m,\u001b[m\u001b[93m*\u001b[m\u001b[96m,\u001b[m\u001b[93m\\.o$\u001b[m\u001b[96m,\u001b[m\u001b[93m\\.obj$\u001b[m\u001b[96m,\u001b[m\u001b[93m\\.info$\u001b[m\u001b[96m,\u001b[m\u001b[93m\\.swp$\u001b[m\u001b[96m,\u001b[m\u001b[93m\\.bak$\u001b[m\u001b[96m,\u001b[m\u001b[93m\\~$\u001b[m\r\n\u001b[96m\"   Quick Help: \u001b[m\u001b[1m\u001b[96m\u003cF1\u003e\u001b[m\u001b[38;5;224m:\u001b[mhelp  \u001b[1m\u001b[96m-\u001b[m\u001b[38;5;224m:\u001b[mgo up dir  \u001b[1m\u001b[96mD\u001b[m\u001b[38;5;224m:\u001b[mdelete  \u001b[1m\u001b[96mR\u001b[m\u001b[38;5;224m:\u001b[mrename  \u001b[1m\u001b[96ms\u001b[m\u001b[38;5;224m:\u001b[msort-by  \u001b[1m\u001b[96mx\u001b[m\u001b[38;5;224m:\u001b[mspecial\r\n\u001b[96m\" ==============================================================================\u001b[m\r\n\u001b[4m\u001b[38;5;159m..\u001b[m\u001b[1m\u001b[4m\u001b[96m/\u001b[m\u001b[4m                                            "}
+{"timestamp":"2026-03-03T19:12:08.6807462+08:00","type":"output","content":"                                                                                     \u001b[m\u001b[9;1H\u001b[38;5;159m.\u001b[m\u001b[1m\u001b[96m/\u001b[m\r\n\u001b[94m~                                                                                                                                   \u001b[11;1H~                                                                                                                                   \u001b[12;1H~                                                                                                                                   \u001b[13;1H~                                                                                                                                   \u001b[14;1H~                                                                                                                                   \u001b[15;1H~                                                                                                                                   \u001b[16;1H~                                                           "}
+{"timestamp":"2026-03-03T19:12:08.6812913+08:00","type":"output","content":"                                                                        \u001b[17;1H~                                                                                                                                   \u001b[18;1H~                                                                                                                                   \u001b[19;1H~                                                                                                                                   \u001b[20;1H~                                                                                                                                   \u001b[21;1H~                                                                                                                                   \u001b[22;1H~                                                                                                                                   \u001b[23;1H~                                                                                                              "}
+{"timestamp":"2026-03-03T19:12:08.6818137+08:00","type":"output","content":"                     \u001b[24;1H~                                                                                                                                   \u001b[25;1H~                                                                                                                                   \u001b[26;1H~                                                                                                                                   \u001b[27;1H~                                                                                                                                   \u001b[28;1H~                                                                                                                                   \u001b[29;1H~                                                                                                                                   \u001b[30;1H~                                                                                                                                   \u001b[31;1H~                      "}
+{"timestamp":"2026-03-03T19:12:08.6818137+08:00","type":"output","content":"                                                                                                             \u001b[32;1H~                                                                                                                                   \u001b[33;1H~                                                                                                                                   \u001b[34;1H~                                                                                                                                   \u001b[35;1H~                                                                                                                                   \u001b[36;1H~                                                                                                                                   \u001b[m\u001b[37;115H8,1\u001b[11CAll\r\"test\" is a directory\u001b[8;1H\u001b[?25h"}
+{"timestamp":"2026-03-03T19:12:08.6838235+08:00","type":"command","content":"\u001b[?12;2$y"}
+{"timestamp":"2026-03-03T19:12:09.1409103+08:00","type":"command","content":":"}
+{"timestamp":"2026-03-03T19:12:09.1475121+08:00","type":"output","content":"\u001b[?25l\u001b[37;105H:\u001b[8;1H\u001b[37;1H\u001b[K\u001b[37;1H:\u001b[?2004h\u001b[?25h"}
+{"timestamp":"2026-03-03T19:12:09.2760351+08:00","type":"command","content":"q"}
+{"timestamp":"2026-03-03T19:12:09.2813868+08:00","type":"output","content":"q\u001b[?25l\u001b[?25h"}
+{"timestamp":"2026-03-03T19:12:09.3451653+08:00","type":"command","content":"\r"}
+{"timestamp":"2026-03-03T19:12:09.3509323+08:00","type":"output","content":"\r"}
+{"timestamp":"2026-03-03T19:12:09.353073+08:00","type":"output","content":"\u001b[?25l\u001b[?2004l"}
+{"timestamp":"2026-03-03T19:12:09.3545096+08:00","type":"output","content":"\u001b[?2004h"}
+{"timestamp":"2026-03-03T19:12:09.3550202+08:00","type":"output","content":"\u001b[?2004l\u001b[37;1H\u001b[K\u001b[37;1H\u001b[?2004l\u001b[?1l\u001b\u003e\u001b[?25h\u001b[?1049l\u001b[23;0;0t"}
+{"timestamp":"2026-03-03T19:12:09.3550202+08:00","type":"output","content":"\u001b]0;sunfx@mn0:~\u0007"}
+{"timestamp":"2026-03-03T19:12:09.3555885+08:00","type":"output","content":"[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T19:12:09.5209396+08:00","type":"command","content":"\u001b[A"}
+{"timestamp":"2026-03-03T19:12:09.5264722+08:00","type":"output","content":"vim test"}
+{"timestamp":"2026-03-03T19:12:09.7252259+08:00","type":"command","content":"."}
+{"timestamp":"2026-03-03T19:12:09.7321882+08:00","type":"output","content":"."}
+{"timestamp":"2026-03-03T19:12:09.8451652+08:00","type":"command","content":"\t"}
+{"timestamp":"2026-03-03T19:12:09.8604986+08:00","type":"output","content":"sh "}
+{"timestamp":"2026-03-03T19:12:09.9603355+08:00","type":"command","content":"\r"}
+{"timestamp":"2026-03-03T19:12:09.9663903+08:00","type":"output","content":"\r\n"}
+{"timestamp":"2026-03-03T19:12:09.9804316+08:00","type":"output","content":"\u001b[?2004h\u001b[?1049h\u001b[22;0;0t\u001b[?1h\u001b=\u001b[?2004h"}
+{"timestamp":"2026-03-03T19:12:09.9810702+08:00","type":"output","content":"\u001b[1;37r\u001b[?12h\u001b[?12l\u001b[27m\u001b[23m\u001b[29m\u001b[m\u001b[H\u001b[2J\u001b[?25l\u001b[37;1H\"test.sh\""}
+{"timestamp":"2026-03-03T19:12:09.9810702+08:00","type":"output","content":" 3L, 22C"}
+{"timestamp":"2026-03-03T19:12:09.9854922+08:00","type":"output","content":"\u001b[2;1H▽\u001b[6n\u001b[2;1H  \u001b[1;1H\u001b[\u003ec\u001b]10;?\u0007\u001b]11;?\u0007"}
+{"timestamp":"2026-03-03T19:12:09.9860046+08:00","type":"output","content":"\u001b[1;1H\u001b[34m#!/bin/bash\u001b[m\r\n\r\n\u001b[38;5;130msleep\u001b[m \u001b[31m10\u001b[m\r\n\u001b[94m~                                                                                                                                   \u001b[5;1H~                                                                                                                                   \u001b[6;1H~                                                                                                                                   \u001b[7;1H~                                                                                                                                   \u001b[8;1H~                                                                                                                                   \u001b[9;1H~                                                                                                                                   \u001b[10;1H~                                                                                                                                "}
+{"timestamp":"2026-03-03T19:12:09.9860046+08:00","type":"command","content":"\u001b[2;2R"}
+{"timestamp":"2026-03-03T19:12:09.986649+08:00","type":"output","content":"   \u001b[11;1H~                                                                                                                                   \u001b[12;1H~                                                                                                                                   \u001b[13;1H~                                                                                                                                   \u001b[14;1H~                                                                                                                                   \u001b[15;1H~                                                                                                                                   \u001b[16;1H~                                                                                                                                   \u001b[17;1H~                                                                                                                                   \u001b[18;1H~                                        "}
+{"timestamp":"2026-03-03T19:12:09.986649+08:00","type":"output","content":"                                                                                           \u001b[19;1H~                                                                                                                                   \u001b[20;1H~                                                                                                                                   \u001b[21;1H~                                                                                                                                   \u001b[22;1H~                                                                                                                                   \u001b[23;1H~                                                                                                                                   \u001b[24;1H~                                                                                                                                   \u001b[25;1H~                                                                                           "}
+{"timestamp":"2026-03-03T19:12:09.986649+08:00","type":"command","content":"\u001b[\u003e0;276;0c"}
+{"timestamp":"2026-03-03T19:12:09.986649+08:00","type":"output","content":"                                        \u001b[26;1H~                                                                                                                                   \u001b[27;1H~                                                                                                                                   \u001b[28;1H~                                                                                                                                   \u001b[29;1H~                                                                                                                                   \u001b[30;1H~                                                                                                                                   \u001b[31;1H~                                                                                                                                   \u001b[32;1H~                                                                                                                                   \u001b[33;1H~   "}
+{"timestamp":"2026-03-03T19:12:09.9872032+08:00","type":"command","content":"\u001b]10;rgb:ffff/ffff/ffff\u001b\\"}
+{"timestamp":"2026-03-03T19:12:09.9872032+08:00","type":"output","content":"                                                                                                                                \u001b[34;1H~                                                                                                                                   \u001b[35;1H~                                                                                                                                   \u001b[36;1H~                                                                                                                                   \u001b[m\u001b[37;115H3,8\u001b[11CAll\u001b[3;8H\u001b[?25h"}
+{"timestamp":"2026-03-03T19:12:09.9872032+08:00","type":"command","content":"\u001b]11;rgb:1e1e/1e1e/1e1e\u001b\\"}
+{"timestamp":"2026-03-03T19:12:09.992095+08:00","type":"output","content":"\u001bP+q436f\u001b\\\u001bP+q6b75\u001b\\\u001bP+q6b64\u001b\\\u001bP+q6b72\u001b\\\u001bP+q6b6c\u001b\\\u001bP+q2332\u001b\\\u001bP+q2334\u001b\\\u001bP+q2569\u001b\\\u001bP+q2a37\u001b\\\u001bP+q6b31\u001b\\\u001b[?12$p"}
+{"timestamp":"2026-03-03T19:12:09.9966138+08:00","type":"command","content":"\u001b[?12;2$y"}
+{"timestamp":"2026-03-03T19:12:09.9997714+08:00","type":"output","content":"\u001b[27m\u001b[23m\u001b[29m\u001b[m\u001b[H\u001b[2J\u001b[?25l\u001b[1;1H\u001b[96m#!/bin/bash\u001b[m\r\n\r\n\u001b[93msleep\u001b[m \u001b[95m10\u001b[m\r\n\u001b[94m~                                                                                                                                   \u001b[5;1H~                                                                                                                                   \u001b[6;1H~                                                                                                                                   \u001b[7;1H~                                                                                                                                   \u001b[8;1H~                                                                                                                                   \u001b[9;1H~                                                                                                                                   \u001b[10;1H~                                                                                                       "}
+{"timestamp":"2026-03-03T19:12:10.000419+08:00","type":"output","content":"                            \u001b[11;1H~                                                                                                                                   \u001b[12;1H~                                                                                                                                   \u001b[13;1H~                                                                                                                                   \u001b[14;1H~                                                                                                                                   \u001b[15;1H~                                                                                                                                   \u001b[16;1H~                                                                                                                                   \u001b[17;1H~                                                                                                                                   \u001b[18;1H~               "}
+{"timestamp":"2026-03-03T19:12:10.000419+08:00","type":"output","content":"                                                                                                                    \u001b[19;1H~                                                                                                                                   \u001b[20;1H~                                                                                                                                   \u001b[21;1H~                                                                                                                                   \u001b[22;1H~                                                                                                                                   \u001b[23;1H~                                                                                                                                   \u001b[24;1H~                                                                                                                                   \u001b[25;1H~                                                                  "}
+{"timestamp":"2026-03-03T19:12:10.000419+08:00","type":"output","content":"                                                                 \u001b[26;1H~                                                                                                                                   \u001b[27;1H~                                                                                                                                   \u001b[28;1H~                                                                                                                                   \u001b[29;1H~                                                                                                                                   \u001b[30;1H~                                                                                                                                   \u001b[31;1H~                                                                                                                                   \u001b[32;1H~                                                                                                                     "}
+{"timestamp":"2026-03-03T19:12:10.000419+08:00","type":"output","content":"              \u001b[33;1H~                                                                                                                                   \u001b[34;1H~                                                                                                                                   \u001b[35;1H~                                                                                                                                   \u001b[36;1H~                                                                                                                                   \u001b[m\u001b[37;115H3,8\u001b[11CAll\r\"test.sh\" 3L, 22C\u001b[3;8H\u001b[?25h"}
+{"timestamp":"2026-03-03T19:12:10.5790179+08:00","type":"command","content":"\u001bOA"}
+{"timestamp":"2026-03-03T19:12:10.5853921+08:00","type":"output","content":"\u001b[?25l\u001b[37;105H~@k\u001b[3;8H"}
+{"timestamp":"2026-03-03T19:12:10.5853921+08:00","type":"output","content":"\u001b[37;105H   \u001b[2;1H\u001b[37;115H2,0-1\u001b[2;1H\u001b[?25h"}
+{"timestamp":"2026-03-03T19:12:11.3507544+08:00","type":"command","content":"\u001bOB"}
+{"timestamp":"2026-03-03T19:12:11.3575282+08:00","type":"output","content":"\u001b[?25l\u001b[37;105H~@k\u001b[2;1H"}
+{"timestamp":"2026-03-03T19:12:11.3575282+08:00","type":"output","content":"\u001b[37;105H   \u001b[3;1H\u001b[37;115H3,1  \u001b[3;1H\u001b[?25h"}
+{"timestamp":"2026-03-03T19:12:11.6779252+08:00","type":"command","content":"i"}
+{"timestamp":"2026-03-03T19:12:11.6844564+08:00","type":"output","content":"\u001b[?25l\u001b[37;105Hi\u001b[3;1H\u001b[37;105H \u001b[3;1H\u001b[37;1H\u001b[1m-- INSERT --\u001b[m\u001b[37;13H\u001b[K\u001b[37;115H3,1\u001b[11CAll\u001b[3;1H\u001b[?25h"}
+{"timestamp":"2026-03-03T19:12:11.8738415+08:00","type":"command","content":"s"}
+{"timestamp":"2026-03-03T19:12:11.881548+08:00","type":"output","content":"\u001b[?25lssleep \u001b[95m10\u001b[m\u001b[37;117H2\u001b[3;2H\u001b[?25h"}
+{"timestamp":"2026-03-03T19:12:11.9229229+08:00","type":"command","content":"r"}
+{"timestamp":"2026-03-03T19:12:11.9298359+08:00","type":"output","content":"\u001b[?25lrsleep \u001b[95m10\u001b[m\u001b[37;117H3\u001b[3;3H\u001b[?25h"}
+{"timestamp":"2026-03-03T19:12:12.0264758+08:00","type":"command","content":"u"}
+{"timestamp":"2026-03-03T19:12:12.033392+08:00","type":"output","content":"\u001b[?25lusleep \u001b[95m10\u001b[m\u001b[37;117H4\u001b[3;4H\u001b[?25h"}
+{"timestamp":"2026-03-03T19:12:12.226787+08:00","type":"command","content":"n"}
+{"timestamp":"2026-03-03T19:12:12.2344953+08:00","type":"output","content":"\u001b[?25lnsleep \u001b[95m10\u001b[m\u001b[37;117H5\u001b[3;5H\u001b[?25h"}
+{"timestamp":"2026-03-03T19:12:12.4239997+08:00","type":"command","content":" "}
+{"timestamp":"2026-03-03T19:12:12.4318867+08:00","type":"output","content":"\u001b[?25l \u001b[93msleep\u001b[m \u001b[95m10\u001b[m\u001b[37;117H6\u001b[3;6H\u001b[?25h"}
+{"timestamp":"2026-03-03T19:12:12.6487342+08:00","type":"command","content":"\u001b"}
+{"timestamp":"2026-03-03T19:12:12.6840649+08:00","type":"output","content":"\u001b[37;1H\u001b[K\u001b[3;5H\u001b[?25l\u001b[37;105H^[\u001b[3;5H"}
+{"timestamp":"2026-03-03T19:12:12.7889228+08:00","type":"output","content":"\u001b[37;105H  \u001b[3;6H"}
+{"timestamp":"2026-03-03T19:12:12.7889228+08:00","type":"output","content":"\u001b[37;115H3,5\u001b[11CAll\u001b[3;5H\u001b[?25h"}
+{"timestamp":"2026-03-03T19:12:12.801557+08:00","type":"command","content":":"}
+{"timestamp":"2026-03-03T19:12:12.8075018+08:00","type":"output","content":"\u001b[?25l\u001b[37;105H:\u001b[3;5H\u001b[37;105H\u001b[K\u001b[37;1H:\u001b[?2004h\u001b[?25h"}
+{"timestamp":"2026-03-03T19:12:12.9468273+08:00","type":"command","content":"x"}
+{"timestamp":"2026-03-03T19:12:12.9534277+08:00","type":"output","content":"x\u001b[?25l\u001b[?25h"}
+{"timestamp":"2026-03-03T19:12:13.0233548+08:00","type":"command","content":"\r"}
+{"timestamp":"2026-03-03T19:12:13.0322724+08:00","type":"output","content":"\r\u001b[?25l\u001b[?2004l"}
+{"timestamp":"2026-03-03T19:12:13.0322724+08:00","type":"output","content":"\"test.sh\""}
+{"timestamp":"2026-03-03T19:12:13.0330117+08:00","type":"output","content":" 3L, 27C written"}
+{"timestamp":"2026-03-03T19:12:13.0330117+08:00","type":"output","content":"\r\r\r\n\u001b[?2004l\u001b[?1l\u001b\u003e\u001b[?25h\u001b[?1049l\u001b[23;0;0t"}
+{"timestamp":"2026-03-03T19:12:13.0330117+08:00","type":"output","content":"\u001b]0;sunfx@mn0:~\u0007"}
+{"timestamp":"2026-03-03T19:12:13.0335993+08:00","type":"output","content":"[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T19:12:13.2305413+08:00","type":"command","content":"\u001b[A"}
+{"timestamp":"2026-03-03T19:12:13.2393841+08:00","type":"output","content":"vim test.sh "}
+{"timestamp":"2026-03-03T19:12:13.3664729+08:00","type":"command","content":"\u001b[A"}
+{"timestamp":"2026-03-03T19:12:13.3760812+08:00","type":"output","content":"\b\b\b\b\u001b[K"}
+{"timestamp":"2026-03-03T19:12:13.6888803+08:00","type":"command","content":"\u001b[A"}
+{"timestamp":"2026-03-03T19:12:13.6955282+08:00","type":"output","content":"\b\b\b\b\b\b\b\b\u001b[1Psqueue "}
+{"timestamp":"2026-03-03T19:12:14.3410266+08:00","type":"command","content":"\u001b[A"}
+{"timestamp":"2026-03-03T19:12:14.348174+08:00","type":"output","content":"\b\b\b\b\b\bbatch -N 1 -n 2 ./test.sh"}
+{"timestamp":"2026-03-03T19:12:14.8243595+08:00","type":"command","content":"\r"}
+{"timestamp":"2026-03-03T19:12:14.8313099+08:00","type":"output","content":"\r\n"}
+{"timestamp":"2026-03-03T19:12:14.8381948+08:00","type":"output","content":"Submitted batch job 316\r\n\u001b]0;sunfx@mn0:~\u0007"}
+{"timestamp":"2026-03-03T19:12:14.8381948+08:00","type":"output","content":"[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T19:12:14.9960668+08:00","type":"command","content":"s"}
+{"timestamp":"2026-03-03T19:12:15.0025869+08:00","type":"output","content":"s"}
+{"timestamp":"2026-03-03T19:12:15.1355274+08:00","type":"command","content":"q"}
+{"timestamp":"2026-03-03T19:12:15.1404675+08:00","type":"output","content":"q"}
+{"timestamp":"2026-03-03T19:12:15.2199319+08:00","type":"command","content":"u"}
+{"timestamp":"2026-03-03T19:12:15.2272706+08:00","type":"output","content":"u"}
+{"timestamp":"2026-03-03T19:12:15.3098986+08:00","type":"command","content":"e"}
+{"timestamp":"2026-03-03T19:12:15.3169622+08:00","type":"output","content":"e"}
+{"timestamp":"2026-03-03T19:12:15.4257647+08:00","type":"command","content":"\t"}
+{"timestamp":"2026-03-03T19:12:15.4345508+08:00","type":"output","content":"ue "}
+{"timestamp":"2026-03-03T19:12:15.4974444+08:00","type":"command","content":"\r"}
+{"timestamp":"2026-03-03T19:12:15.5036811+08:00","type":"output","content":"\r\n"}
+{"timestamp":"2026-03-03T19:12:15.5085827+08:00","type":"output","content":"             JOBID PARTITION     NAME     USER ST       TIME  NODES NODELIST(REASON)\r\n"}
+{"timestamp":"2026-03-03T19:12:15.5090878+08:00","type":"output","content":"\u001b]0;sunfx@mn0:~\u0007"}
+{"timestamp":"2026-03-03T19:12:15.5090878+08:00","type":"output","content":"[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T19:12:16.6389697+08:00","type":"command","content":"l"}
+{"timestamp":"2026-03-03T19:12:16.6475299+08:00","type":"output","content":"l"}
+{"timestamp":"2026-03-03T19:12:16.7419357+08:00","type":"command","content":"s"}
+{"timestamp":"2026-03-03T19:12:16.7568261+08:00","type":"output","content":"s"}
+{"timestamp":"2026-03-03T19:12:16.826866+08:00","type":"command","content":"\r"}
+{"timestamp":"2026-03-03T19:12:16.8330709+08:00","type":"output","content":"\r\n"}
+{"timestamp":"2026-03-03T19:12:16.8349354+08:00","type":"output","content":"\u001b[0m\u001b[38;5;33m111\u001b[0m  LdapAdmin.exe  \u001b[38;5;33mtest\u001b[0m  \u001b[38;5;40mtest.sh\u001b[0m\r\n"}
+{"timestamp":"2026-03-03T19:12:16.8349354+08:00","type":"output","content":"\u001b]0;sunfx@mn0:~\u0007"}
+{"timestamp":"2026-03-03T19:12:16.8354428+08:00","type":"output","content":"[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T19:12:17.1696295+08:00","type":"command","content":"s"}
+{"timestamp":"2026-03-03T19:12:17.1765333+08:00","type":"output","content":"s"}
+{"timestamp":"2026-03-03T19:12:17.2438272+08:00","type":"command","content":"i"}
+{"timestamp":"2026-03-03T19:12:17.2505993+08:00","type":"output","content":"i"}
+{"timestamp":"2026-03-03T19:12:17.4209598+08:00","type":"command","content":"n"}
+{"timestamp":"2026-03-03T19:12:17.4274863+08:00","type":"output","content":"n"}
+{"timestamp":"2026-03-03T19:12:17.4389592+08:00","type":"command","content":"f"}
+{"timestamp":"2026-03-03T19:12:17.4454525+08:00","type":"output","content":"f"}
+{"timestamp":"2026-03-03T19:12:17.5690855+08:00","type":"command","content":"\t"}
+{"timestamp":"2026-03-03T19:12:17.576508+08:00","type":"output","content":"o "}
+{"timestamp":"2026-03-03T19:12:17.7473338+08:00","type":"command","content":"\r"}
+{"timestamp":"2026-03-03T19:12:17.75357+08:00","type":"output","content":"\r\n"}
+{"timestamp":"2026-03-03T19:12:17.7596737+08:00","type":"output","content":"PARTITION     AVAIL  TIMELIMIT  NODES  STATE NODELIST\r\n"}
+{"timestamp":"2026-03-03T19:12:17.7601824+08:00","type":"output","content":"slurm-bridge*    up   infinite      2   idle cn[1-2]\r\n\u001b]0;sunfx@mn0:~\u0007[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T19:12:18.870203+08:00","type":"command","content":"s"}
+{"timestamp":"2026-03-03T19:12:18.877706+08:00","type":"output","content":"s"}
+{"timestamp":"2026-03-03T19:12:19.1534008+08:00","type":"command","content":""}
+{"timestamp":"2026-03-03T19:12:19.1597181+08:00","type":"output","content":"\b\u001b[K"}
+{"timestamp":"2026-03-03T19:12:19.4214624+08:00","type":"command","content":"."}
+{"timestamp":"2026-03-03T19:12:19.4276034+08:00","type":"output","content":"."}
+{"timestamp":"2026-03-03T19:12:19.5908537+08:00","type":"command","content":"/"}
+{"timestamp":"2026-03-03T19:12:19.5973031+08:00","type":"output","content":"/"}
+{"timestamp":"2026-03-03T19:12:19.6590385+08:00","type":"command","content":"t"}
+{"timestamp":"2026-03-03T19:12:19.6652954+08:00","type":"output","content":"t"}
+{"timestamp":"2026-03-03T19:12:19.7984513+08:00","type":"command","content":"\t"}
+{"timestamp":"2026-03-03T19:12:19.80603+08:00","type":"output","content":"\u0007est"}
+{"timestamp":"2026-03-03T19:12:19.9310364+08:00","type":"command","content":"\r"}
+{"timestamp":"2026-03-03T19:12:19.9374385+08:00","type":"output","content":"\r\n"}
+{"timestamp":"2026-03-03T19:12:19.9388927+08:00","type":"output","content":"-bash: ./test: Is a directory\r\n"}
+{"timestamp":"2026-03-03T19:12:19.9388927+08:00","type":"output","content":"\u001b]0;sunfx@mn0:~\u0007[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T19:12:20.6340932+08:00","type":"command","content":"\u001b[A"}
+{"timestamp":"2026-03-03T19:12:20.6410584+08:00","type":"output","content":"./test"}
+{"timestamp":"2026-03-03T19:12:20.818098+08:00","type":"command","content":"."}
+{"timestamp":"2026-03-03T19:12:20.8246743+08:00","type":"output","content":"."}
+{"timestamp":"2026-03-03T19:12:20.8830746+08:00","type":"command","content":"s"}
+{"timestamp":"2026-03-03T19:12:20.8895545+08:00","type":"output","content":"s"}
+{"timestamp":"2026-03-03T19:12:21.0044813+08:00","type":"command","content":"\t"}
+{"timestamp":"2026-03-03T19:12:21.0113594+08:00","type":"output","content":"h "}
+{"timestamp":"2026-03-03T19:12:21.0781866+08:00","type":"command","content":"\r"}
+{"timestamp":"2026-03-03T19:12:21.0845767+08:00","type":"output","content":"\r\n"}
+{"timestamp":"2026-03-03T19:12:21.1213944+08:00","type":"output","content":"[2026-03-03T19:12:19.972] error: couldn't chdir to `/fs/home/sunfx': No such file or directory: going to /tmp instead\r\n[2026-03-03T19:12:19.973] error: couldn't chdir to `/fs/home/sunfx': No such file or directory: going to /tmp instead\r\n"}
+{"timestamp":"2026-03-03T19:12:22.1053828+08:00","type":"command","content":"\u0003"}
+{"timestamp":"2026-03-03T19:12:22.1115357+08:00","type":"output","content":"^C"}
+{"timestamp":"2026-03-03T19:12:22.1126168+08:00","type":"output","content":"srun: interrupt (one more within 1 sec to abort)\r\n"}
+{"timestamp":"2026-03-03T19:12:22.1126168+08:00","type":"output","content":"srun: StepId=317.0 task 0: running\r\n"}
+{"timestamp":"2026-03-03T19:12:22.286607+08:00","type":"command","content":"\u0003"}
+{"timestamp":"2026-03-03T19:12:22.2942448+08:00","type":"output","content":"^Csrun: sending Ctrl-C to StepId=317.0\r\n"}
+{"timestamp":"2026-03-03T19:12:22.295639+08:00","type":"output","content":"srun: forcing job termination\r\n"}
+{"timestamp":"2026-03-03T19:12:22.2967775+08:00","type":"output","content":"srun: Job step aborted: Waiting up to 32 seconds for job step to finish.\r\n"}
+{"timestamp":"2026-03-03T19:12:22.3003954+08:00","type":"output","content":"\u001b]0;sunfx@mn0:~\u0007[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T19:12:22.4513491+08:00","type":"command","content":"\u0003"}
+{"timestamp":"2026-03-03T19:12:22.4587256+08:00","type":"output","content":"^C\r\n\u001b]0;sunfx@mn0:~\u0007[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T19:12:23.1799128+08:00","type":"command","content":"l"}
+{"timestamp":"2026-03-03T19:12:23.1868012+08:00","type":"output","content":"l"}
+{"timestamp":"2026-03-03T19:12:23.5884687+08:00","type":"command","content":""}
+{"timestamp":"2026-03-03T19:12:23.5956742+08:00","type":"output","content":"\b\u001b[K"}
+{"timestamp":"2026-03-03T19:12:23.7817402+08:00","type":"command","content":"\f"}
+{"timestamp":"2026-03-03T19:12:23.7885133+08:00","type":"output","content":"\u001b[H\u001b[2J[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T19:12:23.9517878+08:00","type":"command","content":"l"}
+{"timestamp":"2026-03-03T19:12:23.9583433+08:00","type":"output","content":"l"}
+{"timestamp":"2026-03-03T19:12:24.0424793+08:00","type":"command","content":"s"}
+{"timestamp":"2026-03-03T19:12:24.0483282+08:00","type":"output","content":"s"}
+{"timestamp":"2026-03-03T19:12:24.1183837+08:00","type":"command","content":"\r"}
+{"timestamp":"2026-03-03T19:12:24.1278175+08:00","type":"output","content":"\r\n"}
+{"timestamp":"2026-03-03T19:12:24.128454+08:00","type":"output","content":"\u001b[0m\u001b[38;5;33m111\u001b[0m  LdapAdmin.exe  \u001b[38;5;33mtest\u001b[0m  \u001b[38;5;40mtest.sh\u001b[0m\r\n"}
+{"timestamp":"2026-03-03T19:12:24.128454+08:00","type":"output","content":"\u001b]0;sunfx@mn0:~\u0007[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T19:12:24.5003697+08:00","type":"command","content":"\u001b[A"}
+{"timestamp":"2026-03-03T19:12:24.5074493+08:00","type":"output","content":"ls"}
+{"timestamp":"2026-03-03T19:12:24.6641393+08:00","type":"command","content":"\u001b[A"}
+{"timestamp":"2026-03-03T19:12:24.6707838+08:00","type":"output","content":"\b\b./test.sh "}
+{"timestamp":"2026-03-03T19:12:24.8278875+08:00","type":"command","content":"\u001b[A"}
+{"timestamp":"2026-03-03T19:12:24.8342339+08:00","type":"output","content":"\b\b\b\b\u001b[K"}
+{"timestamp":"2026-03-03T19:12:24.9998895+08:00","type":"command","content":"\u001b[A"}
+{"timestamp":"2026-03-03T19:12:25.0063541+08:00","type":"output","content":"\b\b\b\b\b\bsinfo "}
+{"timestamp":"2026-03-03T19:12:25.2569616+08:00","type":"command","content":"\u001b[A"}
+{"timestamp":"2026-03-03T19:12:25.265064+08:00","type":"output","content":"\b\b\b\b\b\b\u001b[4Pls"}
+{"timestamp":"2026-03-03T19:12:25.5887556+08:00","type":"command","content":"\u001b[A"}
+{"timestamp":"2026-03-03T19:12:25.5952771+08:00","type":"output","content":"\b\bsqueue "}
+{"timestamp":"2026-03-03T19:12:25.9869219+08:00","type":"command","content":"\u001b[A"}
+{"timestamp":"2026-03-03T19:12:25.9935674+08:00","type":"output","content":"\b\b\b\b\b\bbatch -N 1 -n 2 ./test.sh"}
+{"timestamp":"2026-03-03T19:12:26.8882287+08:00","type":"command","content":"\r"}
+{"timestamp":"2026-03-03T19:12:26.8942558+08:00","type":"output","content":"\r\n"}
+{"timestamp":"2026-03-03T19:12:26.9018392+08:00","type":"output","content":"Submitted batch job 318\r\n"}
+{"timestamp":"2026-03-03T19:12:26.9023533+08:00","type":"output","content":"\u001b]0;sunfx@mn0:~\u0007"}
+{"timestamp":"2026-03-03T19:12:26.9023533+08:00","type":"output","content":"[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T19:12:27.8195146+08:00","type":"command","content":"\u001b[A"}
+{"timestamp":"2026-03-03T19:12:27.8660359+08:00","type":"output","content":"sbatch -N 1 -n 2 ./test.sh"}
+{"timestamp":"2026-03-03T19:12:28.5606574+08:00","type":"command","content":"\u0003"}
+{"timestamp":"2026-03-03T19:12:28.5675733+08:00","type":"output","content":"^C"}
+{"timestamp":"2026-03-03T19:12:28.5675733+08:00","type":"output","content":"\r\n"}
+{"timestamp":"2026-03-03T19:12:28.5683062+08:00","type":"output","content":"\u001b]0;sunfx@mn0:~\u0007"}
+{"timestamp":"2026-03-03T19:12:28.5683062+08:00","type":"output","content":"[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T19:12:28.814466+08:00","type":"command","content":"s"}
+{"timestamp":"2026-03-03T19:12:28.8204876+08:00","type":"output","content":"s"}
+{"timestamp":"2026-03-03T19:12:29.0073972+08:00","type":"command","content":"q"}
+{"timestamp":"2026-03-03T19:12:29.0128284+08:00","type":"output","content":"q"}
+{"timestamp":"2026-03-03T19:12:29.1385312+08:00","type":"command","content":"u"}
+{"timestamp":"2026-03-03T19:12:29.1456251+08:00","type":"output","content":"u"}
+{"timestamp":"2026-03-03T19:12:29.2051879+08:00","type":"command","content":"e"}
+{"timestamp":"2026-03-03T19:12:29.2114197+08:00","type":"output","content":"e"}
+{"timestamp":"2026-03-03T19:12:29.3371536+08:00","type":"command","content":"\t"}
+{"timestamp":"2026-03-03T19:12:29.3463371+08:00","type":"output","content":"ue "}
+{"timestamp":"2026-03-03T19:12:29.4616581+08:00","type":"command","content":"\r"}
+{"timestamp":"2026-03-03T19:12:29.4679802+08:00","type":"output","content":"\r\n"}
+{"timestamp":"2026-03-03T19:12:29.4727867+08:00","type":"output","content":"             JOBID PARTITION     NAME     USER ST       TIME  NODES NODELIST(REASON)\r\n"}
+{"timestamp":"2026-03-03T19:12:29.4738418+08:00","type":"output","content":"\u001b]0;sunfx@mn0:~\u0007"}
+{"timestamp":"2026-03-03T19:12:29.4743835+08:00","type":"output","content":"[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T19:12:29.6567886+08:00","type":"command","content":"s"}
+{"timestamp":"2026-03-03T19:12:29.6659433+08:00","type":"output","content":"s"}
+{"timestamp":"2026-03-03T19:12:29.730244+08:00","type":"command","content":"a"}
+{"timestamp":"2026-03-03T19:12:29.7365232+08:00","type":"output","content":"a"}
+{"timestamp":"2026-03-03T19:12:29.8711736+08:00","type":"command","content":"c"}
+{"timestamp":"2026-03-03T19:12:29.8776063+08:00","type":"output","content":"c"}
+{"timestamp":"2026-03-03T19:12:29.9961855+08:00","type":"command","content":"c"}
+{"timestamp":"2026-03-03T19:12:30.0024332+08:00","type":"output","content":"c"}
+{"timestamp":"2026-03-03T19:12:30.0886694+08:00","type":"command","content":"\t"}
+{"timestamp":"2026-03-03T19:12:30.0957093+08:00","type":"output","content":"\u0007t"}
+{"timestamp":"2026-03-03T19:12:30.6143827+08:00","type":"command","content":"\r"}
+{"timestamp":"2026-03-03T19:12:30.6209596+08:00","type":"output","content":"\r\n"}
+{"timestamp":"2026-03-03T19:12:30.6257115+08:00","type":"output","content":"JobID           JobName  Partition    Account  AllocCPUS      State ExitCode \r\n------------ ---------- ---------- ---------- ---------- ---------- -------- \r\n"}
+{"timestamp":"2026-03-03T19:12:30.6312138+08:00","type":"output","content":"300            hostname slurm-bri+      sunfx          1  COMPLETED      0:0 \r\n300.0          hostname                 sunfx          1  COMPLETED      0:0 \r\n301            hostname slurm-bri+      sunfx          1  COMPLETED      0:0 \r\n301.0          hostname                 sunfx          1  COMPLETED      0:0 \r\n"}
+{"timestamp":"2026-03-03T19:12:30.6312138+08:00","type":"output","content":"302            hostname slurm-bri+      sunfx          0 CANCELLED+      0:0 \r\n303            hostname slurm-bri+      sunfx          0 CANCELLED+      0:0 \r\n304            hostname slurm-bri+      sunfx          2  COMPLETED      0:0 \r\n304.0          hostname                 sunfx          2  COMPLETED      0:0 \r\n305            hostname slurm-bri+      sunfx          1  COMPLETED      0:0 \r\n305.0          hostname                 sunfx          1  COMPLETED      0:0 \r\n306               sleep slurm-bri+      sunfx          1    TIMEOUT      0:0 \r\n306.0             sleep                 sunfx          1  CANCELLED     0:15 \r\n307               sleep slurm-bri+      sunfx          0 CANCELLED+      0:0 \r\n308               sleep slurm-bri+      sunfx          0 CANCELLED+      0:0 \r\n309               sleep slurm-bri+      sunfx          0 CANCELLED+      0:0 \r\n310               sleep slurm-bri+      sunfx          0 CANCELLED+      0:0 \r\n"}
+{"timestamp":"2026-03-03T19:12:30.6317196+08:00","type":"output","content":"311               sleep slurm-bri+      sunfx          1 CANCELLED+      0:0 \r\n311.0             sleep                 sunfx          1  CANCELLED     0:15 \r\n312               sleep slurm-bri+      sunfx          1 CANCELLED+      0:0 \r\n312.0             sleep                 sunfx          1  CANCELLED     0:15 \r\n313               sleep slurm-bri+      sunfx          1 CANCELLED+      0:0 \r\n313.0             sleep                 sunfx          1 CANCELLED+      0:2 \r\n314             test.sh slurm-bri+      sunfx          1     FAILED     0:53 \r\n"}
+{"timestamp":"2026-03-03T19:12:30.6317196+08:00","type":"output","content":"314.batch         batch                 sunfx          1  CANCELLED     0:53 \r\n315             test.sh slurm-bri+      sunfx          2     FAILED     0:53 \r\n315.batch         batch                 sunfx          2  CANCELLED     0:53 \r\n316             test.sh slurm-bri+      sunfx          2     FAILED     0:53 \r\n316.batch         batch                 sunfx          2  CANCELLED     0:53 \r\n317               sleep slurm-bri+      sunfx          1 CANCELLED+      0:0 \r\n317.0             sleep                 sunfx          1 CANCELLED+      0:2 \r\n318             test.sh slurm-bri+      sunfx          2     FAILED     0:53 \r\n318.batch         batch                 sunfx          2  CANCELLED     0:53 \r\n"}
+{"timestamp":"2026-03-03T19:12:30.6317196+08:00","type":"output","content":"\u001b]0;sunfx@mn0:~\u0007[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T19:12:31.7602622+08:00","type":"command","content":"\u001b[A"}
+{"timestamp":"2026-03-03T19:12:31.7665013+08:00","type":"output","content":"sacct"}
+{"timestamp":"2026-03-03T19:12:31.8911881+08:00","type":"command","content":" "}
+{"timestamp":"2026-03-03T19:12:31.899361+08:00","type":"output","content":" "}
+{"timestamp":"2026-03-03T19:12:32.2166574+08:00","type":"command","content":"-"}
+{"timestamp":"2026-03-03T19:12:32.2227003+08:00","type":"output","content":"-"}
+{"timestamp":"2026-03-03T19:12:32.3913349+08:00","type":"command","content":"x"}
+{"timestamp":"2026-03-03T19:12:32.3975271+08:00","type":"output","content":"x"}
+{"timestamp":"2026-03-03T19:12:32.6103229+08:00","type":"command","content":"\r"}
+{"timestamp":"2026-03-03T19:12:32.6190137+08:00","type":"output","content":"\r\n"}
+{"timestamp":"2026-03-03T19:12:32.6202021+08:00","type":"output","content":"sacct: option requires an argument -- 'x'\r\n"}
+{"timestamp":"2026-03-03T19:12:32.6224398+08:00","type":"output","content":"\u001b]0;sunfx@mn0:~\u0007"}
+{"timestamp":"2026-03-03T19:12:32.6224398+08:00","type":"output","content":"[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T19:12:33.4572233+08:00","type":"command","content":"\u001b[A"}
+{"timestamp":"2026-03-03T19:12:33.4655109+08:00","type":"output","content":"sacct -x"}
+{"timestamp":"2026-03-03T19:12:33.7462426+08:00","type":"command","content":""}
+{"timestamp":"2026-03-03T19:12:33.7524953+08:00","type":"output","content":"\b\u001b[K"}
+{"timestamp":"2026-03-03T19:12:33.9544863+08:00","type":"command","content":"X"}
+{"timestamp":"2026-03-03T19:12:33.9624528+08:00","type":"output","content":"X"}
+{"timestamp":"2026-03-03T19:12:34.3576715+08:00","type":"command","content":"\r"}
+{"timestamp":"2026-03-03T19:12:34.3680528+08:00","type":"output","content":"\r\n"}
+{"timestamp":"2026-03-03T19:12:34.3751199+08:00","type":"output","content":"JobID           JobName  Partition    Account  AllocCPUS      State ExitCode \r\n------------ ---------- ---------- ---------- ---------- ---------- -------- \r\n"}
+{"timestamp":"2026-03-03T19:12:34.3760645+08:00","type":"output","content":"300            hostname slurm-bri+      sunfx          1  COMPLETED      0:0 \r\n301            hostname slurm-bri+      sunfx          1  COMPLETED      0:0 \r\n302            hostname slurm-bri+      sunfx          0 CANCELLED+      0:0 \r\n303            hostname slurm-bri+      sunfx          0 CANCELLED+      0:0 \r\n304            hostname slurm-bri+      sunfx          2  COMPLETED      0:0 \r\n305            hostname slurm-bri+      sunfx          1  COMPLETED      0:0 \r\n306               sleep slurm-bri+      sunfx          1    TIMEOUT      0:0 \r\n307               sleep slurm-bri+      sunfx          0 CANCELLED+      0:0 \r\n308               sleep slurm-bri+      sunfx          0 CANCELLED+      0:0 \r\n309               sleep slurm-bri+      sunfx          0 CANCELLED+      0:0 \r\n310               sleep slurm-bri+      sunfx          0 CANCELLED+      0:0 \r\n311               sleep slurm-bri+      sunfx          1 CANCELLED+      0:0 \r\n312               sleep slurm-bri+      sunfx          1 CANCELLED+      0:0"}
+{"timestamp":"2026-03-03T19:12:34.3760645+08:00","type":"output","content":" \r\n313               sleep slurm-bri+      sunfx          1 CANCELLED+      0:0 \r\n314             test.sh slurm-bri+      sunfx          1     FAILED     0:53 \r\n315             test.sh slurm-bri+      sunfx          2     FAILED     0:53 \r\n316             test.sh slurm-bri+      sunfx          2     FAILED     0:53 \r\n317               sleep slurm-bri+      sunfx          1 CANCELLED+      0:0 \r\n318             test.sh slurm-bri+      sunfx          2     FAILED     0:53 \r\n"}
+{"timestamp":"2026-03-03T19:12:34.3765709+08:00","type":"output","content":"\u001b]0;sunfx@mn0:~\u0007[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T19:12:35.0206335+08:00","type":"command","content":"\f"}
+{"timestamp":"2026-03-03T19:12:35.0265638+08:00","type":"output","content":"\u001b[H\u001b[2J[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T19:12:35.2410004+08:00","type":"command","content":"\u001b[A"}
+{"timestamp":"2026-03-03T19:12:35.247448+08:00","type":"output","content":"sacct -X"}
+{"timestamp":"2026-03-03T19:12:35.4162617+08:00","type":"command","content":"\r"}
+{"timestamp":"2026-03-03T19:12:35.4229368+08:00","type":"output","content":"\r\n"}
+{"timestamp":"2026-03-03T19:12:35.4325746+08:00","type":"output","content":"JobID           JobName  Partition    Account  AllocCPUS      State ExitCode \r\n------------ ---------- ---------- ---------- ---------- ---------- -------- \r\n"}
+{"timestamp":"2026-03-03T19:12:35.4333308+08:00","type":"output","content":"300            hostname slurm-bri+      sunfx          1  COMPLETED      0:0 \r\n301            hostname slurm-bri+      sunfx          1  COMPLETED      0:0 \r\n302            hostname slurm-bri+      sunfx          0 CANCELLED+      0:0 \r\n303            hostname slurm-bri+      sunfx          0 CANCELLED+      0:0 \r\n"}
+{"timestamp":"2026-03-03T19:12:35.4333308+08:00","type":"output","content":"304            hostname slurm-bri+      sunfx          2  COMPLETED      0:0 \r\n305            hostname slurm-bri+      sunfx          1  COMPLETED      0:0 \r\n306               sleep slurm-bri+      sunfx          1    TIMEOUT      0:0 \r\n307               sleep slurm-bri+      sunfx          0 CANCELLED+      0:0 \r\n308               sleep slurm-bri+      sunfx          0 CANCELLED+      0:0 \r\n309               sleep slurm-bri+      sunfx          0 CANCELLED+      0:0 \r\n310               sleep slurm-bri+      sunfx          0 CANCELLED+      0:0 \r\n311               sleep slurm-bri+      sunfx          1 CANCELLED+      0:0 \r\n312               sleep slurm-bri+      sunfx          1 CANCELLED+      0:0 \r\n"}
+{"timestamp":"2026-03-03T19:12:35.4333308+08:00","type":"output","content":"313               sleep slurm-bri+      sunfx          1 CANCELLED+      0:0 \r\n314             test.sh slurm-bri+      sunfx          1     FAILED     0:53 \r\n315             test.sh slurm-bri+      sunfx          2     FAILED     0:53 \r\n316             test.sh slurm-bri+      sunfx          2     FAILED     0:53 \r\n317               sleep slurm-bri+      sunfx          1 CANCELLED+      0:0 \r\n"}
+{"timestamp":"2026-03-03T19:12:35.4333308+08:00","type":"output","content":"318             test.sh slurm-bri+      sunfx          2     FAILED     0:53 \r\n"}
+{"timestamp":"2026-03-03T19:12:35.4338728+08:00","type":"output","content":"\u001b]0;sunfx@mn0:~\u0007"}
+{"timestamp":"2026-03-03T19:12:35.4338728+08:00","type":"output","content":"[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T19:12:39.1265024+08:00","type":"event","event":"session_closed"}
+{"timestamp":"2026-03-03T19:12:39.1265024+08:00","type":"event","event":"session_end","data":{"duration":66.7922475}}

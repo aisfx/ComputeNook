@@ -21,11 +21,11 @@
         </div>
         <div class="form-group">
           <label>队列/分区 *</label>
-          <select v-model="form.partition" required>
-            <option value="compute">compute (计算队列)</option>
-            <option value="gpu">gpu (GPU队列)</option>
-            <option value="memory">memory (大内存队列)</option>
-            <option value="debug">debug (调试队列)</option>
+          <select v-model="form.partition" required :disabled="loadingPartitions">
+            <option value="" disabled>{{ loadingPartitions ? '加载中...' : '-- 选择分区 --' }}</option>
+            <option v-for="partition in partitions" :key="partition.name" :value="partition.name">
+              {{ partition.name }} ({{ partition.state }})
+            </option>
           </select>
         </div>
       </div>
@@ -41,14 +41,14 @@
         </div>
         <div class="form-group">
           <label>内存 (GB)</label>
-          <input v-model.number="form.memory" type="number" min="1" placeholder="16" />
+          <input v-model.number="form.memory" type="number" min="0" placeholder="不限制" />
         </div>
       </div>
 
       <div class="form-row">
         <div class="form-group">
-          <label>运行时间 (小时) *</label>
-          <input v-model.number="form.time" type="number" min="1" max="168" required />
+          <label>运行时间 (小时)</label>
+          <input v-model.number="form.time" type="number" min="0" placeholder="不限制" />
         </div>
         <div class="form-group">
           <label>GPU 卡数</label>
@@ -77,17 +77,24 @@
       <div class="form-group">
         <label>脚本文件 *</label>
         <div class="script-selector">
-          <select v-model="form.script" class="script-select" required>
-            <option value="">-- 选择脚本文件 --</option>
+          <input 
+            v-model="form.script" 
+            type="text" 
+            class="script-input" 
+            placeholder="输入脚本路径或从列表选择"
+            list="script-files"
+            required 
+          />
+          <datalist id="script-files">
             <option v-for="(file, index) in scriptFiles" :key="index" :value="file.path">
-              {{ file.name }} ({{ file.path }})
+              {{ file.name }}
             </option>
-          </select>
+          </datalist>
           <button type="button" class="btn-secondary btn-small" @click="loadScriptFiles">
             🔄 刷新
           </button>
         </div>
-        <div class="help-text">或手动输入脚本路径</div>
+        <div class="help-text">可以手动输入脚本路径，或从列表中选择</div>
       </div>
 
       <div class="form-group">
@@ -129,6 +136,8 @@ const currentUser = ref<any>(null)
 const selectedTemplate = ref('')
 const selectedTemplateData = ref<any>(null)
 const scriptFiles = ref<any[]>([])
+const partitions = ref<any[]>([])
+const loadingPartitions = ref(false)
 
 // 监听来自模板页面的事件
 const handleTemplateSelect = (template: any) => {
@@ -213,9 +222,9 @@ const form = ref({
   partition: 'compute',
   nodes: 1,
   cpus: 8,
-  memory: 16,
+  memory: 0,
   gpus: 0,
-  time: 1,
+  time: 0,
   priority: 'normal',
   workdir: '',
   script: '',
@@ -225,6 +234,46 @@ const form = ref({
 })
 
 const submitting = ref(false)
+
+// 加载分区列表
+const loadPartitions = async () => {
+  loadingPartitions.value = true
+  try {
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token')
+    if (!token) {
+      return
+    }
+    
+    const response = await fetch('http://localhost:8080/api/jobs/partitions/list', {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    })
+    
+    if (!response.ok) {
+      throw new Error('获取分区列表失败')
+    }
+    
+    const result = await response.json()
+    partitions.value = result.data || []
+    
+    // 如果有分区且当前没有选择分区，默认选择第一个
+    if (partitions.value.length > 0 && !form.value.partition) {
+      form.value.partition = partitions.value[0].name
+    }
+  } catch (err: any) {
+    console.error('Failed to load partitions:', err)
+    // 如果加载失败，使用默认分区列表
+    partitions.value = [
+      { name: 'compute', state: 'UP', nodes: '-' },
+      { name: 'gpu', state: 'UP', nodes: '-' },
+      { name: 'memory', state: 'UP', nodes: '-' },
+      { name: 'debug', state: 'UP', nodes: '-' }
+    ]
+  } finally {
+    loadingPartitions.value = false
+  }
+}
 
 // 重置为家目录
 const resetToHomeDir = () => {
@@ -308,14 +357,15 @@ const applyTemplateData = (template: any) => {
 const resetForm = () => {
   selectedTemplate.value = ''
   const homeDir = currentUser.value?.homeDir || `/home/${currentUser.value?.username || ''}`
+  const defaultPartition = partitions.value.length > 0 ? partitions.value[0].name : 'compute'
   form.value = {
     name: '',
-    partition: 'compute',
+    partition: defaultPartition,
     nodes: 1,
     cpus: 8,
-    memory: 16,
+    memory: 0,
     gpus: 0,
-    time: 1,
+    time: 0,
     priority: 'normal',
     workdir: homeDir,
     script: '',
@@ -327,13 +377,94 @@ const resetForm = () => {
 
 const submitJob = async () => {
   submitting.value = true
-  // 模拟 API 调用
-  setTimeout(() => {
-    alert(`作业 "${form.value.name}" 已提交！\n分区: ${form.value.partition}\n节点: ${form.value.nodes}\nCPU: ${form.value.cpus}`)
+  
+  try {
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token')
+    if (!token) {
+      notification.error('请先登录系统')
+      submitting.value = false
+      return
+    }
+    
+    // 读取脚本文件内容
+    let scriptContent = ''
+    if (form.value.script) {
+      try {
+        const scriptResponse = await fetch(`${fileManagerApi.read()}?path=${encodeURIComponent(form.value.script)}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+        
+        if (!scriptResponse.ok) {
+          throw new Error('无法读取脚本文件，请确认文件路径正确')
+        }
+        
+        const scriptData = await scriptResponse.json()
+        scriptContent = scriptData.content || ''
+        
+        if (!scriptContent) {
+          throw new Error('脚本文件为空')
+        }
+        
+        console.log('Script content loaded, length:', scriptContent.length)
+      } catch (err: any) {
+        notification.error(err.message || '读取脚本文件失败')
+        submitting.value = false
+        return
+      }
+    }
+    
+    // 确保工作目录是绝对路径
+    let workdir = form.value.workdir
+    if (workdir && workdir[0] !== '/') {
+      const homeDir = currentUser.value?.homeDir || `/home/${currentUser.value?.username || ''}`
+      workdir = `${homeDir}/${workdir}`
+    }
+    
+    // 构建提交数据
+    const submitData = {
+      name: form.value.name,
+      partition: form.value.partition,
+      script: scriptContent,  // 发送脚本内容而不是路径
+      nodes: form.value.nodes,
+      cpus: form.value.cpus,
+      memory: form.value.memory || 0,  // 0 表示不限制
+      gpus: form.value.gpus || 0,
+      time: form.value.time || 0,  // 0 表示不限制
+      workdir: workdir,
+      output: form.value.output || 'slurm-%j.out',  // 默认输出文件
+      error: form.value.error || 'slurm-%j.err',    // 默认错误文件
+      priority: form.value.priority,
+      extra_params: form.value.extraParams
+    }
+    
+    console.log('Submitting job with script content length:', scriptContent.length)
+    
+    const response = await fetch('http://localhost:8080/api/jobs', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(submitData)
+    })
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      throw new Error(errorData.error || `提交失败: ${response.status}`)
+    }
+    
+    const result = await response.json()
+    notification.success(`作业提交成功！作业ID: ${result.job_id}`)
     emit('job-submitted')
     resetForm()
+  } catch (err: any) {
+    console.error('Failed to submit job:', err)
+    notification.error(err.message || '作业提交失败')
+  } finally {
     submitting.value = false
-  }, 1000)
+  }
 }
 
 // 初始化
@@ -341,6 +472,7 @@ onMounted(() => {
   currentUser.value = getUser()
   const homeDir = currentUser.value?.homeDir || `/home/${currentUser.value?.username || ''}`
   form.value.workdir = homeDir
+  loadPartitions()
   loadScriptFiles()
 })
 </script>
@@ -436,17 +568,16 @@ onMounted(() => {
   align-items: center;
 }
 
-.script-select {
+.script-input {
   flex: 1;
   padding: 0.625rem 1rem;
   border: 2px solid #e5e7eb;
   border-radius: 8px;
   font-size: 0.95rem;
-  cursor: pointer;
   background: white;
 }
 
-.script-select:focus {
+.script-input:focus {
   outline: none;
   border-color: #667eea;
 }
