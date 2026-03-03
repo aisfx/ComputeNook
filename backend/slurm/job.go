@@ -11,19 +11,55 @@ import (
 type Job struct {
 	JobID       int64  `json:"job_id"`
 	Name        string `json:"name"`
-	User        string `json:"user_name"`
+	User        string `json:"user"`
 	Account     string `json:"account"`
 	Partition   string `json:"partition"`
-	State       string `json:"job_state"`
+	State       struct {
+		Current []string `json:"current"`
+		Reason  string   `json:"reason"`
+	} `json:"state"`
 	Nodes       string `json:"nodes"`
-	CPUs        int    `json:"cpus"`
-	SubmitTime  int64  `json:"submit_time"`
-	StartTime   int64  `json:"start_time"`
-	EndTime     int64  `json:"end_time"`
-	TimeLimit   int64  `json:"time_limit"`
-	WorkDir     string `json:"work_dir"`
-	StdOut      string `json:"standard_output"`
-	StdErr      string `json:"standard_error"`
+	CPUs        int    `json:"-"` // 从 required.CPUs 获取
+	Required    struct {
+		CPUs int `json:"CPUs"`
+	} `json:"required"`
+	Time struct {
+		Submission int64 `json:"submission"`
+		Start      int64 `json:"start"`
+		End        int64 `json:"end"`
+		Elapsed    int64 `json:"elapsed"`
+	} `json:"time"`
+	WorkingDirectory string `json:"working_directory"`
+	Stdout           string `json:"stdout"`
+	Stderr           string `json:"stderr"`
+}
+
+// GetJobState 获取作业状态
+func (j *Job) GetJobState() string {
+	if len(j.State.Current) > 0 {
+		return j.State.Current[0]
+	}
+	return "UNKNOWN"
+}
+
+// GetCPUs 获取 CPU 数量
+func (j *Job) GetCPUs() int {
+	return j.Required.CPUs
+}
+
+// GetSubmitTime 获取提交时间
+func (j *Job) GetSubmitTime() int64 {
+	return j.Time.Submission
+}
+
+// GetStartTime 获取开始时间
+func (j *Job) GetStartTime() int64 {
+	return j.Time.Start
+}
+
+// GetEndTime 获取结束时间
+func (j *Job) GetEndTime() int64 {
+	return j.Time.End
 }
 
 // JobsResponse Slurm 作业列表响应
@@ -43,15 +79,11 @@ type JobResponse struct {
 // startTime: 开始时间（Unix时间戳，为0则不限制）
 // endTime: 结束时间（Unix时间戳，为0则不限制）
 func (c *Client) GetJobs(username string, startTime, endTime int64) ([]Job, error) {
-	// 构建查询参数
-	path := c.buildAPIPath("/jobs")
+	// 使用 slurmdb API 获取作业信息（包括历史和当前作业）
+	path := fmt.Sprintf("/slurmdb/%s/jobs", c.apiVersion)
 	
 	// 添加查询参数
 	hasParams := false
-	
-	// 注意：/slurm/v0.0.40/jobs 端点不支持时间范围过滤
-	// 时间过滤需要在客户端进行，或者使用 /slurmdb/ 端点
-	// 这里我们只添加用户过滤
 	
 	// 添加用户过滤
 	if username != "" {
@@ -64,7 +96,29 @@ func (c *Client) GetJobs(username string, startTime, endTime int64) ([]Job, erro
 		path += fmt.Sprintf("users=%s", username)
 	}
 	
+	// 添加时间范围过滤（slurmdb 支持时间过滤）
+	if startTime > 0 {
+		if hasParams {
+			path += "&"
+		} else {
+			path += "?"
+			hasParams = true
+		}
+		path += fmt.Sprintf("submit_time=%d", startTime)
+	}
+	
+	if endTime > 0 {
+		if hasParams {
+			path += "&"
+		} else {
+			path += "?"
+			hasParams = true
+		}
+		path += fmt.Sprintf("end_time=%d", endTime)
+	}
+	
 	logger.Debug("GetJobs API request: GET %s", path)
+	logger.Debug("Full URL: %s%s", c.baseURL, path)
 	
 	respBody, err := c.doRequest("GET", path, nil)
 	if err != nil {
@@ -72,7 +126,7 @@ func (c *Client) GetJobs(username string, startTime, endTime int64) ([]Job, erro
 		return nil, err
 	}
 	
-	logger.Debug("GetJobs API response: %s", string(respBody))
+	logger.Debug("GetJobs API response length: %d bytes", len(respBody))
 	
 	var response JobsResponse
 	if err := json.Unmarshal(respBody, &response); err != nil {
@@ -85,18 +139,21 @@ func (c *Client) GetJobs(username string, startTime, endTime int64) ([]Job, erro
 		return nil, fmt.Errorf("slurm API error: %s", response.Errors[0].Error)
 	}
 	
-	// 如果指定了时间范围，在客户端进行过滤
+	// 客户端时间过滤（作为备用）
 	jobs := response.Jobs
 	if startTime > 0 || endTime > 0 {
 		filteredJobs := []Job{}
 		for _, job := range jobs {
-			// 使用提交时间进行过滤
-			if startTime > 0 && job.SubmitTime < startTime {
+			submitTime := job.GetSubmitTime()
+			
+			// 跳过时间范围外的作业
+			if startTime > 0 && submitTime < startTime {
 				continue
 			}
-			if endTime > 0 && job.SubmitTime > endTime {
+			if endTime > 0 && submitTime > endTime {
 				continue
 			}
+			
 			filteredJobs = append(filteredJobs, job)
 		}
 		jobs = filteredJobs
@@ -108,9 +165,10 @@ func (c *Client) GetJobs(username string, startTime, endTime int64) ([]Job, erro
 
 // GetJob 获取单个作业
 func (c *Client) GetJob(jobID int64) (*Job, error) {
-	path := c.buildAPIPath(fmt.Sprintf("/job/%d", jobID))
+	path := fmt.Sprintf("/slurm/%s/job/%d", c.apiVersion, jobID)
 	
 	logger.Debug("GetJob API request: GET %s", path)
+	logger.Debug("Full URL: %s%s", c.baseURL, path)
 	
 	respBody, err := c.doRequest("GET", path, nil)
 	if err != nil {
@@ -137,9 +195,10 @@ func (c *Client) GetJob(jobID int64) (*Job, error) {
 
 // CancelJob 取消作业
 func (c *Client) CancelJob(jobID int64) error {
-	path := c.buildAPIPath(fmt.Sprintf("/job/%d", jobID))
+	path := fmt.Sprintf("/slurm/%s/job/%d", c.apiVersion, jobID)
 	
 	logger.Debug("CancelJob API request: DELETE %s", path)
+	logger.Debug("Full URL: %s%s", c.baseURL, path)
 	
 	respBody, err := c.doRequest("DELETE", path, nil)
 	if err != nil {
@@ -147,6 +206,72 @@ func (c *Client) CancelJob(jobID int64) error {
 	}
 	
 	logger.Debug("CancelJob API response: %s", string(respBody))
+	
+	var response JobResponse
+	if err := json.Unmarshal(respBody, &response); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+	
+	if len(response.Errors) > 0 {
+		return fmt.Errorf("slurm API error: %s", response.Errors[0].Error)
+	}
+	
+	return nil
+}
+
+// SuspendJob 暂停作业
+func (c *Client) SuspendJob(jobID int64) error {
+	path := fmt.Sprintf("/slurm/%s/job/%d", c.apiVersion, jobID)
+	
+	// 构建请求体 - 设置作业状态为 SUSPENDED
+	body := map[string]interface{}{
+		"job": map[string]interface{}{
+			"job_state": []string{"SUSPEND"},
+		},
+	}
+	
+	logger.Debug("SuspendJob API request: POST %s", path)
+	logger.Debug("Full URL: %s%s", c.baseURL, path)
+	
+	respBody, err := c.doRequest("POST", path, body)
+	if err != nil {
+		return fmt.Errorf("API request failed: %w", err)
+	}
+	
+	logger.Debug("SuspendJob API response: %s", string(respBody))
+	
+	var response JobResponse
+	if err := json.Unmarshal(respBody, &response); err != nil {
+		return fmt.Errorf("failed to parse response: %w", err)
+	}
+	
+	if len(response.Errors) > 0 {
+		return fmt.Errorf("slurm API error: %s", response.Errors[0].Error)
+	}
+	
+	return nil
+}
+
+// ResumeJob 恢复作业
+func (c *Client) ResumeJob(jobID int64) error {
+	path := fmt.Sprintf("/slurm/%s/job/%d", c.apiVersion, jobID)
+	
+	// 构建请求体 - 设置作业状态为 RESUME
+	body := map[string]interface{}{
+		"job": map[string]interface{}{
+			"job_state": []string{"RESUME"},
+		},
+	}
+	
+	logger.Debug("ResumeJob API request: POST %s", path)
+	logger.Debug("Full URL: %s%s", c.baseURL, path)
+	
+	respBody, err := c.doRequest("POST", path, body)
+	if err != nil {
+		return fmt.Errorf("API request failed: %w", err)
+	}
+	
+	logger.Debug("ResumeJob API response: %s", string(respBody))
 	
 	var response JobResponse
 	if err := json.Unmarshal(respBody, &response); err != nil {
@@ -238,7 +363,7 @@ type PartitionsResponse struct {
 
 // GetPartitions 获取分区列表
 func (c *Client) GetPartitions() ([]Partition, error) {
-	path := c.buildAPIPath("/partitions")
+	path := fmt.Sprintf("/slurm/%s/partitions", c.apiVersion)
 	
 	logger.Debug("GetPartitions API request: GET %s", path)
 	logger.Debug("Full URL: %s%s", c.baseURL, path)
@@ -350,10 +475,12 @@ func (c *Client) SubmitJob(params JobSubmitParams) (int64, error) {
 	}
 	
 	bodyJSON, _ := json.Marshal(body)
-	logger.Debug("SubmitJob API request: POST %s", c.buildAPIPath("/job/submit"))
+	path := fmt.Sprintf("/slurm/%s/job/submit", c.apiVersion)
+	logger.Debug("SubmitJob API request: POST %s", path)
+	logger.Debug("Full URL: %s%s", c.baseURL, path)
 	logger.Debug("Request body: %s", string(bodyJSON))
 	
-	respBody, err := c.doRequest("POST", c.buildAPIPath("/job/submit"), body)
+	respBody, err := c.doRequest("POST", path, body)
 	if err != nil {
 		logger.Error("Job submission failed: %v", err)
 		

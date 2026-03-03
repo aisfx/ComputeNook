@@ -20,7 +20,7 @@ func (c *Client) GetUsers() ([]*models.User, error) {
 		ldap.NeverDerefAliases,
 		0, 0, false,
 		"(objectClass=posixAccount)",
-		[]string{"uid", "uidNumber", "gidNumber", "cn", "mail", "telephoneNumber", "loginShell", "homeDirectory", "description", "shadowLastChange", "shadowExpire"},
+		[]string{"uid", "uidNumber", "gidNumber", "cn", "displayName", "sn", "mail", "telephoneNumber", "loginShell", "homeDirectory", "description", "shadowLastChange", "shadowExpire"},
 		nil,
 	)
 
@@ -31,9 +31,21 @@ func (c *Client) GetUsers() ([]*models.User, error) {
 
 	users := make([]*models.User, 0, len(sr.Entries))
 	for _, entry := range sr.Entries {
+		// 优先使用 displayName，如果没有则使用 cn，最后使用 sn
+		cnName := entry.GetAttributeValue("displayName")
+		if cnName == "" {
+			cnName = entry.GetAttributeValue("cn")
+		}
+		if cnName == "" {
+			cnName = entry.GetAttributeValue("sn")
+		}
+		if cnName == "" {
+			cnName = entry.GetAttributeValue("uid")
+		}
+		
 		user := &models.User{
 			Username: entry.GetAttributeValue("uid"),
-			CNName:   entry.GetAttributeValue("cn"),
+			CNName:   cnName,
 			Email:    entry.GetAttributeValue("mail"),
 			Phone:    entry.GetAttributeValue("telephoneNumber"),
 			Shell:    entry.GetAttributeValue("loginShell"),
@@ -75,7 +87,7 @@ func (c *Client) GetUser(username string) (*models.User, error) {
 		ldap.NeverDerefAliases,
 		0, 0, false,
 		fmt.Sprintf("(&(objectClass=posixAccount)(uid=%s))", ldap.EscapeFilter(username)),
-		[]string{"uid", "uidNumber", "gidNumber", "cn", "mail", "telephoneNumber", "loginShell", "homeDirectory", "description", "shadowLastChange", "shadowExpire"},
+		[]string{"uid", "uidNumber", "gidNumber", "cn", "displayName", "sn", "mail", "telephoneNumber", "loginShell", "homeDirectory", "description", "shadowLastChange", "shadowExpire"},
 		nil,
 	)
 
@@ -89,9 +101,22 @@ func (c *Client) GetUser(username string) (*models.User, error) {
 	}
 
 	entry := sr.Entries[0]
+	
+	// 优先使用 displayName，如果没有则使用 cn，最后使用 sn
+	cnName := entry.GetAttributeValue("displayName")
+	if cnName == "" {
+		cnName = entry.GetAttributeValue("cn")
+	}
+	if cnName == "" {
+		cnName = entry.GetAttributeValue("sn")
+	}
+	if cnName == "" {
+		cnName = entry.GetAttributeValue("uid")
+	}
+	
 	user := &models.User{
 		Username: entry.GetAttributeValue("uid"),
-		CNName:   entry.GetAttributeValue("cn"),
+		CNName:   cnName,
 		Email:    entry.GetAttributeValue("mail"),
 		Phone:    entry.GetAttributeValue("telephoneNumber"),
 		Shell:    entry.GetAttributeValue("loginShell"),

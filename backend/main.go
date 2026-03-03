@@ -169,6 +169,28 @@ func main() {
 			usage.GET("/cluster", middleware.AdminMiddleware(), handlers.GetClusterUsage)
 		}
 
+		// 作业管理 API
+		jobs := auth.Group("/jobs")
+		{
+			// 获取作业列表（普通用户只能看自己的，管理员可以看所有）
+			jobs.GET("", handlers.GetJobs)
+			
+			// 获取单个作业详情
+			jobs.GET("/:id", handlers.GetJob)
+			
+			// 提交作业
+			jobs.POST("", handlers.SubmitJob)
+			
+			// 取消作业
+			jobs.DELETE("/:id", handlers.CancelJob)
+			
+			// 暂停作业
+			jobs.POST("/:id/suspend", handlers.SuspendJob)
+			
+			// 恢复作业
+			jobs.POST("/:id/resume", handlers.ResumeJob)
+		}
+
 		// Web Shell API
 		webshell := auth.Group("/webshell")
 		{
@@ -187,10 +209,45 @@ func main() {
 			webshell.GET("/logs/:log_file/download", handlers.DownloadSessionLog)
 			
 			// 私钥管理
+			webshell.GET("/keys/check", handlers.CheckPrivateKey)
 			webshell.POST("/keys/upload", handlers.UploadPrivateKey)
 			
 			// 连接测试
 			webshell.POST("/nodes/:node_name/test", handlers.TestNodeConnection)
+		}
+
+		// 文件管理 API
+		files := auth.Group("/files")
+		{
+			// 列出目录内容
+			files.GET("/list", handlers.ListDirectory)
+			
+			// 获取文件信息
+			files.GET("/info", handlers.GetFileInfo)
+			
+			// 读取文件内容
+			files.GET("/read", handlers.ReadFile)
+			
+			// 下载文件
+			files.GET("/download", handlers.DownloadFile)
+			
+			// 写入文件
+			files.POST("/write", handlers.WriteFile)
+			
+			// 上传文件
+			files.POST("/upload", handlers.UploadFile)
+			
+			// 删除文件或目录
+			files.DELETE("/delete", handlers.DeleteFile)
+			
+			// 创建目录
+			files.POST("/mkdir", handlers.CreateDirectory)
+			
+			// 重命名文件或目录
+			files.POST("/rename", handlers.RenameFile)
+			
+			// 复制文件
+			files.POST("/copy", handlers.CopyFile)
 		}
 	}
 

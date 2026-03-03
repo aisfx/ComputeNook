@@ -1,0 +1,55 @@
+{"timestamp":"2026-03-03T17:05:42.1963736+08:00","type":"event","event":"session_start","data":{"host":"192.168.5.250","session_id":"08a45013-68bb-4e97-a225-3f70c6567e02","user_id":"24135","username":"sunfx"}}
+{"timestamp":"2026-03-03T17:05:42.1974375+08:00","type":"event","event":"session_created","data":{"host":"192.168.5.250","port":31277}}
+{"timestamp":"2026-03-03T17:05:42.3448734+08:00","type":"event","event":"connection_established"}
+{"timestamp":"2026-03-03T17:05:42.3448734+08:00","type":"output","content":"Activate the web console with: systemctl enable --now cockpit.socket\r\n\r\nLast login: Tue Mar  3 16:48:47 2026\r\r\n"}
+{"timestamp":"2026-03-03T17:05:42.3923879+08:00","type":"output","content":"\u001b]0;sunfx@mn0:~\u0007"}
+{"timestamp":"2026-03-03T17:05:42.3928993+08:00","type":"output","content":"[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T17:05:43.1435047+08:00","type":"command","content":"\r"}
+{"timestamp":"2026-03-03T17:05:43.1507708+08:00","type":"output","content":"\r\n"}
+{"timestamp":"2026-03-03T17:05:43.1507708+08:00","type":"output","content":"\u001b]0;sunfx@mn0:~\u0007[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T17:05:43.342826+08:00","type":"command","content":"l"}
+{"timestamp":"2026-03-03T17:05:43.3502278+08:00","type":"output","content":"l"}
+{"timestamp":"2026-03-03T17:05:43.4228705+08:00","type":"command","content":"s"}
+{"timestamp":"2026-03-03T17:05:43.4297449+08:00","type":"output","content":"s"}
+{"timestamp":"2026-03-03T17:05:43.5106873+08:00","type":"command","content":"\r"}
+{"timestamp":"2026-03-03T17:05:43.5190383+08:00","type":"output","content":"\r\n"}
+{"timestamp":"2026-03-03T17:05:43.5217953+08:00","type":"output","content":"\u001b]0;sunfx@mn0:~\u0007[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T17:05:43.6792421+08:00","type":"command","content":"d"}
+{"timestamp":"2026-03-03T17:05:43.6858481+08:00","type":"output","content":"d"}
+{"timestamp":"2026-03-03T17:05:43.7878008+08:00","type":"command","content":"m"}
+{"timestamp":"2026-03-03T17:05:43.795206+08:00","type":"output","content":"m"}
+{"timestamp":"2026-03-03T17:05:43.8397533+08:00","type":"command","content":"e"}
+{"timestamp":"2026-03-03T17:05:43.846076+08:00","type":"output","content":"e"}
+{"timestamp":"2026-03-03T17:05:43.9442367+08:00","type":"command","content":"s"}
+{"timestamp":"2026-03-03T17:05:43.9509576+08:00","type":"output","content":"s"}
+{"timestamp":"2026-03-03T17:05:44.0877784+08:00","type":"command","content":"\t"}
+{"timestamp":"2026-03-03T17:05:44.0950487+08:00","type":"output","content":"g "}
+{"timestamp":"2026-03-03T17:05:44.1324757+08:00","type":"command","content":"\r"}
+{"timestamp":"2026-03-03T17:05:44.1386931+08:00","type":"output","content":"\r\n"}
+{"timestamp":"2026-03-03T17:05:44.1407559+08:00","type":"output","content":"\u001b]0;sunfx@mn0:~\u0007[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T17:05:45.2987423+08:00","type":"command","content":"i"}
+{"timestamp":"2026-03-03T17:05:45.3051403+08:00","type":"output","content":"i"}
+{"timestamp":"2026-03-03T17:05:45.6089242+08:00","type":"command","content":" "}
+{"timestamp":"2026-03-03T17:05:45.6157752+08:00","type":"output","content":" "}
+{"timestamp":"2026-03-03T17:05:46.0558684+08:00","type":"command","content":""}
+{"timestamp":"2026-03-03T17:05:46.0622771+08:00","type":"output","content":"\b\u001b[K"}
+{"timestamp":"2026-03-03T17:05:46.1814622+08:00","type":"command","content":"p"}
+{"timestamp":"2026-03-03T17:05:46.1879802+08:00","type":"output","content":"p"}
+{"timestamp":"2026-03-03T17:05:46.311286+08:00","type":"command","content":" "}
+{"timestamp":"2026-03-03T17:05:46.3239447+08:00","type":"output","content":" "}
+{"timestamp":"2026-03-03T17:05:46.372148+08:00","type":"command","content":"a"}
+{"timestamp":"2026-03-03T17:05:46.3779919+08:00","type":"output","content":"a"}
+{"timestamp":"2026-03-03T17:05:46.4358022+08:00","type":"command","content":"d"}
+{"timestamp":"2026-03-03T17:05:46.4426044+08:00","type":"output","content":"d"}
+{"timestamp":"2026-03-03T17:05:46.4942314+08:00","type":"command","content":"\r"}
+{"timestamp":"2026-03-03T17:05:46.505745+08:00","type":"output","content":"\r\n"}
+{"timestamp":"2026-03-03T17:05:46.5067204+08:00","type":"output","content":"1: lo: \u003cLOOPBACK,UP,LOWER_UP\u003e mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000\r\n    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00\r\n    inet 127.0.0.1/8 scope host lo\r\n       valid_lft forever preferred_lft forever\r\n    inet6 ::1/128 scope host \r\n       valid_lft forever preferred_lft forever\r\n2: eth0: \u003cBROADCAST,MULTICAST,UP,LOWER_UP\u003e mtu 1500 qdisc fq_codel state UP group default qlen 1000\r\n    link/ether bc:24:11:33:a3:bf brd ff:ff:ff:ff:ff:ff\r\n    altname enp0s18\r\n    altname ens18\r\n    inet 192.168.3.100/22 brd 192.168.3.255 scope global noprefixroute eth0\r\n       valid_lft forever preferred_lft forever\r\n    inet6 fe80::be24:11ff:fe33:a3bf/64 scope link \r\n       valid_lft forever preferred_lft forever\r\n3: flannel.1: \u003cBROADCAST,MULTICAST,UP,LOWER_UP\u003e mtu 1450 qdisc noqueue state UNKNOWN group default \r\n"}
+{"timestamp":"2026-03-03T17:05:46.5067204+08:00","type":"output","content":"    link/ether f2:e4:c9:c8:4d:0f brd ff:ff:ff:ff:ff:ff\r\n    inet 10.244.0.0/32 scope global flannel.1\r\n       valid_lft forever preferred_lft forever\r\n    inet6 fe80::f0e4:c9ff:fec8:4d0f/64 scope link \r\n       valid_lft forever preferred_lft forever\r\n4: cni0: \u003cBROADCAST,MULTICAST,UP,LOWER_UP\u003e mtu 1450 qdisc noqueue state UP group default qlen 1000\r\n    link/ether 16:27:73:3c:1e:81 brd ff:ff:ff:ff:ff:ff\r\n    inet 10.244.0.1/24 brd 10.244.0.255 scope global cni0\r\n       valid_lft forever preferred_lft forever\r\n    inet6 fe80::1427:73ff:fe3c:1e81/64 scope link \r\n       valid_lft forever preferred_lft forever\r\n5: veth3c9461db@if2: \u003cBROADCAST,MULTICAST,UP,LOWER_UP\u003e mtu 1450 qdisc noqueue master cni0 state UP group default qlen 1000\r\n"}
+{"timestamp":"2026-03-03T17:05:46.5072253+08:00","type":"output","content":"    link/ether 12:15:d0:3a:33:e6 brd ff:ff:ff:ff:ff:ff link-netns cni-5f27df1e-4cc2-9115-aea8-50111e4ddb90\r\n    inet6 fe80::1015:d0ff:fe3a:33e6/64 scope link \r\n       valid_lft forever preferred_lft forever\r\n6: vethf4e8abff@if2: \u003cBROADCAST,MULTICAST,UP,LOWER_UP\u003e mtu 1450 qdisc noqueue master cni0 state UP group default qlen 1000\r\n    link/ether 8e:b3:f7:8b:d2:62 brd ff:ff:ff:ff:ff:ff link-netns cni-75dcb0dd-69f2-4926-c854-1fd0504f9e2a\r\n    inet6 fe80::8cb3:f7ff:fe8b:d262/64 scope link \r\n       valid_lft forever preferred_lft forever\r\n12: vethedb529d7@if2: \u003cBROADCAST,MULTICAST,UP,LOWER_UP\u003e mtu 1450 qdisc noqueue master cni0 state UP group default qlen 1000\r\n    link/ether 86:74:1b:28:59:ed brd ff:ff:ff:ff:ff:ff link-netns cni-b2398b7b-77f2-c1a7-fc44-311a87264479\r\n    inet6 fe80::8474:1bff:fe28:59ed/64 scope link \r\n       valid_lft forever preferred_lft forever\r\n13: veth89a7460f@if2: \u003cBROADCAST,MULTICAST,UP,LOWER_UP\u003e mtu 1450 qdisc noqueue master cni0 state UP group default qlen 1000\r\n    link/ether 3e:00:dc:52"}
+{"timestamp":"2026-03-03T17:05:46.5072253+08:00","type":"output","content":":99:97 brd ff:ff:ff:ff:ff:ff link-netns cni-2400d353-faef-2112-cb7e-e0449d5cb47e\r\n    inet6 fe80::3c00:dcff:fe52:9997/64 scope link \r\n       valid_lft forever preferred_lft forever\r\n14: vetha915aeb9@if2: \u003cBROADCAST,MULTICAST,UP,LOWER_UP\u003e mtu 1450 qdisc noqueue master cni0 state UP group default qlen 1000\r\n    link/ether 4a:d5:e1:91:13:f9 brd ff:ff:ff:ff:ff:ff link-netns cni-2d1411d9-4b6d-b77b-faf2-e79eac3d8886\r\n    inet6 fe80::48d5:e1ff:fe91:13f9/64 scope link \r\n       valid_lft forever preferred_lft forever\r\n"}
+{"timestamp":"2026-03-03T17:05:46.5072253+08:00","type":"output","content":"15: vethace6f28e@if2: \u003cBROADCAST,MULTICAST,UP,LOWER_UP\u003e mtu 1450 qdisc noqueue master cni0 state UP group default qlen 1000\r\n    link/ether 96:86:e3:1a:fa:67 brd ff:ff:ff:ff:ff:ff link-netns cni-e4c048a8-c4c8-62c4-478e-bb46a0872db2\r\n    inet6 fe80::9486:e3ff:fe1a:fa67/64 scope link \r\n       valid_lft forever preferred_lft forever\r\n16: veth326f6e6b@if2: \u003cBROADCAST,MULTICAST,UP,LOWER_UP\u003e mtu 1450 qdisc noqueue master cni0 state UP group default qlen 1000\r\n    link/ether e2:e5:10:85:60:e3 brd ff:ff:ff:ff:ff:ff link-netns cni-71a97f65-38cc-ee93-1af1-5a95f2f2566e\r\n    inet6 fe80::e0e5:10ff:fe85:60e3/64 scope link \r\n       valid_lft forever preferred_lft forever\r\n17: vethe59ed617@if2: \u003cBROADCAST,MULTICAST,UP,LOWER_UP\u003e mtu 1450 qdisc noqueue master cni0 state UP group default qlen 1000\r\n    link/ether 96:dd:2f:23:4c:f2 brd ff:ff:ff:ff:ff:ff link-netns cni-15620f8f-9ab2-be18-a2ec-ce4c4690ef07\r\n    inet6 fe80::94dd:2fff:fe23:4cf2/64 scope link \r\n       valid_lft forever preferred_lft forever\r\n"}
+{"timestamp":"2026-03-03T17:05:46.5090275+08:00","type":"output","content":"18: vethffe29658@if2: \u003cBROADCAST,MULTICAST,UP,LOWER_UP\u003e mtu 1450 qdisc noqueue master cni0 state UP group default qlen 1000\r\n    link/ether de:95:14:1c:b4:e9 brd ff:ff:ff:ff:ff:ff link-netns cni-942a0a6c-5724-da32-285e-53c49bce4f92\r\n    inet6 fe80::dc95:14ff:fe1c:b4e9/64 scope link \r\n       valid_lft forever preferred_lft forever\r\n19: vethde70c63a@if2: \u003cBROADCAST,MULTICAST,UP,LOWER_UP\u003e mtu 1450 qdisc noqueue master cni0 state UP group default qlen 1000\r\n    link/ether 4a:a4:bd:aa:b8:1d brd ff:ff:ff:ff:ff:ff link-netns cni-0069b962-ada1-d219-af33-db4e5cdd3c1c\r\n    inet6 fe80::48a4:bdff:feaa:b81d/64 scope link \r\n       valid_lft forever preferred_lft forever\r\n20: vethd43e6fcb@if2: \u003cBROADCAST,MULTICAST,UP,LOWER_UP\u003e mtu 1450 qdisc noqueue master cni0 state UP group default qlen 1000\r\n    link/ether be:0b:8e:c8:1c:ec brd ff:ff:ff:ff:ff:ff link-netns cni-d4ec0ee7-998e-4dc0-8092-9c1c755a8b4d\r\n    inet6 fe80::bc0b:8eff:fec8:1cec/64 scope link \r\n       valid_lft forever preferred_lft forever\r\n21: veth00c7ae18@if2: \u003cBR"}
+{"timestamp":"2026-03-03T17:05:46.5103481+08:00","type":"output","content":"OADCAST,MULTICAST,UP,LOWER_UP\u003e mtu 1450 qdisc noqueue master cni0 state UP group default qlen 1000\r\n    link/ether f6:4e:c5:6a:76:fe brd ff:ff:ff:ff:ff:ff link-netns cni-46accffe-8035-6695-7642-a84587f4a36c\r\n    inet6 fe80::f44e:c5ff:fe6a:76fe/64 scope link \r\n       valid_lft forever preferred_lft forever\r\n22: veth6f1c3a7b@if2: \u003cBROADCAST,MULTICAST,UP,LOWER_UP\u003e mtu 1450 qdisc noqueue master cni0 state UP group default qlen 1000\r\n    link/ether 7e:64:14:3d:4a:05 brd ff:ff:ff:ff:ff:ff link-netns cni-c1534ddf-46c6-202d-9963-cc47984b7212\r\n    inet6 fe80::7c64:14ff:fe3d:4a05/64 scope link \r\n       valid_lft forever preferred_lft forever\r\n"}
+{"timestamp":"2026-03-03T17:05:46.5108984+08:00","type":"output","content":"\u001b]0;sunfx@mn0:~\u0007[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T17:06:05.3181249+08:00","type":"event","event":"session_closed"}
+{"timestamp":"2026-03-03T17:06:05.3181249+08:00","type":"event","event":"session_end","data":{"duration":23.1217513}}

@@ -1,10 +1,10 @@
 package handlers
 
 import (
+	"log"
 	"net/http"
 	"os"
 	"time"
-
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"hpc-backend/ldap"
@@ -73,32 +73,40 @@ func GetCurrentUser(c *gin.Context) {
 	uid, _ := c.Get("uid")
 	isAdmin, _ := c.Get("isAdmin")
 
-	// 开发模式
-	if os.Getenv("DEV_MODE") == "true" {
+	log.Printf("GetCurrentUser: username=%v, uid=%v, isAdmin=%v", username, uid, isAdmin)
+
+	// 尝试从 LDAP 获取完整用户信息
+	client, err := ldap.NewClient()
+	if err != nil {
+		log.Printf("GetCurrentUser: Failed to connect to LDAP: %v", err)
+		// 如果 LDAP 连接失败，返回基本信息
 		c.JSON(http.StatusOK, gin.H{
 			"data": models.User{
 				Username: username.(string),
 				UID:      uid.(int),
-				CNName:   "开发用户",
+				CNName:   username.(string),
 				IsAdmin:  isAdmin.(bool),
 			},
 		})
-		return
-	}
-
-	// 生产模式：从 LDAP 获取完整信息
-	client, err := ldap.NewClient()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
 	defer client.Close()
 
 	user, err := client.GetUser(username.(string))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		log.Printf("GetCurrentUser: Failed to get user from LDAP: %v", err)
+		// 如果用户不存在于 LDAP，返回基本信息
+		c.JSON(http.StatusOK, gin.H{
+			"data": models.User{
+				Username: username.(string),
+				UID:      uid.(int),
+				CNName:   username.(string),
+				IsAdmin:  isAdmin.(bool),
+			},
+		})
 		return
 	}
 
+	log.Printf("GetCurrentUser: Successfully retrieved user: %s", user.Username)
 	c.JSON(http.StatusOK, gin.H{"data": user})
 }

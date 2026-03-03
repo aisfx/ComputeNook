@@ -249,14 +249,14 @@ onMounted(() => {
 }
 
 .logo {
-  padding: 2rem 1.5rem;
+  padding: 1.5rem 1.5rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .logo h1 {
-  font-size: 1.5rem;
+  font-size: 1.3rem;
   font-weight: 600;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.25rem;
 }
 
 .welcome-text {
@@ -297,13 +297,13 @@ onMounted(() => {
 .nav-item {
   display: flex;
   align-items: center;
-  padding: 1rem 1.5rem;
+  padding: 0.75rem 1.5rem;
   color: rgba(255, 255, 255, 0.8);
   cursor: pointer;
   transition: all 0.25s ease;
   text-decoration: none;
   border-radius: 8px;
-  margin: 0.25rem 0.75rem;
+  margin: 0.2rem 0.75rem;
   position: relative;
   overflow: hidden;
 }
@@ -462,7 +462,7 @@ onMounted(() => {
 
 .top-header {
   background: white;
-  padding: 1.5rem 2rem;
+  padding: 1rem 1.5rem;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
   display: flex;
   justify-content: space-between;
@@ -474,15 +474,15 @@ onMounted(() => {
 }
 
 .top-header h2 {
-  font-size: 1.5rem;
+  font-size: 1.3rem;
   color: #333;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.25rem;
 }
 
 .sub-nav {
   display: flex;
   gap: 0.5rem;
-  margin-top: 1rem;
+  margin-top: 0.5rem;
 }
 
 .sub-nav-btn {

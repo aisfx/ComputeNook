@@ -29,6 +29,7 @@ type WebShellSession struct {
 	
 	sshClient *SSHClient
 	wsConn    *websocket.Conn
+	wsMutex   sync.Mutex       // 保护WebSocket写入
 	logger    *SessionLogger
 	
 	// 控制通道
@@ -36,6 +37,17 @@ type WebShellSession struct {
 	resize   chan ResizeMsg
 	input    chan []byte
 	output   chan []byte
+}
+
+// WriteMessage 安全地写入WebSocket消息
+func (s *WebShellSession) WriteMessage(msgType string, data interface{}) error {
+	s.wsMutex.Lock()
+	defer s.wsMutex.Unlock()
+	
+	return s.wsConn.WriteJSON(map[string]interface{}{
+		"type": msgType,
+		"data": data,
+	})
 }
 
 // ResizeMsg 终端大小调整消息
@@ -277,12 +289,8 @@ func (s *WebShellSession) handleWebSocket() {
 	for {
 		select {
 		case data := <-s.output:
-			// 发送输出到WebSocket
-			msg := WebSocketMessage{
-				Type: "output",
-				Data: string(data),
-			}
-			if err := s.wsConn.WriteJSON(msg); err != nil {
+			// 发送输出到WebSocket（使用安全方法）
+			if err := s.WriteMessage("output", string(data)); err != nil {
 				log.Printf("Failed to write to WebSocket: %v", err)
 				return
 			}

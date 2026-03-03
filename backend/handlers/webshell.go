@@ -56,21 +56,50 @@ func GetNodes(c *gin.Context) {
 
 // ConnectWebShell WebSocket连接处理
 func ConnectWebShell(c *gin.Context) {
-	// 获取用户信息
+	// 获取用户信息（从中间件设置的 context）
 	userInterface, exists := c.Get("user")
 	if !exists {
+		log.Printf("ConnectWebShell: User not found in context")
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
 		return
 	}
 	
 	user, ok := userInterface.(map[string]interface{})
 	if !ok {
+		log.Printf("ConnectWebShell: Invalid user data type")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid user data"})
 		return
 	}
 	
-	userID := user["uid"].(string)
-	username := user["username"].(string)
+	userIDInterface, exists := user["uid"]
+	if !exists {
+		log.Printf("ConnectWebShell: UID not found in user data")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "User ID not found"})
+		return
+	}
+	
+	userID, ok := userIDInterface.(string)
+	if !ok {
+		log.Printf("ConnectWebShell: UID is not a string, type: %T", userIDInterface)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid user ID format"})
+		return
+	}
+	
+	usernameInterface, exists := user["username"]
+	if !exists {
+		log.Printf("ConnectWebShell: Username not found in user data")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Username not found"})
+		return
+	}
+	
+	username, ok := usernameInterface.(string)
+	if !ok {
+		log.Printf("ConnectWebShell: Username is not a string")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid username format"})
+		return
+	}
+	
+	log.Printf("ConnectWebShell: User authenticated - ID: %s, Username: %s", userID, username)
 	
 	// 获取连接参数
 	nodeName := c.Query("node")
@@ -122,6 +151,7 @@ func ConnectWebShell(c *gin.Context) {
 	
 	// 如果没有私钥且没有密码，返回错误
 	if keyErr != nil && password == "" {
+		// 会话还未创建，直接写入（此时没有并发问题）
 		conn.WriteJSON(map[string]interface{}{
 			"type": "auth_required",
 			"data": "No private key found. Please provide password or upload private key.",
@@ -142,6 +172,7 @@ func ConnectWebShell(c *gin.Context) {
 	// 创建会话
 	session, err := sessionManager.CreateSession(sessionID, userID, username, sshConfig, conn)
 	if err != nil {
+		// 会话创建失败，直接写入（此时没有并发问题）
 		conn.WriteJSON(map[string]interface{}{
 			"type": "error",
 			"data": "Failed to create session: " + err.Error(),
@@ -152,28 +183,23 @@ func ConnectWebShell(c *gin.Context) {
 	
 	// 启动会话
 	if err := session.Start(); err != nil {
-		conn.WriteJSON(map[string]interface{}{
-			"type": "error",
-			"data": "Failed to start session: " + err.Error(),
-		})
+		// 使用会话的安全写入方法
+		session.WriteMessage("error", "Failed to start session: "+err.Error())
 		sessionManager.RemoveSession(sessionID)
 		return
 	}
 	
-	// 发送连接成功消息
-	conn.WriteJSON(map[string]interface{}{
-		"type": "connected",
-		"data": map[string]interface{}{
-			"session_id": sessionID,
-			"node":       nodeName,
-			"username":   username, // 返回实际使用的用户名
-			"auth_method": func() string {
-				if privateKey != "" {
-					return "private_key"
-				}
-				return "password"
-			}(),
-		},
+	// 发送连接成功消息（使用会话的安全写入方法）
+	session.WriteMessage("connected", map[string]interface{}{
+		"session_id": sessionID,
+		"node":       nodeName,
+		"username":   username, // 返回实际使用的用户名
+		"auth_method": func() string {
+			if privateKey != "" {
+				return "private_key"
+			}
+			return "password"
+		}(),
 	})
 	
 	// 处理WebSocket消息
@@ -211,9 +237,8 @@ func handleWebSocketMessages(session *webshell.WebShellSession, conn *websocket.
 			}
 			
 		case "ping":
-			conn.WriteJSON(map[string]interface{}{
-				"type": "pong",
-			})
+			// 使用会话的安全写入方法
+			session.WriteMessage("pong", nil)
 		}
 	}
 }
@@ -489,6 +514,27 @@ func UploadPrivateKey(c *gin.Context) {
 	
 	log.Printf("UploadPrivateKey: Successfully uploaded key for user %s", userID)
 	c.JSON(http.StatusOK, gin.H{"message": "Private key uploaded successfully"})
+}
+
+// CheckPrivateKey 检查用户是否已上传私钥
+func CheckPrivateKey(c *gin.Context) {
+	// 获取用户信息
+	userInterface, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+	
+	user := userInterface.(map[string]interface{})
+	userID := user["uid"].(string)
+	
+	// 检查私钥文件是否存在
+	keyPath := filepath.Join("keys", userID, "id_rsa")
+	_, err := os.Stat(keyPath)
+	
+	c.JSON(http.StatusOK, gin.H{
+		"has_key": err == nil,
+	})
 }
 
 // TestNodeConnection 测试节点连接

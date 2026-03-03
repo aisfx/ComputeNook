@@ -94,14 +94,6 @@
                   📋 详情
                 </button>
                 <button 
-                  class="btn-link" 
-                  v-if="job.status === 'RUNNING' && canControlJob(job)"
-                  @click="pauseJob(job)"
-                  title="暂停作业"
-                >
-                  ⏸️ 暂停
-                </button>
-                <button 
                   class="btn-link danger" 
                   v-if="(job.status === 'RUNNING' || job.status === 'PENDING') && canControlJob(job)"
                   @click="cancelJob(job)"
@@ -129,10 +121,26 @@
     </div>
 
     <!-- 分页 -->
-    <div class="pagination" v-if="filteredJobs.length > 0">
+    <div class="pagination" v-if="pagination.total > 0">
+      <button 
+        class="btn-secondary" 
+        :disabled="pagination.page <= 1"
+        @click="changePage(pagination.page - 1)"
+      >
+        ← 上一页
+      </button>
+      
       <span class="pagination-info">
-        共 {{ filteredJobs.length }} 个作业
+        第 {{ pagination.page }} / {{ pagination.totalPages }} 页，共 {{ pagination.total }} 个作业
       </span>
+      
+      <button 
+        class="btn-secondary" 
+        :disabled="pagination.page >= pagination.totalPages"
+        @click="changePage(pagination.page + 1)"
+      >
+        下一页 →
+      </button>
     </div>
   </div>
 </template>
@@ -154,98 +162,19 @@ const loading = ref(false)
 const error = ref('')
 
 const summary = ref({
-  running: 3,
-  pending: 1,
-  completed: 15,
-  failed: 2
+  running: 0,
+  pending: 0,
+  completed: 0,
+  failed: 0
 })
 
-const allJobs = ref([
-  { 
-    id: '12345', 
-    name: 'simulation_job', 
-    status: 'RUNNING', 
-    partition: 'compute', 
-    nodes: 4,
-    cpus: 32,
-    submitTime: '2026-02-14 10:30',
-    runTime: '2h 15m',
-    directory: '/home/admin/jobs/simulation_job',
-    user: 'admin'
-  },
-  { 
-    id: '12346', 
-    name: 'data_process', 
-    status: 'PENDING', 
-    partition: 'gpu', 
-    nodes: 1,
-    cpus: 8,
-    submitTime: '2026-02-14 11:00',
-    runTime: '-',
-    directory: '/home/admin/jobs/data_process',
-    user: 'admin'
-  },
-  { 
-    id: '12347', 
-    name: 'ml_training', 
-    status: 'RUNNING', 
-    partition: 'gpu', 
-    nodes: 2,
-    cpus: 16,
-    submitTime: '2026-02-14 09:30',
-    runTime: '3h 45m',
-    directory: '/home/user01/jobs/ml_training',
-    user: 'user01'
-  },
-  { 
-    id: '12348', 
-    name: 'cfd_analysis', 
-    status: 'RUNNING', 
-    partition: 'compute', 
-    nodes: 8,
-    cpus: 128,
-    submitTime: '2026-02-14 08:00',
-    runTime: '5h 20m',
-    directory: '/home/user02/jobs/cfd_analysis',
-    user: 'user02'
-  },
-  { 
-    id: '12344', 
-    name: 'quantum_calc', 
-    status: 'COMPLETED', 
-    partition: 'compute', 
-    nodes: 2,
-    cpus: 32,
-    submitTime: '2026-02-14 06:00',
-    runTime: '4h 30m',
-    directory: '/home/admin/jobs/quantum_calc',
-    user: 'admin'
-  },
-  { 
-    id: '12343', 
-    name: 'test_job', 
-    status: 'FAILED', 
-    partition: 'debug', 
-    nodes: 1,
-    cpus: 4,
-    submitTime: '2026-02-14 11:30',
-    runTime: '0h 5m',
-    directory: '/home/user03/jobs/test_job',
-    user: 'user03'
-  },
-  { 
-    id: '12342', 
-    name: 'deep_learning', 
-    status: 'PENDING', 
-    partition: 'gpu', 
-    nodes: 1,
-    cpus: 16,
-    submitTime: '2026-02-14 11:45',
-    runTime: '-',
-    directory: '/home/user01/jobs/deep_learning',
-    user: 'user01'
-  }
-])
+const allJobs = ref<any[]>([])
+const pagination = ref({
+  page: 1,
+  pageSize: 15,
+  total: 0,
+  totalPages: 0
+})
 
 const filteredJobs = computed(() => {
   let jobs = allJobs.value
@@ -289,44 +218,38 @@ const canControlJob = (job: any) => {
   return currentUserInfo.value?.isAdmin || job.user === currentUser.value
 }
 
-const pauseJob = async (job: any) => {
-  if (notification.confirmAction('暂停作业', `${job.id} - ${job.name}`)) {
-    console.log('暂停作业:', job.id)
-    
-    // TODO: 取消下面的注释以启用真实API调用
-    /*
-    try {
-      await jobAPI.pauseJob(job.id)
-      notification.success(`作业 ${job.id} 已暂停`)
-      await loadJobs() // 重新加载作业列表
-    } catch (err: any) {
-      notification.error(err.response?.data?.error || '暂停作业失败')
-    }
-    */
-    
-    notification.success(`作业 ${job.id} 已暂停`)
-  }
-}
-
 const cancelJob = async (job: any) => {
-  if (notification.confirm({
-    title: '取消作业',
-    message: `确定要取消作业 ${job.id} - ${job.name} 吗？\n\n此操作不可恢复。`
-  })) {
-    console.log('取消作业:', job.id)
-    
-    // TODO: 取消下面的注释以启用真实API调用
-    /*
-    try {
-      await jobAPI.cancelJob(job.id)
-      notification.success(`作业 ${job.id} 已取消`)
-      await loadJobs() // 重新加载作业列表
-    } catch (err: any) {
-      notification.error(err.response?.data?.error || '取消作业失败')
+  // 使用简单的确认对话框
+  const confirmed = confirm(`🗑️ 取消作业\n\n确定要取消作业 ${job.id} - ${job.name} 吗？\n\n此操作不可恢复。`)
+  
+  if (!confirmed) {
+    return
+  }
+  
+  console.log('取消作业:', job.id)
+  
+  try {
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token')
+    if (!token) {
+      throw new Error('请先登录系统')
     }
-    */
     
-    notification.success(`作业 ${job.id} 已取消`)
+    const response = await fetch(`http://localhost:8080/api/jobs/${job.id}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    })
+    
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.error || '取消作业失败')
+    }
+    
+    notification.success('作业取消成功')
+    await loadJobs() // 重新加载作业列表
+  } catch (err: any) {
+    notification.error(err.message || '取消作业失败')
   }
 }
 
@@ -336,29 +259,155 @@ const openDirectory = (job: any) => {
 }
 
 const loadJobs = async () => {
-  console.log('刷新作业列表')
-  
-  // TODO: 取消下面的注释以启用真实API调用
-  /*
   loading.value = true
   error.value = ''
   
   try {
-    const username = viewMode.value === 'my' ? currentUser.value : undefined
-    const response = await jobAPI.getJobs(username)
-    allJobs.value = response
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token')
+    if (!token) {
+      throw new Error('请先登录系统')
+    }
+    
+    // 构建 API URL
+    let url = `http://localhost:8080/api/jobs?page=${pagination.value.page}&page_size=${pagination.value.pageSize}`
+    
+    // 如果是"我的作业"模式，添加用户名参数
+    if (viewMode.value === 'my') {
+      url += `&user=${encodeURIComponent(currentUser.value)}`
+    }
+    
+    const response = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    })
+    
+    if (!response.ok) {
+      // 静默处理错误，不显示提示
+      console.error('Failed to fetch jobs:', response.status, response.statusText)
+      allJobs.value = []
+      updateSummary()
+      return
+    }
+    
+    const result = await response.json()
+    
+    // 处理返回的数据
+    if (result.data && Array.isArray(result.data)) {
+      allJobs.value = result.data.map((job: any) => {
+        // 计算运行时间
+        let runTime = 0
+        if (job.end_time && job.start_time && job.end_time > 0 && job.start_time > 0) {
+          // 已完成的作业
+          runTime = job.end_time - job.start_time
+        } else if (job.start_time && job.start_time > 0) {
+          // 正在运行的作业
+          runTime = Math.floor(Date.now() / 1000) - job.start_time
+        }
+        
+        // 解析节点数量
+        let nodeCount = 0
+        if (typeof job.nodes === 'number') {
+          nodeCount = job.nodes
+        } else if (typeof job.nodes === 'string' && job.nodes) {
+          // 节点字符串可能是 "node01,node02" 或 "node[01-04]" 或 "cn1"
+          if (job.nodes === 'None assigned' || job.nodes === '') {
+            nodeCount = 0
+          } else {
+            const nodeList = job.nodes.split(',')
+            nodeCount = nodeList.length
+          }
+        }
+        
+        return {
+          id: job.job_id || job.id,
+          user: job.user_name || job.user,
+          name: job.name || `Job ${job.job_id || job.id}`,
+          status: job.job_state || job.status || 'UNKNOWN',
+          partition: job.partition || '-',
+          nodes: nodeCount,
+          cpus: job.cpus || 0,
+          submitTime: formatTime(job.submit_time),
+          runTime: formatDuration(runTime),
+          directory: job.work_dir || job.directory || '-',
+          account: job.account || '-',
+          timeLimit: job.time_limit || 0
+        }
+      })
+      
+      // 更新分页信息
+      if (result.pagination) {
+        pagination.value = {
+          page: result.pagination.page,
+          pageSize: result.pagination.page_size,
+          total: result.pagination.total,
+          totalPages: result.pagination.total_pages
+        }
+      }
+    } else {
+      allJobs.value = []
+    }
+    
     updateSummary()
   } catch (err: any) {
-    error.value = err.response?.data?.error || '加载作业列表失败'
+    // 静默处理错误，只在控制台输出
     console.error('Failed to load jobs:', err)
+    allJobs.value = []
+    updateSummary()
   } finally {
     loading.value = false
   }
-  */
+}
+
+// 切换页码
+const changePage = (newPage: number) => {
+  if (newPage >= 1 && newPage <= pagination.value.totalPages) {
+    pagination.value.page = newPage
+    loadJobs()
+  }
+}
+
+// 格式化时间
+const formatTime = (timestamp: any): string => {
+  if (!timestamp || timestamp === 0) return '-'
   
-  // 当前使用模拟数据
-  updateSummary()
-  notification.success('作业列表已刷新')
+  try {
+    // Unix 时间戳（秒）转换为毫秒
+    const date = new Date(timestamp * 1000)
+    
+    // 检查日期是否有效
+    if (isNaN(date.getTime())) return '-'
+    
+    return date.toLocaleString('zh-CN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    }).replace(/\//g, '-')
+  } catch {
+    return '-'
+  }
+}
+
+// 格式化持续时间
+const formatDuration = (seconds: any): string => {
+  if (!seconds || seconds === 0 || seconds < 0) return '-'
+  
+  const days = Math.floor(seconds / 86400)
+  const hours = Math.floor((seconds % 86400) / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+  
+  if (days > 0) {
+    return `${days}天${hours}时${minutes}分`
+  } else if (hours > 0) {
+    return `${hours}时${minutes}分`
+  } else if (minutes > 0) {
+    return `${minutes}分`
+  } else {
+    return `${seconds}秒`
+  }
 }
 
 // 初始化
@@ -374,8 +423,8 @@ onMounted(() => {
   // 更新统计数据
   updateSummary()
   
-  // TODO: 取消下面的注释以在页面加载时自动获取作业列表
-  // loadJobs()
+  // 自动加载作业列表
+  loadJobs()
   
   console.log('当前用户:', currentUser.value, '是否管理员:', currentUserInfo.value?.isAdmin)
 })
@@ -527,6 +576,7 @@ onMounted(() => {
   display: flex;
   justify-content: center;
   align-items: center;
+  gap: 1rem;
   margin-top: 1.5rem;
   padding-top: 1.5rem;
   border-top: 1px solid #e5e7eb;
@@ -535,6 +585,11 @@ onMounted(() => {
 .pagination-info {
   font-size: 0.9rem;
   color: #666;
+}
+
+.pagination .btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 @media (max-width: 1024px) {

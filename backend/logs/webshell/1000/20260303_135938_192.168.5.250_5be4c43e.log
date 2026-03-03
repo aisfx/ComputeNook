@@ -1,0 +1,5 @@
+{"timestamp":"2026-03-03T13:59:38.319828+08:00","type":"event","event":"session_start","data":{"host":"192.168.5.250","session_id":"5be4c43e-8a00-4e3d-ad83-286fabd6ffde","user_id":"1000","username":"admin"}}
+{"timestamp":"2026-03-03T13:59:38.3209126+08:00","type":"event","event":"session_created","data":{"host":"192.168.5.250","port":31277}}
+{"timestamp":"2026-03-03T13:59:38.3209126+08:00","type":"event","event":"connection_failed","data":{"error":"failed to parse private key: ssh: no key found"}}
+{"timestamp":"2026-03-03T13:59:38.3209126+08:00","type":"event","event":"session_closed"}
+{"timestamp":"2026-03-03T13:59:38.3209126+08:00","type":"event","event":"session_end","data":{"duration":0.0010846}}

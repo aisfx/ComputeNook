@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"log"
 	"net/http"
 	"os"
+	"sort"
 	"strconv"
 	"time"
 
@@ -91,16 +93,20 @@ func GetJobs(c *gin.Context) {
 	}
 	
 	// 安全地获取管理员状态
-	isAdminVal, _ := c.Get("is_admin")
+	isAdminVal, _ := c.Get("isAdmin")
 	isAdmin := false
 	if isAdminVal != nil {
 		isAdmin, _ = isAdminVal.(bool)
 	}
 	
+	log.Printf("GetJobs: username=%s, isAdmin=%v", username, isAdmin)
+	
 	// 获取查询参数
 	queryUser := c.Query("user")
 	startTimeStr := c.Query("start_time")
 	endTimeStr := c.Query("end_time")
+	
+	log.Printf("GetJobs: queryUser=%s, startTime=%s, endTime=%s", queryUser, startTimeStr, endTimeStr)
 	
 	// 权限检查：非管理员只能查询自己的作业
 	if !isAdmin {
@@ -110,6 +116,8 @@ func GetJobs(c *gin.Context) {
 		}
 		queryUser = username.(string)
 	}
+	
+	log.Printf("GetJobs: Final queryUser=%s", queryUser)
 	
 	// 解析时间参数
 	var startTime, endTime int64
@@ -126,11 +134,24 @@ func GetJobs(c *gin.Context) {
 		}
 	}
 	
-	// 如果没有指定时间范围，默认查询最近1年
+	// 如果没有指定时间范围，根据视图模式设置默认时间范围
 	if startTime == 0 && endTime == 0 {
 		endTime = time.Now().Unix()
-		startTime = endTime - 365*24*60*60 // 1年前
+		
+		// "我的作业"模式：显示最近1天的作业
+		// "所有作业"模式：显示最近1个月的作业
+		if queryUser != "" {
+			// 我的作业：1天
+			startTime = endTime - 24*60*60
+			logger.Debug("My jobs mode: showing jobs from last 1 day")
+		} else {
+			// 所有作业：30天
+			startTime = endTime - 30*24*60*60
+			logger.Debug("All jobs mode: showing jobs from last 30 days")
+		}
 	}
+	
+	logger.Debug("Time range: start=%d, end=%d", startTime, endTime)
 	
 	// 开发模式：返回模拟数据
 	if os.Getenv("DEV_MODE") == "true" {
@@ -214,7 +235,22 @@ func GetJobs(c *gin.Context) {
 		return
 	}
 	
-	logger.Debug("Getting jobs for user: %s, start_time: %d, end_time: %d", queryUser, startTime, endTime)
+	// 获取分页参数
+	pageStr := c.DefaultQuery("page", "1")
+	pageSizeStr := c.DefaultQuery("page_size", "15")
+	
+	page, err := strconv.Atoi(pageStr)
+	if err != nil || page < 1 {
+		page = 1
+	}
+	
+	pageSize, err := strconv.Atoi(pageSizeStr)
+	if err != nil || pageSize < 1 {
+		pageSize = 15
+	}
+	
+	logger.Debug("Getting jobs for user: %s, start_time: %d, end_time: %d, page: %d, page_size: %d", 
+		queryUser, startTime, endTime, page, pageSize)
 	
 	jobs, err := client.GetJobs(queryUser, startTime, endTime)
 	if err != nil {
@@ -223,8 +259,61 @@ func GetJobs(c *gin.Context) {
 		return
 	}
 	
-	logger.Info("Successfully retrieved %d jobs", len(jobs))
-	c.JSON(http.StatusOK, gin.H{"data": jobs})
+	// 转换为前端需要的格式
+	allJobs := make([]map[string]interface{}, 0, len(jobs))
+	for _, job := range jobs {
+		allJobs = append(allJobs, map[string]interface{}{
+			"job_id":      job.JobID,
+			"name":        job.Name,
+			"user_name":   job.User,
+			"account":     job.Account,
+			"partition":   job.Partition,
+			"job_state":   job.GetJobState(),
+			"nodes":       job.Nodes,
+			"cpus":        job.GetCPUs(),
+			"submit_time": job.GetSubmitTime(),
+			"start_time":  job.GetStartTime(),
+			"end_time":    job.GetEndTime(),
+			"work_dir":    job.WorkingDirectory,
+		})
+	}
+	
+	// 按作业 ID 倒序排序（最新的作业在前面）
+	sort.Slice(allJobs, func(i, j int) bool {
+		return allJobs[i]["job_id"].(int64) > allJobs[j]["job_id"].(int64)
+	})
+	
+	// 计算分页
+	total := len(allJobs)
+	totalPages := (total + pageSize - 1) / pageSize
+	
+	start := (page - 1) * pageSize
+	end := start + pageSize
+	
+	if start >= total {
+		start = 0
+		end = 0
+	} else if end > total {
+		end = total
+	}
+	
+	pagedJobs := []map[string]interface{}{}
+	if start < end {
+		pagedJobs = allJobs[start:end]
+	}
+	
+	logger.Info("Successfully retrieved %d jobs (page %d/%d, showing %d jobs)", 
+		total, page, totalPages, len(pagedJobs))
+	
+	c.JSON(http.StatusOK, gin.H{
+		"data": pagedJobs,
+		"pagination": gin.H{
+			"page":        page,
+			"page_size":   pageSize,
+			"total":       total,
+			"total_pages": totalPages,
+		},
+	})
 }
 
 // GetJob 获取单个作业
@@ -311,11 +400,13 @@ func CancelJob(c *gin.Context) {
 	}
 	
 	// 安全地获取管理员状态
-	isAdminVal, _ := c.Get("is_admin")
+	isAdminVal, _ := c.Get("isAdmin")
 	isAdmin := false
 	if isAdminVal != nil {
 		isAdmin, _ = isAdminVal.(bool)
 	}
+	
+	logger.Info("CancelJob: user=%s, isAdmin=%v, jobID=%d", username, isAdmin, jobID)
 	
 	// 开发模式：模拟取消成功
 	if os.Getenv("DEV_MODE") == "true" {
@@ -352,6 +443,130 @@ func CancelJob(c *gin.Context) {
 	
 	logger.Info("Job %d cancelled by user %s", jobID, username.(string))
 	c.JSON(http.StatusOK, gin.H{"message": "作业取消成功"})
+}
+
+// SuspendJob 暂停作业
+func SuspendJob(c *gin.Context) {
+	jobIDStr := c.Param("id")
+	jobID, err := strconv.ParseInt(jobIDStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的作业ID"})
+		return
+	}
+	
+	// 获取当前用户信息
+	username, exists := c.Get("username")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未授权"})
+		return
+	}
+	
+	// 安全地获取管理员状态
+	isAdminVal, _ := c.Get("isAdmin")
+	isAdmin := false
+	if isAdminVal != nil {
+		isAdmin, _ = isAdminVal.(bool)
+	}
+	
+	logger.Info("SuspendJob: user=%s, isAdmin=%v, jobID=%d", username, isAdmin, jobID)
+	
+	// 开发模式：模拟暂停成功
+	if os.Getenv("DEV_MODE") == "true" {
+		c.JSON(http.StatusOK, gin.H{"message": "作业暂停成功 (开发模式)"})
+		return
+	}
+	
+	client, err := slurm.NewClient()
+	if err != nil {
+		logger.Error("Failed to create Slurm client: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法连接到 Slurm API: " + err.Error()})
+		return
+	}
+	
+	// 先获取作业信息，检查权限
+	job, err := client.GetJob(jobID)
+	if err != nil {
+		logger.Error("Failed to get job: %v", err)
+		c.JSON(http.StatusNotFound, gin.H{"error": "作业不存在: " + err.Error()})
+		return
+	}
+	
+	// 权限检查：非管理员只能暂停自己的作业
+	if !isAdmin && job.User != username.(string) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权暂停此作业"})
+		return
+	}
+	
+	if err := client.SuspendJob(jobID); err != nil {
+		logger.Error("Failed to suspend job: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "暂停作业失败: " + err.Error()})
+		return
+	}
+	
+	logger.Info("Job %d suspended by user %s", jobID, username.(string))
+	c.JSON(http.StatusOK, gin.H{"message": "作业暂停成功"})
+}
+
+// ResumeJob 恢复作业
+func ResumeJob(c *gin.Context) {
+	jobIDStr := c.Param("id")
+	jobID, err := strconv.ParseInt(jobIDStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的作业ID"})
+		return
+	}
+	
+	// 获取当前用户信息
+	username, exists := c.Get("username")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未授权"})
+		return
+	}
+	
+	// 安全地获取管理员状态
+	isAdminVal, _ := c.Get("isAdmin")
+	isAdmin := false
+	if isAdminVal != nil {
+		isAdmin, _ = isAdminVal.(bool)
+	}
+	
+	logger.Info("ResumeJob: user=%s, isAdmin=%v, jobID=%d", username, isAdmin, jobID)
+	
+	// 开发模式：模拟恢复成功
+	if os.Getenv("DEV_MODE") == "true" {
+		c.JSON(http.StatusOK, gin.H{"message": "作业恢复成功 (开发模式)"})
+		return
+	}
+	
+	client, err := slurm.NewClient()
+	if err != nil {
+		logger.Error("Failed to create Slurm client: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法连接到 Slurm API: " + err.Error()})
+		return
+	}
+	
+	// 先获取作业信息，检查权限
+	job, err := client.GetJob(jobID)
+	if err != nil {
+		logger.Error("Failed to get job: %v", err)
+		c.JSON(http.StatusNotFound, gin.H{"error": "作业不存在: " + err.Error()})
+		return
+	}
+	
+	// 权限检查：非管理员只能恢复自己的作业
+	if !isAdmin && job.User != username.(string) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权恢复此作业"})
+		return
+	}
+	
+	if err := client.ResumeJob(jobID); err != nil {
+		logger.Error("Failed to resume job: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "恢复作业失败: " + err.Error()})
+		return
+	}
+	
+	logger.Info("Job %d resumed by user %s", jobID, username.(string))
+	c.JSON(http.StatusOK, gin.H{"message": "作业恢复成功"})
 }
 
 // SubmitJob 提交作业
