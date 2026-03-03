@@ -42,7 +42,8 @@ type Association struct {
 	IsDefault bool     `json:"is_default,omitempty"`
 	
 	// Slurm API 返回的额外字段（用于解析完整响应）
-	ID            *AssociationID `json:"id,omitempty"`
+	// ID 可能是数字或对象，使用 interface{} 兼容两种情况
+	ID            interface{}    `json:"id,omitempty"`
 	ParentAccount string         `json:"parent_account,omitempty"`
 	SharesRaw     int            `json:"shares_raw,omitempty"`
 	Priority      interface{}    `json:"priority,omitempty"`

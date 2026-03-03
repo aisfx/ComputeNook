@@ -37,16 +37,30 @@ func validatePath(path string) error {
 		return &PathError{Message: "非法路径：不允许使用 .."}
 	}
 	
-	// 获取绝对路径
-	absPath, err := filepath.Abs(path)
-	if err != nil {
-		return &PathError{Message: "无效的路径"}
+	// 如果路径为空，使用基础路径
+	if path == "" {
+		return nil
+	}
+	
+	// 清理路径
+	cleanPath := filepath.Clean(path)
+	
+	// 获取基础路径
+	basePath := getBasePath()
+	
+	// 如果基础路径为空或为根目录，允许所有路径
+	if basePath == "" || basePath == "/" {
+		return nil
 	}
 	
 	// 检查路径是否在允许的基础路径下
-	basePath := getBasePath()
-	if !strings.HasPrefix(absPath, basePath) {
-		return &PathError{Message: "访问被拒绝：路径超出允许范围"}
+	// 使用 HasPrefix 检查，但要确保是目录边界
+	if !strings.HasPrefix(cleanPath, basePath) {
+		// 如果路径不是以基础路径开头，检查是否是基础路径本身
+		if cleanPath != basePath {
+			log.Printf("Path validation failed: cleanPath=%s, basePath=%s", cleanPath, basePath)
+			return &PathError{Message: "访问被拒绝：路径超出允许范围"}
+		}
 	}
 	
 	return nil
@@ -63,15 +77,25 @@ func (e *PathError) Error() string {
 
 // ListDirectory 列出目录内容
 func ListDirectory(c *gin.Context) {
-	path := c.Query("path")
-	if path == "" {
-		path = getBasePath()
+	// 获取当前用户信息
+	username, exists := c.Get("username")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未授权"})
+		return
 	}
 
-	log.Printf("ListDirectory: path=%s", path)
+	// 获取路径参数
+	path := c.Query("path")
+	if path == "" {
+		// 默认使用用户家目录
+		path = "/home/" + username.(string)
+	}
+
+	log.Printf("ListDirectory: user=%s, path=%s, basePath=%s", username, path, getBasePath())
 
 	// 验证路径
 	if err := validatePath(path); err != nil {
+		log.Printf("Path validation failed: %v", err)
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -251,10 +275,18 @@ func WriteFile(c *gin.Context) {
 
 // UploadFile 上传文件
 func UploadFile(c *gin.Context) {
+	// 获取当前用户信息
+	username, exists := c.Get("username")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未授权"})
+		return
+	}
+
 	// 获取目标路径
 	targetPath := c.PostForm("path")
 	if targetPath == "" {
-		targetPath = getBasePath()
+		// 默认使用用户家目录
+		targetPath = "/home/" + username.(string)
 	}
 
 	// 验证路径
@@ -270,7 +302,8 @@ func UploadFile(c *gin.Context) {
 		return
 	}
 
-	log.Printf("UploadFile: filename=%s, size=%d, target=%s", file.Filename, file.Size, targetPath)
+	log.Printf("UploadFile: user=%s, filename=%s, size=%d, target=%s", 
+		username, file.Filename, file.Size, targetPath)
 
 	// 构建完整路径
 	fullPath := filepath.Join(targetPath, file.Filename)

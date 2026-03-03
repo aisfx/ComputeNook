@@ -109,9 +109,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, defineExpose } from 'vue'
 import { getUser } from '../utils/auth'
 import notification from '../utils/notification'
+import { fileManagerApi } from '../config/api'
 
 const currentPath = ref('')
 const files = ref<any[]>([])
@@ -121,8 +122,24 @@ const showFileViewer = ref(false)
 const viewingFile = ref<any>(null)
 const fileContent = ref('')
 
+// 导航到指定目录（供外部调用）
+const navigateToPath = (path: string) => {
+  if (!path || path === '-') {
+    notification.error('无效的路径')
+    return
+  }
+  
+  currentPath.value = path
+  loadDirectory()
+}
+
+// 暴露方法给父组件
+defineExpose({
+  navigateToPath
+})
+
 const canGoUp = computed(() => {
-  const homePath = `/home/${currentUser.value?.username || ''}`
+  const homePath = currentUser.value?.homeDir || `/home/${currentUser.value?.username || ''}`
   return currentPath.value !== homePath && currentPath.value !== '/'
 })
 
@@ -137,7 +154,7 @@ const sortedFiles = computed(() => {
 })
 
 const goHome = () => {
-  currentPath.value = `/home/${currentUser.value?.username || ''}`
+  currentPath.value = currentUser.value?.homeDir || `/home/${currentUser.value?.username || ''}`
   loadDirectory()
 }
 
@@ -158,9 +175,7 @@ const loadDirectory = async () => {
       throw new Error('请先登录系统')
     }
     
-    // 使用环境变量或默认值
-    const fileManagerUrl = import.meta.env.VITE_FILEMANAGER_URL || 'http://localhost:8081'
-    const url = `${fileManagerUrl}/api/files/list?path=${encodeURIComponent(currentPath.value)}`
+    const url = `${fileManagerApi.list()}?path=${encodeURIComponent(currentPath.value)}`
     
     const response = await fetch(url, {
       headers: {
@@ -204,7 +219,7 @@ const viewFile = async (file: any) => {
       throw new Error('请先登录系统')
     }
     
-    const url = `http://localhost:8080/api/files/read?path=${encodeURIComponent(file.path)}`
+    const url = `${fileManagerApi.read()}?path=${encodeURIComponent(file.path)}`
     
     const response = await fetch(url, {
       headers: {
@@ -234,7 +249,7 @@ const closeFileViewer = () => {
 
 const downloadFile = (file: any) => {
   const token = localStorage.getItem('token') || sessionStorage.getItem('token')
-  const url = `http://localhost:8080/api/files/download?path=${encodeURIComponent(file.path)}`
+  const url = `${fileManagerApi.download()}?path=${encodeURIComponent(file.path)}`
   
   // 创建一个隐藏的 a 标签来触发下载
   const link = document.createElement('a')
@@ -263,7 +278,7 @@ const deleteFile = async (file: any) => {
       throw new Error('请先登录系统')
     }
     
-    const url = `http://localhost:8080/api/files/delete?path=${encodeURIComponent(file.path)}`
+    const url = `${fileManagerApi.delete()}?path=${encodeURIComponent(file.path)}`
     
     const response = await fetch(url, {
       method: 'DELETE',
@@ -299,7 +314,7 @@ const renameFile = async (file: any) => {
     parts[parts.length - 1] = newName
     const newPath = parts.join('/')
     
-    const response = await fetch('http://localhost:8080/api/files/rename', {
+    const response = await fetch(fileManagerApi.rename(), {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -336,7 +351,7 @@ const showCreateFolderDialog = async () => {
     
     const newPath = `${currentPath.value}/${folderName}`
     
-    const response = await fetch('http://localhost:8080/api/files/mkdir', {
+    const response = await fetch(fileManagerApi.mkdir(), {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -372,7 +387,7 @@ const showCreateFileDialog = async () => {
     
     const newPath = `${currentPath.value}/${fileName}`
     
-    const response = await fetch('http://localhost:8080/api/files/write', {
+    const response = await fetch(fileManagerApi.write(), {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -424,7 +439,7 @@ const uploadFile = async (file: File) => {
     formData.append('file', file)
     formData.append('path', currentPath.value)
     
-    const response = await fetch('http://localhost:8080/api/files/upload', {
+    const response = await fetch(fileManagerApi.upload(), {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`
@@ -506,7 +521,7 @@ const getFileIcon = (filename: string): string => {
 
 onMounted(() => {
   currentUser.value = getUser()
-  currentPath.value = `/home/${currentUser.value?.username || ''}`
+  currentPath.value = currentUser.value?.homeDir || `/home/${currentUser.value?.username || ''}`
   loadDirectory()
 })
 </script>

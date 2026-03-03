@@ -249,6 +249,16 @@ func main() {
 			// 复制文件
 			files.POST("/copy", handlers.CopyFile)
 		}
+
+		// 仪表盘统计 API
+		dashboard := auth.Group("/dashboard")
+		{
+			// 获取集群统计信息
+			dashboard.GET("/stats", handlers.GetDashboardStats)
+			
+			// 获取节点列表
+			dashboard.GET("/nodes", handlers.GetDashboardNodes)
+		}
 	}
 
 	port := os.Getenv("SERVER_PORT")

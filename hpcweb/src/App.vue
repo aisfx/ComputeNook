@@ -83,11 +83,11 @@
 
       <div class="content-area">
         <Dashboard v-if="currentView === 'dashboard'" />
-        <JobManagement v-else-if="currentView === 'jobs'" />
+        <JobManagement v-else-if="currentView === 'jobs'" @open-directory="handleOpenDirectory" />
         <Monitoring v-else-if="currentView === 'monitoring' && isAdmin" />
         <WebShell v-else-if="currentView === 'shell'" />
         <Desktop v-else-if="currentView === 'desktop'" />
-        <FileManager v-else-if="currentView === 'files'" />
+        <FileManager ref="fileManagerRef" v-else-if="currentView === 'files'" />
         <Reports v-else-if="currentView === 'reports'" />
         <Profile v-else-if="currentView === 'profile'" />
         <AdminUsers v-else-if="currentView === 'admin' && adminTab === 'users' && isAdmin" />
@@ -139,9 +139,23 @@ const adminTab = ref('users') // 管理员子页面，默认为用户管理
 const currentUser = ref<any>(null)
 const isAuthenticated = ref(false)
 const isAdmin = ref(false)
+const fileManagerRef = ref<any>(null) // 文件管理器引用
 
 // 提供给子组件使用
 provide('jobManagementTab', jobManagementTab)
+
+// 处理打开目录事件
+const handleOpenDirectory = (path: string) => {
+  // 切换到文件管理视图
+  currentView.value = 'files'
+  
+  // 等待组件渲染后再调用导航方法
+  setTimeout(() => {
+    if (fileManagerRef.value && fileManagerRef.value.navigateToPath) {
+      fileManagerRef.value.navigateToPath(path)
+    }
+  }, 100)
+}
 
 const menuItems = computed(() => {
   const items = [

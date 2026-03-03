@@ -39,132 +39,146 @@
       </div>
     </div>
 
-    <!-- 作业统计和存储配额 -->
-    <div class="dashboard-row">
-      <div class="card job-stats">
+    <!-- 作业统计、存储配额、机时信息 - 饼图展示 -->
+    <div class="charts-row">
+      <!-- 作业统计饼图 -->
+      <div class="card chart-card">
         <h3>📊 作业统计</h3>
-        <div class="job-stats-grid">
-          <div class="job-stat-item">
-            <div class="job-stat-label">运行中</div>
-            <div class="job-stat-value running">{{ jobStats.running }}</div>
-          </div>
-          <div class="job-stat-item">
-            <div class="job-stat-label">等待中</div>
-            <div class="job-stat-value pending">{{ jobStats.pending }}</div>
-          </div>
-          <div class="job-stat-item">
-            <div class="job-stat-label">已完成</div>
-            <div class="job-stat-value completed">{{ jobStats.completed }}</div>
-          </div>
-          <div class="job-stat-item">
-            <div class="job-stat-label">失败</div>
-            <div class="job-stat-value failed">{{ jobStats.failed }}</div>
+        <div class="chart-container">
+          <svg class="pie-chart" viewBox="0 0 200 200">
+            <circle cx="100" cy="100" r="80" fill="none" stroke="#e5e7eb" stroke-width="40"/>
+            <circle 
+              v-if="jobStats.running > 0"
+              cx="100" cy="100" r="80" 
+              fill="none" 
+              stroke="#3b82f6" 
+              stroke-width="40"
+              :stroke-dasharray="`${jobStatsPercentages.running * 5.03} 503`"
+              :stroke-dashoffset="0"
+              transform="rotate(-90 100 100)"
+            />
+            <circle 
+              v-if="jobStats.pending > 0"
+              cx="100" cy="100" r="80" 
+              fill="none" 
+              stroke="#f59e0b" 
+              stroke-width="40"
+              :stroke-dasharray="`${jobStatsPercentages.pending * 5.03} 503`"
+              :stroke-dashoffset="`${-jobStatsPercentages.running * 5.03}`"
+              transform="rotate(-90 100 100)"
+            />
+            <circle 
+              v-if="jobStats.completed > 0"
+              cx="100" cy="100" r="80" 
+              fill="none" 
+              stroke="#10b981" 
+              stroke-width="40"
+              :stroke-dasharray="`${jobStatsPercentages.completed * 5.03} 503`"
+              :stroke-dashoffset="`${-(jobStatsPercentages.running + jobStatsPercentages.pending) * 5.03}`"
+              transform="rotate(-90 100 100)"
+            />
+            <circle 
+              v-if="jobStats.failed > 0"
+              cx="100" cy="100" r="80" 
+              fill="none" 
+              stroke="#ef4444" 
+              stroke-width="40"
+              :stroke-dasharray="`${jobStatsPercentages.failed * 5.03} 503`"
+              :stroke-dashoffset="`${-(jobStatsPercentages.running + jobStatsPercentages.pending + jobStatsPercentages.completed) * 5.03}`"
+              transform="rotate(-90 100 100)"
+            />
+            <text x="100" y="95" text-anchor="middle" class="chart-total">{{ jobStatsTotal }}</text>
+            <text x="100" y="115" text-anchor="middle" class="chart-label">总作业</text>
+          </svg>
+          <div class="chart-legend">
+            <div class="legend-item">
+              <span class="legend-color" style="background: #3b82f6"></span>
+              <span class="legend-text">运行中: {{ jobStats.running }}</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-color" style="background: #f59e0b"></span>
+              <span class="legend-text">等待中: {{ jobStats.pending }}</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-color" style="background: #10b981"></span>
+              <span class="legend-text">已完成: {{ jobStats.completed }}</span>
+            </div>
+            <div class="legend-item">
+              <span class="legend-color" style="background: #ef4444"></span>
+              <span class="legend-text">失败: {{ jobStats.failed }}</span>
+            </div>
           </div>
         </div>
       </div>
 
-      <div class="card storage-quota">
+      <!-- 存储配额饼图 -->
+      <div class="card chart-card">
         <h3>💾 存储配额</h3>
-        <div class="quota-grid-compact">
-          <div class="quota-section-compact">
-            <div class="quota-header-compact">
-              <h4>📦 容量配额</h4>
-              <span class="quota-status" :class="storageQuota.capacity.percentage > 90 ? 'warning' : ''">
-                {{ storageQuota.capacity.used }} / {{ storageQuota.capacity.total }}
-              </span>
+        <div class="chart-container">
+          <svg class="pie-chart" viewBox="0 0 200 200">
+            <circle cx="100" cy="100" r="80" fill="none" stroke="#e5e7eb" stroke-width="40"/>
+            <circle 
+              cx="100" cy="100" r="80" 
+              fill="none" 
+              :stroke="storageQuota.capacity.percentage > 90 ? '#ef4444' : storageQuota.capacity.percentage > 80 ? '#f59e0b' : '#667eea'"
+              stroke-width="40"
+              :stroke-dasharray="`${storageQuota.capacity.percentage * 5.03} 503`"
+              stroke-dashoffset="0"
+              transform="rotate(-90 100 100)"
+            />
+            <text x="100" y="95" text-anchor="middle" class="chart-total">{{ storageQuota.capacity.percentage }}%</text>
+            <text x="100" y="115" text-anchor="middle" class="chart-label">已使用</text>
+          </svg>
+          <div class="chart-legend">
+            <div class="legend-item">
+              <span class="legend-color" :style="{ background: storageQuota.capacity.percentage > 90 ? '#ef4444' : storageQuota.capacity.percentage > 80 ? '#f59e0b' : '#667eea' }"></span>
+              <span class="legend-text">已用: {{ storageQuota.capacity.used }}</span>
             </div>
-            <div class="quota-bar">
-              <div 
-                class="quota-fill" 
-                :class="{ warning: storageQuota.capacity.percentage > 80, danger: storageQuota.capacity.percentage > 90 }"
-                :style="{ width: storageQuota.capacity.percentage + '%' }"
-              >
-                <span class="quota-percentage">{{ storageQuota.capacity.percentage }}%</span>
-              </div>
+            <div class="legend-item">
+              <span class="legend-color" style="background: #e5e7eb"></span>
+              <span class="legend-text">总量: {{ storageQuota.capacity.total }}</span>
+            </div>
+            <div class="legend-item-full">
+              <span class="legend-text-small">文件数: {{ storageQuota.files.used.toLocaleString() }} / {{ storageQuota.files.total.toLocaleString() }} ({{ storageQuota.files.percentage }}%)</span>
             </div>
           </div>
+        </div>
+      </div>
 
-          <div class="quota-section-compact">
-            <div class="quota-header-compact">
-              <h4>📄 文件数配额</h4>
-              <span class="quota-status" :class="storageQuota.files.percentage > 90 ? 'warning' : ''">
-                {{ storageQuota.files.used.toLocaleString() }} / {{ storageQuota.files.total.toLocaleString() }}
-              </span>
+      <!-- 机时信息饼图 -->
+      <div class="card chart-card">
+        <h3>⏱️ 机时信息</h3>
+        <div class="chart-container">
+          <svg class="pie-chart" viewBox="0 0 200 200">
+            <circle cx="100" cy="100" r="80" fill="none" stroke="#e5e7eb" stroke-width="40"/>
+            <circle 
+              cx="100" cy="100" r="80" 
+              fill="none" 
+              :stroke="machineTime.usageRate > 90 ? '#ef4444' : machineTime.usageRate > 70 ? '#f59e0b' : '#667eea'"
+              stroke-width="40"
+              :stroke-dasharray="`${machineTime.usageRate * 5.03} 503`"
+              stroke-dashoffset="0"
+              transform="rotate(-90 100 100)"
+            />
+            <text x="100" y="95" text-anchor="middle" class="chart-total">{{ machineTime.usageRate }}%</text>
+            <text x="100" y="115" text-anchor="middle" class="chart-label">使用率</text>
+          </svg>
+          <div class="chart-legend">
+            <div class="legend-item">
+              <span class="legend-color" :style="{ background: machineTime.usageRate > 90 ? '#ef4444' : machineTime.usageRate > 70 ? '#f59e0b' : '#667eea' }"></span>
+              <span class="legend-text">已用: {{ machineTime.used }} 核时</span>
             </div>
-            <div class="quota-bar">
-              <div 
-                class="quota-fill" 
-                :class="{ warning: storageQuota.files.percentage > 80, danger: storageQuota.files.percentage > 90 }"
-                :style="{ width: storageQuota.files.percentage + '%' }"
-              >
-                <span class="quota-percentage">{{ storageQuota.files.percentage }}%</span>
-              </div>
+            <div class="legend-item">
+              <span class="legend-color" style="background: #10b981"></span>
+              <span class="legend-text">剩余: {{ machineTime.remaining }} 核时</span>
+            </div>
+            <div class="legend-item-full">
+              <span class="legend-text-small">总配额: {{ machineTime.totalQuota }} 核时</span>
+            </div>
+            <div class="legend-item-full">
+              <span class="legend-text-small">有效期: {{ machineTime.expiryDate }}</span>
             </div>
           </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 机时信息 -->
-    <div class="card machine-time-info">
-      <h3>⏱️ 机时信息</h3>
-      <div class="machine-time-grid">
-        <div class="time-item">
-          <div class="time-icon">📊</div>
-          <div class="time-content">
-            <span class="time-label">总机时配额</span>
-            <span class="time-value">{{ machineTime.totalQuota }} 核时</span>
-          </div>
-        </div>
-        <div class="time-item">
-          <div class="time-icon">✅</div>
-          <div class="time-content">
-            <span class="time-label">已使用机时</span>
-            <span class="time-value used">{{ machineTime.used }} 核时</span>
-          </div>
-        </div>
-        <div class="time-item">
-          <div class="time-icon">💰</div>
-          <div class="time-content">
-            <span class="time-label">剩余机时</span>
-            <span class="time-value remaining">{{ machineTime.remaining }} 核时</span>
-          </div>
-        </div>
-        <div class="time-item">
-          <div class="time-icon">📈</div>
-          <div class="time-content">
-            <span class="time-label">使用率</span>
-            <span class="time-value" :class="{ warning: machineTime.usageRate > 80 }">
-              {{ machineTime.usageRate }}%
-            </span>
-          </div>
-        </div>
-      </div>
-      <div class="time-progress">
-        <div class="progress-label">
-          <span>机时使用进度</span>
-          <span>{{ machineTime.used }} / {{ machineTime.totalQuota }} 核时</span>
-        </div>
-        <div class="progress-bar-large">
-          <div 
-            class="progress-fill-large" 
-            :style="{ width: machineTime.usageRate + '%' }"
-            :class="{ warning: machineTime.usageRate > 70, danger: machineTime.usageRate > 90 }"
-          ></div>
-        </div>
-      </div>
-      <div class="time-details">
-        <div class="detail-row">
-          <span class="detail-label">本月已用:</span>
-          <span class="detail-value">{{ machineTime.monthUsed }} 核时</span>
-        </div>
-        <div class="detail-row">
-          <span class="detail-label">今日已用:</span>
-          <span class="detail-value">{{ machineTime.todayUsed }} 核时</span>
-        </div>
-        <div class="detail-row">
-          <span class="detail-label">配额有效期:</span>
-          <span class="detail-value">{{ machineTime.expiryDate }}</span>
         </div>
       </div>
     </div>
@@ -209,33 +223,28 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import notification from '../utils/notification'
 
 const stats = ref({
-  nodes: 32,
-  nodesOnline: 30,
-  cpuCores: 2048,
-  cpuUsage: 65,
-  gpuCards: 128,
-  gpuInUse: 96,
-  memory: 64,
-  memoryFree: 22
+  nodes: 0,
+  nodesOnline: 0,
+  cpuCores: 0,
+  cpuUsage: 0,
+  gpuCards: 0,
+  gpuInUse: 0,
+  memory: 0,
+  memoryFree: 0
 })
 
 const jobStats = ref({
-  running: 45,
-  pending: 12,
-  completed: 328,
-  failed: 5
+  running: 0,
+  pending: 0,
+  completed: 0,
+  failed: 0
 })
 
-const nodes = ref([
-  { name: 'node001', status: 'online', statusText: '在线', cpuUsage: 75, memUsage: 68, gpu: '4/4', jobs: 8 },
-  { name: 'node002', status: 'online', statusText: '在线', cpuUsage: 45, memUsage: 52, gpu: '2/4', jobs: 4 },
-  { name: 'node003', status: 'online', statusText: '在线', cpuUsage: 90, memUsage: 85, gpu: '4/4', jobs: 12 },
-  { name: 'node004', status: 'idle', statusText: '空闲', cpuUsage: 5, memUsage: 12, gpu: '0/4', jobs: 0 },
-  { name: 'node005', status: 'offline', statusText: '离线', cpuUsage: 0, memUsage: 0, gpu: '0/4', jobs: 0 }
-])
+const nodes = ref<any[]>([])
 
 const machineTime = ref({
   totalQuota: 50000,
@@ -260,6 +269,186 @@ const storageQuota = ref({
     available: 143580,
     percentage: 86
   }
+})
+
+// 计算作业统计百分比
+const jobStatsTotal = computed(() => {
+  return jobStats.value.running + jobStats.value.pending + 
+         jobStats.value.completed + jobStats.value.failed
+})
+
+const jobStatsPercentages = computed(() => {
+  const total = jobStatsTotal.value
+  if (total === 0) {
+    return { running: 0, pending: 0, completed: 0, failed: 0 }
+  }
+  return {
+    running: (jobStats.value.running / total) * 100,
+    pending: (jobStats.value.pending / total) * 100,
+    completed: (jobStats.value.completed / total) * 100,
+    failed: (jobStats.value.failed / total) * 100
+  }
+})
+
+// 加载仪表盘统计数据
+const loadDashboardStats = async () => {
+  try {
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token')
+    if (!token) {
+      return
+    }
+    
+    const response = await fetch('http://localhost:8080/api/dashboard/stats', {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    })
+    
+    if (!response.ok) {
+      return
+    }
+    
+    const result = await response.json()
+    const data = result.data
+    
+    // 更新统计数据
+    stats.value = {
+      nodes: data.total_nodes,
+      nodesOnline: data.online_nodes,
+      cpuCores: data.total_cpus,
+      cpuUsage: Math.round(data.cpu_usage_percent),
+      gpuCards: data.total_gpus,
+      gpuInUse: data.allocated_gpus,
+      memory: parseFloat(data.total_memory_tb.toFixed(1)),
+      memoryFree: parseFloat(data.free_memory_tb.toFixed(1))
+    }
+  } catch (err: any) {
+    console.error('Failed to load dashboard stats:', err)
+    // 静默处理错误，不显示通知
+  }
+}
+
+// 加载节点列表
+const loadNodes = async () => {
+  try {
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token')
+    if (!token) {
+      throw new Error('请先登录系统')
+    }
+    
+    const response = await fetch('http://localhost:8080/api/dashboard/nodes', {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    })
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}))
+      const errorMsg = errorData.error || `HTTP ${response.status}: ${response.statusText}`
+      throw new Error(errorMsg)
+    }
+    
+    const result = await response.json()
+    const nodeData = result.data || []
+    
+    console.log('Loaded nodes:', nodeData)
+    
+    // 转换节点数据
+    nodes.value = nodeData.map((node: any) => {
+      // 状态映射
+      let status = 'idle'
+      let statusText = '空闲'
+      const state = (node.state || '').toUpperCase()
+      
+      if (state === 'ALLOCATED' || state === 'MIXED') {
+        status = 'online'
+        statusText = '在线'
+      } else if (state === 'IDLE') {
+        status = 'idle'
+        statusText = '空闲'
+      } else if (state === 'DOWN' || state === 'DRAIN' || state === 'DRAINING') {
+        status = 'offline'
+        statusText = '离线'
+      } else {
+        status = 'online'
+        statusText = '在线'
+      }
+      
+      // GPU 信息格式化
+      let gpuInfo = '-'
+      if (node.gpu_info && node.gpu_info !== '') {
+        // 解析总GPU数
+        const totalMatch = node.gpu_info.match(/gpu:(\w+:)?(\d+)/)
+        const usedMatch = node.gpu_used ? node.gpu_used.match(/gpu:(\w+:)?(\d+)/) : null
+        
+        if (totalMatch) {
+          const total = parseInt(totalMatch[2])
+          const used = usedMatch ? parseInt(usedMatch[2]) : 0
+          gpuInfo = `${used}/${total}`
+        }
+      }
+      
+      return {
+        name: node.name,
+        status: status,
+        statusText: statusText,
+        cpuUsage: Math.round(node.cpu_usage_percent || 0),
+        memUsage: Math.round(node.memory_usage_percent || 0),
+        gpu: gpuInfo,
+        jobs: node.running_jobs || 0
+      }
+    })
+  } catch (err: any) {
+    console.error('Failed to load nodes:', err)
+    // 只在控制台输出错误，不显示通知（避免干扰用户）
+    // notification.error(err.message || '获取节点列表失败')
+  }
+}
+
+// 加载作业统计（从作业API获取）
+const loadJobStats = async () => {
+  try {
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token')
+    if (!token) {
+      return
+    }
+    
+    const response = await fetch('http://localhost:8080/api/jobs?page=1&page_size=1000', {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    })
+    
+    if (!response.ok) {
+      return
+    }
+    
+    const result = await response.json()
+    const jobs = result.data || []
+    
+    // 统计作业状态
+    jobStats.value = {
+      running: jobs.filter((j: any) => j.job_state === 'RUNNING').length,
+      pending: jobs.filter((j: any) => j.job_state === 'PENDING').length,
+      completed: jobs.filter((j: any) => j.job_state === 'COMPLETED').length,
+      failed: jobs.filter((j: any) => j.job_state === 'FAILED').length
+    }
+  } catch (err: any) {
+    console.error('Failed to load job stats:', err)
+  }
+}
+
+onMounted(() => {
+  loadDashboardStats()
+  loadNodes()
+  loadJobStats()
+  
+  // 定时刷新（每30秒）
+  setInterval(() => {
+    loadDashboardStats()
+    loadNodes()
+    loadJobStats()
+  }, 30000)
 })
 </script>
 
@@ -322,6 +511,78 @@ const storageQuota = ref({
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1.5rem;
+}
+
+.charts-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.5rem;
+}
+
+.chart-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.chart-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  margin-top: 1rem;
+}
+
+.pie-chart {
+  width: 200px;
+  height: 200px;
+}
+
+.chart-total {
+  font-size: 2rem;
+  font-weight: 700;
+  fill: #333;
+}
+
+.chart-label {
+  font-size: 0.9rem;
+  fill: #666;
+}
+
+.chart-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.legend-item-full {
+  display: flex;
+  align-items: center;
+  padding-top: 0.5rem;
+  border-top: 1px solid #e5e7eb;
+}
+
+.legend-color {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.legend-text {
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.legend-text-small {
+  font-size: 0.85rem;
+  color: #999;
 }
 
 .job-stats-grid {
@@ -509,17 +770,19 @@ const storageQuota = ref({
   font-size: 0.85rem;
 }
 
+@media (max-width: 1024px) {
+  .charts-row {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 768px) {
   .dashboard-row {
     grid-template-columns: 1fr;
   }
   
-  .machine-time-grid {
+  .charts-row {
     grid-template-columns: 1fr;
-  }
-  
-  .job-stats-grid {
-    grid-template-columns: 1fr 1fr;
   }
 }
 

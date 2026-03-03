@@ -151,7 +151,7 @@ import { getUser, isAdmin } from '../utils/auth'
 import notification from '../utils/notification'
 // import { jobAPI } from '../api' // TODO: 取消注释以启用真实API调用
 
-const emit = defineEmits(['view-detail'])
+const emit = defineEmits(['view-detail', 'open-directory'])
 
 const viewMode = ref<'my' | 'all'>('my')
 const statusFilter = ref('')
@@ -254,8 +254,15 @@ const cancelJob = async (job: any) => {
 }
 
 const openDirectory = (job: any) => {
+  if (!job.directory || job.directory === '-') {
+    notification.error('作业目录不可用')
+    return
+  }
+  
   console.log('打开作业目录:', job.directory)
-  notification.info(`作业目录：\n${job.directory}`, '打开作业目录')
+  
+  // 触发事件，通知父组件切换到文件管理并打开指定目录
+  emit('open-directory', job.directory)
 }
 
 const loadJobs = async () => {

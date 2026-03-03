@@ -1,0 +1,37 @@
+{"timestamp":"2026-03-03T17:55:21.71717+08:00","type":"event","event":"session_start","data":{"host":"192.168.5.250","session_id":"53b31277-c3d0-49e8-9eb8-b380e10ae61e","user_id":"24135","username":"sunfx"}}
+{"timestamp":"2026-03-03T17:55:21.7188189+08:00","type":"event","event":"session_created","data":{"host":"192.168.5.250","port":31277}}
+{"timestamp":"2026-03-03T17:55:21.8620812+08:00","type":"event","event":"connection_established"}
+{"timestamp":"2026-03-03T17:55:21.8625877+08:00","type":"output","content":"Activate the web console with: systemctl enable --now cockpit.socket\r\n\r\nLast login: Tue Mar  3 17:13:23 2026 from 192.168.0.11\r\r\n"}
+{"timestamp":"2026-03-03T17:55:21.9044673+08:00","type":"output","content":"\u001b]0;sunfx@mn0:~\u0007"}
+{"timestamp":"2026-03-03T17:55:21.9052634+08:00","type":"output","content":"[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T17:55:22.7257229+08:00","type":"command","content":"\r"}
+{"timestamp":"2026-03-03T17:55:22.7328205+08:00","type":"output","content":"\r\n"}
+{"timestamp":"2026-03-03T17:55:22.733366+08:00","type":"output","content":"\u001b]0;sunfx@mn0:~\u0007"}
+{"timestamp":"2026-03-03T17:55:22.733366+08:00","type":"output","content":"[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T17:55:22.880475+08:00","type":"command","content":"l"}
+{"timestamp":"2026-03-03T17:55:22.8863399+08:00","type":"output","content":"l"}
+{"timestamp":"2026-03-03T17:55:22.9818551+08:00","type":"command","content":"s"}
+{"timestamp":"2026-03-03T17:55:22.9883021+08:00","type":"output","content":"s"}
+{"timestamp":"2026-03-03T17:55:23.0903906+08:00","type":"command","content":"\r"}
+{"timestamp":"2026-03-03T17:55:23.0955874+08:00","type":"output","content":"\r\n"}
+{"timestamp":"2026-03-03T17:55:23.0977788+08:00","type":"output","content":"\u001b[0m\u001b[38;5;33m111\u001b[0m\r\n"}
+{"timestamp":"2026-03-03T17:55:23.0977788+08:00","type":"output","content":"\u001b]0;sunfx@mn0:~\u0007[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T17:55:23.259903+08:00","type":"command","content":"\r"}
+{"timestamp":"2026-03-03T17:55:23.2698755+08:00","type":"output","content":"\r\n"}
+{"timestamp":"2026-03-03T17:55:23.2703863+08:00","type":"output","content":"\u001b]0;sunfx@mn0:~\u0007[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T17:55:23.4158662+08:00","type":"command","content":"s"}
+{"timestamp":"2026-03-03T17:55:23.4228303+08:00","type":"output","content":"s"}
+{"timestamp":"2026-03-03T17:55:23.4850566+08:00","type":"command","content":"i"}
+{"timestamp":"2026-03-03T17:55:23.4918643+08:00","type":"output","content":"i"}
+{"timestamp":"2026-03-03T17:55:23.6425003+08:00","type":"command","content":"n"}
+{"timestamp":"2026-03-03T17:55:23.6493461+08:00","type":"output","content":"n"}
+{"timestamp":"2026-03-03T17:55:23.6573197+08:00","type":"command","content":"f"}
+{"timestamp":"2026-03-03T17:55:23.6631606+08:00","type":"output","content":"f"}
+{"timestamp":"2026-03-03T17:55:23.7788413+08:00","type":"command","content":"\t"}
+{"timestamp":"2026-03-03T17:55:23.7853663+08:00","type":"output","content":"o "}
+{"timestamp":"2026-03-03T17:55:23.8975624+08:00","type":"command","content":"\r"}
+{"timestamp":"2026-03-03T17:55:23.9042309+08:00","type":"output","content":"\r\n"}
+{"timestamp":"2026-03-03T17:55:23.915138+08:00","type":"output","content":"PARTITION     AVAIL  TIMELIMIT  NODES  STATE NODELIST\r\nslurm-bridge*    up   infinite      2   idle cn[1-2]\r\n"}
+{"timestamp":"2026-03-03T17:55:23.9156439+08:00","type":"output","content":"\u001b]0;sunfx@mn0:~\u0007[sunfx@mn0 ~]$ "}
+{"timestamp":"2026-03-03T17:55:26.1442121+08:00","type":"event","event":"session_closed"}
+{"timestamp":"2026-03-03T17:55:26.1442121+08:00","type":"event","event":"session_end","data":{"duration":4.4270420999999995}}

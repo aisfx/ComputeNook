@@ -3,8 +3,10 @@ package main
 import (
 	"log"
 	"os"
+	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/joho/godotenv"
 )
 
@@ -27,7 +29,10 @@ func main() {
 	// CORS 中间件
 	r.Use(CORSMiddleware())
 
-	// 健康检查
+	// JWT 认证中间件
+	r.Use(AuthMiddleware())
+
+	// 健康检查（不需要认证）
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{
 			"status":  "ok",
@@ -93,6 +98,66 @@ func CORSMiddleware() gin.HandlerFunc {
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(204)
 			return
+		}
+
+		c.Next()
+	}
+}
+
+// AuthMiddleware JWT 认证中间件
+func AuthMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// 健康检查不需要认证
+		if c.Request.URL.Path == "/health" {
+			c.Next()
+			return
+		}
+
+		// 获取 token
+		authHeader := c.GetHeader("Authorization")
+		if authHeader == "" {
+			c.JSON(401, gin.H{"error": "未提供认证令牌"})
+			c.Abort()
+			return
+		}
+
+		// 解析 Bearer token
+		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+		if tokenString == authHeader {
+			c.JSON(401, gin.H{"error": "无效的认证令牌格式"})
+			c.Abort()
+			return
+		}
+
+		// 解析 JWT token
+		jwtSecret := os.Getenv("JWT_SECRET")
+		if jwtSecret == "" {
+			jwtSecret = "default-secret-key" // 默认密钥，生产环境必须设置
+		}
+
+		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+			return []byte(jwtSecret), nil
+		})
+
+		if err != nil || !token.Valid {
+			log.Printf("JWT validation failed: %v", err)
+			c.JSON(401, gin.H{"error": "无效的认证令牌"})
+			c.Abort()
+			return
+		}
+
+		// 提取用户信息
+		if claims, ok := token.Claims.(jwt.MapClaims); ok {
+			username, _ := claims["username"].(string)
+			uid, _ := claims["uid"].(float64)
+			isAdmin, _ := claims["isAdmin"].(bool)
+
+			// 设置到上下文
+			c.Set("username", username)
+			c.Set("uid", int(uid))
+			c.Set("isAdmin", isAdmin)
+
+			log.Printf("Authenticated user: %s (uid=%d, admin=%v)", username, int(uid), isAdmin)
 		}
 
 		c.Next()

@@ -1,6 +1,6 @@
 <template>
   <div class="job-management">
-    <JobInfo v-if="currentTab === 'info'" @view-detail="handleViewDetail" />
+    <JobInfo v-if="currentTab === 'info'" @view-detail="handleViewDetail" @open-directory="handleOpenDirectory" />
     <JobSubmit v-else-if="currentTab === 'submit'" ref="jobSubmitRef" />
     <JobTemplates v-else-if="currentTab === 'templates'" @use-template="handleUseTemplate" />
 
@@ -22,6 +22,8 @@ import JobInfo from '../components/JobInfo.vue'
 import JobSubmit from '../components/JobSubmit.vue'
 import JobTemplates from '../components/JobTemplates.vue'
 import JobDetailModal from '../components/JobDetailModal.vue'
+
+const emit = defineEmits(['open-directory'])
 
 const currentTab = inject('jobManagementTab', ref('info'))
 const selectedJob = ref<any>(null)
@@ -56,9 +58,9 @@ const handleCancel = (jobId: string) => {
   }
 }
 
-const handleOpenDirectory = (jobId: string, directory: string) => {
-  console.log('打开作业目录:', directory)
-  alert(`打开作业目录: ${directory}`)
+const handleOpenDirectory = (path: string) => {
+  // 转发事件到父组件（App.vue）
+  emit('open-directory', path)
 }
 </script>
 

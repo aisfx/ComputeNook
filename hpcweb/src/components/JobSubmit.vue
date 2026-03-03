@@ -66,12 +66,28 @@
 
       <div class="form-group">
         <label>工作目录 *</label>
-        <input v-model="form.workdir" type="text" placeholder="/home/username/jobs" required />
+        <div class="input-with-button">
+          <input v-model="form.workdir" type="text" placeholder="/home/username/jobs" required />
+          <button type="button" class="btn-icon" @click="resetToHomeDir" title="重置为家目录">
+            🏠
+          </button>
+        </div>
       </div>
 
       <div class="form-group">
-        <label>脚本路径 *</label>
-        <input v-model="form.script" type="text" placeholder="/path/to/script.sh" required />
+        <label>脚本文件 *</label>
+        <div class="script-selector">
+          <select v-model="form.script" class="script-select" required>
+            <option value="">-- 选择脚本文件 --</option>
+            <option v-for="(file, index) in scriptFiles" :key="index" :value="file.path">
+              {{ file.name }} ({{ file.path }})
+            </option>
+          </select>
+          <button type="button" class="btn-secondary btn-small" @click="loadScriptFiles">
+            🔄 刷新
+          </button>
+        </div>
+        <div class="help-text">或手动输入脚本路径</div>
       </div>
 
       <div class="form-group">
@@ -102,12 +118,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
+import { getUser } from '../utils/auth'
+import { fileManagerApi } from '../config/api'
+import notification from '../utils/notification'
 
 const emit = defineEmits(['job-submitted'])
 
+const currentUser = ref<any>(null)
 const selectedTemplate = ref('')
 const selectedTemplateData = ref<any>(null)
+const scriptFiles = ref<any[]>([])
 
 // 监听来自模板页面的事件
 const handleTemplateSelect = (template: any) => {
@@ -205,6 +226,58 @@ const form = ref({
 
 const submitting = ref(false)
 
+// 重置为家目录
+const resetToHomeDir = () => {
+  const homeDir = currentUser.value?.homeDir || `/home/${currentUser.value?.username || ''}`
+  form.value.workdir = homeDir
+}
+
+// 加载脚本文件列表
+const loadScriptFiles = async () => {
+  try {
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token')
+    if (!token) {
+      notification.error('请先登录系统')
+      return
+    }
+    
+    const homeDir = currentUser.value?.homeDir || `/home/${currentUser.value?.username || ''}`
+    const url = `${fileManagerApi.list()}?path=${encodeURIComponent(homeDir)}`
+    
+    const response = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    })
+    
+    if (!response.ok) {
+      throw new Error('读取目录失败')
+    }
+    
+    const result = await response.json()
+    const files = result.files || []
+    
+    // 筛选出脚本文件（.sh, .py, .R, .m 等）
+    scriptFiles.value = files
+      .filter((file: any) => {
+        if (file.is_dir) return false
+        const ext = file.name.split('.').pop()?.toLowerCase()
+        return ['sh', 'py', 'r', 'm', 'pl', 'jl', 'slurm', 'sbatch'].includes(ext || '')
+      })
+      .map((file: any) => ({
+        name: file.name,
+        path: file.path
+      }))
+    
+    if (scriptFiles.value.length === 0) {
+      notification.info('家目录下没有找到脚本文件')
+    }
+  } catch (err: any) {
+    console.error('Failed to load script files:', err)
+    notification.error(err.message || '加载脚本文件失败')
+  }
+}
+
 const applyTemplate = () => {
   if (!selectedTemplate.value) return
   
@@ -234,6 +307,7 @@ const applyTemplateData = (template: any) => {
 
 const resetForm = () => {
   selectedTemplate.value = ''
+  const homeDir = currentUser.value?.homeDir || `/home/${currentUser.value?.username || ''}`
   form.value = {
     name: '',
     partition: 'compute',
@@ -243,7 +317,7 @@ const resetForm = () => {
     gpus: 0,
     time: 1,
     priority: 'normal',
-    workdir: '',
+    workdir: homeDir,
     script: '',
     output: '',
     error: '',
@@ -261,6 +335,14 @@ const submitJob = async () => {
     submitting.value = false
   }, 1000)
 }
+
+// 初始化
+onMounted(() => {
+  currentUser.value = getUser()
+  const homeDir = currentUser.value?.homeDir || `/home/${currentUser.value?.username || ''}`
+  form.value.workdir = homeDir
+  loadScriptFiles()
+})
 </script>
 
 <style scoped>
@@ -320,6 +402,65 @@ const submitJob = async () => {
 .submit-form textarea:focus {
   outline: none;
   border-color: #667eea;
+}
+
+.input-with-button {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.input-with-button input {
+  flex: 1;
+}
+
+.btn-icon {
+  padding: 0.625rem 1rem;
+  background: #f3f4f6;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 1.2rem;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.btn-icon:hover {
+  background: #667eea;
+  border-color: #667eea;
+  transform: scale(1.05);
+}
+
+.script-selector {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.script-select {
+  flex: 1;
+  padding: 0.625rem 1rem;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  cursor: pointer;
+  background: white;
+}
+
+.script-select:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.btn-small {
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+.help-text {
+  font-size: 0.85rem;
+  color: #999;
+  margin-top: 0.5rem;
 }
 
 .form-actions {
