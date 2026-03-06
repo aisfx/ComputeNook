@@ -548,12 +548,12 @@ func (c *Client) SubmitJob(params JobSubmitParams) (int64, error) {
 		"tasks":     1, // 默认1个任务
 	}
 	
-	// 用户名（必需）
+	// 用户名和账户（必需）
 	if params.Username != "" {
 		job["user_name"] = params.Username
+		job["account"] = params.Username // 使用用户名作为account
 		logger.Info("✓ User: %s", params.Username)
-		// 注意：不设置account，让Slurm使用用户的默认account
-		// 如果需要指定account，应该从LDAP或数据库中获取用户的有效account
+		logger.Info("✓ Account: %s", params.Username)
 	} else {
 		logger.Error("✗ Username is empty!")
 	}
@@ -601,10 +601,13 @@ func (c *Client) SubmitJob(params JobSubmitParams) (int64, error) {
 		logger.Info("✓ Time limit: %d minutes", params.TimeLimit*60)
 	}
 	
-	// QoS
+	// QoS - 如果没有指定，使用用户名作为QoS
 	if params.QoS != "" {
 		job["qos"] = params.QoS
 		logger.Info("✓ QoS: %s", params.QoS)
+	} else if params.Username != "" {
+		job["qos"] = params.Username
+		logger.Info("✓ QoS: %s (using username as default)", params.Username)
 	}
 	
 	// 不设置输出和错误文件路径，让Slurm使用默认值

@@ -159,7 +159,7 @@ func GetJobs(c *gin.Context) {
 		return
 	}
 	
-	client, err := slurm.NewClient()
+	client, err := GetSlurmClientForUser(queryUser)
 	if err != nil {
 		logger.Error("Failed to create Slurm client: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法连接到 Slurm API: " + err.Error()})
@@ -558,7 +558,7 @@ func SubmitJob(c *gin.Context) {
 		return
 	}
 	
-	client, err := slurm.NewClient()
+	client, err := GetSlurmClientForUser(username.(string))
 	if err != nil {
 		logger.Error("Failed to create Slurm client: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法连接到 Slurm API: " + err.Error()})

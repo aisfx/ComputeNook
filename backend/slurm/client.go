@@ -16,9 +16,10 @@ type Client struct {
 	token      string
 	apiVersion string
 	httpClient *http.Client
+	username   string // 当前用户名，用于动态生成token
 }
 
-// NewClient 创建新的 Slurm 客户端
+// NewClient 创建新的 Slurm 客户端（使用默认token）
 func NewClient() (*Client, error) {
 	baseURL := os.Getenv("SLURM_REST_URL")
 	if baseURL == "" {
@@ -37,6 +38,35 @@ func NewClient() (*Client, error) {
 		baseURL:    baseURL,
 		token:      token,
 		apiVersion: apiVersion,
+		httpClient: &http.Client{
+			Timeout: 30 * time.Second,
+		},
+	}, nil
+}
+
+// NewClientForUser 为指定用户创建 Slurm 客户端（动态生成token）
+func NewClientForUser(username string) (*Client, error) {
+	baseURL := os.Getenv("SLURM_REST_URL")
+	if baseURL == "" {
+		baseURL = "http://localhost:6820"
+	}
+
+	apiVersion := os.Getenv("SLURM_API_VERSION")
+	if apiVersion == "" {
+		apiVersion = "v0.0.40"
+	}
+
+	// 获取用户的token（动态生成）
+	token, err := GetSlurmTokenForUser(username)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get Slurm token for user %s: %w", username, err)
+	}
+
+	return &Client{
+		baseURL:    baseURL,
+		token:      token,
+		apiVersion: apiVersion,
+		username:   username,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
@@ -64,6 +94,14 @@ func (c *Client) doRequest(method, path string, body interface{}) ([]byte, error
 	req.Header.Set("Content-Type", "application/json")
 	if c.token != "" {
 		req.Header.Set("X-SLURM-USER-TOKEN", c.token)
+		// 添加调试日志
+		if c.username != "" {
+			fmt.Printf("[DEBUG] Slurm API Request for user: %s\n", c.username)
+		}
+		fmt.Printf("[DEBUG] Token length: %d bytes\n", len(c.token))
+		fmt.Printf("[DEBUG] Token (first 50): %s...\n", c.token[:min(50, len(c.token))])
+		fmt.Printf("[DEBUG] Token (last 50): ...%s\n", c.token[max(0, len(c.token)-50):])
+		fmt.Printf("[DEBUG] Request: %s %s\n", method, url)
 	}
 
 	resp, err := c.httpClient.Do(req)
@@ -98,4 +136,21 @@ func (c *Client) doRequest(method, path string, body interface{}) ([]byte, error
 // buildAPIPath 构建带版本的API路径
 func (c *Client) buildAPIPath(endpoint string) string {
 	return fmt.Sprintf("/slurmdb/%s%s", c.apiVersion, endpoint)
+}
+
+
+// min 返回两个整数中的较小值
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+// max 返回两个整数中的较大值
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
