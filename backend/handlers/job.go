@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -195,7 +196,7 @@ func GetJobs(c *gin.Context) {
 		allJobs = append(allJobs, map[string]interface{}{
 			"job_id":      job.JobID,
 			"name":        job.Name,
-			"user_name":   job.User,
+			"user_name":   job.GetUser(),
 			"account":     job.Account,
 			"partition":   job.Partition,
 			"job_state":   job.GetJobState(),
@@ -204,7 +205,7 @@ func GetJobs(c *gin.Context) {
 			"submit_time": job.GetSubmitTime(),
 			"start_time":  job.GetStartTime(),
 			"end_time":    job.GetEndTime(),
-			"work_dir":    job.WorkingDirectory,
+			"work_dir":    job.GetWorkingDirectory(),
 		})
 	}
 	
@@ -305,7 +306,7 @@ func GetJob(c *gin.Context) {
 	}
 	
 	// 权限检查：非管理员只能查询自己的作业
-	if !isAdmin && job.User != username.(string) {
+	if !isAdmin && job.GetUser() != username.(string) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "无权查询此作业"})
 		return
 	}
@@ -360,7 +361,7 @@ func CancelJob(c *gin.Context) {
 	}
 	
 	// 权限检查：非管理员只能取消自己的作业
-	if !isAdmin && job.User != username.(string) {
+	if !isAdmin && job.GetUser() != username.(string) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "无权取消此作业"})
 		return
 	}
@@ -422,7 +423,7 @@ func SuspendJob(c *gin.Context) {
 	}
 	
 	// 权限检查：非管理员只能暂停自己的作业
-	if !isAdmin && job.User != username.(string) {
+	if !isAdmin && job.GetUser() != username.(string) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "无权暂停此作业"})
 		return
 	}
@@ -484,7 +485,7 @@ func ResumeJob(c *gin.Context) {
 	}
 	
 	// 权限检查：非管理员只能恢复自己的作业
-	if !isAdmin && job.User != username.(string) {
+	if !isAdmin && job.GetUser() != username.(string) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "无权恢复此作业"})
 		return
 	}
@@ -539,6 +540,13 @@ func SubmitJob(c *gin.Context) {
 		return
 	}
 	
+	logger.Info("========== SUBMIT JOB REQUEST ==========")
+	logger.Info("Authenticated user: %s", username.(string))
+	logger.Info("Request: name=%s, partition=%s, qos=%s", req.Name, req.Partition, req.QoS)
+	logger.Info("Resources: nodes=%d, cpus=%d, memory=%dGB, gpus=%d, time=%dh", 
+		req.Nodes, req.CPUs, req.Memory, req.GPUs, req.TimeLimit)
+	logger.Info("=========================================")
+	
 	// 开发模式：模拟提交成功
 	if os.Getenv("DEV_MODE") == "true" {
 		mockJobID := time.Now().Unix()
@@ -557,6 +565,23 @@ func SubmitJob(c *gin.Context) {
 		return
 	}
 	
+	// 如果没有指定工作目录，使用用户的home目录
+	workDir := req.WorkDir
+	if workDir == "" {
+		// 从环境变量获取home目录基础路径
+		homeBasePath := os.Getenv("HOME_BASE_PATH")
+		if homeBasePath == "" {
+			homeBasePath = "/home" // 默认值
+		}
+		// 从用户名构建home目录路径
+		workDir = fmt.Sprintf("%s/%s", homeBasePath, username.(string))
+		logger.Info("No working directory specified, using default: %s", workDir)
+	}
+	
+	// 验证工作目录路径
+	logger.Info("Job submission request: name=%s, partition=%s, workdir=%s, script_length=%d", 
+		req.Name, req.Partition, workDir, len(req.Script))
+	
 	// 构建作业提交参数
 	jobParams := slurm.JobSubmitParams{
 		Name:        req.Name,
@@ -568,11 +593,12 @@ func SubmitJob(c *gin.Context) {
 		Memory:      req.Memory,
 		GPUs:        req.GPUs,
 		TimeLimit:   req.TimeLimit,
-		WorkDir:     req.WorkDir,
-		Output:      req.Output,
-		Error:       req.Error,
+		WorkDir:     workDir,
+		Output:      "",  // 不指定，让Slurm使用默认值
+		Error:       "",  // 不指定，让Slurm使用默认值
 		Priority:    req.Priority,
 		ExtraParams: req.ExtraParams,
+		Username:    username.(string), // 传递LDAP用户名
 	}
 	
 	jobID, err := client.SubmitJob(jobParams)

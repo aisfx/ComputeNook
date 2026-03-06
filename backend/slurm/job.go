@@ -9,18 +9,44 @@ import (
 
 // Job Slurm 作业
 type Job struct {
-	JobID       int64  `json:"job_id"`
-	Name        string `json:"name"`
-	User        string `json:"user"`
-	Account     string `json:"account"`
-	Partition   string `json:"partition"`
-	State       struct {
+	JobID            int64  `json:"job_id"`
+	Name             string `json:"name"`
+	UserName         string `json:"user_name"`
+	Account          string `json:"account"`
+	Partition        string `json:"partition"`
+	JobState         []string `json:"job_state"`
+	Nodes            string `json:"nodes"`
+	CPUs             struct {
+		Set      bool  `json:"set"`
+		Infinite bool  `json:"infinite"`
+		Number   int64 `json:"number"`
+	} `json:"cpus"`
+	SubmitTime struct {
+		Set      bool  `json:"set"`
+		Infinite bool  `json:"infinite"`
+		Number   int64 `json:"number"`
+	} `json:"submit_time"`
+	StartTime struct {
+		Set      bool  `json:"set"`
+		Infinite bool  `json:"infinite"`
+		Number   int64 `json:"number"`
+	} `json:"start_time"`
+	EndTime struct {
+		Set      bool  `json:"set"`
+		Infinite bool  `json:"infinite"`
+		Number   int64 `json:"number"`
+	} `json:"end_time"`
+	CurrentWorkingDirectory string `json:"current_working_directory"`
+	StandardOutput          string `json:"standard_output"`
+	StandardError           string `json:"standard_error"`
+	
+	// 兼容旧版本API
+	User  string `json:"user"`
+	State struct {
 		Current []string `json:"current"`
 		Reason  string   `json:"reason"`
 	} `json:"state"`
-	Nodes       string `json:"nodes"`
-	CPUs        int    `json:"-"` // 从 required.CPUs 获取
-	Required    struct {
+	Required struct {
 		CPUs int `json:"CPUs"`
 	} `json:"required"`
 	Time struct {
@@ -36,6 +62,11 @@ type Job struct {
 
 // GetJobState 获取作业状态
 func (j *Job) GetJobState() string {
+	// 优先使用新版本API的字段
+	if len(j.JobState) > 0 {
+		return j.JobState[0]
+	}
+	// 兼容旧版本
 	if len(j.State.Current) > 0 {
 		return j.State.Current[0]
 	}
@@ -44,22 +75,62 @@ func (j *Job) GetJobState() string {
 
 // GetCPUs 获取 CPU 数量
 func (j *Job) GetCPUs() int {
+	// 优先使用新版本API的字段
+	if j.CPUs.Set {
+		return int(j.CPUs.Number)
+	}
+	// 兼容旧版本
 	return j.Required.CPUs
 }
 
 // GetSubmitTime 获取提交时间
 func (j *Job) GetSubmitTime() int64 {
+	// 优先使用新版本API的字段
+	if j.SubmitTime.Set {
+		return j.SubmitTime.Number
+	}
+	// 兼容旧版本
 	return j.Time.Submission
 }
 
 // GetStartTime 获取开始时间
 func (j *Job) GetStartTime() int64 {
+	// 优先使用新版本API的字段
+	if j.StartTime.Set {
+		return j.StartTime.Number
+	}
+	// 兼容旧版本
 	return j.Time.Start
 }
 
 // GetEndTime 获取结束时间
 func (j *Job) GetEndTime() int64 {
+	// 优先使用新版本API的字段
+	if j.EndTime.Set {
+		return j.EndTime.Number
+	}
+	// 兼容旧版本
 	return j.Time.End
+}
+
+// GetUser 获取用户名
+func (j *Job) GetUser() string {
+	// 优先使用新版本API的字段
+	if j.UserName != "" {
+		return j.UserName
+	}
+	// 兼容旧版本
+	return j.User
+}
+
+// GetWorkingDirectory 获取工作目录
+func (j *Job) GetWorkingDirectory() string {
+	// 优先使用新版本API的字段
+	if j.CurrentWorkingDirectory != "" {
+		return j.CurrentWorkingDirectory
+	}
+	// 兼容旧版本
+	return j.WorkingDirectory
 }
 
 // JobsResponse Slurm 作业列表响应
@@ -79,8 +150,35 @@ type JobResponse struct {
 // startTime: 开始时间（Unix时间戳，为0则不限制）
 // endTime: 结束时间（Unix时间戳，为0则不限制）
 func (c *Client) GetJobs(username string, startTime, endTime int64) ([]Job, error) {
-	// 使用 slurmdb API 获取作业信息（包括历史和当前作业）
-	path := fmt.Sprintf("/slurmdb/%s/jobs", c.apiVersion)
+	allJobs := []Job{}
+	
+	// 1. 获取当前运行的作业（使用 /slurm/ API）
+	runningPath := fmt.Sprintf("/slurm/%s/jobs", c.apiVersion)
+	if username != "" {
+		runningPath += fmt.Sprintf("?user_name=%s", username)
+	}
+	
+	logger.Debug("GetJobs (running) API request: GET %s", runningPath)
+	logger.Debug("Full URL: %s%s", c.baseURL, runningPath)
+	
+	runningRespBody, err := c.doRequest("GET", runningPath, nil)
+	if err != nil {
+		logger.Info("Failed to get running jobs: %v", err)
+		// 继续执行，不返回错误
+	} else {
+		var runningResponse JobsResponse
+		if err := json.Unmarshal(runningRespBody, &runningResponse); err != nil {
+			logger.Info("Failed to parse running jobs response: %v", err)
+		} else if len(runningResponse.Errors) > 0 {
+			logger.Info("Slurm API returned errors for running jobs: %s", runningResponse.Errors[0].Error)
+		} else {
+			logger.Info("Found %d running jobs", len(runningResponse.Jobs))
+			allJobs = append(allJobs, runningResponse.Jobs...)
+		}
+	}
+	
+	// 2. 获取历史作业（使用 /slurmdb/ API）
+	historyPath := fmt.Sprintf("/slurmdb/%s/jobs", c.apiVersion)
 	
 	// 添加查询参数
 	hasParams := false
@@ -88,59 +186,61 @@ func (c *Client) GetJobs(username string, startTime, endTime int64) ([]Job, erro
 	// 添加用户过滤
 	if username != "" {
 		if hasParams {
-			path += "&"
+			historyPath += "&"
 		} else {
-			path += "?"
+			historyPath += "?"
 			hasParams = true
 		}
-		path += fmt.Sprintf("users=%s", username)
+		historyPath += fmt.Sprintf("users=%s", username)
 	}
 	
 	// 添加时间范围过滤（slurmdb 支持时间过滤）
 	if startTime > 0 {
 		if hasParams {
-			path += "&"
+			historyPath += "&"
 		} else {
-			path += "?"
+			historyPath += "?"
 			hasParams = true
 		}
-		path += fmt.Sprintf("submit_time=%d", startTime)
+		historyPath += fmt.Sprintf("submit_time=%d", startTime)
 	}
 	
 	if endTime > 0 {
 		if hasParams {
-			path += "&"
+			historyPath += "&"
 		} else {
-			path += "?"
+			historyPath += "?"
 			hasParams = true
 		}
-		path += fmt.Sprintf("end_time=%d", endTime)
+		historyPath += fmt.Sprintf("end_time=%d", endTime)
 	}
 	
-	logger.Debug("GetJobs API request: GET %s", path)
-	logger.Debug("Full URL: %s%s", c.baseURL, path)
+	logger.Debug("GetJobs (history) API request: GET %s", historyPath)
+	logger.Debug("Full URL: %s%s", c.baseURL, historyPath)
 	
-	respBody, err := c.doRequest("GET", path, nil)
+	historyRespBody, err := c.doRequest("GET", historyPath, nil)
 	if err != nil {
-		logger.Error("GetJobs API request failed: %v", err)
-		return nil, err
-	}
-	
-	logger.Debug("GetJobs API response length: %d bytes", len(respBody))
-	
-	var response JobsResponse
-	if err := json.Unmarshal(respBody, &response); err != nil {
-		logger.Error("Failed to parse jobs response: %v", err)
-		return nil, fmt.Errorf("failed to parse jobs response: %w", err)
-	}
-	
-	if len(response.Errors) > 0 {
-		logger.Error("Slurm API returned errors: %s", response.Errors[0].Error)
-		return nil, fmt.Errorf("slurm API error: %s", response.Errors[0].Error)
+		logger.Info("Failed to get history jobs: %v", err)
+		// 如果运行中的作业也失败了，返回错误
+		if len(allJobs) == 0 {
+			return nil, err
+		}
+	} else {
+		logger.Debug("GetJobs (history) API response length: %d bytes", len(historyRespBody))
+		
+		var historyResponse JobsResponse
+		if err := json.Unmarshal(historyRespBody, &historyResponse); err != nil {
+			logger.Info("Failed to parse history jobs response: %v", err)
+		} else if len(historyResponse.Errors) > 0 {
+			logger.Info("Slurm API returned errors for history jobs: %s", historyResponse.Errors[0].Error)
+		} else {
+			logger.Info("Found %d history jobs", len(historyResponse.Jobs))
+			allJobs = append(allJobs, historyResponse.Jobs...)
+		}
 	}
 	
 	// 客户端时间过滤（作为备用）
-	jobs := response.Jobs
+	jobs := allJobs
 	if startTime > 0 || endTime > 0 {
 		filteredJobs := []Job{}
 		for _, job := range jobs {
@@ -159,8 +259,33 @@ func (c *Client) GetJobs(username string, startTime, endTime int64) ([]Job, erro
 		jobs = filteredJobs
 	}
 	
-	logger.Info("GetJobs returned %d jobs (filtered from %d)", len(jobs), len(response.Jobs))
-	return jobs, nil
+	// 去重（根据job_id）
+	jobMap := make(map[int64]Job)
+	for _, job := range jobs {
+		// 如果已存在，保留状态更新的（运行中的优先）
+		if existingJob, exists := jobMap[job.JobID]; exists {
+			// 如果新作业是运行中的，替换旧的
+			if job.GetJobState() == "RUNNING" || job.GetJobState() == "PENDING" {
+				jobMap[job.JobID] = job
+			} else if existingJob.GetJobState() != "RUNNING" && existingJob.GetJobState() != "PENDING" {
+				// 两个都是完成状态，保留提交时间更晚的
+				if job.GetSubmitTime() > existingJob.GetSubmitTime() {
+					jobMap[job.JobID] = job
+				}
+			}
+		} else {
+			jobMap[job.JobID] = job
+		}
+	}
+	
+	// 转换回数组
+	uniqueJobs := []Job{}
+	for _, job := range jobMap {
+		uniqueJobs = append(uniqueJobs, job)
+	}
+	
+	logger.Info("GetJobs returned %d unique jobs (from %d total)", len(uniqueJobs), len(allJobs))
+	return uniqueJobs, nil
 }
 
 // GetJob 获取单个作业
@@ -301,6 +426,7 @@ type JobSubmitParams struct {
 	Error       string
 	Priority    string
 	ExtraParams string
+	Username    string // LDAP用户名
 }
 
 // Partition 分区信息
@@ -410,111 +536,194 @@ func (c *Client) SubmitJob(params JobSubmitParams) (int64, error) {
 		return 0, fmt.Errorf("script is required")
 	}
 	
-	// 如果没有指定工作目录，不设置（让Slurm使用默认值）
-	if params.WorkDir == "" {
-		logger.Warn("No working directory specified, Slurm will use default")
-	}
+	logger.Info("========== JOB SUBMISSION START ==========")
+	logger.Info("Submitting job: name=%s, partition=%s, nodes=%d, cpus=%d, workdir=%s, username=%s, script_length=%d", 
+		params.Name, params.Partition, params.Nodes, params.CPUs, params.WorkDir, params.Username, len(params.Script))
+	logger.Info("QoS=%s, Memory=%dGB, GPUs=%d, TimeLimit=%dh", params.QoS, params.Memory, params.GPUs, params.TimeLimit)
 	
-	logger.Info("Submitting job: name=%s, partition=%s, nodes=%d, cpus=%d, workdir=%s, script_length=%d", 
-		params.Name, params.Partition, params.Nodes, params.CPUs, params.WorkDir, len(params.Script))
-	
-	// 构建最小化的作业描述
+	// 构建作业描述 - 按照v0.0.44格式
 	job := map[string]interface{}{
 		"name":      params.Name,
 		"partition": params.Partition,
+		"tasks":     1, // 默认1个任务
+	}
+	
+	// 用户名（必需）
+	if params.Username != "" {
+		job["user_name"] = params.Username
+		logger.Info("✓ User: %s", params.Username)
+		// 注意：不设置account，让Slurm使用用户的默认account
+		// 如果需要指定account，应该从LDAP或数据库中获取用户的有效account
+	} else {
+		logger.Error("✗ Username is empty!")
+	}
+	
+	// 工作目录（必需）
+	if params.WorkDir != "" {
+		job["current_working_directory"] = params.WorkDir
+		logger.Info("✓ Working directory: %s", params.WorkDir)
+	} else {
+		logger.Error("✗ Working directory is empty!")
+	}
+	
+	// environment - 在job对象内部，使用LDAP用户名
+	if params.Username != "" {
+		job["environment"] = map[string]string{
+			"USER": params.Username,
+		}
+		logger.Info("✓ USER environment variable: %s", params.Username)
+	} else {
+		job["environment"] = map[string]string{
+			"USER": "${USER}",
+		}
+		logger.Info("⚠ USER environment variable: ${USER} (using default)")
 	}
 	
 	// 资源配置
 	if params.Nodes > 0 {
-		job["nodes"] = params.Nodes
+		job["nodes"] = fmt.Sprintf("%d", params.Nodes) // 转换为字符串
+		logger.Info("✓ Nodes: %d", params.Nodes)
 	}
 	if params.CPUs > 0 {
 		job["cpus_per_task"] = params.CPUs
+		logger.Info("✓ CPUs per task: %d", params.CPUs)
 	}
 	if params.Memory > 0 {
 		job["memory_per_node"] = params.Memory * 1024 // MB
+		logger.Info("✓ Memory per node: %d MB", params.Memory*1024)
 	}
 	if params.GPUs > 0 {
 		job["gres"] = fmt.Sprintf("gpu:%d", params.GPUs)
+		logger.Info("✓ GPUs: %d", params.GPUs)
 	}
 	if params.TimeLimit > 0 {
 		job["time_limit"] = params.TimeLimit * 60 // 分钟
-	}
-	
-	// 工作目录（只有明确指定时才设置）
-	if params.WorkDir != "" {
-		job["current_working_directory"] = params.WorkDir
-		logger.Debug("Setting working directory: %s", params.WorkDir)
-	}
-	
-	// 输出文件（只有明确指定时才设置）
-	if params.Output != "" {
-		// 如果是相对路径且有工作目录，转换为绝对路径
-		if params.Output[0] != '/' && params.WorkDir != "" {
-			job["standard_output"] = params.WorkDir + "/" + params.Output
-		} else {
-			job["standard_output"] = params.Output
-		}
-		logger.Debug("Setting standard output: %s", job["standard_output"])
-	}
-	
-	if params.Error != "" {
-		// 如果是相对路径且有工作目录，转换为绝对路径
-		if params.Error[0] != '/' && params.WorkDir != "" {
-			job["standard_error"] = params.WorkDir + "/" + params.Error
-		} else {
-			job["standard_error"] = params.Error
-		}
-		logger.Debug("Setting standard error: %s", job["standard_error"])
+		logger.Info("✓ Time limit: %d minutes", params.TimeLimit*60)
 	}
 	
 	// QoS
 	if params.QoS != "" {
 		job["qos"] = params.QoS
+		logger.Info("✓ QoS: %s", params.QoS)
 	}
 	
-	// 构建请求体 - 使用最简单的格式
+	// 不设置输出和错误文件路径，让Slurm使用默认值
+	logger.Info("ℹ Using Slurm default paths for output and error files")
+	
+	// 根据API版本构建请求体
+	// v0.0.44格式: {"script": "...", "job": {"environment": {...}, ...}}
 	body := map[string]interface{}{
 		"script": params.Script,
 		"job":    job,
 	}
 	
+	// 打印完整的job对象（用于调试）
+	jobJSON, _ := json.MarshalIndent(job, "", "  ")
+	logger.Info("========== JOB OBJECT ==========")
+	logger.Info("%s", string(jobJSON))
+	logger.Info("================================")
+	
+	// 打印脚本内容（限制长度）
+	scriptPreview := params.Script
+	if len(scriptPreview) > 200 {
+		scriptPreview = scriptPreview[:200] + "..."
+	}
+	logger.Info("========== SCRIPT CONTENT ==========")
+	logger.Info("%s", scriptPreview)
+	logger.Info("====================================")
+	
 	bodyJSON, _ := json.Marshal(body)
 	path := fmt.Sprintf("/slurm/%s/job/submit", c.apiVersion)
-	logger.Debug("SubmitJob API request: POST %s", path)
-	logger.Debug("Full URL: %s%s", c.baseURL, path)
+	logger.Info("========== API REQUEST ==========")
+	logger.Info("Method: POST")
+	logger.Info("Path: %s", path)
+	logger.Info("Full URL: %s%s", c.baseURL, path)
+	logger.Info("API Version: %s", c.apiVersion)
+	logger.Info("=================================")
 	
-	// 只记录请求体的前500个字符，避免日志过长
+	// 记录完整请求体
 	bodyStr := string(bodyJSON)
-	if len(bodyStr) > 500 {
-		logger.Debug("Request body (first 500 chars): %s...", bodyStr[:500])
+	if len(bodyStr) > 2000 {
+		logger.Info("Request body (first 2000 chars):")
+		logger.Info("%s...", bodyStr[:2000])
 	} else {
-		logger.Debug("Request body: %s", bodyStr)
+		logger.Info("Request body:")
+		logger.Info("%s", bodyStr)
 	}
 	
 	respBody, err := c.doRequest("POST", path, body)
 	if err != nil {
-		logger.Error("Job submission failed: %v", err)
+		logger.Error("========== JOB SUBMISSION FAILED ==========")
+		logger.Error("Error: %v", err)
+		logger.Error("===========================================")
 		return 0, fmt.Errorf("API request failed: %w", err)
 	}
 	
-	logger.Debug("SubmitJob API response: %s", string(respBody))
+	// 记录响应
+	respStr := string(respBody)
+	logger.Info("========== API RESPONSE ==========")
+	if len(respStr) > 2000 {
+		logger.Info("Response (first 2000 chars):")
+		logger.Info("%s...", respStr[:2000])
+	} else {
+		logger.Info("Response:")
+		logger.Info("%s", respStr)
+	}
+	logger.Info("==================================")
 	
+	// 解析响应 - 支持不同版本的响应格式
 	var response struct {
-		JobID  int64   `json:"job_id"`
-		Errors []Error `json:"errors"`
+		JobID   int64   `json:"job_id"`    // v0.0.43+
+		JobId   int64   `json:"jobId"`     // 旧版本兼容
+		Errors  []Error `json:"errors"`
+		Warnings []Error `json:"warnings"`
 	}
 	
 	if err := json.Unmarshal(respBody, &response); err != nil {
+		logger.Error("========== RESPONSE PARSE FAILED ==========")
+		logger.Error("Error: %v", err)
+		logger.Error("Response body: %s", respStr)
+		logger.Error("===========================================")
 		return 0, fmt.Errorf("failed to parse response: %w", err)
 	}
 	
 	if len(response.Errors) > 0 {
+		logger.Error("========== SLURM API ERROR ==========")
+		for i, err := range response.Errors {
+			logger.Error("Error %d: %s", i+1, err.Error)
+		}
+		logger.Error("=====================================")
 		return 0, fmt.Errorf("slurm API error: %s", response.Errors[0].Error)
 	}
 	
-	logger.Info("Job submitted successfully: job_id=%d", response.JobID)
-	return response.JobID, nil
+	if len(response.Warnings) > 0 {
+		logger.Info("========== SLURM API WARNINGS ==========")
+		for i, warn := range response.Warnings {
+			logger.Info("Warning %d: %s", i+1, warn.Error)
+		}
+		logger.Info("========================================")
+	}
+	
+	// 获取作业ID（兼容不同字段名）
+	jobID := response.JobID
+	if jobID == 0 {
+		jobID = response.JobId
+	}
+	
+	if jobID == 0 {
+		logger.Error("========== NO JOB ID RETURNED ==========")
+		logger.Error("Response: %s", respStr)
+		logger.Error("========================================")
+		return 0, fmt.Errorf("no job ID returned in response")
+	}
+	
+	logger.Info("========== JOB SUBMISSION SUCCESS ==========")
+	logger.Info("✓ Job ID: %d", jobID)
+	logger.Info("✓ Job Name: %s", params.Name)
+	logger.Info("✓ Partition: %s", params.Partition)
+	logger.Info("✓ User: %s", params.Username)
+	logger.Info("============================================")
+	return jobID, nil
 }
 
 

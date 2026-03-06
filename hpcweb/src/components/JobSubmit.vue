@@ -415,19 +415,7 @@ const submitJob = async () => {
       }
     }
     
-    // 确保工作目录是绝对路径（如果指定了的话）
-    let workdir = form.value.workdir?.trim()
-    if (workdir) {
-      if (workdir[0] !== '/') {
-        const homeDir = currentUser.value?.homeDir || `/home/${currentUser.value?.username || ''}`
-        workdir = `${homeDir}/${workdir}`
-      }
-    } else {
-      // 如果没有指定工作目录，使用空字符串（让Slurm使用默认值）
-      workdir = ''
-    }
-    
-    // 构建提交数据
+    // 构建提交数据 - 只发送必需字段，让Slurm使用默认路径
     const submitData: any = {
       name: form.value.name,
       partition: form.value.partition,
@@ -437,19 +425,15 @@ const submitJob = async () => {
       memory: form.value.memory || 0,  // 0 表示不限制
       gpus: form.value.gpus || 0,
       time: form.value.time || 0,  // 0 表示不限制
-      output: form.value.output || 'slurm-%j.out',  // 默认输出文件
-      error: form.value.error || 'slurm-%j.err',    // 默认错误文件
       priority: form.value.priority,
       extra_params: form.value.extraParams
     }
     
-    // 只有明确指定了工作目录时才添加
-    if (workdir) {
-      submitData.workdir = workdir
-    }
+    // 不发送workdir、output、error，让Slurm使用默认值
+    // 这样可以避免路径权限问题
     
     console.log('Submitting job with script content length:', scriptContent.length)
-    console.log('Working directory:', workdir || '(using Slurm default)')
+    console.log('Using Slurm default paths for working directory and output files')
     
     const response = await fetch('http://localhost:8080/api/jobs', {
       method: 'POST',
