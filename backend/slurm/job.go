@@ -178,6 +178,7 @@ func (c *Client) GetJobs(username string, startTime, endTime int64) ([]Job, erro
 	}
 	
 	// 2. 获取历史作业（使用 /slurmdb/ API）
+	// 注意：如果slurmdbd未配置或认证失败，这个请求会失败，但不影响返回运行中的作业
 	historyPath := fmt.Sprintf("/slurmdb/%s/jobs", c.apiVersion)
 	
 	// 添加查询参数
@@ -220,19 +221,18 @@ func (c *Client) GetJobs(username string, startTime, endTime int64) ([]Job, erro
 	
 	historyRespBody, err := c.doRequest("GET", historyPath, nil)
 	if err != nil {
-		logger.Info("Failed to get history jobs: %v", err)
-		// 如果运行中的作业也失败了，返回错误
-		if len(allJobs) == 0 {
-			return nil, err
-		}
+		logger.Warn("Failed to get history jobs (slurmdbd may not be configured): %v", err)
+		logger.Info("Continuing with %d running jobs only", len(allJobs))
+		// 不返回错误，继续使用已获取的运行中作业
 	} else {
 		logger.Debug("GetJobs (history) API response length: %d bytes", len(historyRespBody))
 		
 		var historyResponse JobsResponse
 		if err := json.Unmarshal(historyRespBody, &historyResponse); err != nil {
-			logger.Info("Failed to parse history jobs response: %v", err)
+			logger.Warn("Failed to parse history jobs response: %v", err)
 		} else if len(historyResponse.Errors) > 0 {
-			logger.Info("Slurm API returned errors for history jobs: %s", historyResponse.Errors[0].Error)
+			logger.Warn("Slurm API returned errors for history jobs: %s", historyResponse.Errors[0].Error)
+			logger.Info("This is normal if slurmdbd is not configured")
 		} else {
 			logger.Info("Found %d history jobs", len(historyResponse.Jobs))
 			allJobs = append(allJobs, historyResponse.Jobs...)

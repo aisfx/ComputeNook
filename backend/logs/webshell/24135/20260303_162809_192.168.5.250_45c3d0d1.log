@@ -1,6 +1,0 @@
-{"timestamp":"2026-03-03T16:28:09.1878314+08:00","type":"event","event":"session_start","data":{"host":"192.168.5.250","session_id":"45c3d0d1-e70b-496e-aa47-ddc3e782d395","user_id":"24135","username":"sunfx"}}
-{"timestamp":"2026-03-03T16:28:09.1900114+08:00","type":"event","event":"session_created","data":{"host":"192.168.5.250","port":31277}}
-{"timestamp":"2026-03-03T16:28:09.3358795+08:00","type":"event","event":"connection_established"}
-{"timestamp":"2026-03-03T16:28:09.3358795+08:00","type":"output","content":"Activate the web console with: systemctl enable --now cockpit.socket\r\n\r\nLast login: Tue Mar  3 13:46:57 2026 from 192.168.0.11\r\r\n"}
-{"timestamp":"2026-03-03T16:28:09.3363908+08:00","type":"event","event":"session_closed"}
-{"timestamp":"2026-03-03T16:28:09.3380105+08:00","type":"event","event":"session_end","data":{"duration":0.1501791}}

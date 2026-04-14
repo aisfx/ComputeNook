@@ -55,7 +55,10 @@ func GetAccountUsageWithBilling(c *gin.Context) {
 		endTime = time.Now()
 	}
 
-	client, err := slurm.NewClient()
+	// 获取当前用户
+	username, _ := c.Get("username")
+	
+	client, err := GetSlurmClientForUser(username.(string))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -115,7 +118,10 @@ func GetUserUsageByAccount(c *gin.Context) {
 		endTime = time.Now()
 	}
 
-	client, err := slurm.NewClient()
+	// 获取当前用户
+	username, _ := c.Get("username")
+	
+	client, err := GetSlurmClientForUser(username.(string))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -167,7 +173,10 @@ func GetAllAccountsUsage(c *gin.Context) {
 		endTime = time.Now()
 	}
 
-	client, err := slurm.NewClient()
+	// 获取当前用户
+	username, _ := c.Get("username")
+	
+	client, err := GetSlurmClientForUser(username.(string))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -222,7 +231,10 @@ func GetUsageSummary(c *gin.Context) {
 		endTime = time.Now()
 	}
 
-	client, err := slurm.NewClient()
+	// 获取当前用户
+	username, _ := c.Get("username")
+	
+	client, err := GetSlurmClientForUser(username.(string))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -301,7 +313,10 @@ func GetClusterUsage(c *gin.Context) {
 		endTime = time.Now()
 	}
 
-	client, err := slurm.NewClient()
+	// 获取当前用户
+	username, _ := c.Get("username")
+	
+	client, err := GetSlurmClientForUser(username.(string))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -359,7 +374,10 @@ func GetUserUsage(c *gin.Context) {
 		endTime = time.Now()
 	}
 
-	client, err := slurm.NewClient()
+	// 获取当前用户
+	username, _ := c.Get("username")
+	
+	client, err := GetSlurmClientForUser(username.(string))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -416,7 +434,10 @@ func GetAccountUsage(c *gin.Context) {
 		endTime = time.Now()
 	}
 
-	client, err := slurm.NewClient()
+	// 获取当前用户
+	username, _ := c.Get("username")
+	
+	client, err := GetSlurmClientForUser(username.(string))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

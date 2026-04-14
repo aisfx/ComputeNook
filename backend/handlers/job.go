@@ -159,7 +159,9 @@ func GetJobs(c *gin.Context) {
 		return
 	}
 	
-	client, err := GetSlurmClientForUser(queryUser)
+	// 使用当前登录用户的username创建Slurm客户端（而不是queryUser）
+	// 这样即使查询所有作业，也会使用当前用户的JWT token
+	client, err := GetSlurmClientForUser(username.(string))
 	if err != nil {
 		logger.Error("Failed to create Slurm client: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法连接到 Slurm API: " + err.Error()})
@@ -345,7 +347,7 @@ func CancelJob(c *gin.Context) {
 		return
 	}
 	
-	client, err := slurm.NewClient()
+	client, err := GetSlurmClientForUser(username.(string))
 	if err != nil {
 		logger.Error("Failed to create Slurm client: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法连接到 Slurm API: " + err.Error()})
@@ -407,7 +409,7 @@ func SuspendJob(c *gin.Context) {
 		return
 	}
 	
-	client, err := slurm.NewClient()
+	client, err := GetSlurmClientForUser(username.(string))
 	if err != nil {
 		logger.Error("Failed to create Slurm client: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法连接到 Slurm API: " + err.Error()})
@@ -469,7 +471,7 @@ func ResumeJob(c *gin.Context) {
 		return
 	}
 	
-	client, err := slurm.NewClient()
+	client, err := GetSlurmClientForUser(username.(string))
 	if err != nil {
 		logger.Error("Failed to create Slurm client: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法连接到 Slurm API: " + err.Error()})
@@ -617,8 +619,15 @@ func SubmitJob(c *gin.Context) {
 
 // GetPartitions 获取分区列表
 func GetPartitions(c *gin.Context) {
-	// 创建 Slurm 客户端
-	client, err := slurm.NewClient()
+	// 获取当前用户信息
+	username, exists := c.Get("username")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未授权"})
+		return
+	}
+	
+	// 创建 Slurm 客户端（使用当前用户的JWT token）
+	client, err := GetSlurmClientForUser(username.(string))
 	if err != nil {
 		logger.Error("Failed to create Slurm client: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to connect to Slurm"})

@@ -28,6 +28,10 @@ type JWTPayload struct {
 }
 
 // GenerateSlurmToken 为指定用户生成Slurm REST API JWT token
+// 严格按照Python实现：
+// 1. priv_key = f.read() - 读取原始密钥字节
+// 2. signing_key = jwk_from_dict({'kty': 'oct', 'k': b64encode(priv_key)})
+// 3. 使用JWT库进行签名，但我们需要手动实现相同的逻辑
 func GenerateSlurmToken(username string) (string, error) {
 	// 从环境变量获取JWT密钥
 	secret := os.Getenv("SLURM_JWT_KEY")
@@ -35,13 +39,26 @@ func GenerateSlurmToken(username string) (string, error) {
 		return "", fmt.Errorf("SLURM_JWT_KEY not configured in .env file")
 	}
 
-	// 去除密钥中的空白字符
-	secret = strings.TrimSpace(secret)
-	
 	logger.Info("========== GENERATING SLURM JWT TOKEN ==========")
 	logger.Info("Username: %s", username)
-	logger.Info("Secret length: %d bytes", len(secret))
-	logger.Debug("Secret (first 20 chars): %s...", secret[:min(20, len(secret))])
+	logger.Info("Secret (raw) length: %d bytes", len(secret))
+	
+	// 关键发现：Python代码的实际行为
+	// 1. with open("/etc/slurm/jwt_hs256.key", "rb") as f: priv_key = f.read()
+	//    - 以二进制模式读取文件，包括文件末尾的换行符
+	//    - 文件内容是Base64字符串 + 换行符，例如: "YEoqs4yNYiqeL6X4CHmAokT0cm+yBr7qUT1bxHGUMYI=\n"
+	// 2. signing_key = jwk_from_dict({'kty': 'oct', 'k': b64encode(priv_key)})
+	//    - 这里的b64encode是对已经包含Base64字符串+换行符的字节进行再次编码
+	//    - 但实际上JWT库在签名时使用的是原始的priv_key（Base64字符串+换行符的字节）
+	// 3. 最终用于HMAC-SHA256签名的密钥是：Base64字符串+换行符的ASCII字节
+	//
+	// 测试证明：密钥必须是 "YEoqs4yNYiqeL6X4CHmAokT0cm+yBr7qUT1bxHGUMYI=\n" 的字节形式
+	// 即：将Base64字符串作为ASCII字符串，并在末尾添加换行符
+	
+	// 添加换行符（模拟从文件读取的实际内容）
+	signingKey := []byte(secret + "\n")
+	logger.Info("Signing key length: %d bytes (Base64 string + newline)", len(signingKey))
+	logger.Debug("Signing key (first 32 bytes hex): %x", signingKey[:min(32, len(signingKey))])
 
 	// 获取token有效期（默认24小时）
 	lifespanStr := os.Getenv("SLURM_JWT_LIFESPAN")
@@ -87,11 +104,12 @@ func GenerateSlurmToken(username string) (string, error) {
 	logger.Debug("Payload (JSON): %s", string(payloadJSON))
 	logger.Debug("Payload (base64): %s", payloadB64)
 
-	// 创建签名
+	// 创建签名 - 直接使用原始密钥字符串的字节
 	message := headerB64 + "." + payloadB64
-	h := hmac.New(sha256.New, []byte(secret))
+	h := hmac.New(sha256.New, signingKey)
 	h.Write([]byte(message))
 	signature := base64.RawURLEncoding.EncodeToString(h.Sum(nil))
+	logger.Debug("Message to sign: %s", message)
 	logger.Debug("Signature (base64): %s", signature)
 
 	// 生成完整的JWT token

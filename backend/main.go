@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"log"
+	"net/http"
 	"os"
 	"strings"
 
@@ -269,9 +270,23 @@ func main() {
 		port = "8080"
 	}
 
+	// 如果存在 static 目录，托管前端静态文件
+	if _, err := os.Stat("static"); err == nil {
+		r.Static("/static", "./static")
+		r.StaticFile("/favicon.ico", "./static/favicon.ico")
+		// SPA fallback：所有非 /api 路由返回 index.html
+		r.NoRoute(func(c *gin.Context) {
+			if !strings.HasPrefix(c.Request.URL.Path, "/api") {
+				c.File("./static/index.html")
+			} else {
+				c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+			}
+		})
+		log.Printf("Frontend static files served from ./static")
+	}
+
 	log.Printf("Server starting on port %s", port)
 	log.Printf("API Documentation: http://localhost:%s/api", port)
-	log.Printf("API Documentation (JSON): http://localhost:%s/api?format=json", port)
 	
 	if err := r.Run(":" + port); err != nil {
 		log.Fatal("Failed to start server:", err)

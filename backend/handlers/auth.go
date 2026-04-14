@@ -19,6 +19,40 @@ func Login(c *gin.Context) {
 		return
 	}
 
+	// 开发模式：允许任何用户名密码登录
+	if os.Getenv("DEV_MODE") == "true" {
+		// 创建模拟用户
+		user := &models.User{
+			Username: req.Username,
+			UID:      1000,
+			GID:      1000,
+			CNName:   req.Username,
+			IsAdmin:  req.Username == "admin", // admin用户是管理员
+		}
+
+		// 生成 JWT Token
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+			"username": user.Username,
+			"uid":      user.UID,
+			"isAdmin":  user.IsAdmin,
+			"exp":      time.Now().Add(time.Hour * 24).Unix(),
+		})
+
+		tokenString, err := token.SignedString([]byte(os.Getenv("JWT_SECRET")))
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
+			return
+		}
+
+		log.Printf("DEV MODE: User %s logged in (isAdmin: %v)", user.Username, user.IsAdmin)
+		c.JSON(http.StatusOK, models.LoginResponse{
+			Token: tokenString,
+			User:  user,
+		})
+		return
+	}
+
+	// 生产模式：使用LDAP认证
 	// 创建 LDAP 客户端
 	client, err := ldap.NewClient()
 	if err != nil {

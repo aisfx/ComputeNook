@@ -47,8 +47,8 @@ func GetDashboardStats(c *gin.Context) {
 	
 	isAdmin, _ := c.Get("isAdmin")
 	
-	// 创建 Slurm 客户端
-	client, err := slurm.NewClient()
+	// 创建 Slurm 客户端（使用当前用户的JWT token）
+	client, err := GetSlurmClientForUser(username.(string))
 	if err != nil {
 		logger.Error("Failed to create Slurm client: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to connect to Slurm"})
@@ -172,8 +172,8 @@ func GetDashboardNodes(c *gin.Context) {
 	
 	isAdmin, _ := c.Get("isAdmin")
 	
-	// 创建 Slurm 客户端
-	client, err := slurm.NewClient()
+	// 创建 Slurm 客户端（使用当前用户的JWT token）
+	client, err := GetSlurmClientForUser(username.(string))
 	if err != nil {
 		logger.Error("Failed to create Slurm client: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to connect to Slurm"})

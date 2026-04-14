@@ -1,0 +1,19 @@
+# Node
+node_modules/
+dist/
+release/
+
+# Env
+.env
+*.env.local
+
+# Go
+backend/hpc-backend
+backend/logs/
+
+# OS
+.DS_Store
+*.log
+
+# Editor
+.vscode/settings.json
