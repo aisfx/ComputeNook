@@ -17,3 +17,7 @@ backend/logs/
 
 # Editor
 .vscode/settings.json
+
+# 编译产物
+src/**/*.vue.js
+src/**/*.ts.js
