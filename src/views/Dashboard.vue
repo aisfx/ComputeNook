@@ -21,7 +21,7 @@
       </div>
 
       <div class="stat-card">
-        <div class="stat-icon">🎮</div>
+        <div class="stat-icon">🤖</div>
         <div class="stat-content">
           <div class="stat-label">GPU 卡数</div>
           <div class="stat-value">{{ stats.gpuCards }}</div>
@@ -219,12 +219,127 @@
         </tbody>
       </table>
     </div>
+
+    <!-- 用户资源限制 -->
+    <div class="user-perm-card card">
+      <div class="user-perm-header">
+        <div class="user-perm-avatar">{{ userInitial }}</div>
+        <div>
+          <div class="user-perm-name">{{ currentUser?.cnName || currentUser?.username }}</div>
+          <div class="user-perm-role">
+            <span :class="['perm-badge', currentUser?.isAdmin ? 'perm-admin' : 'perm-user']">
+              {{ currentUser?.isAdmin ? '管理员' : '普通用户' }}
+            </span>
+            <span v-if="resourcesLoading" class="perm-loading">加载资源限制...</span>
+          </div>
+        </div>
+        <button class="perm-refresh" @click="loadMyResources" :disabled="resourcesLoading">刷新</button>
+      </div>
+
+      <!-- 资源限制（来自 QoS） -->
+      <div v-if="myResources.qos_limits?.length" class="res-section">
+        <div class="res-section-title">资源配额 (QoS 限制)</div>
+        <div v-for="qos in myResources.qos_limits" :key="qos.name" class="res-qos-block">
+          <div class="res-qos-name">{{ qos.name }}<span v-if="qos.description" class="res-qos-desc">{{ qos.description }}</span></div>
+          <div class="res-grid">
+            <div class="res-item">
+              <div class="res-label">最大节点数</div>
+              <div class="res-value">{{ formatLimit(qos.max_nodes) }}</div>
+            </div>
+            <div class="res-item">
+              <div class="res-label">最大 CPU 核心</div>
+              <div class="res-value">{{ formatLimit(qos.max_cpus) }}</div>
+            </div>
+            <div class="res-item">
+              <div class="res-label">最大运行作业</div>
+              <div class="res-value">{{ formatLimit(qos.max_jobs) }}</div>
+            </div>
+            <div class="res-item">
+              <div class="res-label">最大提交作业</div>
+              <div class="res-value">{{ formatLimit(qos.max_submit) }}</div>
+            </div>
+            <div class="res-item">
+              <div class="res-label">最大运行时长</div>
+              <div class="res-value">{{ formatWall(qos.max_wall_pu) }}</div>
+            </div>
+            <div class="res-item">
+              <div class="res-label">TRES 限制</div>
+              <div class="res-value mono">{{ qos.max_tres || '不限制' }}</div>
+            </div>
+            <div class="res-item" v-if="qos.grp_tres_mins">
+              <div class="res-label">总机时限制</div>
+              <div class="res-value">{{ qos.grp_tres_mins }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 账户关联 -->
+      <div v-if="myResources.associations?.length" class="res-section">
+        <div class="res-section-title">账户关联</div>
+        <div class="res-assoc-list">
+          <div v-for="(a, i) in myResources.associations" :key="i" class="res-assoc-item">
+            <span class="res-assoc-account">{{ a.account }}</span>
+            <span v-if="a.partition" class="res-assoc-part">分区: {{ a.partition }}</span>
+            <span v-if="a.qos_list?.length" class="res-assoc-qos">
+              QoS: {{ a.qos_list.join(', ') }}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="!resourcesLoading && !myResources.qos_limits?.length && !myResources.associations?.length" class="res-empty">
+        暂无资源限制数据
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import notification from '../utils/notification'
+import { getUser } from '../utils/auth'
+import axios from 'axios'
+
+const currentUser = ref<any>(null)
+const myResources = ref<any>({ associations: [], qos_limits: [] })
+const resourcesLoading = ref(false)
+
+const userInitial = computed(() => {
+  const name = currentUser.value?.cnName || currentUser.value?.username || '?'
+  return name.charAt(0).toUpperCase()
+})
+
+const formatLimit = (val: any): string => {
+  if (val === null || val === undefined || val === 0 || val === '0' || val === '') return '不限制'
+  if (typeof val === 'object') {
+    // Slurm 新版返回对象格式 {number: x, set: true}
+    if (val.set === false || val.number === 0) return '不限制'
+    if (val.number !== undefined) return String(val.number)
+  }
+  return String(val)
+}
+
+const formatWall = (val: any): string => {
+  const v = formatLimit(val)
+  if (v === '不限制') return v
+  const mins = parseInt(v)
+  if (isNaN(mins)) return v
+  if (mins >= 60) return `${Math.floor(mins / 60)} 小时`
+  return `${mins} 分钟`
+}
+
+const loadMyResources = async () => {
+  resourcesLoading.value = true
+  try {
+    const res = await axios.get('/me/resources')
+    myResources.value = res.data.data || {}
+  } catch (e: any) {
+    console.error('Failed to load resources:', e)
+  } finally {
+    resourcesLoading.value = false
+  }
+}
 
 const stats = ref({
   nodes: 0,
@@ -454,11 +569,12 @@ const loadJobStats = async () => {
 }
 
 onMounted(() => {
+  currentUser.value = getUser()
   loadDashboardStats()
   loadNodes()
   loadJobStats()
+  loadMyResources()
   
-  // 定时刷新（每30秒）
   setInterval(() => {
     loadDashboardStats()
     loadNodes()
@@ -932,3 +1048,343 @@ onMounted(() => {
 
 /* 存储配额样式 - 原版（已删除，使用紧凑版） */
 </style>
+
+<style scoped>
+/* 用户资源限制卡片 */
+.user-perm-card { margin-top: 0; }
+
+.user-perm-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid hsl(var(--border));
+}
+
+.user-perm-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.user-perm-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+  margin-bottom: 3px;
+}
+
+.user-perm-role {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.perm-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+.perm-admin { background: hsl(var(--primary) / 0.1); color: hsl(var(--primary)); }
+.perm-user { background: hsl(var(--muted)); color: hsl(var(--muted-foreground)); }
+.perm-loading { font-size: 0.75rem; color: hsl(var(--muted-foreground)); }
+
+.perm-refresh {
+  margin-left: auto;
+  padding: 5px 12px;
+  background: hsl(var(--secondary));
+  border: 1px solid hsl(var(--border));
+  border-radius: 6px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  color: hsl(var(--foreground));
+  transition: background 0.15s;
+}
+.perm-refresh:hover { background: hsl(var(--accent)); }
+.perm-refresh:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* 资源区块 */
+.res-section {
+  margin-bottom: 16px;
+}
+
+.res-section-title {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: hsl(var(--muted-foreground));
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 10px;
+}
+
+.res-qos-block {
+  border: 1px solid hsl(var(--border));
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.res-qos-name {
+  padding: 8px 14px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+  background: hsl(var(--muted) / 0.4);
+  border-bottom: 1px solid hsl(var(--border));
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.res-qos-desc {
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: hsl(var(--muted-foreground));
+}
+
+.res-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: hsl(var(--border));
+}
+
+.res-item {
+  background: hsl(var(--card));
+  padding: 10px 14px;
+}
+
+.res-label {
+  font-size: 0.7rem;
+  color: hsl(var(--muted-foreground));
+  margin-bottom: 3px;
+}
+
+.res-value {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+}
+
+.res-value.mono {
+  font-family: var(--font-family-mono);
+  font-size: 0.78rem;
+}
+
+/* 账户关联 */
+.res-assoc-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.res-assoc-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: hsl(var(--muted) / 0.3);
+  border: 1px solid hsl(var(--border));
+  border-radius: 6px;
+  font-size: 0.8rem;
+  flex-wrap: wrap;
+}
+
+.res-assoc-account {
+  font-weight: 600;
+  color: hsl(var(--foreground));
+}
+
+.res-assoc-part, .res-assoc-qos {
+  color: hsl(var(--muted-foreground));
+  background: hsl(var(--secondary));
+  padding: 1px 8px;
+  border-radius: 4px;
+}
+
+.res-empty {
+  text-align: center;
+  padding: 24px;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.875rem;
+}
+
+@media (max-width: 768px) {
+  .res-grid { grid-template-columns: repeat(2, 1fr); }
+}
+</style>
+
+
+.user-perm-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid hsl(var(--border));
+}
+
+.user-perm-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.user-perm-name {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+  margin-bottom: 4px;
+}
+
+.perm-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 20px;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.perm-admin {
+  background: hsl(var(--primary) / 0.1);
+  color: hsl(var(--primary));
+}
+
+.perm-user {
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+}
+
+.user-perm-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: hsl(var(--border));
+  border: 1px solid hsl(var(--border));
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+
+.perm-item {
+  background: hsl(var(--card));
+  padding: 12px 14px;
+}
+
+.perm-label {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: hsl(var(--muted-foreground));
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+}
+
+.perm-value {
+  font-size: 0.875rem;
+  color: hsl(var(--foreground));
+  font-weight: 500;
+}
+
+.perm-value.mono {
+  font-family: var(--font-family-mono);
+  font-size: 0.8rem;
+}
+
+.perm-groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.perm-group-tag {
+  background: hsl(var(--secondary));
+  color: hsl(var(--secondary-foreground));
+  padding: 1px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+}
+
+.perm-permissions {
+  border: 1px solid hsl(var(--border));
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.perm-section-title {
+  padding: 10px 14px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: hsl(var(--muted-foreground));
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: hsl(var(--muted) / 0.5);
+  border-bottom: 1px solid hsl(var(--border));
+}
+
+.perm-list {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.perm-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 14px;
+  border-bottom: 1px solid hsl(var(--border));
+  border-right: 1px solid hsl(var(--border));
+}
+
+.perm-row:nth-child(3n) { border-right: none; }
+.perm-row:nth-last-child(-n+3) { border-bottom: none; }
+
+.perm-row-label {
+  font-size: 0.8rem;
+  color: hsl(var(--foreground));
+}
+
+.perm-row-status {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.perm-row-status.allowed {
+  background: hsl(var(--success) / 0.1);
+  color: hsl(var(--success));
+}
+
+.perm-row-status.denied {
+  background: hsl(var(--destructive) / 0.1);
+  color: hsl(var(--destructive));
+}
+
+@media (max-width: 768px) {
+  .user-perm-grid { grid-template-columns: repeat(2, 1fr); }
+  .perm-list { grid-template-columns: repeat(2, 1fr); }
+  .perm-row:nth-child(3n) { border-right: 1px solid hsl(var(--border)); }
+  .perm-row:nth-child(2n) { border-right: none; }
+}

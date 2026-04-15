@@ -2,6 +2,8 @@
 
 基于 Vue 3 + TypeScript + Go 构建的高性能计算集群统一管理平台，支持亮色/暗色双主题，参考 shadcn-admin 设计风格。
 
+> 更新日志见 [CHANGELOG.md](./CHANGELOG.md)
+
 ## 功能模块
 
 - **仪表盘** — 集群概览、节点状态、CPU/GPU/内存实时统计、作业统计
