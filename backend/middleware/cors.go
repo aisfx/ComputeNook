@@ -17,12 +17,21 @@ func CORSMiddleware() gin.HandlerFunc {
 
 		origin := c.Request.Header.Get("Origin")
 		if origin != "" {
-			origins := strings.Split(allowedOrigins, ",")
-			for _, o := range origins {
-				if strings.TrimSpace(o) == origin || allowedOrigins == "*" {
-					c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
-					break
+			allowed := false
+			if allowedOrigins == "*" {
+				// 带 credentials 时不能用通配符，直接 echo 请求的 origin
+				allowed = true
+			} else {
+				for _, o := range strings.Split(allowedOrigins, ",") {
+					if strings.TrimSpace(o) == origin {
+						allowed = true
+						break
+					}
 				}
+			}
+			if allowed {
+				c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+				c.Writer.Header().Set("Vary", "Origin")
 			}
 		} else if allowedOrigins == "*" {
 			c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
