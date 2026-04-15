@@ -162,7 +162,8 @@
         <span class="total-count">共 {{ logs.length }} 条记录</span>
       </div>
     </div>
-
+  </div>
+  <Teleport to="body">
     <!-- 详情对话框 -->
     <div v-if="showDetailsDialog" class="modal-overlay" @click.self="closeDetails">
       <div class="modal modal-large">
@@ -231,7 +232,7 @@
         </div>
       </div>
     </div>
-  </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">

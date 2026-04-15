@@ -49,7 +49,8 @@
         </tbody>
       </table>
     </div>
-
+  </div>
+  <Teleport to="body">
     <!-- 创建对话框 -->
     <div v-if="showCreateDialog" class="modal-overlay" @click.self="showCreateDialog = false">
       <div class="modal-content">
@@ -99,7 +100,7 @@
         </div>
       </div>
     </div>
-  </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">

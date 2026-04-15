@@ -270,19 +270,25 @@ func main() {
 		port = "8080"
 	}
 
-	// 如果存在 static 目录，托管前端静态文件
+	// 前端静态文件目录，优先级：./static > ../dist
+	frontendDir := ""
 	if _, err := os.Stat("static"); err == nil {
-		r.Static("/static", "./static")
-		r.StaticFile("/favicon.ico", "./static/favicon.ico")
-		// SPA fallback：所有非 /api 路由返回 index.html
+		frontendDir = "./static"
+	} else if _, err := os.Stat("../dist"); err == nil {
+		frontendDir = "../dist"
+	}
+
+	if frontendDir != "" {
+		r.Static("/assets", frontendDir+"/assets")
+		r.StaticFile("/favicon.ico", frontendDir+"/favicon.ico")
 		r.NoRoute(func(c *gin.Context) {
 			if !strings.HasPrefix(c.Request.URL.Path, "/api") {
-				c.File("./static/index.html")
+				c.File(frontendDir + "/index.html")
 			} else {
 				c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 			}
 		})
-		log.Printf("Frontend static files served from ./static")
+		log.Printf("Frontend static files served from %s", frontendDir)
 	}
 
 	log.Printf("Server starting on port %s", port)

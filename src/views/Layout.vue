@@ -1,0 +1,631 @@
+<template>
+  <div class="app-shell" :data-theme="theme">
+    <!-- Sidebar -->
+    <aside class="sidebar" :class="{ collapsed: sidebarCollapsed }">
+      <!-- Logo -->
+      <div class="sidebar-header">
+        <div class="sidebar-logo" @click="currentView = 'dashboard'">
+          <div class="logo-icon">⚡</div>
+          <span class="logo-text">HPC 平台</span>
+        </div>
+        <button class="sidebar-collapse-btn" @click="sidebarCollapsed = !sidebarCollapsed">
+          <span>{{ sidebarCollapsed ? '→' : '←' }}</span>
+        </button>
+      </div>
+
+      <!-- Nav -->
+      <nav class="sidebar-nav">
+        <div class="nav-section">
+          <div class="nav-section-label" v-if="!sidebarCollapsed">通用</div>
+          <a
+            :class="['nav-item', { active: currentView === 'dashboard' }]"
+            @click="currentView = 'dashboard'"
+            :title="sidebarCollapsed ? '仪表盘' : ''"
+          >
+            <span class="nav-item-icon">▦</span>
+            <span class="nav-item-label">仪表盘</span>
+          </a>
+
+          <!-- 作业管理 expandable -->
+          <a
+            :class="['nav-item', { active: currentView === 'jobs' }]"
+            @click="currentView = 'jobs'; jobsExpanded = !jobsExpanded"
+            :title="sidebarCollapsed ? '作业管理' : ''"
+          >
+            <span class="nav-item-icon">≡</span>
+            <span class="nav-item-label">作业管理</span>
+            <span class="nav-item-chevron" v-if="!sidebarCollapsed">{{ jobsExpanded ? '▾' : '▸' }}</span>
+          </a>
+          <div v-if="jobsExpanded && !sidebarCollapsed" class="nav-sub">
+            <a
+              v-for="tab in jobTabs"
+              :key="tab.id"
+              :class="['nav-sub-item', { active: currentView === 'jobs' && jobManagementTab === tab.id }]"
+              @click="currentView = 'jobs'; jobManagementTab = tab.id"
+            >{{ tab.label }}</a>
+          </div>
+
+          <a
+            v-for="item in otherMenuItems"
+            :key="item.id"
+            :class="['nav-item', { active: currentView === item.id }]"
+            @click="currentView = item.id"
+            :title="sidebarCollapsed ? item.label : ''"
+          >
+            <span class="nav-item-icon">{{ item.icon }}</span>
+            <span class="nav-item-label">{{ item.label }}</span>
+          </a>
+        </div>
+
+        <!-- Admin section -->
+        <div class="nav-section" v-if="isAdmin">
+          <div class="nav-section-label" v-if="!sidebarCollapsed">管理</div>
+          <a
+            :class="['nav-item', { active: currentView === 'monitoring' }]"
+            @click="currentView = 'monitoring'"
+            :title="sidebarCollapsed ? '集群监控' : ''"
+          >
+            <span class="nav-item-icon">📈</span>
+            <span class="nav-item-label">集群监控</span>
+          </a>
+          <!-- Admin expandable -->
+          <a
+            :class="['nav-item', { active: currentView === 'admin' }]"
+            @click="currentView = 'admin'; adminExpanded = !adminExpanded"
+            :title="sidebarCollapsed ? '系统管理' : ''"
+          >
+            <span class="nav-item-icon">⚙️</span>
+            <span class="nav-item-label">系统管理</span>
+            <span class="nav-item-chevron" v-if="!sidebarCollapsed">{{ adminExpanded ? '▾' : '▸' }}</span>
+          </a>
+          <div v-if="adminExpanded && !sidebarCollapsed" class="nav-sub">
+            <template v-for="tab in adminTabs" :key="tab.id">
+              <div v-if="tab.isGroup" class="nav-sub-group">{{ tab.label }}</div>
+              <a
+                v-else
+                :class="['nav-sub-item', { active: adminTab === tab.id && currentView === 'admin' }]"
+                @click="adminTab = tab.id; currentView = 'admin'"
+              >{{ tab.label }}</a>
+            </template>
+          </div>
+        </div>
+      </nav>
+
+      <!-- Sidebar footer -->
+      <div class="sidebar-footer">
+        <div class="user-info" v-if="!sidebarCollapsed">
+          <div class="user-avatar">{{ userInitial }}</div>
+          <div class="user-details">
+            <div class="user-name">{{ currentUser?.cnName || currentUser?.username }}</div>
+            <div class="user-role">{{ isAdmin ? '管理员' : '普通用户' }}</div>
+          </div>
+        </div>
+        <div class="user-avatar" v-else :title="currentUser?.username">{{ userInitial }}</div>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <div class="main-wrapper">
+      <!-- Top bar -->
+      <header class="topbar">
+        <div class="topbar-left">
+          <h1 class="page-title">{{ currentTitle }}</h1>
+        </div>
+        <div class="topbar-right">
+          <div class="status-badge">
+            <span class="status-dot"></span>
+            <span>集群在线</span>
+          </div>
+          <!-- Theme toggle -->
+          <button class="icon-btn" @click="toggleTheme" :title="theme === 'dark' ? '切换亮色' : '切换暗色'">
+            <span>{{ theme === 'dark' ? '☀️' : '🌙' }}</span>
+          </button>
+          <button class="icon-btn" @click="goToProfile" title="个人信息">
+            <span>👤</span>
+          </button>
+          <button class="icon-btn danger" @click="handleLogout" title="退出">
+            <span>🚪</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- Content -->
+      <main class="content-area">
+        <Dashboard v-if="currentView === 'dashboard'" />
+        <JobManagement v-else-if="currentView === 'jobs'" @open-directory="handleOpenDirectory" />
+        <Monitoring v-else-if="currentView === 'monitoring' && isAdmin" />
+        <WebShell v-else-if="currentView === 'shell'" />
+        <Desktop v-else-if="currentView === 'desktop'" />
+        <FileManager ref="fileManagerRef" v-else-if="currentView === 'files'" />
+        <Reports v-else-if="currentView === 'reports'" />
+        <Profile v-else-if="currentView === 'profile'" />
+        <AdminUsers v-else-if="currentView === 'admin' && adminTab === 'users' && isAdmin" />
+        <AdminGroups v-else-if="currentView === 'admin' && adminTab === 'groups' && isAdmin" />
+        <AdminQoS v-else-if="currentView === 'admin' && adminTab === 'qos' && isAdmin" />
+        <AdminAssociations v-else-if="currentView === 'admin' && adminTab === 'associations' && isAdmin" />
+        <AdminHours v-else-if="currentView === 'admin' && adminTab === 'hours' && isAdmin" />
+        <AdminQuota v-else-if="currentView === 'admin' && adminTab === 'quota' && isAdmin" />
+        <AdminAudit v-else-if="currentView === 'admin' && adminTab === 'audit' && isAdmin" />
+        <AdminSlurmAccounts v-else-if="currentView === 'admin' && adminTab === 'slurm-accounts' && isAdmin" />
+        <AdminSlurmUsers v-else-if="currentView === 'admin' && adminTab === 'slurm-users' && isAdmin" />
+        <div v-else-if="!isAdmin && (currentView === 'monitoring' || currentView === 'admin')" class="no-permission">
+          <div class="no-perm-icon">🔒</div>
+          <h3>无访问权限</h3>
+          <p>请联系管理员获取权限</p>
+        </div>
+      </main>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, provide, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
+import Dashboard from './Dashboard.vue'
+import JobManagement from './JobManagement.vue'
+import WebShell from './WebShell.vue'
+import Desktop from './Desktop.vue'
+import FileManager from './FileManager.vue'
+import Reports from './Reports.vue'
+import AdminUsers from './AdminUsers.vue'
+import AdminGroups from './AdminGroups.vue'
+import AdminQoS from './AdminQoS.vue'
+import AdminHours from './AdminHours.vue'
+import AdminQuota from './AdminQuota.vue'
+import AdminAudit from './AdminAudit.vue'
+import AdminSlurmAccounts from './AdminSlurmAccounts.vue'
+import AdminSlurmUsers from './AdminSlurmUsers.vue'
+import AdminAssociations from './AdminAssociations.vue'
+import Monitoring from './Monitoring.vue'
+import Profile from './Profile.vue'
+import { getUser, logout, setupAxiosInterceptors, isAdmin as checkAdmin } from '../utils/auth'
+
+const router = useRouter()
+const currentView = ref('dashboard')
+const jobManagementTab = ref('info')
+const jobsExpanded = ref(true)
+const adminTab = ref('users')
+const adminExpanded = ref(false)
+const sidebarCollapsed = ref(false)
+const currentUser = ref<any>(null)
+const isAdmin = ref(false)
+const fileManagerRef = ref<any>(null)
+const theme = ref<'light' | 'dark'>('light')
+
+provide('jobManagementTab', jobManagementTab)
+
+const userInitial = computed(() => {
+  const name = currentUser.value?.cnName || currentUser.value?.username || '?'
+  return name.charAt(0).toUpperCase()
+})
+
+const toggleTheme = () => {
+  theme.value = theme.value === 'light' ? 'dark' : 'light'
+  localStorage.setItem('theme', theme.value)
+}
+
+const handleOpenDirectory = (path: string) => {
+  currentView.value = 'files'
+  setTimeout(() => {
+    if (fileManagerRef.value?.navigateToPath) {
+      fileManagerRef.value.navigateToPath(path)
+    }
+  }, 100)
+}
+
+const otherMenuItems = [
+  { id: 'shell', label: 'Web Shell', icon: '>' },
+  { id: 'desktop', label: '远程桌面', icon: '#' },
+  { id: 'files', label: '文件管理', icon: '-' },
+  { id: 'reports', label: '报表中心', icon: '~' },
+]
+
+const jobTabs = [
+  { id: 'info', label: '作业列表' },
+  { id: 'submit', label: '提交作业' },
+  { id: 'templates', label: '作业模板' }
+]
+
+const adminTabs = [
+  { id: 'group-user', label: '用户管理', isGroup: true },
+  { id: 'users', label: '用户管理', parent: 'group-user' },
+  { id: 'groups', label: '用户组管理', parent: 'group-user' },
+  { id: 'group-account', label: '账户管理', isGroup: true },
+  { id: 'slurm-accounts', label: 'Slurm账户', parent: 'group-account' },
+  { id: 'slurm-users', label: 'Slurm用户', parent: 'group-account' },
+  { id: 'group-resource', label: '资源管理', isGroup: true },
+  { id: 'associations', label: '资源绑定', parent: 'group-resource' },
+  { id: 'qos', label: 'QoS配置', parent: 'group-resource' },
+  { id: 'hours', label: '机时管理', parent: 'group-resource' },
+  { id: 'quota', label: '存储配额', parent: 'group-resource' },
+  { id: 'audit', label: '数据审计' }
+]
+
+const currentTitle = computed(() => {
+  if (currentView.value === 'admin') {
+    const tab = adminTabs.find(t => t.id === adminTab.value)
+    return tab?.label || '系统管理'
+  }
+  if (currentView.value === 'jobs') {
+    const tab = jobTabs.find(t => t.id === jobManagementTab.value)
+    return tab?.label || '作业管理'
+  }
+  const all = [
+    { id: 'dashboard', label: '仪表盘' },
+    ...otherMenuItems,
+    { id: 'monitoring', label: '集群监控' },
+    { id: 'profile', label: '个人信息' }
+  ]
+  return all.find(i => i.id === currentView.value)?.label || ''
+})
+
+const handleLogout = () => {
+  if (confirm('确定要退出登录吗？')) {
+    logout()
+    router.push('/login')
+  }
+}
+
+const goToProfile = () => { currentView.value = 'profile' }
+
+onMounted(() => {
+  setupAxiosInterceptors()
+  currentUser.value = getUser()
+  isAdmin.value = checkAdmin()
+  const saved = localStorage.getItem('theme') as 'light' | 'dark' | null
+  if (saved) theme.value = saved
+})
+</script>
+
+<style scoped>
+/* ===== App Shell ===== */
+.app-shell {
+  display: flex;
+  height: 100vh;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  overflow: hidden;
+}
+
+/* ===== Sidebar ===== */
+.sidebar {
+  width: 220px;
+  min-width: 220px;
+  background: hsl(var(--sidebar-bg));
+  border-right: 1px solid hsl(var(--sidebar-border));
+  display: flex;
+  flex-direction: column;
+  transition: width 0.2s ease, min-width 0.2s ease;
+  overflow: hidden;
+}
+
+.sidebar.collapsed {
+  width: 56px;
+  min-width: 56px;
+}
+
+/* Header */
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  height: 56px;
+  border-bottom: 1px solid hsl(var(--sidebar-border));
+  flex-shrink: 0;
+}
+
+.sidebar-logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.logo-icon {
+  width: 28px;
+  height: 28px;
+  background: hsl(var(--sidebar-primary));
+  color: hsl(var(--sidebar-primary-foreground));
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.logo-text {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: hsl(var(--sidebar-foreground));
+  white-space: nowrap;
+}
+
+.sidebar-collapse-btn {
+  background: none;
+  border: none;
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  font-size: 12px;
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+.sidebar-collapse-btn:hover { background: hsl(var(--sidebar-accent)); }
+
+/* Nav */
+.sidebar-nav {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+
+.nav-section { margin-bottom: 4px; }
+
+.nav-section-label {
+  padding: 8px 12px 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: hsl(var(--muted-foreground));
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px;
+  margin: 1px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: hsl(var(--sidebar-foreground));
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: background 0.15s, color 0.15s;
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.nav-item:hover {
+  background: hsl(var(--sidebar-accent));
+  color: hsl(var(--sidebar-accent-foreground));
+}
+
+.nav-item.active {
+  background: hsl(var(--sidebar-primary));
+  color: hsl(var(--sidebar-primary-foreground));
+}
+
+.nav-item-icon {
+  font-size: 14px;
+  width: 18px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.nav-item-label { flex: 1; }
+
+.nav-item-chevron {
+  font-size: 10px;
+  color: hsl(var(--muted-foreground));
+}
+
+/* Sub nav */
+.nav-sub {
+  margin: 2px 8px 4px 28px;
+}
+
+.nav-sub-group {
+  padding: 6px 8px 2px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: hsl(var(--muted-foreground));
+}
+
+.nav-sub-item {
+  display: block;
+  padding: 5px 8px;
+  border-radius: 5px;
+  font-size: 0.8rem;
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  margin: 1px 0;
+}
+.nav-sub-item:hover { background: hsl(var(--sidebar-accent)); color: hsl(var(--sidebar-accent-foreground)); }
+.nav-sub-item.active { color: hsl(var(--sidebar-foreground)); font-weight: 500; }
+
+/* Footer */
+.sidebar-footer {
+  padding: 12px;
+  border-top: 1px solid hsl(var(--sidebar-border));
+  flex-shrink: 0;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.user-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: hsl(var(--sidebar-primary));
+  color: hsl(var(--sidebar-primary-foreground));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.user-details { overflow: hidden; }
+
+.user-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: hsl(var(--sidebar-foreground));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.user-role {
+  font-size: 0.7rem;
+  color: hsl(var(--muted-foreground));
+}
+
+/* ===== Main ===== */
+.main-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
+/* Topbar */
+.topbar {
+  height: 56px;
+  border-bottom: 1px solid hsl(var(--border));
+  background: hsl(var(--background));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  flex-shrink: 0;
+  gap: 16px;
+}
+
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+
+.page-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+  white-space: nowrap;
+}
+
+.page-tabs {
+  display: flex;
+  gap: 4px;
+}
+
+.page-tab {
+  padding: 5px 12px;
+  border: none;
+  background: none;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: hsl(var(--muted-foreground));
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.page-tab:hover { background: hsl(var(--accent)); color: hsl(var(--accent-foreground)); }
+.page-tab.active { background: hsl(var(--secondary)); color: hsl(var(--secondary-foreground)); font-weight: 600; }
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.status-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: hsl(var(--muted));
+  border-radius: 20px;
+  font-size: 0.75rem;
+  color: hsl(var(--muted-foreground));
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: hsl(var(--success));
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.icon-btn {
+  width: 34px;
+  height: 34px;
+  border: none;
+  background: none;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  color: hsl(var(--muted-foreground));
+  transition: background 0.15s, color 0.15s;
+}
+.icon-btn:hover { background: hsl(var(--accent)); color: hsl(var(--accent-foreground)); }
+.icon-btn.danger:hover { background: hsl(var(--destructive) / 0.1); color: hsl(var(--destructive)); }
+
+/* Content */
+.content-area {
+  flex: 1;
+  overflow-y: auto;
+  background: hsl(var(--background));
+  padding: 24px;
+}
+
+/* No permission */
+.no-permission {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  text-align: center;
+  gap: 12px;
+}
+.no-perm-icon { font-size: 3rem; opacity: 0.3; }
+.no-permission h3 { font-size: 1.1rem; color: hsl(var(--foreground)); }
+.no-permission p { color: hsl(var(--muted-foreground)); font-size: 0.875rem; }
+
+/* Collapsed sidebar hide labels */
+.sidebar.collapsed .nav-item-label,
+.sidebar.collapsed .nav-item-chevron,
+.sidebar.collapsed .nav-section-label,
+.sidebar.collapsed .nav-sub,
+.sidebar.collapsed .logo-text,
+.sidebar.collapsed .user-details {
+  display: none;
+}
+
+.sidebar.collapsed .nav-item {
+  justify-content: center;
+  padding: 8px;
+  margin: 1px 6px;
+}
+
+.sidebar.collapsed .sidebar-collapse-btn { margin: 0 auto; }
+</style>

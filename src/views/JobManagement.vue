@@ -68,5 +68,9 @@ const handleOpenDirectory = (path: string) => {
 .job-management {
   display: flex;
   flex-direction: column;
+  width: 100%;
+  height: 100%;
+  padding: 1.5rem;
+  box-sizing: border-box;
 }
 </style>

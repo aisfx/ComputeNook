@@ -129,6 +129,7 @@ import { ref, onMounted } from 'vue'
 import { getUser } from '../utils/auth'
 import { fileManagerApi } from '../config/api'
 import notification from '../utils/notification'
+import { jobTemplates } from '../data/jobTemplates'
 
 const emit = defineEmits(['job-submitted'])
 
@@ -150,72 +151,7 @@ defineExpose({
   handleTemplateSelect
 })
 
-const templates = ref([
-  { 
-    id: 1, 
-    name: 'GPU 训练模板', 
-    partition: 'gpu',
-    nodes: 1,
-    cpus: 8,
-    memory: 32,
-    gpus: 4,
-    time: 24,
-    priority: 'normal',
-    workdir: '/home/admin/jobs/gpu_training',
-    script: '/home/admin/scripts/train.sh',
-    output: 'train_output.log',
-    error: 'train_error.log',
-    extraParams: '--gres=gpu:4'
-  },
-  { 
-    id: 2, 
-    name: 'CPU 计算模板', 
-    partition: 'compute',
-    nodes: 4,
-    cpus: 32,
-    memory: 64,
-    gpus: 0,
-    time: 12,
-    priority: 'normal',
-    workdir: '/home/admin/jobs/compute',
-    script: '/home/admin/scripts/compute.sh',
-    output: 'compute_output.log',
-    error: 'compute_error.log',
-    extraParams: ''
-  },
-  { 
-    id: 3, 
-    name: '数据分析模板', 
-    partition: 'compute',
-    nodes: 2,
-    cpus: 16,
-    memory: 128,
-    gpus: 0,
-    time: 6,
-    priority: 'normal',
-    workdir: '/home/admin/jobs/analysis',
-    script: '/home/admin/scripts/analyze.sh',
-    output: 'analysis_output.log',
-    error: 'analysis_error.log',
-    extraParams: '--mem-per-cpu=8G'
-  },
-  { 
-    id: 4, 
-    name: '快速调试模板', 
-    partition: 'debug',
-    nodes: 1,
-    cpus: 4,
-    memory: 8,
-    gpus: 0,
-    time: 1,
-    priority: 'high',
-    workdir: '/home/admin/jobs/debug',
-    script: '/home/admin/scripts/debug.sh',
-    output: 'debug_output.log',
-    error: 'debug_error.log',
-    extraParams: ''
-  }
-])
+const templates = ref(jobTemplates)
 
 const form = ref({
   name: '',
@@ -341,15 +277,15 @@ const applyTemplateData = (template: any) => {
     partition: template.partition,
     nodes: template.nodes,
     cpus: template.cpus,
-    memory: template.memory,
-    gpus: template.gpus,
-    time: template.time,
-    priority: template.priority,
-    workdir: template.workdir,
-    script: template.script,
-    output: template.output,
-    error: template.error,
-    extraParams: template.extraParams
+    memory: template.memory || 0,
+    gpus: template.gpus || 0,
+    time: template.time || 0,
+    priority: 'normal',
+    workdir: form.value.workdir,
+    script: '',
+    output: '',
+    error: '',
+    extraParams: template.gpus ? `--gres=gpu:${template.gpus}` : ''
   }
 }
 
@@ -472,154 +408,475 @@ onMounted(() => {
 
 <style scoped>
 .job-submit {
+  width: 100%;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 180px);
+  height: calc(100vh - 100px);
   overflow: hidden;
+  background: hsl(var(--background));
+  border: none;
+  padding: 0;
 }
 
+/* Header */
 .submit-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1rem;
-  padding-bottom: 0.75rem;
+  padding: 16px 20px;
+  border-bottom: 1px solid hsl(var(--border));
+  flex-shrink: 0;
+  background: hsl(var(--card));
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+.submit-header h2 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+}
+
+.template-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.template-selector label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: hsl(var(--muted-foreground));
+  white-space: nowrap;
+}
+
+.template-select {
+  padding: 6px 10px;
+  border: 1px solid hsl(var(--input));
+  border-radius: var(--radius-md);
+  font-size: 0.8rem;
+  min-width: 160px;
+  cursor: pointer;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  outline: none;
+}
+.template-select:focus {
+  border-color: hsl(var(--ring));
+  box-shadow: 0 0 0 2px hsl(var(--ring) / 0.2);
+}
+
+/* Scrollable form */
+.submit-form {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  background: hsl(var(--card));
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+}
+
+.submit-form::-webkit-scrollbar { width: 4px; }
+.submit-form::-webkit-scrollbar-track { background: transparent; }
+.submit-form::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 2px; }
+
+/* Form rows */
+.form-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 12px;
+}
+
+.form-group label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: hsl(var(--foreground));
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 10px;
+  border: 1px solid hsl(var(--input));
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  border-color: hsl(var(--ring));
+  box-shadow: 0 0 0 2px hsl(var(--ring) / 0.2);
+}
+
+.form-group input:disabled,
+.form-group select:disabled {
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+  cursor: not-allowed;
+}
+
+.form-group textarea {
+  resize: vertical;
+  font-family: var(--font-family-mono);
+  min-height: 72px;
+  font-size: 0.8rem;
+}
+
+/* Input with button */
+.input-with-button {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+}
+.input-with-button input { flex: 1; min-width: 0; }
+
+.btn-icon {
+  padding: 0 10px;
+  background: hsl(var(--secondary));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius-md);
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.15s;
+  flex-shrink: 0;
+  color: hsl(var(--foreground));
+}
+.btn-icon:hover { background: hsl(var(--accent)); }
+
+/* Script selector */
+.script-selector {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.script-input {
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 7px 10px;
+  border: 1px solid hsl(var(--input));
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  outline: none;
+}
+.script-input:focus {
+  border-color: hsl(var(--ring));
+  box-shadow: 0 0 0 2px hsl(var(--ring) / 0.2);
+}
+
+.btn-small {
+  padding: 6px 12px;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  flex-shrink: 0;
+  background: hsl(var(--secondary));
+  color: hsl(var(--secondary-foreground));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-small:hover { background: hsl(var(--accent)); }
+
+.help-text {
+  font-size: 0.75rem;
+  color: hsl(var(--muted-foreground));
+  margin-top: 3px;
+}
+
+/* Actions */
+.form-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+  padding-top: 16px;
+  border-top: 1px solid hsl(var(--border));
+  position: sticky;
+  bottom: 0;
+  background: hsl(var(--card));
+}
+.form-actions button { flex: 1; }
+
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 16px;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.btn-primary:hover:not(:disabled) { opacity: 0.9; }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 16px;
+  background: hsl(var(--secondary));
+  color: hsl(var(--secondary-foreground));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-secondary:hover { background: hsl(var(--accent)); }
+</style>
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  padding: 0.625rem 1.25rem;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.1s;
+}
+.btn-primary:hover:not(:disabled) { opacity: 0.9; transform: translateY(-1px); }
+.btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  padding: 0.625rem 1.25rem;
+  background: white;
+  color: #667eea;
+  border: 1.5px solid #667eea;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-secondary:hover { background: #f0f0ff; }
+.job-submit {
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 160px);
+  overflow: hidden;
+}
+
+/* header：标题左，模板选择右，同行对齐 */
+.submit-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.25rem;
+  padding-bottom: 0.875rem;
   border-bottom: 2px solid #e5e7eb;
   flex-shrink: 0;
 }
 
 .submit-header h2 {
   margin: 0;
-  font-size: 1.3rem;
-}
-
-.submit-form {
-  flex: 1;
-  overflow-y: auto;
-  padding-right: 0.5rem;
-}
-
-.submit-form::-webkit-scrollbar {
-  width: 6px;
-}
-
-.submit-form::-webkit-scrollbar-track {
-  background: #f1f1f1;
-  border-radius: 3px;
-}
-
-.submit-form::-webkit-scrollbar-thumb {
-  background: #888;
-  border-radius: 3px;
-}
-
-.submit-form::-webkit-scrollbar-thumb:hover {
-  background: #555;
+  font-size: 1.2rem;
+  color: #1a1a2e;
 }
 
 .template-selector {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.625rem;
+  flex-shrink: 0;
 }
 
 .template-selector label {
+  font-size: 0.875rem;
   font-weight: 600;
-  color: #666;
-  font-size: 0.95rem;
+  color: #6b7280;
+  white-space: nowrap;
 }
 
 .template-select {
-  padding: 0.625rem 1rem;
-  border: 2px solid #667eea;
+  padding: 0.5rem 0.875rem;
+  border: 1.5px solid #667eea;
   border-radius: 8px;
-  font-size: 0.95rem;
-  min-width: 200px;
+  font-size: 0.9rem;
+  min-width: 180px;
   cursor: pointer;
   background: white;
   color: #333;
-  font-weight: 600;
+  outline: none;
 }
 
 .template-select:focus {
-  outline: none;
   border-color: #764ba2;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.12);
 }
 
-.submit-form textarea {
-  padding: 0.75rem;
-  border: 2px solid #e5e7eb;
+/* 可滚动表单区域 */
+.submit-form {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.submit-form::-webkit-scrollbar { width: 5px; }
+.submit-form::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 3px; }
+.submit-form::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; }
+
+/* 多列行 */
+.form-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+/* 单个字段 */
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  margin-bottom: 1rem;
+}
+
+.form-group label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #374151;
+}
+
+/* 统一 input / select / textarea */
+.form-group input,
+.form-group select,
+.form-group textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.625rem 0.875rem;
+  border: 1.5px solid #e5e7eb;
   border-radius: 8px;
-  font-size: 1rem;
-  font-family: 'Courier New', monospace;
-  resize: vertical;
-  transition: border-color 0.3s;
-}
-
-.submit-form textarea:focus {
+  font-size: 0.9rem;
+  background: white;
+  color: #1a1a2e;
   outline: none;
-  border-color: #667eea;
+  transition: border-color 0.2s, box-shadow 0.2s;
 }
 
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.12);
+}
+
+.form-group input:disabled,
+.form-group select:disabled {
+  background: #f3f4f6;
+  cursor: not-allowed;
+  color: #9ca3af;
+}
+
+.form-group textarea {
+  resize: vertical;
+  font-family: 'Courier New', monospace;
+  min-height: 80px;
+}
+
+/* 带按钮的输入框 */
 .input-with-button {
   display: flex;
   gap: 0.5rem;
-  align-items: center;
+  align-items: stretch;
 }
 
 .input-with-button input {
   flex: 1;
+  min-width: 0;
 }
 
 .btn-icon {
-  padding: 0.625rem 1rem;
+  padding: 0 0.875rem;
   background: #f3f4f6;
-  border: 2px solid #e5e7eb;
+  border: 1.5px solid #e5e7eb;
   border-radius: 8px;
-  font-size: 1.2rem;
+  font-size: 1.1rem;
   cursor: pointer;
-  transition: all 0.3s;
+  transition: all 0.2s;
+  flex-shrink: 0;
 }
 
 .btn-icon:hover {
   background: #667eea;
   border-color: #667eea;
-  transform: scale(1.05);
 }
 
+/* 脚本选择器 */
 .script-selector {
   display: flex;
   gap: 0.5rem;
-  align-items: center;
+  align-items: stretch;
 }
 
 .script-input {
   flex: 1;
-  padding: 0.625rem 1rem;
-  border: 2px solid #e5e7eb;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 0.625rem 0.875rem;
+  border: 1.5px solid #e5e7eb;
   border-radius: 8px;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   background: white;
+  outline: none;
 }
 
 .script-input:focus {
-  outline: none;
   border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.12);
 }
 
 .btn-small {
-  padding: 0.5rem 1rem;
-  font-size: 0.9rem;
+  padding: 0.5rem 0.875rem;
+  font-size: 0.875rem;
   white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .help-text {
-  font-size: 0.85rem;
-  color: #999;
-  margin-top: 0.5rem;
+  font-size: 0.8rem;
+  color: #9ca3af;
+  margin-top: 0.375rem;
 }
 
+/* 底部操作栏 */
 .form-actions {
   display: flex;
   gap: 1rem;
@@ -629,25 +886,9 @@ onMounted(() => {
   position: sticky;
   bottom: 0;
   background: white;
+  flex-shrink: 0;
 }
 
 .form-actions button {
   flex: 1;
 }
-
-@media (max-width: 768px) {
-  .submit-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 1rem;
-  }
-  
-  .template-selector {
-    width: 100%;
-  }
-  
-  .template-select {
-    flex: 1;
-  }
-}
-</style>

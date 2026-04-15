@@ -3,6 +3,7 @@ import { createRouter, createWebHistory } from 'vue-router';
 import App from './App.vue';
 import Login from './views/Login.vue';
 import ForceChangePassword from './views/ForceChangePassword.vue';
+import Layout from './views/Layout.vue';
 import { isAuthenticated, getUser } from './utils/auth';
 import './styles/main.css';
 // 创建路由
@@ -27,7 +28,7 @@ const router = createRouter({
         {
             path: '/dashboard',
             name: 'Dashboard',
-            component: App,
+            component: Layout,
             meta: { requiresAuth: true }
         },
         {

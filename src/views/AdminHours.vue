@@ -75,7 +75,8 @@
         <p>暂无机时分配记录</p>
       </div>
     </div>
-
+  </div>
+  <Teleport to="body">
     <!-- 添加/编辑机时模态框 -->
     <div v-if="showModal" class="modal-overlay" @click.self="closeModal">
       <div class="modal">
@@ -147,7 +148,7 @@
         </div>
       </div>
     </div>
-  </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">

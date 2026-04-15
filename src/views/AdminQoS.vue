@@ -47,7 +47,8 @@
         </tbody>
       </table>
     </div>
-
+  </div>
+  <Teleport to="body">
     <!-- 添加/编辑 QoS 模态框 -->
     <div v-if="showModal" class="modal-overlay">
       <div class="modal">
@@ -197,7 +198,7 @@
         </div>
       </div>
     </div>
-  </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">

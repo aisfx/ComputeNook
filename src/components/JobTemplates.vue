@@ -57,41 +57,107 @@
     </div>
 
     <!-- 配置文件预览弹窗 -->
-    <div v-if="showConfigModal" class="modal-overlay" @click="showConfigModal = false">
-      <div class="modal-content config-modal" @click.stop>
-        <div class="modal-header">
-          <h2>📄 {{ currentTemplate?.name }} - 配置文件</h2>
-          <button @click="showConfigModal = false" class="btn-close">✕</button>
-        </div>
-        <div class="modal-body">
-          <div class="config-tabs">
-            <button 
-              v-for="file in configFiles" 
-              :key="file.name"
-              :class="['config-tab', { active: currentConfigFile === file.name }]"
-              @click="currentConfigFile = file.name"
-            >
-              {{ file.name }}
-            </button>
+    <Teleport to="body">
+
+      <!-- 编辑模板弹窗 -->
+      <div v-if="showEditModal" class="job-templates-modal-overlay" @click="showEditModal = false">
+        <div class="job-templates-modal-content" style="max-width:600px" @click.stop>
+          <div class="job-templates-modal-header">
+            <h2>✏️ 编辑模板</h2>
+            <button @click="showEditModal = false" class="job-templates-btn-close">✕</button>
           </div>
-          <pre class="config-content">{{ currentConfigContent }}</pre>
-          <div class="config-actions">
-            <button class="btn-primary" @click="downloadConfig">💾 下载配置</button>
-            <button class="btn-secondary" @click="copyConfig">📋 复制</button>
+          <div class="job-templates-modal-body">
+            <div class="edit-form">
+              <div class="edit-row">
+                <div class="edit-field">
+                  <label>模板名称</label>
+                  <input v-model="editForm.name" type="text" />
+                </div>
+                <div class="edit-field">
+                  <label>应用类型</label>
+                  <input v-model="editForm.appType" type="text" />
+                </div>
+              </div>
+              <div class="edit-field">
+                <label>描述</label>
+                <input v-model="editForm.description" type="text" />
+              </div>
+              <div class="edit-row">
+                <div class="edit-field">
+                  <label>分区</label>
+                  <input v-model="editForm.partition" type="text" />
+                </div>
+                <div class="edit-field">
+                  <label>节点数</label>
+                  <input v-model.number="editForm.nodes" type="number" min="1" />
+                </div>
+              </div>
+              <div class="edit-row">
+                <div class="edit-field">
+                  <label>CPU 核心数</label>
+                  <input v-model.number="editForm.cpus" type="number" min="1" />
+                </div>
+                <div class="edit-field">
+                  <label>内存 (GB)</label>
+                  <input v-model.number="editForm.memory" type="number" min="0" />
+                </div>
+                <div class="edit-field">
+                  <label>GPU 卡数</label>
+                  <input v-model.number="editForm.gpus" type="number" min="0" />
+                </div>
+                <div class="edit-field">
+                  <label>时间 (小时)</label>
+                  <input v-model.number="editForm.time" type="number" min="0" />
+                </div>
+              </div>
+            </div>
+            <div class="job-templates-config-actions" style="margin-top:1.5rem">
+              <button class="job-templates-btn-primary" @click="saveEdit">💾 保存</button>
+              <button class="job-templates-btn-secondary" @click="showEditModal = false">取消</button>
+            </div>
           </div>
         </div>
       </div>
-    </div>
+
+      <div v-if="showConfigModal" class="job-templates-modal-overlay" @click="showConfigModal = false">
+        <div class="job-templates-modal-content" @click.stop>
+          <div class="job-templates-modal-header">
+            <h2>📄 {{ currentTemplate?.name }} - 配置文件</h2>
+            <button @click="showConfigModal = false" class="job-templates-btn-close">✕</button>
+          </div>
+          <div class="job-templates-modal-body">
+            <div class="job-templates-config-tabs">
+              <button 
+                v-for="file in configFiles" 
+                :key="file.name"
+                :class="['job-templates-config-tab', { active: currentConfigFile === file.name }]"
+                @click="currentConfigFile = file.name"
+              >
+                {{ file.name }}
+              </button>
+            </div>
+            <pre class="job-templates-config-content">{{ currentConfigContent }}</pre>
+            <div class="job-templates-config-actions">
+              <button class="job-templates-btn-primary" @click="downloadConfig">💾 下载配置</button>
+              <button class="job-templates-btn-secondary" @click="copyConfig">📋 复制</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { jobTemplates } from '../data/jobTemplates'
 
 const emit = defineEmits(['use-template'])
 
 const showCreateModal = ref(false)
 const showConfigModal = ref(false)
+const showEditModal = ref(false)
+const editForm = ref<any>({})
 const selectedCategory = ref('all')
 const currentTemplate = ref<any>(null)
 const currentConfigFile = ref('submit.sh')
@@ -105,152 +171,7 @@ const categories = [
   { id: 'general', name: '通用', icon: '💻' }
 ]
 
-const templates = ref([
-  {
-    id: 1,
-    name: 'Fluent 流体仿真',
-    icon: '🌊',
-    category: 'cfd',
-    appType: 'Fluent',
-    description: 'ANSYS Fluent 流体动力学仿真标准配置',
-    nodes: 2,
-    cpus: 48,
-    gpus: 0,
-    memory: 128,
-    time: 24,
-    partition: 'compute',
-    appParams: {
-      '版本': 'v2023R1',
-      '求解器': 'pressure-based',
-      '并行方式': 'MPI',
-      '精度': 'double'
-    },
-    moduleLoad: 'ansys/2023R1',
-    executable: 'fluent',
-    inputFile: 'case.cas',
-    configTemplate: 'fluent'
-  },
-  {
-    id: 2,
-    name: 'Gaussian 量子化学',
-    icon: '⚗️',
-    category: 'chemistry',
-    appType: 'Gaussian',
-    description: 'Gaussian 量子化学计算标准配置',
-    nodes: 1,
-    cpus: 32,
-    gpus: 0,
-    memory: 64,
-    time: 48,
-    partition: 'compute',
-    appParams: {
-      '版本': 'G16',
-      '计算方法': 'DFT/B3LYP',
-      '基组': '6-31G(d)',
-      '内存': '32GB'
-    },
-    moduleLoad: 'gaussian/g16',
-    executable: 'g16',
-    inputFile: 'input.gjf',
-    configTemplate: 'gaussian'
-  },
-  {
-    id: 3,
-    name: 'LAMMPS 分子动力学',
-    icon: '🔬',
-    category: 'md',
-    appType: 'LAMMPS',
-    description: 'LAMMPS 大规模原子/分子并行模拟',
-    nodes: 4,
-    cpus: 128,
-    gpus: 0,
-    memory: 256,
-    time: 72,
-    partition: 'compute',
-    appParams: {
-      '版本': '2023.08.02',
-      '力场': 'ReaxFF',
-      '时间步长': '0.5 fs',
-      '总步数': '1000000'
-    },
-    moduleLoad: 'lammps/2023',
-    executable: 'lmp_mpi',
-    inputFile: 'in.lammps',
-    configTemplate: 'lammps'
-  },
-  {
-    id: 4,
-    name: 'PyTorch 深度学习',
-    icon: '🤖',
-    category: 'ai',
-    appType: 'PyTorch',
-    description: 'PyTorch 深度学习训练标准配置',
-    nodes: 1,
-    cpus: 16,
-    gpus: 4,
-    memory: 64,
-    time: 48,
-    partition: 'gpu',
-    appParams: {
-      '版本': '2.1.0',
-      'CUDA': '11.8',
-      'Python': '3.10',
-      '批次大小': '32'
-    },
-    moduleLoad: 'pytorch/2.1.0-cuda11.8',
-    executable: 'python',
-    inputFile: 'train.py',
-    configTemplate: 'pytorch'
-  },
-  {
-    id: 5,
-    name: 'OpenFOAM CFD',
-    icon: '🌊',
-    category: 'cfd',
-    appType: 'OpenFOAM',
-    description: 'OpenFOAM 开源 CFD 工具包',
-    nodes: 4,
-    cpus: 96,
-    gpus: 0,
-    memory: 192,
-    time: 36,
-    partition: 'compute',
-    appParams: {
-      '版本': 'v2306',
-      '求解器': 'simpleFoam',
-      '湍流模型': 'k-epsilon',
-      '网格数': '5M cells'
-    },
-    moduleLoad: 'openfoam/v2306',
-    executable: 'simpleFoam',
-    inputFile: 'system/controlDict',
-    configTemplate: 'openfoam'
-  },
-  {
-    id: 6,
-    name: 'VASP 第一性原理',
-    icon: '⚗️',
-    category: 'chemistry',
-    appType: 'VASP',
-    description: 'VASP 第一性原理计算',
-    nodes: 2,
-    cpus: 64,
-    gpus: 0,
-    memory: 128,
-    time: 96,
-    partition: 'compute',
-    appParams: {
-      '版本': '6.4.1',
-      '泛函': 'PBE',
-      '截断能': '500 eV',
-      'K点': '5x5x5'
-    },
-    moduleLoad: 'vasp/6.4.1',
-    executable: 'vasp_std',
-    inputFile: 'INCAR',
-    configTemplate: 'vasp'
-  }
-])
+const templates = ref(jobTemplates)
 
 const filteredTemplates = computed(() => {
   if (selectedCategory.value === 'all') {
@@ -475,7 +396,16 @@ const viewConfig = (template: any) => {
 }
 
 const editTemplate = (template: any) => {
-  alert(`编辑模板: ${template.name}`)
+  editForm.value = { ...template }
+  showEditModal.value = true
+}
+
+const saveEdit = () => {
+  const index = templates.value.findIndex(t => t.id === editForm.value.id)
+  if (index > -1) {
+    templates.value[index] = { ...templates.value[index], ...editForm.value }
+  }
+  showEditModal.value = false
 }
 
 const deleteTemplate = (id: number) => {
@@ -507,6 +437,59 @@ const copyConfig = () => {
 </script>
 
 <style scoped>
+/* 按钮基础 */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.4rem 0.75rem;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s;
+  white-space: nowrap;
+}
+.btn-primary:hover { opacity: 0.9; }
+
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.4rem 0.75rem;
+  background: white;
+  color: #667eea;
+  border: 1.5px solid #667eea;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.btn-secondary:hover { background: #f0f0ff; }
+
+.btn-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.4rem 0.625rem;
+  background: #f3f4f6;
+  color: #374151;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.btn-link:hover { background: #e5e7eb; }
+.btn-link.danger { color: #ef4444; }
+.btn-link.danger:hover { background: #fee2e2; border-color: #fecaca; }
+
 .templates-header {
   display: flex;
   justify-content: space-between;
@@ -526,6 +509,8 @@ const copyConfig = () => {
   border-radius: 8px;
   padding: 1.5rem;
   transition: all 0.3s;
+  overflow: hidden;
+  min-width: 0;
 }
 
 .template-card:hover {
@@ -572,6 +557,8 @@ const copyConfig = () => {
   display: flex;
   gap: 0.5rem;
   align-items: center;
+  flex-wrap: wrap;
+  margin-top: 0.75rem;
 }
 </style>
 
@@ -667,15 +654,85 @@ const copyConfig = () => {
   max-width: 900px;
   max-height: 85vh;
 }
+</style>
 
-.config-tabs {
+<!-- 弹窗样式非 scoped，因为使用了 Teleport 挂载到 body -->
+<style>
+.job-templates-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 1.5rem;
+}
+
+.job-templates-modal-content {
+  background: white;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 900px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+}
+
+.job-templates-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid #e5e7eb;
+  flex-shrink: 0;
+}
+
+.job-templates-modal-header h2 {
+  margin: 0;
+  font-size: 1.1rem;
+  color: #1a1a2e;
+}
+
+.job-templates-btn-close {
+  background: none;
+  border: none;
+  font-size: 1.2rem;
+  color: #9ca3af;
+  cursor: pointer;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.job-templates-btn-close:hover {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.job-templates-modal-body {
+  padding: 1.5rem;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.job-templates-config-tabs {
   display: flex;
   gap: 0.5rem;
   margin-bottom: 1rem;
   border-bottom: 2px solid #e5e7eb;
 }
 
-.config-tab {
+.job-templates-config-tab {
   padding: 0.75rem 1.5rem;
   border: none;
   background: transparent;
@@ -686,16 +743,10 @@ const copyConfig = () => {
   transition: all 0.3s;
 }
 
-.config-tab:hover {
-  color: #667eea;
-}
+.job-templates-config-tab:hover { color: #667eea; }
+.job-templates-config-tab.active { color: #667eea; border-bottom-color: #667eea; }
 
-.config-tab.active {
-  color: #667eea;
-  border-bottom-color: #667eea;
-}
-
-.config-content {
+.job-templates-config-content {
   background: #1e1e1e;
   color: #d4d4d4;
   padding: 1.5rem;
@@ -709,8 +760,72 @@ const copyConfig = () => {
   margin-bottom: 1rem;
 }
 
-.config-actions {
+.job-templates-config-actions {
   display: flex;
   gap: 1rem;
+}
+
+.job-templates-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 1rem;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.job-templates-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 1rem;
+  background: white;
+  color: #667eea;
+  border: 1.5px solid #667eea;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.edit-form { display: flex; flex-direction: column; gap: 1rem; }
+
+.edit-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0.75rem;
+}
+
+.edit-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.edit-field label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #374151;
+}
+
+.edit-field input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.5rem 0.75rem;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.edit-field input:focus {
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102,126,234,0.12);
 }
 </style>

@@ -78,23 +78,27 @@
       </div>
 
       <div class="panel-content">
-        <div v-if="!prometheusUrl && !grafanaUrl" class="empty-state">
+        <div v-if="!grafanaUrl" class="empty-state">
           <div class="empty-icon">📊</div>
           <h3>未配置监控系统</h3>
-          <p>请先配置 Prometheus 或 Grafana 的访问地址</p>
+          <p>请先配置 Grafana 的访问地址</p>
           <button class="btn-primary" @click="showConfigModal = true">立即配置</button>
         </div>
 
-        <div v-else class="iframe-container">
-          <iframe 
-            v-if="currentPanelUrl"
-            :src="currentPanelUrl" 
-            frameborder="0"
-            @load="onIframeLoad"
-          ></iframe>
-          <div v-if="iframeLoading" class="iframe-loading">
-            <div class="spinner"></div>
-            <p>加载监控面板中...</p>
+        <div v-else class="grafana-link-panel">
+          <div class="grafana-info">
+            <div class="grafana-icon">📊</div>
+            <h3>Grafana 监控面板</h3>
+            <p>由于浏览器安全限制（X-Frame-Options），Grafana 无法在此页面内嵌显示。</p>
+            <p class="grafana-url-text">{{ currentPanelUrl }}</p>
+            <div class="grafana-actions">
+              <a :href="currentPanelUrl" target="_blank" class="btn-primary">
+                🔗 在新标签页打开 Grafana
+              </a>
+              <button class="btn-secondary" @click="copyGrafanaUrl">
+                📋 复制链接
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -318,7 +322,6 @@ const loadConfig = () => {
 
 const refreshMonitoring = () => {
   iframeLoading.value = true
-  // 重新加载 iframe
   const iframe = document.querySelector('iframe')
   if (iframe) {
     iframe.src = iframe.src
@@ -327,6 +330,11 @@ const refreshMonitoring = () => {
 
 const onIframeLoad = () => {
   iframeLoading.value = false
+}
+
+const copyGrafanaUrl = () => {
+  navigator.clipboard.writeText(currentPanelUrl.value)
+  alert('链接已复制到剪贴板')
 }
 
 const acknowledgeAlert = (alert: any) => {
@@ -603,6 +611,44 @@ onMounted(() => {
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
+.grafana-link-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  padding: 3rem;
+}
+
+.grafana-info {
+  text-align: center;
+  max-width: 520px;
+}
+
+.grafana-icon { font-size: 4rem; margin-bottom: 1rem; }
+.grafana-info h3 { font-size: 1.4rem; color: #1a1a2e; margin: 0 0 0.75rem; }
+.grafana-info p { color: #6b7280; font-size: 0.95rem; margin: 0 0 0.5rem; }
+
+.grafana-url-text {
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 0.625rem 1rem;
+  font-family: monospace;
+  font-size: 0.85rem;
+  color: #374151;
+  word-break: break-all;
+  margin: 1rem 0 1.5rem;
+}
+
+.grafana-actions {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.grafana-actions a.btn-primary { text-decoration: none; }
 
 .btn-primary {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);

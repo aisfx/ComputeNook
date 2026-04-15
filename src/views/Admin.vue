@@ -389,7 +389,8 @@
         </table>
       </div>
     </div>
-
+  </div>
+  <Teleport to="body">
     <!-- 添加用户组弹窗 -->
     <div v-if="showAddGroupModal" class="modal-overlay" @click="showAddGroupModal = false">
       <div class="modal-content" @click.stop>
@@ -512,7 +513,7 @@
         </div>
       </div>
     </div>
-  </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
