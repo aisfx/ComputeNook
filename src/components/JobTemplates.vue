@@ -59,6 +59,96 @@
     <!-- 配置文件预览弹窗 -->
     <Teleport to="body">
 
+      <!-- 新建模板弹窗 -->
+      <div v-if="showCreateModal" class="job-templates-modal-overlay" @click="showCreateModal = false">
+        <div class="job-templates-modal-content" style="max-width:640px" @click.stop>
+          <div class="job-templates-modal-header">
+            <h2>+ 新建模板</h2>
+            <button @click="showCreateModal = false" class="job-templates-btn-close">✕</button>
+          </div>
+          <div class="job-templates-modal-body">
+            <div class="edit-form">
+              <div class="edit-row">
+                <div class="edit-field">
+                  <label>模板名称 *</label>
+                  <input v-model="createForm.name" type="text" placeholder="例：My LAMMPS 模板" />
+                </div>
+                <div class="edit-field">
+                  <label>应用类型 *</label>
+                  <input v-model="createForm.appType" type="text" placeholder="例：LAMMPS" />
+                </div>
+              </div>
+              <div class="edit-row">
+                <div class="edit-field">
+                  <label>图标（emoji）</label>
+                  <input v-model="createForm.icon" type="text" placeholder="🔬" maxlength="4" />
+                </div>
+                <div class="edit-field">
+                  <label>分类</label>
+                  <select v-model="createForm.category" class="edit-select">
+                    <option value="cfd">CFD</option>
+                    <option value="chemistry">化学</option>
+                    <option value="md">分子动力学</option>
+                    <option value="ai">AI/ML</option>
+                    <option value="general">通用</option>
+                  </select>
+                </div>
+              </div>
+              <div class="edit-field">
+                <label>描述</label>
+                <input v-model="createForm.description" type="text" placeholder="简短描述此模板用途" />
+              </div>
+              <div class="edit-row">
+                <div class="edit-field">
+                  <label>分区</label>
+                  <input v-model="createForm.partition" type="text" placeholder="compute" />
+                </div>
+                <div class="edit-field">
+                  <label>节点数</label>
+                  <input v-model.number="createForm.nodes" type="number" min="1" />
+                </div>
+              </div>
+              <div class="edit-row">
+                <div class="edit-field">
+                  <label>CPU 核心数</label>
+                  <input v-model.number="createForm.cpus" type="number" min="1" />
+                </div>
+                <div class="edit-field">
+                  <label>内存 (GB)</label>
+                  <input v-model.number="createForm.memory" type="number" min="1" />
+                </div>
+                <div class="edit-field">
+                  <label>GPU 卡数</label>
+                  <input v-model.number="createForm.gpus" type="number" min="0" />
+                </div>
+                <div class="edit-field">
+                  <label>时间 (小时)</label>
+                  <input v-model.number="createForm.time" type="number" min="1" />
+                </div>
+              </div>
+              <div class="edit-row">
+                <div class="edit-field">
+                  <label>可执行文件</label>
+                  <input v-model="createForm.executable" type="text" placeholder="例：lmp_mpi" />
+                </div>
+                <div class="edit-field">
+                  <label>输入文件名</label>
+                  <input v-model="createForm.inputFile" type="text" placeholder="例：in.lammps" />
+                </div>
+              </div>
+              <div class="edit-field">
+                <label>模块加载（module load）</label>
+                <input v-model="createForm.moduleLoad" type="text" placeholder="例：lammps/2023" />
+              </div>
+            </div>
+            <div class="job-templates-config-actions" style="margin-top:1.5rem">
+              <button class="job-templates-btn-primary" @click="saveCreate">💾 创建</button>
+              <button class="job-templates-btn-secondary" @click="showCreateModal = false">取消</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- 编辑模板弹窗 -->
       <div v-if="showEditModal" class="job-templates-modal-overlay" @click="showEditModal = false">
         <div class="job-templates-modal-content" style="max-width:600px" @click.stop>
@@ -161,6 +251,27 @@ const editForm = ref<any>({})
 const selectedCategory = ref('all')
 const currentTemplate = ref<any>(null)
 const currentConfigFile = ref('submit.sh')
+
+const defaultCreateForm = () => ({
+  name: '',
+  icon: '💻',
+  category: 'general',
+  appType: '',
+  description: '',
+  nodes: 1,
+  cpus: 8,
+  gpus: 0,
+  memory: 32,
+  time: 24,
+  partition: 'compute',
+  executable: '',
+  inputFile: '',
+  moduleLoad: '',
+  appParams: {},
+  configTemplate: 'default'
+})
+
+const createForm = ref(defaultCreateForm())
 
 const categories = [
   { id: 'all', name: '全部', icon: '📚' },
@@ -406,6 +517,17 @@ const saveEdit = () => {
     templates.value[index] = { ...templates.value[index], ...editForm.value }
   }
   showEditModal.value = false
+}
+
+const saveCreate = () => {
+  if (!createForm.value.name.trim() || !createForm.value.appType.trim()) {
+    alert('请填写模板名称和应用类型')
+    return
+  }
+  const newId = templates.value.length > 0 ? Math.max(...templates.value.map(t => t.id)) + 1 : 1
+  templates.value.push({ ...createForm.value, id: newId })
+  createForm.value = defaultCreateForm()
+  showCreateModal.value = false
 }
 
 const deleteTemplate = (id: number) => {
@@ -825,6 +947,24 @@ const copyConfig = () => {
 }
 
 .edit-field input:focus {
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102,126,234,0.12);
+}
+
+.edit-select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.5rem 0.75rem;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  outline: none;
+  background: white;
+  cursor: pointer;
+  transition: border-color 0.2s;
+}
+
+.edit-select:focus {
   border-color: #667eea;
   box-shadow: 0 0 0 3px rgba(102,126,234,0.12);
 }
