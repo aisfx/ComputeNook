@@ -525,7 +525,7 @@ const saveCreate = () => {
     return
   }
   const newId = templates.value.length > 0 ? Math.max(...templates.value.map(t => t.id)) + 1 : 1
-  templates.value.push({ ...createForm.value, id: newId })
+  templates.value.push({ ...createForm.value, id: newId } as any)
   createForm.value = defaultCreateForm()
   showCreateModal.value = false
 }

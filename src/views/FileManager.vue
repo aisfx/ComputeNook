@@ -1,119 +1,202 @@
 <template>
-  <div class="file-manager">
-    <div class="file-header">
-      <h2>📁 文件管理</h2>
-      <div class="path-bar">
-        <button class="btn-secondary" @click="goHome" title="返回主目录">
-          🏠 主目录
+  <div class="fm">
+    <!-- 顶部工具栏 -->
+    <div class="fm-toolbar">
+      <div class="fm-nav">
+        <button class="fm-btn fm-btn-icon" @click="goHome" title="主目录">
+          <svg viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
         </button>
-        <button class="btn-secondary" @click="goUp" :disabled="!canGoUp" title="上级目录">
-          ⬆️ 上级
+        <button class="fm-btn fm-btn-icon" @click="goUp" :disabled="!canGoUp" title="上级目录">
+          <svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
         </button>
-        <div class="current-path">
-          <span class="path-label">当前路径：</span>
-          <input 
-            v-model="currentPath" 
+        <button class="fm-btn fm-btn-icon" @click="loadDirectory" title="刷新">
+          <svg viewBox="0 0 24 24"><path d="M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+        </button>
+        <div class="fm-path-wrap">
+          <svg class="fm-path-icon" viewBox="0 0 24 24"><path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2z"/></svg>
+          <input
+            v-model="currentPath"
             @keyup.enter="loadDirectory"
-            class="path-input"
+            class="fm-path-input"
             placeholder="输入路径..."
+            spellcheck="false"
           />
-          <button class="btn-primary" @click="loadDirectory">
-            🔄 刷新
-          </button>
         </div>
+      </div>
+      <div class="fm-actions">
+        <button class="fm-btn fm-btn-primary" @click="showUploadDialog">
+          <svg viewBox="0 0 24 24"><path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z"/></svg>
+          上传
+        </button>
+        <button class="fm-btn fm-btn-secondary" @click="showCreateFolderDialog">
+          <svg viewBox="0 0 24 24"><path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-1 8h-3v3h-2v-3h-3v-2h3V9h2v3h3v2z"/></svg>
+          新建文件夹
+        </button>
+        <button class="fm-btn fm-btn-secondary" @click="showCreateFileDialog">
+          <svg viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 7V3.5L18.5 9H13zm-1 5h-2v-2h2v2zm0 4h-2v-2h2v2zm4-4h-2v-2h2v2zm0 4h-2v-2h2v2z"/></svg>
+          新建文件
+        </button>
       </div>
     </div>
 
-    <div class="file-actions">
-      <button class="btn-primary" @click="showUploadDialog">
-        ⬆️ 上传文件
-      </button>
-      <button class="btn-secondary" @click="showCreateFolderDialog">
-        📁 新建文件夹
-      </button>
-      <button class="btn-secondary" @click="showCreateFileDialog">
-        📄 新建文件
-      </button>
+    <!-- 面包屑 -->
+    <div class="fm-breadcrumb">
+      <span
+        v-for="(crumb, i) in breadcrumbs"
+        :key="i"
+        class="fm-crumb"
+      >
+        <span
+          :class="['fm-crumb-text', { 'fm-crumb-link': i < breadcrumbs.length - 1 }]"
+          @click="i < breadcrumbs.length - 1 && navigateToCrumb(i)"
+        >{{ crumb }}</span>
+        <svg v-if="i < breadcrumbs.length - 1" class="fm-crumb-sep" viewBox="0 0 24 24"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+      </span>
     </div>
 
-    <div class="file-list" v-if="!loading">
-      <table class="files-table">
-        <thead>
-          <tr>
-            <th style="width: 40px"></th>
-            <th>名称</th>
-            <th style="width: 120px">大小</th>
-            <th style="width: 180px">修改时间</th>
-            <th style="width: 120px">权限</th>
-            <th style="width: 200px">操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="file in sortedFiles" :key="file.path" @dblclick="handleDoubleClick(file)">
-            <td class="file-icon">{{ file.is_dir ? '📁' : getFileIcon(file.name) }}</td>
-            <td class="file-name">
-              <span :class="{ 'is-dir': file.is_dir }">{{ file.name }}</span>
-            </td>
-            <td class="file-size">{{ file.is_dir ? '-' : formatSize(file.size) }}</td>
-            <td class="file-time">{{ formatTime(file.mod_time) }}</td>
-            <td class="file-permissions">{{ file.permissions }}</td>
-            <td class="file-actions">
-              <button v-if="file.is_dir" class="btn-link" @click="openDirectory(file)" title="打开">
-                📂 打开
-              </button>
-              <button v-if="!file.is_dir" class="btn-link" @click="viewFile(file)" title="查看">
-                👁️ 查看
-              </button>
-              <button v-if="!file.is_dir" class="btn-link" @click="downloadFile(file)" title="下载">
-                ⬇️ 下载
-              </button>
-              <button class="btn-link" @click="renameFile(file)" title="重命名">
-                ✏️ 重命名
-              </button>
-              <button class="btn-link danger" @click="deleteFile(file)" title="删除">
-                🗑️ 删除
-              </button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-
-      <div v-if="files.length === 0" class="empty-state">
-        <div class="empty-icon">📭</div>
-        <p>此目录为空</p>
+    <!-- 文件列表 -->
+    <div class="fm-body">
+      <div v-if="loading" class="fm-loading">
+        <div class="fm-spinner"></div>
+        <span>加载中...</span>
       </div>
+
+      <template v-else>
+        <div v-if="sortedFiles.length === 0" class="fm-empty">
+          <svg viewBox="0 0 24 24"><path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10z"/></svg>
+          <p>此目录为空</p>
+        </div>
+
+        <table v-else class="fm-table">
+          <thead>
+            <tr>
+              <th class="col-icon"></th>
+              <th class="col-name">名称</th>
+              <th class="col-size">大小</th>
+              <th class="col-time">修改时间</th>
+              <th class="col-perm">权限</th>
+              <th class="col-ops">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              v-for="file in sortedFiles"
+              :key="file.path"
+              @dblclick="handleDoubleClick(file)"
+              class="fm-row"
+            >
+              <td class="col-icon">
+                <div :class="['fm-icon', file.is_dir ? 'fm-icon-dir' : `fm-icon-${getFileType(file.name)}`]">
+                  <component :is="file.is_dir ? IconFolder : getFileIconComp(file.name)" />
+                </div>
+              </td>
+              <td class="col-name">
+                <span :class="['fm-name', { 'fm-name-dir': file.is_dir }]">{{ file.name }}</span>
+              </td>
+              <td class="col-size">{{ file.is_dir ? '—' : formatSize(file.size) }}</td>
+              <td class="col-time">{{ formatTime(file.mod_time) }}</td>
+              <td class="col-perm"><code class="fm-perm">{{ file.permissions }}</code></td>
+              <td class="col-ops">
+                <div class="fm-ops">
+                  <button v-if="file.is_dir" class="fm-op" @click="openDirectory(file)" title="打开">
+                    <svg viewBox="0 0 24 24"><path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10z"/></svg>
+                  </button>
+                  <button v-if="!file.is_dir" class="fm-op" @click="viewFile(file)" title="查看">
+                    <svg viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
+                  </button>
+                  <button v-if="!file.is_dir" class="fm-op" @click="downloadFile(file)" title="下载">
+                    <svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+                  </button>
+                  <button class="fm-op" @click="renameFile(file)" title="重命名">
+                    <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                  </button>
+                  <button class="fm-op fm-op-danger" @click="deleteFile(file)" title="删除">
+                    <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </template>
     </div>
 
-    <div v-if="loading" class="loading-state">
-      <div class="spinner">⏳</div>
-      <p>加载中...</p>
-    </div>
-
-    <!-- 文件查看对话框 -->
-    <div v-if="showFileViewer" class="modal-overlay" @click="closeFileViewer">
-      <div class="modal-content" @click.stop>
-        <div class="modal-header">
-          <h3>📄 {{ viewingFile?.name }}</h3>
-          <button class="btn-close" @click="closeFileViewer">✕</button>
-        </div>
-        <div class="modal-body">
-          <pre class="file-content">{{ fileContent }}</pre>
-        </div>
-        <div class="modal-footer">
-          <button class="btn-secondary" @click="closeFileViewer">关闭</button>
-          <button class="btn-primary" @click="downloadFile(viewingFile)">下载</button>
+    <!-- 文件查看弹窗 -->
+    <Teleport to="body">
+      <div v-if="showFileViewer" class="fm-modal-overlay" @click="closeFileViewer">
+        <div class="fm-modal" @click.stop>
+          <div class="fm-modal-header">
+            <div class="fm-modal-title">
+              <div :class="['fm-icon', `fm-icon-${getFileType(viewingFile?.name || '')}`]" style="width:28px;height:28px">
+                <component :is="getFileIconComp(viewingFile?.name || '')" />
+              </div>
+              <span>{{ viewingFile?.name }}</span>
+            </div>
+            <button class="fm-modal-close" @click="closeFileViewer">
+              <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+            </button>
+          </div>
+          <div class="fm-modal-body">
+            <pre class="fm-file-content">{{ fileContent }}</pre>
+          </div>
+          <div class="fm-modal-footer">
+            <button class="fm-btn fm-btn-secondary" @click="closeFileViewer">关闭</button>
+            <button class="fm-btn fm-btn-primary" @click="downloadFile(viewingFile)">
+              <svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+              下载
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, defineComponent, h } from 'vue'
 import { getUser } from '../utils/auth'
 import notification from '../utils/notification'
 import { fileManagerApi } from '../config/api'
 
+// ── SVG 图标组件 ──────────────────────────────────────────────
+const svg = (d: string) => defineComponent({ render: () => h('svg', { viewBox: '0 0 24 24' }, [h('path', { d })]) })
+
+const IconFolder   = svg('M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2z')
+const IconCode     = svg('M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z')
+const IconImage    = svg('M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z')
+const IconVideo    = svg('M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z')
+const IconAudio    = svg('M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z')
+const IconArchive  = svg('M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-6 9h-2v2h-2v-2H8v-2h2v-2h2v2h2v2z')
+const IconPdf      = svg('M20 2H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-8.5 7.5c0 .83-.67 1.5-1.5 1.5H9v2H7.5V7H10c.83 0 1.5.67 1.5 1.5v1zm5 2c0 .83-.67 1.5-1.5 1.5h-2.5V7H15c.83 0 1.5.67 1.5 1.5v3zm4-3H19v1h1.5V11H19v2h-1.5V7h3v1.5zM9 9.5h1v-1H9v1zM4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm10 5.5h1v-3h-1v3z')
+const IconText     = svg('M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zM6 20V4h7v5h5v11H6z')
+const IconFile     = svg('M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm4 18H6V4h7v5h5v11z')
+
+type FileType = 'dir'|'code'|'image'|'video'|'audio'|'archive'|'pdf'|'text'|'file'
+
+const EXT_MAP: Record<string, FileType> = {
+  py:'code', js:'code', ts:'code', go:'code', c:'code', cpp:'code', java:'code',
+  sh:'code', bash:'code', html:'code', css:'code', json:'code', xml:'code', yaml:'code', yml:'code',
+  jpg:'image', jpeg:'image', png:'image', gif:'image', svg:'image', webp:'image', bmp:'image',
+  mp4:'video', avi:'video', mov:'video', mkv:'video',
+  mp3:'audio', wav:'audio', flac:'audio', ogg:'audio',
+  zip:'archive', tar:'archive', gz:'archive', bz2:'archive', xz:'archive', rar:'archive',
+  pdf:'pdf',
+  txt:'text', md:'text', log:'text', csv:'text',
+}
+
+const TYPE_ICONS: Record<FileType, any> = {
+  dir: IconFolder, code: IconCode, image: IconImage, video: IconVideo,
+  audio: IconAudio, archive: IconArchive, pdf: IconPdf, text: IconText, file: IconFile
+}
+
+const getFileType = (name: string): FileType => {
+  const ext = name.split('.').pop()?.toLowerCase() || ''
+  return EXT_MAP[ext] || 'file'
+}
+
+const getFileIconComp = (name: string) => TYPE_ICONS[getFileType(name)]
+
+// ── 状态 ──────────────────────────────────────────────────────
 const currentPath = ref('')
 const files = ref<any[]>([])
 const loading = ref(false)
@@ -122,36 +205,31 @@ const showFileViewer = ref(false)
 const viewingFile = ref<any>(null)
 const fileContent = ref('')
 
-// 导航到指定目录（供外部调用）
-const navigateToPath = (path: string) => {
-  if (!path || path === '-') {
-    notification.error('无效的路径')
-    return
-  }
-  
-  currentPath.value = path
+// ── 面包屑 ────────────────────────────────────────────────────
+const breadcrumbs = computed(() => {
+  const parts = currentPath.value.split('/').filter(Boolean)
+  return ['/', ...parts]
+})
+
+const navigateToCrumb = (index: number) => {
+  if (index === 0) { currentPath.value = '/'; loadDirectory(); return }
+  const parts = currentPath.value.split('/').filter(Boolean)
+  currentPath.value = '/' + parts.slice(0, index).join('/')
   loadDirectory()
 }
 
-// 暴露方法给父组件
-defineExpose({
-  navigateToPath
-})
-
+// ── 导航 ──────────────────────────────────────────────────────
 const canGoUp = computed(() => {
-  const homePath = currentUser.value?.homeDir || `/home/${currentUser.value?.username || ''}`
-  return currentPath.value !== homePath && currentPath.value !== '/'
+  const home = currentUser.value?.homeDir || `/home/${currentUser.value?.username || ''}`
+  return currentPath.value !== home && currentPath.value !== '/'
 })
 
-const sortedFiles = computed(() => {
-  return [...files.value].sort((a, b) => {
-    // 文件夹排在前面
-    if (a.is_dir && !b.is_dir) return -1
-    if (!a.is_dir && b.is_dir) return 1
-    // 按名称排序
+const sortedFiles = computed(() =>
+  [...files.value].sort((a, b) => {
+    if (a.is_dir !== b.is_dir) return a.is_dir ? -1 : 1
     return a.name.localeCompare(b.name)
   })
-})
+)
 
 const goHome = () => {
   currentPath.value = currentUser.value?.homeDir || `/home/${currentUser.value?.username || ''}`
@@ -160,363 +238,148 @@ const goHome = () => {
 
 const goUp = () => {
   if (!canGoUp.value) return
-  const parts = currentPath.value.split('/').filter(p => p)
+  const parts = currentPath.value.split('/').filter(Boolean)
   parts.pop()
   currentPath.value = '/' + parts.join('/')
   loadDirectory()
 }
 
+const navigateToPath = (path: string) => {
+  if (!path || path === '-') { notification.error('无效的路径'); return }
+  currentPath.value = path
+  loadDirectory()
+}
+
+defineExpose({ navigateToPath })
+
+// ── API ───────────────────────────────────────────────────────
+const token = () => localStorage.getItem('token') || sessionStorage.getItem('token') || ''
+
 const loadDirectory = async () => {
   loading.value = true
-  
   try {
-    const token = localStorage.getItem('token') || sessionStorage.getItem('token')
-    if (!token) {
-      throw new Error('请先登录系统')
-    }
-    
-    const url = `${fileManagerApi.list()}?path=${encodeURIComponent(currentPath.value)}`
-    
-    const response = await fetch(url, {
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
+    const res = await fetch(`${fileManagerApi.list()}?path=${encodeURIComponent(currentPath.value)}`, {
+      headers: { Authorization: `Bearer ${token()}` }
     })
-    
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.error || '读取目录失败')
-    }
-    
-    const result = await response.json()
-    files.value = result.files || []
-    currentPath.value = result.path || currentPath.value
-  } catch (err: any) {
-    notification.error(err.message || '读取目录失败')
+    if (!res.ok) throw new Error((await res.json()).error || '读取目录失败')
+    const data = await res.json()
+    files.value = data.files || []
+    currentPath.value = data.path || currentPath.value
+  } catch (e: any) {
+    notification.error(e.message || '读取目录失败')
     files.value = []
   } finally {
     loading.value = false
   }
 }
 
-const openDirectory = (file: any) => {
-  currentPath.value = file.path
-  loadDirectory()
-}
-
-const handleDoubleClick = (file: any) => {
-  if (file.is_dir) {
-    openDirectory(file)
-  } else {
-    viewFile(file)
-  }
-}
+const openDirectory = (file: any) => { currentPath.value = file.path; loadDirectory() }
+const handleDoubleClick = (file: any) => file.is_dir ? openDirectory(file) : viewFile(file)
 
 const viewFile = async (file: any) => {
   try {
-    const token = localStorage.getItem('token') || sessionStorage.getItem('token')
-    if (!token) {
-      throw new Error('请先登录系统')
-    }
-    
-    const url = `${fileManagerApi.read()}?path=${encodeURIComponent(file.path)}`
-    
-    const response = await fetch(url, {
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
+    const res = await fetch(`${fileManagerApi.read()}?path=${encodeURIComponent(file.path)}`, {
+      headers: { Authorization: `Bearer ${token()}` }
     })
-    
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.error || '读取文件失败')
-    }
-    
-    const result = await response.json()
-    fileContent.value = result.content || ''
+    if (!res.ok) throw new Error((await res.json()).error || '读取文件失败')
+    const data = await res.json()
+    fileContent.value = data.content || ''
     viewingFile.value = file
     showFileViewer.value = true
-  } catch (err: any) {
-    notification.error(err.message || '读取文件失败')
-  }
+  } catch (e: any) { notification.error(e.message) }
 }
 
-const closeFileViewer = () => {
-  showFileViewer.value = false
-  viewingFile.value = null
-  fileContent.value = ''
-}
+const closeFileViewer = () => { showFileViewer.value = false; viewingFile.value = null; fileContent.value = '' }
 
 const downloadFile = (file: any) => {
-  const token = localStorage.getItem('token') || sessionStorage.getItem('token')
-  const url = `${fileManagerApi.download()}?path=${encodeURIComponent(file.path)}`
-  
-  // 创建一个隐藏的 a 标签来触发下载
-  const link = document.createElement('a')
-  link.href = url
-  link.download = file.name
-  link.style.display = 'none'
-  
-  // 添加 Authorization header（通过在 URL 中添加 token）
-  link.href = `${url}&token=${token}`
-  
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
-  
-  notification.success('开始下载文件')
+  const url = `${fileManagerApi.download()}?path=${encodeURIComponent(file.path)}&token=${token()}`
+  const a = document.createElement('a')
+  a.href = url; a.download = file.name; a.style.display = 'none'
+  document.body.appendChild(a); a.click(); document.body.removeChild(a)
+  notification.success('开始下载')
 }
 
 const deleteFile = async (file: any) => {
-  const confirmed = confirm(`🗑️ 删除${file.is_dir ? '文件夹' : '文件'}\n\n确定要删除 "${file.name}" 吗？\n\n此操作不可恢复！`)
-  
-  if (!confirmed) return
-  
+  if (!confirm(`确定删除 "${file.name}"？此操作不可恢复！`)) return
   try {
-    const token = localStorage.getItem('token') || sessionStorage.getItem('token')
-    if (!token) {
-      throw new Error('请先登录系统')
-    }
-    
-    const url = `${fileManagerApi.delete()}?path=${encodeURIComponent(file.path)}`
-    
-    const response = await fetch(url, {
-      method: 'DELETE',
-      headers: {
-        'Authorization': `Bearer ${token}`
-      }
+    const res = await fetch(`${fileManagerApi.delete()}?path=${encodeURIComponent(file.path)}`, {
+      method: 'DELETE', headers: { Authorization: `Bearer ${token()}` }
     })
-    
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.error || '删除失败')
-    }
-    
-    notification.success('删除成功')
-    await loadDirectory()
-  } catch (err: any) {
-    notification.error(err.message || '删除失败')
-  }
+    if (!res.ok) throw new Error((await res.json()).error || '删除失败')
+    notification.success('删除成功'); await loadDirectory()
+  } catch (e: any) { notification.error(e.message) }
 }
 
 const renameFile = async (file: any) => {
-  const newName = prompt(`重命名 "${file.name}"\n\n请输入新名称：`, file.name)
-  
+  const newName = prompt(`重命名 "${file.name}"`, file.name)
   if (!newName || newName === file.name) return
-  
   try {
-    const token = localStorage.getItem('token') || sessionStorage.getItem('token')
-    if (!token) {
-      throw new Error('请先登录系统')
-    }
-    
-    const parts = file.path.split('/')
-    parts[parts.length - 1] = newName
-    const newPath = parts.join('/')
-    
-    const response = await fetch(fileManagerApi.rename(), {
+    const parts = file.path.split('/'); parts[parts.length - 1] = newName
+    const res = await fetch(fileManagerApi.rename(), {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        old_path: file.path,
-        new_path: newPath
-      })
+      headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ old_path: file.path, new_path: parts.join('/') })
     })
-    
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.error || '重命名失败')
-    }
-    
-    notification.success('重命名成功')
-    await loadDirectory()
-  } catch (err: any) {
-    notification.error(err.message || '重命名失败')
-  }
+    if (!res.ok) throw new Error((await res.json()).error || '重命名失败')
+    notification.success('重命名成功'); await loadDirectory()
+  } catch (e: any) { notification.error(e.message) }
 }
 
 const showCreateFolderDialog = async () => {
-  const folderName = prompt('新建文件夹\n\n请输入文件夹名称：')
-  
-  if (!folderName) return
-  
+  const name = prompt('新建文件夹名称：'); if (!name) return
   try {
-    const token = localStorage.getItem('token') || sessionStorage.getItem('token')
-    if (!token) {
-      throw new Error('请先登录系统')
-    }
-    
-    const newPath = `${currentPath.value}/${folderName}`
-    
-    const response = await fetch(fileManagerApi.mkdir(), {
+    const res = await fetch(fileManagerApi.mkdir(), {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        path: newPath
-      })
+      headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: `${currentPath.value}/${name}` })
     })
-    
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.error || '创建文件夹失败')
-    }
-    
-    notification.success('文件夹创建成功')
-    await loadDirectory()
-  } catch (err: any) {
-    notification.error(err.message || '创建文件夹失败')
-  }
+    if (!res.ok) throw new Error((await res.json()).error || '创建失败')
+    notification.success('文件夹创建成功'); await loadDirectory()
+  } catch (e: any) { notification.error(e.message) }
 }
 
 const showCreateFileDialog = async () => {
-  const fileName = prompt('新建文件\n\n请输入文件名称：')
-  
-  if (!fileName) return
-  
+  const name = prompt('新建文件名称：'); if (!name) return
   try {
-    const token = localStorage.getItem('token') || sessionStorage.getItem('token')
-    if (!token) {
-      throw new Error('请先登录系统')
-    }
-    
-    const newPath = `${currentPath.value}/${fileName}`
-    
-    const response = await fetch(fileManagerApi.write(), {
+    const res = await fetch(fileManagerApi.write(), {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        path: newPath,
-        content: ''
-      })
+      headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: `${currentPath.value}/${name}`, content: '' })
     })
-    
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.error || '创建文件失败')
-    }
-    
-    notification.success('文件创建成功')
-    await loadDirectory()
-  } catch (err: any) {
-    notification.error(err.message || '创建文件失败')
-  }
+    if (!res.ok) throw new Error((await res.json()).error || '创建失败')
+    notification.success('文件创建成功'); await loadDirectory()
+  } catch (e: any) { notification.error(e.message) }
 }
 
 const showUploadDialog = () => {
   const input = document.createElement('input')
-  input.type = 'file'
-  input.multiple = true
+  input.type = 'file'; input.multiple = true
   input.onchange = async (e: any) => {
-    const files = e.target.files
-    if (!files || files.length === 0) return
-    
-    for (const file of files) {
-      await uploadFile(file)
+    for (const file of e.target.files) {
+      const fd = new FormData(); fd.append('file', file); fd.append('path', currentPath.value)
+      try {
+        const res = await fetch(fileManagerApi.upload(), {
+          method: 'POST', headers: { Authorization: `Bearer ${token()}` }, body: fd
+        })
+        if (!res.ok) throw new Error((await res.json()).error || '上传失败')
+        notification.success(`"${file.name}" 上传成功`)
+      } catch (e: any) { notification.error(`上传 "${file.name}" 失败: ${e.message}`) }
     }
-    
     await loadDirectory()
   }
   input.click()
 }
 
-const uploadFile = async (file: File) => {
-  try {
-    const token = localStorage.getItem('token') || sessionStorage.getItem('token')
-    if (!token) {
-      throw new Error('请先登录系统')
-    }
-    
-    const formData = new FormData()
-    formData.append('file', file)
-    formData.append('path', currentPath.value)
-    
-    const response = await fetch(fileManagerApi.upload(), {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`
-      },
-      body: formData
-    })
-    
-    if (!response.ok) {
-      const error = await response.json()
-      throw new Error(error.error || '上传失败')
-    }
-    
-    notification.success(`文件 "${file.name}" 上传成功`)
-  } catch (err: any) {
-    notification.error(`上传 "${file.name}" 失败: ${err.message}`)
-  }
+// ── 格式化 ────────────────────────────────────────────────────
+const formatSize = (b: number) => {
+  if (!b) return '0 B'
+  const u = ['B','KB','MB','GB','TB'], i = Math.floor(Math.log(b) / Math.log(1024))
+  return (b / Math.pow(1024, i)).toFixed(1) + ' ' + u[i]
 }
 
-const formatSize = (bytes: number): string => {
-  if (bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
-}
-
-const formatTime = (timeStr: string): string => {
-  try {
-    const date = new Date(timeStr)
-    return date.toLocaleString('zh-CN', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
-  } catch {
-    return timeStr
-  }
-}
-
-const getFileIcon = (filename: string): string => {
-  const ext = filename.split('.').pop()?.toLowerCase()
-  const iconMap: Record<string, string> = {
-    'txt': '📄',
-    'pdf': '📕',
-    'doc': '📘',
-    'docx': '📘',
-    'xls': '📗',
-    'xlsx': '📗',
-    'ppt': '📙',
-    'pptx': '📙',
-    'zip': '📦',
-    'tar': '📦',
-    'gz': '📦',
-    'jpg': '🖼️',
-    'jpeg': '🖼️',
-    'png': '🖼️',
-    'gif': '🖼️',
-    'mp4': '🎬',
-    'avi': '🎬',
-    'mp3': '🎵',
-    'wav': '🎵',
-    'py': '🐍',
-    'js': '📜',
-    'ts': '📜',
-    'html': '🌐',
-    'css': '🎨',
-    'json': '📋',
-    'xml': '📋',
-    'sh': '⚙️',
-    'c': '⚙️',
-    'cpp': '⚙️',
-    'java': '☕',
-    'go': '🐹'
-  }
-  return iconMap[ext || ''] || '📄'
+const formatTime = (s: string) => {
+  try { return new Date(s).toLocaleString('zh-CN', { year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' }) }
+  catch { return s }
 }
 
 onMounted(() => {
@@ -527,202 +390,206 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.file-manager {
-  padding: 1.5rem;
-}
+/* ── 布局 ── */
+.fm { display: flex; flex-direction: column; height: 100%; background: #f5f6fa; }
 
-.file-header {
-  margin-bottom: 1.5rem;
-}
-
-.file-header h2 {
-  margin: 0 0 1rem 0;
-}
-
-.path-bar {
-  display: flex;
-  gap: 0.75rem;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.current-path {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-  flex: 1;
-  min-width: 300px;
-}
-
-.path-label {
-  font-weight: 600;
-  color: #666;
-  white-space: nowrap;
-}
-
-.path-input {
-  flex: 1;
-  padding: 0.5rem 1rem;
-  border: 2px solid #e5e7eb;
-  border-radius: 8px;
-  font-size: 0.9rem;
-  font-family: monospace;
-}
-
-.path-input:focus {
-  outline: none;
-  border-color: #667eea;
-}
-
-.file-actions {
-  display: flex;
-  gap: 0.75rem;
-  margin-bottom: 1.5rem;
-  flex-wrap: wrap;
-}
-
-.files-table {
-  width: 100%;
-  border-collapse: collapse;
-  background: white;
-  border-radius: 8px;
-  overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.files-table thead {
-  background: #f9fafb;
-}
-
-.files-table th {
-  padding: 1rem;
-  text-align: left;
-  font-weight: 600;
-  color: #374151;
-  border-bottom: 2px solid #e5e7eb;
-}
-
-.files-table td {
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid #f3f4f6;
-}
-
-.files-table tbody tr:hover {
-  background: #f9fafb;
-  cursor: pointer;
-}
-
-.file-icon {
-  font-size: 1.5rem;
-  text-align: center;
-}
-
-.file-name .is-dir {
-  font-weight: 600;
-  color: #667eea;
-}
-
-.file-size, .file-time, .file-permissions {
-  color: #6b7280;
-  font-size: 0.9rem;
-}
-
-.file-actions {
-  display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-}
-
-.empty-state, .loading-state {
-  text-align: center;
-  padding: 4rem 2rem;
-  color: #9ca3af;
-}
-
-.empty-icon, .spinner {
-  font-size: 4rem;
-  margin-bottom: 1rem;
-}
-
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+/* ── 工具栏 ── */
+.fm-toolbar {
   display: flex;
   align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.modal-content {
-  background: white;
-  border-radius: 12px;
-  width: 90%;
-  max-width: 800px;
-  max-height: 80vh;
-  display: flex;
-  flex-direction: column;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
-}
-
-.modal-header {
-  display: flex;
   justify-content: space-between;
-  align-items: center;
-  padding: 1.5rem;
-  border-bottom: 1px solid #e5e7eb;
+  gap: 1rem;
+  padding: 0.75rem 1.25rem;
+  background: #fff;
+  border-bottom: 1px solid #e8eaf0;
+  flex-wrap: wrap;
 }
 
-.modal-header h3 {
-  margin: 0;
+.fm-nav { display: flex; align-items: center; gap: 0.5rem; flex: 1; min-width: 0; }
+
+.fm-btn {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  padding: 0.45rem 0.9rem;
+  border: none; border-radius: 7px;
+  font-size: 0.82rem; font-weight: 600;
+  cursor: pointer; transition: all 0.15s; white-space: nowrap;
+}
+.fm-btn svg { width: 16px; height: 16px; fill: currentColor; flex-shrink: 0; }
+
+.fm-btn-icon {
+  padding: 0.45rem; background: #f3f4f8; color: #555; border: 1px solid #e2e4ec;
+}
+.fm-btn-icon:hover:not(:disabled) { background: #e8eaf4; color: #333; }
+.fm-btn-icon:disabled { opacity: 0.35; cursor: not-allowed; }
+
+.fm-btn-primary { background: #5b6ef5; color: #fff; }
+.fm-btn-primary:hover { background: #4a5de4; }
+
+.fm-btn-secondary { background: #fff; color: #5b6ef5; border: 1.5px solid #5b6ef5; }
+.fm-btn-secondary:hover { background: #f0f1ff; }
+
+.fm-path-wrap {
+  display: flex; align-items: center; gap: 0.5rem;
+  flex: 1; min-width: 0;
+  background: #f3f4f8; border: 1.5px solid #e2e4ec;
+  border-radius: 8px; padding: 0 0.75rem;
+  transition: border-color 0.15s;
+}
+.fm-path-wrap:focus-within { border-color: #5b6ef5; background: #fff; }
+.fm-path-icon { width: 16px; height: 16px; fill: #9ca3af; flex-shrink: 0; }
+
+.fm-path-input {
+  flex: 1; border: none; background: transparent;
+  font-size: 0.85rem; font-family: 'SF Mono', 'Fira Code', monospace;
+  color: #374151; padding: 0.45rem 0; outline: none;
 }
 
-.btn-close {
-  background: none;
-  border: none;
-  font-size: 1.5rem;
-  cursor: pointer;
+.fm-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+
+/* ── 面包屑 ── */
+.fm-breadcrumb {
+  display: flex; align-items: center; flex-wrap: wrap;
+  padding: 0.5rem 1.25rem;
+  background: #fff; border-bottom: 1px solid #e8eaf0;
+  font-size: 0.82rem; color: #9ca3af;
+}
+.fm-crumb { display: flex; align-items: center; }
+.fm-crumb-text { padding: 0.15rem 0.3rem; border-radius: 4px; }
+.fm-crumb-link { color: #5b6ef5; cursor: pointer; }
+.fm-crumb-link:hover { background: #f0f1ff; }
+.fm-crumb-sep { width: 14px; height: 14px; fill: #d1d5db; }
+
+/* ── 主体 ── */
+.fm-body { flex: 1; overflow: auto; padding: 1rem 1.25rem; }
+
+/* ── 加载 ── */
+.fm-loading {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 0.75rem; padding: 4rem;
+  color: #9ca3af; font-size: 0.9rem;
+}
+.fm-spinner {
+  width: 32px; height: 32px;
+  border: 3px solid #e8eaf0; border-top-color: #5b6ef5;
+  border-radius: 50%; animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── 空状态 ── */
+.fm-empty {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 0.75rem; padding: 4rem;
   color: #9ca3af;
-  padding: 0;
-  width: 2rem;
-  height: 2rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 4px;
+}
+.fm-empty svg { width: 48px; height: 48px; fill: #d1d5db; }
+.fm-empty p { margin: 0; font-size: 0.9rem; }
+
+/* ── 表格 ── */
+.fm-table {
+  width: 100%; border-collapse: collapse;
+  background: #fff; border-radius: 10px;
+  overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,.06);
+}
+.fm-table thead { background: #f8f9fc; }
+.fm-table th {
+  padding: 0.7rem 1rem; text-align: left;
+  font-size: 0.78rem; font-weight: 700;
+  color: #6b7280; text-transform: uppercase; letter-spacing: .04em;
+  border-bottom: 1.5px solid #e8eaf0;
+}
+.fm-table td { padding: 0.6rem 1rem; border-bottom: 1px solid #f3f4f8; }
+.fm-row { transition: background 0.1s; cursor: default; }
+.fm-row:hover { background: #f8f9fc; }
+.fm-row:last-child td { border-bottom: none; }
+
+.col-icon  { width: 44px; }
+.col-size  { width: 90px; color: #9ca3af; font-size: 0.82rem; }
+.col-time  { width: 160px; color: #9ca3af; font-size: 0.82rem; }
+.col-perm  { width: 110px; }
+.col-ops   { width: 140px; }
+
+/* ── 文件图标 ── */
+.fm-icon {
+  width: 34px; height: 34px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+}
+.fm-icon svg { width: 18px; height: 18px; fill: currentColor; }
+
+.fm-icon-dir     { background: #fff3e0; color: #f59e0b; }
+.fm-icon-code    { background: #e8f5e9; color: #22c55e; }
+.fm-icon-image   { background: #fce4ec; color: #ec4899; }
+.fm-icon-video   { background: #e3f2fd; color: #3b82f6; }
+.fm-icon-audio   { background: #f3e5f5; color: #a855f7; }
+.fm-icon-archive { background: #fff8e1; color: #d97706; }
+.fm-icon-pdf     { background: #ffebee; color: #ef4444; }
+.fm-icon-text    { background: #e8eaf6; color: #6366f1; }
+.fm-icon-file    { background: #f3f4f8; color: #9ca3af; }
+
+/* ── 文件名 ── */
+.fm-name { font-size: 0.88rem; color: #374151; }
+.fm-name-dir { font-weight: 600; color: #5b6ef5; cursor: pointer; }
+.fm-name-dir:hover { text-decoration: underline; }
+
+/* ── 权限 ── */
+.fm-perm {
+  font-family: 'SF Mono', monospace; font-size: 0.75rem;
+  background: #f3f4f8; color: #6b7280;
+  padding: 0.15rem 0.4rem; border-radius: 4px;
 }
 
-.btn-close:hover {
-  background: #f3f4f6;
-  color: #374151;
+/* ── 操作按钮 ── */
+.fm-ops { display: flex; gap: 0.25rem; }
+.fm-op {
+  width: 30px; height: 30px; border: none; border-radius: 6px;
+  background: #f3f4f8; color: #6b7280;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: all 0.15s;
 }
+.fm-op svg { width: 15px; height: 15px; fill: currentColor; }
+.fm-op:hover { background: #e8eaf4; color: #374151; }
+.fm-op-danger:hover { background: #fee2e2; color: #ef4444; }
 
-.modal-body {
-  flex: 1;
-  overflow: auto;
-  padding: 1.5rem;
+/* ── 弹窗 ── */
+.fm-modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.45);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 9999; padding: 1.5rem;
 }
-
-.file-content {
-  margin: 0;
-  padding: 1rem;
-  background: #f9fafb;
-  border-radius: 8px;
-  font-family: 'Courier New', monospace;
-  font-size: 0.9rem;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-wrap: break-word;
+.fm-modal {
+  background: #fff; border-radius: 12px;
+  width: 100%; max-width: 820px; max-height: 85vh;
+  display: flex; flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0,0,0,.2);
+  overflow: hidden;
 }
+.fm-modal-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 1rem 1.25rem; border-bottom: 1px solid #e8eaf0;
+}
+.fm-modal-title {
+  display: flex; align-items: center; gap: 0.75rem;
+  font-size: 0.95rem; font-weight: 600; color: #1f2937;
+}
+.fm-modal-close {
+  width: 32px; height: 32px; border: none; border-radius: 6px;
+  background: transparent; color: #9ca3af; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s;
+}
+.fm-modal-close svg { width: 18px; height: 18px; fill: currentColor; }
+.fm-modal-close:hover { background: #f3f4f8; color: #374151; }
 
-.modal-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.75rem;
-  padding: 1.5rem;
-  border-top: 1px solid #e5e7eb;
+.fm-modal-body { flex: 1; overflow: auto; padding: 1.25rem; }
+.fm-file-content {
+  margin: 0; padding: 1rem 1.25rem;
+  background: #1e1e2e; color: #cdd6f4;
+  border-radius: 8px; font-family: 'SF Mono','Fira Code',monospace;
+  font-size: 0.85rem; line-height: 1.65;
+  white-space: pre-wrap; word-break: break-all;
+}
+.fm-modal-footer {
+  display: flex; justify-content: flex-end; gap: 0.75rem;
+  padding: 1rem 1.25rem; border-top: 1px solid #e8eaf0;
 }
 </style>
