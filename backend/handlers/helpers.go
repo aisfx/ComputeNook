@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"os"
 	"hpc-backend/slurm"
 )
 
@@ -12,4 +13,14 @@ func GetSlurmClientForUser(username string) (*slurm.Client, error) {
 		return slurm.NewClientForUser(username)
 	}
 	return slurm.NewClient()
+}
+
+// GetSlurmAdminClient 使用管理员账户创建Slurm客户端
+// 用于需要管理员权限的写操作（创建/更新/删除账户、用户等）
+func GetSlurmAdminClient() (*slurm.Client, error) {
+	adminUser := os.Getenv("SLURM_ADMIN_USER")
+	if adminUser == "" {
+		adminUser = "root"
+	}
+	return slurm.NewClientForUser(adminUser)
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	"hpc-backend/handlers"
+	"hpc-backend/logger"
 	"hpc-backend/middleware"
 )
 
@@ -18,6 +19,22 @@ func main() {
 	if err := godotenv.Load(); err != nil {
 		log.Println("Warning: .env file not found")
 	}
+
+	// 程序退出时关闭日志文件
+	defer logger.Close()
+
+	logger.Info("========================================")
+	logger.Info("HPC Backend Starting")
+	logger.Info("========================================")
+	logger.Info("LDAP_HOST: %s", os.Getenv("LDAP_HOST"))
+	logger.Info("LDAP_PORT: %s", os.Getenv("LDAP_PORT"))
+	logger.Info("DEV_MODE: %s", os.Getenv("DEV_MODE"))
+	logFile := os.Getenv("LOG_FILE")
+	if logFile == "" {
+		logFile = "slurm-web.log"
+	}
+	logger.Info("LOG_FILE: %s", logFile)
+	logger.Info("========================================")
 
 	log.Println("========================================")
 	log.Println("HPC Backend Starting")
@@ -70,6 +87,8 @@ func main() {
 	auth.Use(middleware.AuthMiddleware())
 	{
 		auth.GET("/me", handlers.GetCurrentUser)
+		auth.GET("/me/resources", handlers.GetMyResources)
+		auth.POST("/ai/chat", handlers.AIChat)
 		
 		// 普通用户可以访问的路由
 		auth.POST("/profile/change-password", handlers.ChangePassword)
@@ -161,6 +180,8 @@ func main() {
 		{
 			// 普通用户可以查看自己的使用情况
 			usage.GET("/user", handlers.GetUserUsage)
+			usage.GET("/debug", handlers.DebugUserUsage)       // 调试：解析后的记录
+			usage.GET("/debug/raw", handlers.DebugRawJobs)     // 调试：Slurm 原始 JSON
 			
 			// 管理员可以查看所有使用情况
 			usage.GET("/account", middleware.AdminMiddleware(), handlers.GetAccountUsageWithBilling)

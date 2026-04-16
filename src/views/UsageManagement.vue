@@ -93,6 +93,9 @@
         </div>
       </div>
     </div>
+
+    <!-- 使用汇总 -->
+    <div class="card" v-if="summary">
       <h4>📈 使用汇总</h4>
       <div class="summary-grid">
         <div class="summary-item">

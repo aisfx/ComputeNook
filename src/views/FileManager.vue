@@ -97,22 +97,40 @@
               <td class="col-time">{{ formatTime(file.mod_time) }}</td>
               <td class="col-perm"><code class="fm-perm">{{ file.permissions }}</code></td>
               <td class="col-ops">
-                <div class="fm-ops">
-                  <button v-if="file.is_dir" class="fm-op" @click="openDirectory(file)" title="打开">
-                    <svg viewBox="0 0 24 24"><path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10z"/></svg>
+                <div class="fm-dropdown">
+                  <button class="fm-op-toggle" :data-ops="file.path" @click.stop="openOps = openOps === file.path ? null : file.path">
+                    操作 ▾
                   </button>
-                  <button v-if="!file.is_dir" class="fm-op" @click="viewFile(file)" title="查看">
-                    <svg viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
-                  </button>
-                  <button v-if="!file.is_dir" class="fm-op" @click="downloadFile(file)" title="下载">
-                    <svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
-                  </button>
-                  <button class="fm-op" @click="renameFile(file)" title="重命名">
-                    <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
-                  </button>
-                  <button class="fm-op fm-op-danger" @click="deleteFile(file)" title="删除">
-                    <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
-                  </button>
+                  <Teleport to="body">
+                    <div
+                      v-if="openOps === file.path"
+                      class="fm-dropdown-menu"
+                      :style="getDropdownStyle(file.path)"
+                      @click.stop
+                    >
+                      <button v-if="file.is_dir" class="fm-dropdown-item" @click="openDirectory(file); openOps = null">
+                        <svg viewBox="0 0 24 24"><path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10z"/></svg>
+                        打开
+                      </button>
+                      <button v-if="!file.is_dir" class="fm-dropdown-item" @click="viewFile(file); openOps = null">
+                        <svg viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
+                        查看
+                      </button>
+                      <button v-if="!file.is_dir" class="fm-dropdown-item" @click="downloadFile(file); openOps = null">
+                        <svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+                        下载
+                      </button>
+                      <button class="fm-dropdown-item" @click="renameFile(file); openOps = null">
+                        <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                        重命名
+                      </button>
+                      <div class="fm-dropdown-divider"></div>
+                      <button class="fm-dropdown-item fm-dropdown-danger" @click="deleteFile(file); openOps = null">
+                        <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                        删除
+                      </button>
+                    </div>
+                  </Teleport>
                 </div>
               </td>
             </tr>
@@ -153,7 +171,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, defineComponent, h } from 'vue'
+import { ref, computed, onMounted, onUnmounted, defineComponent, h } from 'vue'
 import { getUser } from '../utils/auth'
 import notification from '../utils/notification'
 import { fileManagerApi } from '../config/api'
@@ -204,6 +222,23 @@ const currentUser = ref<any>(null)
 const showFileViewer = ref(false)
 const viewingFile = ref<any>(null)
 const fileContent = ref('')
+const openOps = ref<string | null>(null)
+
+// 计算下拉菜单的绝对定位位置
+const getDropdownStyle = (filePath: string) => {
+  const btn = document.querySelector(`[data-ops="${CSS.escape(filePath)}"]`) as HTMLElement
+  if (!btn) return {}
+  const rect = btn.getBoundingClientRect()
+  return {
+    position: 'fixed' as const,
+    top: `${rect.bottom + 4}px`,
+    right: `${window.innerWidth - rect.right}px`,
+    zIndex: 9999
+  }
+}
+
+// 点击外部关闭
+const handleGlobalClick = () => { openOps.value = null }
 
 // ── 面包屑 ────────────────────────────────────────────────────
 const breadcrumbs = computed(() => {
@@ -386,7 +421,10 @@ onMounted(() => {
   currentUser.value = getUser()
   currentPath.value = currentUser.value?.homeDir || `/home/${currentUser.value?.username || ''}`
   loadDirectory()
+  document.addEventListener('click', handleGlobalClick)
 })
+
+onUnmounted(() => { document.removeEventListener('click', handleGlobalClick) })
 </script>
 
 <style scoped>
@@ -537,17 +575,52 @@ onMounted(() => {
   padding: 0.15rem 0.4rem; border-radius: 4px;
 }
 
-/* ── 操作按钮 ── */
-.fm-ops { display: flex; gap: 0.25rem; }
-.fm-op {
-  width: 30px; height: 30px; border: none; border-radius: 6px;
-  background: #f3f4f8; color: #6b7280;
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer; transition: all 0.15s;
+/* ── 操作下拉 ── */
+.fm-dropdown { position: relative; display: inline-block; }
+
+.fm-op-toggle {
+  padding: 0.3rem 0.75rem;
+  border: 1px solid #e2e4ec;
+  border-radius: 6px;
+  background: #f3f4f8;
+  color: #555;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
 }
-.fm-op svg { width: 15px; height: 15px; fill: currentColor; }
-.fm-op:hover { background: #e8eaf4; color: #374151; }
-.fm-op-danger:hover { background: #fee2e2; color: #ef4444; }
+.fm-op-toggle:hover { background: #e8eaf4; color: #333; }
+
+.fm-dropdown-menu {
+  background: #fff;
+  border: 1px solid #e8eaf0;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,.1);
+  min-width: 130px;
+  overflow: hidden;
+}
+
+.fm-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.55rem 0.9rem;
+  background: none;
+  border: none;
+  text-align: left;
+  font-size: 0.85rem;
+  color: #374151;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.fm-dropdown-item svg { width: 14px; height: 14px; fill: currentColor; flex-shrink: 0; }
+.fm-dropdown-item:hover { background: #f3f4f8; }
+.fm-dropdown-danger { color: #ef4444; }
+.fm-dropdown-danger:hover { background: #fee2e2; }
+
+.fm-dropdown-divider { height: 1px; background: #e8eaf0; margin: 0.25rem 0; }
 
 /* ── 弹窗 ── */
 .fm-modal-overlay {

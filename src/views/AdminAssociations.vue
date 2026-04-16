@@ -1,14 +1,14 @@
 <template>
   <div class="admin-associations">
     <div class="page-header">
-      <h2>资源绑定管理</h2>
+      <h3>资源绑定管理</h3>
       <button class="btn-primary" @click="showCreateDialog = true">
         <span class="icon">➕</span>
         创建资源绑定
       </button>
     </div>
 
-    <div class="table-container">
+    <div class="card">
       <table class="data-table">
         <thead>
           <tr>
@@ -34,15 +34,19 @@
             <td>{{ assoc.user }}</td>
             <td>
               {{ assoc.account }}
-              <span v-if="assoc.is_default" class="default-badge">⭐ 默认</span>
+              <span v-if="assoc.is_default" class="badge badge-default">默认</span>
             </td>
             <td>{{ assoc.cluster || '-' }}</td>
             <td>{{ assoc.partition || '-' }}</td>
             <td>{{ assoc.qos && assoc.qos.length > 0 ? assoc.qos.join(', ') : '-' }}</td>
             <td>
-              <div class="action-buttons">
-                <button class="btn-edit-small" @click="editAssociation(assoc)">编辑</button>
-                <button class="btn-danger-small" @click="deleteAssociation(assoc)">删除</button>
+              <div class="action-dropdown">
+                <button class="btn-action-toggle" @click.stop="openMenu = openMenu === `${assoc.account}-${assoc.user}` ? null : `${assoc.account}-${assoc.user}`">操作 ▾</button>
+                <div v-if="openMenu === `${assoc.account}-${assoc.user}`" class="dropdown-menu" @click.stop>
+                  <button class="dropdown-item" @click="editAssociation(assoc); openMenu = null">✏️ 编辑</button>
+                  <div class="dropdown-divider"></div>
+                  <button class="dropdown-item danger" @click="deleteAssociation(assoc); openMenu = null">🗑️ 删除</button>
+                </div>
               </div>
             </td>
           </tr>
@@ -104,7 +108,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { getAssociations, createAssociation as apiCreateAssociation, updateAssociation as apiUpdateAssociation, deleteAssociation as apiDeleteAssociation } from '../api'
 import { slurmUserAPI, slurmAccountAPI } from '../api'
 import { showSuccess, showError } from '../utils/notification'
@@ -138,6 +142,8 @@ const isEditing = ref(false)
 const qosInput = ref('')
 const originalAssociation = ref<Association | null>(null)
 const loading = ref(false)
+const openMenu = ref<string | null>(null)
+const closeMenu = () => { openMenu.value = null }
 const newAssociation = ref<Association>({
   user: '',
   account: '',
@@ -322,6 +328,11 @@ watch(showCreateDialog, (newVal) => {
 
 onMounted(() => {
   loadAssociations()
+  document.addEventListener('click', closeMenu)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', closeMenu)
 })
 </script>
 
@@ -337,39 +348,41 @@ onMounted(() => {
   margin-bottom: 2rem;
 }
 
-.page-header h2 {
+.page-header h3 {
   margin: 0;
-  color: #333;
+  font-size: 1.5rem;
 }
 
 .btn-primary {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1.5rem;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
   border: none;
+  padding: 0.75rem 1.5rem;
   border-radius: 8px;
   cursor: pointer;
-  font-size: 1rem;
-  transition: all 0.3s;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(102,126,234,0.3); }
+.btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.btn-secondary {
+  background: #e5e7eb;
+  color: #374151;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
 }
 
-.btn-primary:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-}
-
-.icon {
-  font-size: 1.2rem;
-}
-
-.table-container {
+.card {
   background: white;
   border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  overflow: hidden;
+  padding: 1.5rem;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
 }
 
 .data-table {
@@ -377,15 +390,13 @@ onMounted(() => {
   border-collapse: collapse;
 }
 
-.data-table thead {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-}
-
 .data-table th {
+  background: #f9fafb;
   padding: 1rem;
   text-align: left;
   font-weight: 600;
+  color: #555;
+  border-bottom: 2px solid #e5e7eb;
 }
 
 .data-table td {
@@ -393,19 +404,11 @@ onMounted(() => {
   border-bottom: 1px solid #e5e7eb;
 }
 
-.data-table tbody tr:hover {
-  background: #f9fafb;
-}
+.data-table tbody tr:hover { background: #f9fafb; }
 
-.empty-state {
+.empty-state, .loading-state {
   text-align: center;
   color: #9ca3af;
-  padding: 3rem !important;
-}
-
-.loading-state {
-  text-align: center;
-  color: #667eea;
   padding: 3rem !important;
 }
 
@@ -413,70 +416,72 @@ onMounted(() => {
   display: inline-block;
   width: 20px;
   height: 20px;
-  border: 3px solid rgba(102, 126, 234, 0.3);
+  border: 3px solid rgba(102,126,234,0.3);
   border-radius: 50%;
   border-top-color: #667eea;
-  animation: spin 1s ease-in-out infinite;
+  animation: spin 1s linear infinite;
   margin-right: 0.5rem;
+  vertical-align: middle;
 }
+@keyframes spin { to { transform: rotate(360deg); } }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-.default-badge {
-  display: inline-block;
-  margin-left: 0.5rem;
-  padding: 0.25rem 0.5rem;
-  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
-  color: white;
-  border-radius: 4px;
-  font-size: 0.75rem;
+.badge {
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.85rem;
   font-weight: 600;
 }
+.badge-default { background: #fef3c7; color: #92400e; }
 
-.action-buttons {
-  display: flex;
-  gap: 0.5rem;
-}
+.action-dropdown { position: relative; display: inline-block; }
 
-.btn-edit-small {
-  padding: 0.5rem 1rem;
-  background: #3b82f6;
+.btn-action-toggle {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
   border: none;
+  padding: 0.4rem 0.9rem;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 0.9rem;
-  transition: all 0.3s;
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.btn-action-toggle:hover { opacity: 0.9; }
+
+.dropdown-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  min-width: 120px;
+  z-index: 100;
+  overflow: hidden;
 }
 
-.btn-edit-small:hover {
-  background: #2563eb;
-}
-
-.btn-danger-small {
-  padding: 0.5rem 1rem;
-  background: #ef4444;
-  color: white;
+.dropdown-item {
+  display: block;
+  width: 100%;
+  padding: 0.6rem 1rem;
+  background: none;
   border: none;
-  border-radius: 6px;
+  text-align: left;
   cursor: pointer;
   font-size: 0.9rem;
-  transition: all 0.3s;
+  color: #374151;
+  white-space: nowrap;
 }
-
-.btn-danger-small:hover {
-  background: #dc2626;
-}
+.dropdown-item:hover { background: #f3f4f6; }
+.dropdown-item.danger { color: #ef4444; }
+.dropdown-item.danger:hover { background: #fee2e2; }
+.dropdown-divider { height: 1px; background: #e5e7eb; margin: 0.25rem 0; }
 
 .modal-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  inset: 0;
+  background: rgba(0,0,0,0.5);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -488,7 +493,8 @@ onMounted(() => {
   border-radius: 12px;
   width: 90%;
   max-width: 500px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  max-height: 90vh;
+  overflow-y: auto;
 }
 
 .modal-header {
@@ -498,71 +504,38 @@ onMounted(() => {
   padding: 1.5rem;
   border-bottom: 1px solid #e5e7eb;
 }
-
-.modal-header h3 {
-  margin: 0;
-  color: #333;
-}
+.modal-header h3 { margin: 0; }
 
 .btn-close {
   background: none;
   border: none;
-  font-size: 1.5rem;
-  color: #9ca3af;
+  font-size: 2rem;
   cursor: pointer;
-  padding: 0;
-  width: 2rem;
-  height: 2rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 4px;
-  transition: all 0.3s;
+  color: #9ca3af;
+  line-height: 1;
 }
+.btn-close:hover { color: #374151; }
 
-.btn-close:hover {
-  background: #f3f4f6;
-  color: #333;
-}
+.modal-body { padding: 1.5rem; }
 
-.modal-body {
-  padding: 1.5rem;
-}
-
-.form-group {
-  margin-bottom: 1.5rem;
-}
-
-.form-group label {
-  display: block;
-  margin-bottom: 0.5rem;
-  color: #374151;
-  font-weight: 500;
-}
-
+.form-group { margin-bottom: 1.5rem; }
+.form-group label { display: block; margin-bottom: 0.5rem; font-weight: 600; color: #374151; }
 .form-group input,
 .form-group select {
   width: 100%;
   padding: 0.75rem;
   border: 1px solid #d1d5db;
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 1rem;
-  transition: all 0.3s;
+  box-sizing: border-box;
 }
-
 .form-group input:focus,
 .form-group select:focus {
   outline: none;
   border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  box-shadow: 0 0 0 3px rgba(102,126,234,0.1);
 }
-
-.form-group small {
-  display: block;
-  margin-top: 0.25rem;
-  color: #6b7280;
-  font-size: 0.85rem;
-}
+.form-group small { display: block; margin-top: 0.25rem; color: #6b7280; font-size: 0.85rem; }
 
 .modal-footer {
   display: flex;
@@ -570,20 +543,5 @@ onMounted(() => {
   gap: 1rem;
   padding: 1.5rem;
   border-top: 1px solid #e5e7eb;
-}
-
-.btn-secondary {
-  padding: 0.75rem 1.5rem;
-  background: #f3f4f6;
-  color: #374151;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 1rem;
-  transition: all 0.3s;
-}
-
-.btn-secondary:hover {
-  background: #e5e7eb;
 }
 </style>

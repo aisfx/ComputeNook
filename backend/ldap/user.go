@@ -180,37 +180,53 @@ func (c *Client) UpdateUser(username string, user *models.User) error {
 	dn := fmt.Sprintf("uid=%s,%s", username, baseDN)
 
 	// 先获取当前用户信息，检查哪些属性存在
-	currentUser, err := c.GetUser(username)
+	searchRequest := ldap.NewSearchRequest(
+		baseDN,
+		ldap.ScopeWholeSubtree,
+		ldap.NeverDerefAliases,
+		0, 0, false,
+		fmt.Sprintf("(&(objectClass=posixAccount)(uid=%s))", ldap.EscapeFilter(username)),
+		[]string{"mail", "telephoneNumber", "displayName"},
+		nil,
+	)
+	sr, err := c.conn.Search(searchRequest)
 	if err != nil {
 		return fmt.Errorf("failed to get current user: %w", err)
 	}
+	if len(sr.Entries) == 0 {
+		return fmt.Errorf("user not found")
+	}
+	entry := sr.Entries[0]
+	currentEmail := entry.GetAttributeValue("mail")
+	currentPhone := entry.GetAttributeValue("telephoneNumber")
+	hasDisplayName := entry.GetAttributeValue("displayName") != ""
 
 	modifyRequest := ldap.NewModifyRequest(dn, nil)
 	modifyRequest.Replace("cn", []string{user.CNName})
 	modifyRequest.Replace("sn", []string{user.CNName})
+	// displayName 处理：有则替换，无则添加
+	if hasDisplayName {
+		modifyRequest.Replace("displayName", []string{user.CNName})
+	} else {
+		modifyRequest.Add("displayName", []string{user.CNName})
+	}
 	modifyRequest.Replace("gidNumber", []string{strconv.Itoa(user.GID)})
 	modifyRequest.Replace("homeDirectory", []string{user.HomeDir})
 	modifyRequest.Replace("loginShell", []string{user.Shell})
 
 	// 邮箱处理
 	if user.Email != "" {
-		// 有新值，直接替换
 		modifyRequest.Replace("mail", []string{user.Email})
-	} else if currentUser.Email != "" {
-		// 新值为空，但原来有值，则删除
+	} else if currentEmail != "" {
 		modifyRequest.Delete("mail", []string{})
 	}
-	// 如果新值为空且原来也没有值，则不做任何操作
-	
+
 	// 电话处理
 	if user.Phone != "" {
-		// 有新值，直接替换
 		modifyRequest.Replace("telephoneNumber", []string{user.Phone})
-	} else if currentUser.Phone != "" {
-		// 新值为空，但原来有值，则删除
+	} else if currentPhone != "" {
 		modifyRequest.Delete("telephoneNumber", []string{})
 	}
-	// 如果新值为空且原来也没有值，则不做任何操作
 
 	if err := c.conn.Modify(modifyRequest); err != nil {
 		return fmt.Errorf("failed to update user: %w", err)

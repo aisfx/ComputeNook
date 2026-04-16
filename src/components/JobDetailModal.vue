@@ -114,12 +114,15 @@
         <!-- Footer -->
         <div class="jd-footer">
           <button
-            v-if="job.status === 'RUNNING' || job.status === 'PENDING'"
+            v-if="job.status === 'RUNNING' || job.status === 'PENDING' || job.status === 'SUSPENDED'"
             class="jd-btn-danger"
             @click="$emit('cancel', job.id)"
           >取消作业</button>
-          <button v-if="job.status === 'RUNNING'" class="jd-btn-outline" @click="$emit('pause', job.id)">
+          <button v-if="job.status === 'RUNNING'" class="jd-btn-warning" @click="$emit('pause', job.id)">
             暂停作业
+          </button>
+          <button v-if="job.status === 'SUSPENDED'" class="jd-btn-outline" @click="$emit('resume', job.id)">
+            恢复作业
           </button>
           <button class="jd-btn-outline" @click="openLog">查看日志</button>
           <button class="jd-btn-ghost" @click="$emit('close')">关闭</button>
@@ -135,7 +138,7 @@ import { fileManagerApi } from '../config/api'
 import { getToken } from '../utils/auth'
 
 const props = defineProps<{ job: any }>()
-defineEmits(['close', 'pause', 'cancel', 'open-directory'])
+defineEmits(['close', 'pause', 'resume', 'cancel', 'open-directory'])
 
 const refreshing = ref(false)
 const lastUpdateTime = ref(new Date().toLocaleTimeString())
@@ -467,6 +470,19 @@ onUnmounted(() => {
   transition: opacity 0.15s;
 }
 .jd-btn-danger:hover { opacity: 0.85; }
+
+.jd-btn-warning {
+  padding: 7px 14px;
+  background: hsl(var(--warning, 38 92% 50%));
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.jd-btn-warning:hover { opacity: 0.85; }
 
 .jd-btn-outline {
   padding: 7px 14px;

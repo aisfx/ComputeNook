@@ -26,6 +26,24 @@
             <span class="nav-item-label">仪表盘</span>
           </a>
 
+          <a
+            :class="['nav-item', { active: currentView === 'shell' }]"
+            @click="currentView = 'shell'"
+            :title="sidebarCollapsed ? 'Web Shell' : ''"
+          >
+            <span class="nav-item-icon">></span>
+            <span class="nav-item-label">Web Shell</span>
+          </a>
+
+          <a
+            :class="['nav-item', { active: currentView === 'desktop' }]"
+            @click="currentView = 'desktop'"
+            :title="sidebarCollapsed ? '远程桌面' : ''"
+          >
+            <span class="nav-item-icon">#</span>
+            <span class="nav-item-label">远程桌面</span>
+          </a>
+
           <!-- 作业管理 expandable -->
           <a
             :class="['nav-item', { active: currentView === 'jobs' }]"
@@ -57,38 +75,6 @@
           </a>
         </div>
 
-        <!-- Admin section -->
-        <div class="nav-section" v-if="isAdmin">
-          <div class="nav-section-label" v-if="!sidebarCollapsed">管理</div>
-          <a
-            :class="['nav-item', { active: currentView === 'monitoring' }]"
-            @click="currentView = 'monitoring'"
-            :title="sidebarCollapsed ? '集群监控' : ''"
-          >
-            <span class="nav-item-icon">📈</span>
-            <span class="nav-item-label">集群监控</span>
-          </a>
-          <!-- Admin expandable -->
-          <a
-            :class="['nav-item', { active: currentView === 'admin' }]"
-            @click="currentView = 'admin'; adminExpanded = !adminExpanded"
-            :title="sidebarCollapsed ? '系统管理' : ''"
-          >
-            <span class="nav-item-icon">⚙️</span>
-            <span class="nav-item-label">系统管理</span>
-            <span class="nav-item-chevron" v-if="!sidebarCollapsed">{{ adminExpanded ? '▾' : '▸' }}</span>
-          </a>
-          <div v-if="adminExpanded && !sidebarCollapsed" class="nav-sub">
-            <template v-for="tab in adminTabs" :key="tab.id">
-              <div v-if="tab.isGroup" class="nav-sub-group">{{ tab.label }}</div>
-              <a
-                v-else
-                :class="['nav-sub-item', { active: adminTab === tab.id && currentView === 'admin' }]"
-                @click="adminTab = tab.id; currentView = 'admin'"
-              >{{ tab.label }}</a>
-            </template>
-          </div>
-        </div>
       </nav>
 
       <!-- Sidebar footer -->
@@ -120,6 +106,7 @@
           <button class="icon-btn" @click="toggleTheme" :title="theme === 'dark' ? '切换亮色' : '切换暗色'">
             <span>{{ theme === 'dark' ? '☀️' : '🌙' }}</span>
           </button>
+          <button v-if="isAdmin" class="btn-admin" @click="goToAdmin" title="管理后台">⚙️ 管理后台</button>
           <button class="icon-btn" @click="goToProfile" title="个人信息">
             <span>👤</span>
           </button>
@@ -131,7 +118,7 @@
 
       <!-- Content -->
       <main class="content-area">
-        <Dashboard v-if="currentView === 'dashboard'" />
+        <Dashboard v-if="currentView === 'dashboard'" @navigate="currentView = $event" />
         <JobManagement v-else-if="currentView === 'jobs'" @open-directory="handleOpenDirectory" />
         <Monitoring v-else-if="currentView === 'monitoring' && isAdmin" />
         <WebShell v-else-if="currentView === 'shell'" />
@@ -155,6 +142,9 @@
         </div>
       </main>
     </div>
+
+    <!-- AI 悬浮助手 -->
+    <AIAssistant />
   </div>
 </template>
 
@@ -178,12 +168,14 @@ import AdminSlurmUsers from './AdminSlurmUsers.vue'
 import AdminAssociations from './AdminAssociations.vue'
 import Monitoring from './Monitoring.vue'
 import Profile from './Profile.vue'
+import AIAssistant from '../components/AIAssistant.vue'
 import { getUser, logout, setupAxiosInterceptors, isAdmin as checkAdmin } from '../utils/auth'
 
 const router = useRouter()
 const currentView = ref('dashboard')
 const jobManagementTab = ref('info')
 const jobsExpanded = ref(true)
+const shellExpanded = ref(true)
 const adminTab = ref('users')
 const adminExpanded = ref(false)
 const sidebarCollapsed = ref(false)
@@ -214,8 +206,6 @@ const handleOpenDirectory = (path: string) => {
 }
 
 const otherMenuItems = [
-  { id: 'shell', label: 'Web Shell', icon: '>' },
-  { id: 'desktop', label: '远程桌面', icon: '#' },
   { id: 'files', label: '文件管理', icon: '-' },
   { id: 'reports', label: '报表中心', icon: '~' },
 ]
@@ -267,6 +257,7 @@ const handleLogout = () => {
 }
 
 const goToProfile = () => { currentView.value = 'profile' }
+const goToAdmin = () => { router.push('/admin') }
 
 onMounted(() => {
   setupAxiosInterceptors()
@@ -363,10 +354,10 @@ onMounted(() => {
   padding: 8px 0;
 }
 
-.nav-section { margin-bottom: 4px; }
+.nav-section { margin-bottom: 2px; }
 
 .nav-section-label {
-  padding: 8px 12px 4px;
+  padding: 6px 12px 2px;
   font-size: 0.7rem;
   font-weight: 600;
   text-transform: uppercase;
@@ -378,12 +369,12 @@ onMounted(() => {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 7px 12px;
-  margin: 1px 8px;
+  padding: 6px 12px;
+  margin: 1px 6px;
   border-radius: 6px;
   cursor: pointer;
   color: hsl(var(--sidebar-foreground));
-  font-size: 0.875rem;
+  font-size: 0.85rem;
   font-weight: 500;
   transition: background 0.15s, color 0.15s;
   text-decoration: none;
@@ -417,11 +408,11 @@ onMounted(() => {
 
 /* Sub nav */
 .nav-sub {
-  margin: 2px 8px 4px 28px;
+  margin: 1px 6px 2px 26px;
 }
 
 .nav-sub-group {
-  padding: 6px 8px 2px;
+  padding: 4px 8px 2px;
   font-size: 0.7rem;
   font-weight: 600;
   text-transform: uppercase;
@@ -431,9 +422,9 @@ onMounted(() => {
 
 .nav-sub-item {
   display: block;
-  padding: 5px 8px;
+  padding: 5px 10px;
   border-radius: 5px;
-  font-size: 0.8rem;
+  font-size: 0.82rem;
   color: hsl(var(--muted-foreground));
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
@@ -588,6 +579,20 @@ onMounted(() => {
 }
 .icon-btn:hover { background: hsl(var(--accent)); color: hsl(var(--accent-foreground)); }
 .icon-btn.danger:hover { background: hsl(var(--destructive) / 0.1); color: hsl(var(--destructive)); }
+
+.btn-admin {
+  padding: 5px 12px;
+  border: 1px solid hsl(var(--sidebar-primary) / 0.4);
+  background: hsl(var(--sidebar-primary) / 0.08);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: hsl(var(--sidebar-primary));
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.btn-admin:hover { background: hsl(var(--sidebar-primary) / 0.15); }
 
 /* Content */
 .content-area {

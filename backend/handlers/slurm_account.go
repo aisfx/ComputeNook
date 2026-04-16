@@ -178,11 +178,8 @@ func CreateSlurmAccount(c *gin.Context) {
 		return
 	}
 
-	// 获取当前用户
-	username, _ := c.Get("username")
-	
-	// 创建 Slurm 客户端
-	slurmClient, err := GetSlurmClientForUser(username.(string))
+	// 使用管理员客户端执行写操作
+	slurmClient, err := GetSlurmAdminClient()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法连接到 Slurm API: " + err.Error()})
 		return
@@ -229,10 +226,8 @@ func UpdateSlurmAccount(c *gin.Context) {
 		return
 	}
 
-	// 获取当前用户
-	username, _ := c.Get("username")
-	
-	client, err := GetSlurmClientForUser(username.(string))
+	// 使用管理员客户端执行写操作
+	client, err := GetSlurmAdminClient()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法连接到 Slurm API: " + err.Error()})
 		return
@@ -256,10 +251,8 @@ func DeleteSlurmAccount(c *gin.Context) {
 		return
 	}
 
-	// 获取当前用户
-	username, _ := c.Get("username")
-	
-	client, err := GetSlurmClientForUser(username.(string))
+	// 使用管理员客户端执行写操作
+	client, err := GetSlurmAdminClient()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法连接到 Slurm API: " + err.Error()})
 		return
@@ -416,11 +409,8 @@ func CreateSlurmUser(c *gin.Context) {
 		return
 	}
 
-	// 获取当前用户
-	username, _ := c.Get("username")
-	
-	// 创建 Slurm 客户端
-	slurmClient, err := GetSlurmClientForUser(username.(string))
+	// 使用管理员客户端执行写操作
+	slurmClient, err := GetSlurmAdminClient()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法连接到 Slurm API: " + err.Error()})
 		return
@@ -475,10 +465,8 @@ func UpdateSlurmUser(c *gin.Context) {
 		return
 	}
 
-	// 获取当前用户
-	username, _ := c.Get("username")
-	
-	client, err := GetSlurmClientForUser(username.(string))
+	// 使用管理员客户端执行写操作
+	client, err := GetSlurmAdminClient()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法连接到 Slurm API: " + err.Error()})
 		return
@@ -502,10 +490,8 @@ func DeleteSlurmUser(c *gin.Context) {
 		return
 	}
 
-	// 获取当前用户
-	username, _ := c.Get("username")
-	
-	client, err := GetSlurmClientForUser(username.(string))
+	// 使用管理员客户端执行写操作
+	client, err := GetSlurmAdminClient()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法连接到 Slurm API: " + err.Error()})
 		return
@@ -628,10 +614,8 @@ func CreateAssociation(c *gin.Context) {
 		return
 	}
 
-	// 获取当前用户
-	username, _ := c.Get("username")
-	
-	client, err := GetSlurmClientForUser(username.(string))
+	// 使用管理员客户端执行写操作
+	client, err := GetSlurmAdminClient()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法连接到 Slurm API: " + err.Error()})
 		return
@@ -718,10 +702,8 @@ func UpdateAssociation(c *gin.Context) {
 		return
 	}
 
-	// 获取当前用户
-	username, _ := c.Get("username")
-	
-	client, err := GetSlurmClientForUser(username.(string))
+	// 使用管理员客户端执行写操作
+	client, err := GetSlurmAdminClient()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法连接到 Slurm API: " + err.Error()})
 		return
@@ -757,10 +739,8 @@ func DeleteAssociation(c *gin.Context) {
 		return
 	}
 
-	// 获取当前用户
-	username, _ := c.Get("username")
-	
-	client, err := GetSlurmClientForUser(username.(string))
+	// 使用管理员客户端执行写操作
+	client, err := GetSlurmAdminClient()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法连接到 Slurm API: " + err.Error()})
 		return

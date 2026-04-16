@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"hpc-backend/ldap"
@@ -141,8 +143,8 @@ func CreateUser(c *gin.Context) {
 func UpdateUser(c *gin.Context) {
 	username := c.Param("username")
 
-	var user models.User
-	if err := c.ShouldBindJSON(&user); err != nil {
+	var req models.UpdateUserRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
@@ -160,7 +162,18 @@ func UpdateUser(c *gin.Context) {
 	}
 	defer client.Close()
 
-	if err := client.UpdateUser(username, &user); err != nil {
+	user := &models.User{
+		Username: username,
+		UID:      req.UID,
+		GID:      req.GID,
+		CNName:   req.CNName,
+		Email:    req.Email,
+		Phone:    req.Phone,
+		Shell:    req.Shell,
+		HomeDir:  req.HomeDir,
+	}
+
+	if err := client.UpdateUser(username, user); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
@@ -451,4 +464,136 @@ func UpdateProfile(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "个人信息更新成功"})
+}
+
+// GetMyResources 获取当前用户的资源限制（Association + QoS）
+func GetMyResources(c *gin.Context) {
+	username, exists := c.Get("username")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未授权"})
+		return
+	}
+
+	// 开发模式：返回模拟数据
+	if os.Getenv("DEV_MODE") == "true" {
+		c.JSON(http.StatusOK, gin.H{
+			"data": map[string]interface{}{
+				"associations": []map[string]interface{}{
+					{
+						"account":   "default",
+						"partition": "compute",
+						"qos":       "normal",
+						"qos_list":  []string{"normal", "high"},
+						"max_jobs":  100,
+					},
+				},
+				"qos_limits": []map[string]interface{}{
+					{
+						"name":        "normal",
+						"max_cpus":    128,
+						"max_nodes":   4,
+						"max_memory":  256,
+						"max_gpus":    0,
+						"max_jobs":    100,
+						"max_submit":  200,
+						"max_wall":    72,
+						"grp_tres_mins": 0,
+					},
+				},
+			},
+		})
+		return
+	}
+
+	client, err := GetSlurmClientForUser(username.(string))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法连接到 Slurm: " + err.Error()})
+		return
+	}
+
+	// 获取用户的 association
+	associations, err := client.GetUserAssociations(username.(string))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "获取资源关联失败: " + err.Error()})
+		return
+	}
+
+	// 收集用户可用的 QoS 名称
+	qosNames := make(map[string]bool)
+	assocList := make([]map[string]interface{}, 0)
+	for _, a := range associations {
+		item := map[string]interface{}{
+			"account":   a.Account,
+			"partition": a.Partition,
+			"qos":       "",
+			"qos_list":  a.QoS,
+			"max_jobs":  0,
+		}
+		assocList = append(assocList, item)
+		for _, q := range a.QoS {
+			qosNames[q] = true
+		}
+	}
+
+	// 获取相关 QoS 的限制
+	allQoS, err := client.GetQoSList()
+	qosLimits := make([]map[string]interface{}, 0)
+	if err == nil {
+		for _, q := range allQoS {
+			if !qosNames[q.Name] {
+				continue
+			}
+
+			// 从新版嵌套结构提取 billing 限制（billing-minutes）
+			var billingLimit int64
+			for _, tres := range q.Limits.Max.TRES.Minutes.Total {
+				if tres.Type == "billing" {
+					billingLimit = tres.Count
+					break
+				}
+			}
+			// 兼容旧版 GrpTRESMins 字段
+			if billingLimit == 0 && q.GrpTRESMins != "" {
+				fmt.Sscanf(q.GrpTRESMins, "%d", &billingLimit)
+			}
+
+			// 查询该用户在此 QoS 关联账户下的已使用 billing-minutes
+			var usedBillingMins float64
+			if billingLimit > 0 {
+				startTime := time.Now().AddDate(-1, 0, 0) // 近一年
+				endTime := time.Now()
+				records, uerr := client.GetUserUsage(username.(string), startTime, endTime)
+				if uerr == nil {
+					for _, r := range records {
+						usedBillingMins += r.BillingMins // 直接用已计算好的 BillingMins
+					}
+				}
+				fmt.Printf("[BILLING] user=%s qos=%s limit=%d used=%.4f mins\n",
+					username, q.Name, billingLimit, usedBillingMins)
+			}
+
+			item := map[string]interface{}{
+				"name":               q.Name,
+				"description":        q.Description,
+				"max_cpus":           q.MaxCPUs,
+				"max_nodes":          q.MaxNodes,
+				"max_tres":           q.MaxTRES,
+				"max_jobs":           q.MaxJobs,
+				"max_submit":         q.MaxSubmit,
+				"max_wall_pu":        q.MaxWallPU,
+				"max_wall_pj":        q.MaxWall,
+				"grp_tres_mins":      q.GrpTRESMins,
+				"billing_limit_mins": billingLimit,
+				"billing_used_mins":  usedBillingMins, // float64，保留小数
+			}
+			qosLimits = append(qosLimits, item)
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"data": map[string]interface{}{
+			"associations": assocList,
+			"qos_limits":   qosLimits,
+		},
+	})
 }

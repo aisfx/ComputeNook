@@ -782,12 +782,13 @@ const connectToNode = async (node: any, password: string = '') => {
     websocket.onclose = () => {
       connectionStatus.value = 'disconnected'
       connected.value = false
-      // 取消断开连接提示
-      // notification.info('连接已断开')
+      isFullscreen.value = false
+      sidebarCollapsed.value = false
       if (terminal) {
         terminal.dispose()
         terminal = null
       }
+      window.removeEventListener('resize', handleResize)
     }
     
     websocket.onerror = (error) => {
@@ -924,8 +925,9 @@ const handleWebSocketMessage = (message: any) => {
       break
       
     case 'auth_required':
-      notification.warning(message.data)
+      notification.warning('需要密码认证，请输入SSH密码')
       showPasswordInput.value = true
+      nextTick(() => { passwordInput.value?.focus() })
       break
       
     case 'error':
@@ -959,6 +961,8 @@ const disconnect = () => {
   connected.value = false
   connectionStatus.value = 'disconnected'
   currentNode.value = null
+  isFullscreen.value = false        // 退出全屏，避免断开后页面空白
+  sidebarCollapsed.value = false    // 恢复侧边栏
 }
 
 // 切换全屏
@@ -1047,64 +1051,75 @@ const handleKeyUpload = async (event: Event) => {
 
 <style scoped>
 .webshell-container {
-  padding: 2rem;
-  height: calc(100vh - 4rem);
+  padding: 1.25rem 1.5rem;
+  height: 100%;
   display: flex;
   flex-direction: column;
+  gap: 1rem;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .page-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 2rem;
+  flex-shrink: 0;
 }
 
 .page-header h3 {
   margin: 0;
-  font-size: 1.5rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #374151;
 }
 
 .header-actions {
   display: flex;
-  gap: 1rem;
+  gap: 0.75rem;
 }
 
 .main-workspace {
   flex: 1;
   display: flex;
-  gap: 0.5rem;
+  gap: 0.75rem;
+  overflow: hidden;
+  min-height: 0;
   overflow: hidden;
 }
 
 .hosts-sidebar {
-  width: 220px;
-  background: #f9fafb;
+  width: 200px;
+  min-width: 200px;
+  background: white;
   border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  border-radius: 12px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  transition: all 0.3s ease;
+  transition: all 0.25s ease;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
 }
 
 .hosts-sidebar.collapsed {
-  width: 50px;
-  min-width: 50px;
+  width: 48px;
+  min-width: 48px;
 }
 
 .sidebar-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1rem;
-  border-bottom: 1px solid #e5e7eb;
-  background: white;
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid #f3f4f6;
+  background: #fafafa;
+  border-radius: 12px 12px 0 0;
 }
 
 .sidebar-header h4 {
   margin: 0;
-  font-size: 1rem;
+  font-size: 0.85rem;
+  font-weight: 600;
   color: #374151;
   white-space: nowrap;
   overflow: hidden;
@@ -1112,7 +1127,7 @@ const handleKeyUpload = async (event: Event) => {
 
 .sidebar-controls {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.25rem;
   align-items: center;
 }
 
@@ -1120,14 +1135,16 @@ const handleKeyUpload = async (event: Event) => {
   background: none;
   border: none;
   cursor: pointer;
-  font-size: 1rem;
-  padding: 0.25rem;
-  border-radius: 4px;
-  transition: background 0.2s;
+  font-size: 0.9rem;
+  padding: 0.25rem 0.4rem;
+  border-radius: 6px;
+  transition: background 0.15s;
+  color: #6b7280;
 }
 
 .btn-icon:hover {
   background: #f3f4f6;
+  color: #374151;
 }
 
 .hosts-list {
@@ -1136,54 +1153,35 @@ const handleKeyUpload = async (event: Event) => {
   padding: 0.5rem;
 }
 
-.loading-small {
-  text-align: center;
-  padding: 2rem 1rem;
-  color: #6b7280;
-  font-size: 0.9rem;
-}
-
-.empty-state {
-  text-align: center;
-  padding: 2rem 1rem;
-  color: #9ca3af;
-}
-
-.empty-state p {
-  margin: 0;
-  font-size: 0.9rem;
-}
-
 .host-item {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.75rem;
-  margin-bottom: 0.25rem;
-  border-radius: 6px;
+  gap: 0.6rem;
+  padding: 0.6rem 0.75rem;
+  margin-bottom: 0.2rem;
+  border-radius: 8px;
   cursor: pointer;
-  transition: all 0.2s;
-  background: white;
+  transition: all 0.15s;
   border: 1px solid transparent;
 }
 
 .host-item:hover:not(.disabled) {
-  background: #f0f9ff;
-  border-color: #bfdbfe;
+  background: #f0f4ff;
+  border-color: #c7d2fe;
 }
 
 .host-item.active {
-  background: #dbeafe;
-  border-color: #3b82f6;
+  background: #eef2ff;
+  border-color: #818cf8;
 }
 
 .host-item.disabled {
-  opacity: 0.5;
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
 .host-icon {
-  font-size: 1.5rem;
+  font-size: 1.2rem;
   flex-shrink: 0;
 }
 
@@ -1194,16 +1192,16 @@ const handleKeyUpload = async (event: Event) => {
 
 .host-name {
   font-weight: 600;
-  color: #374151;
-  font-size: 0.9rem;
+  color: #1f2937;
+  font-size: 0.85rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .host-address {
-  font-size: 0.75rem;
-  color: #6b7280;
+  font-size: 0.72rem;
+  color: #9ca3af;
   font-family: monospace;
   white-space: nowrap;
   overflow: hidden;
@@ -1212,18 +1210,17 @@ const handleKeyUpload = async (event: Event) => {
 
 .host-status {
   flex-shrink: 0;
-  width: 12px;
-  height: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
 }
 
-.host-status.connected span {
-  color: #10b981;
-  font-size: 1.2rem;
-  line-height: 1;
+.host-status.connected {
+  background: #10b981;
+  box-shadow: 0 0 0 2px rgba(16,185,129,0.2);
 }
+
+.host-status.connected span { display: none; }
 
 .terminal-area {
   flex: 1;
@@ -1317,30 +1314,32 @@ const handleKeyUpload = async (event: Event) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #f9fafb;
-  border-radius: 8px;
-  border: 2px dashed #d1d5db;
+  background: white;
+  border-radius: 12px;
+  border: 2px dashed #e5e7eb;
 }
 
 .prompt-content {
   text-align: center;
-  max-width: 400px;
   padding: 2rem;
 }
 
 .prompt-icon {
-  font-size: 4rem;
+  font-size: 3.5rem;
   margin-bottom: 1rem;
+  opacity: 0.5;
 }
 
 .prompt-content h3 {
-  margin-bottom: 1rem;
+  margin: 0 0 0.5rem 0;
   color: #374151;
+  font-size: 1.1rem;
 }
 
 .prompt-content p {
   margin: 0;
-  color: #6b7280;
+  color: #9ca3af;
+  font-size: 0.9rem;
 }
 
 .modal-overlay {

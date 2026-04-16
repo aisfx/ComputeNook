@@ -29,37 +29,54 @@ const currentTab = inject('jobManagementTab', ref('info'))
 const selectedJob = ref<any>(null)
 const jobSubmitRef = ref<any>(null)
 
+const getToken = () => localStorage.getItem('token') || sessionStorage.getItem('token')
+
 const handleViewDetail = (job: any) => {
   selectedJob.value = job
 }
 
 const handleUseTemplate = (template: any) => {
-  // 切换到提交作业页面
   currentTab.value = 'submit'
-  // 等待组件渲染后应用模板
   setTimeout(() => {
-    if (jobSubmitRef.value && jobSubmitRef.value.handleTemplateSelect) {
+    if (jobSubmitRef.value?.handleTemplateSelect) {
       jobSubmitRef.value.handleTemplateSelect(template)
     }
   }, 100)
 }
 
-const handlePause = (jobId: string) => {
-  console.log('暂停作业:', jobId)
-  alert(`作业 ${jobId} 已暂停`)
-  selectedJob.value = null
-}
-
-const handleCancel = (jobId: string) => {
-  if (confirm(`确定要取消作业 ${jobId} 吗？`)) {
-    console.log('取消作业:', jobId)
+const handleCancel = async (jobId: string | number) => {
+  if (!confirm(`确定要取消作业 ${jobId} 吗？`)) return
+  try {
+    const res = await fetch(`http://localhost:8080/api/jobs/${jobId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${getToken()}` }
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || '取消失败')
     alert(`作业 ${jobId} 已取消`)
     selectedJob.value = null
+  } catch (e: any) {
+    alert(`取消失败: ${e.message}`)
+  }
+}
+
+const handlePause = async (jobId: string | number) => {
+  if (!confirm(`确定要暂停作业 ${jobId} 吗？`)) return
+  try {
+    const res = await fetch(`http://localhost:8080/api/jobs/${jobId}/suspend`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${getToken()}` }
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || '暂停失败')
+    alert(`作业 ${jobId} 已暂停`)
+    selectedJob.value = null
+  } catch (e: any) {
+    alert(`暂停失败: ${e.message}`)
   }
 }
 
 const handleOpenDirectory = (path: string) => {
-  // 转发事件到父组件（App.vue）
   emit('open-directory', path)
 }
 </script>

@@ -4,7 +4,8 @@ import App from './App.vue'
 import Login from './views/Login.vue'
 import ForceChangePassword from './views/ForceChangePassword.vue'
 import Layout from './views/Layout.vue'
-import { isAuthenticated, getUser } from './utils/auth'
+import AdminLayout from './views/AdminLayout.vue'
+import { isAuthenticated, getUser, isAdmin } from './utils/auth'
 import './styles/main.css'
 
 // 创建路由
@@ -31,6 +32,12 @@ const router = createRouter({
       name: 'Dashboard',
       component: Layout,
       meta: { requiresAuth: true }
+    },
+    {
+      path: '/admin',
+      name: 'Admin',
+      component: AdminLayout,
+      meta: { requiresAuth: true, requiresAdmin: true }
     },
     {
       path: '/:pathMatch(.*)*',
@@ -73,6 +80,12 @@ router.beforeEach((to, from, next) => {
         return
       }
     }
+  }
+
+  // 非管理员访问管理页面
+  if (to.meta.requiresAdmin && !isAdmin()) {
+    next('/dashboard')
+    return
   }
 
   next()

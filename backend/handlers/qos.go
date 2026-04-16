@@ -114,10 +114,7 @@ func CreateQoS(c *gin.Context) {
 		return
 	}
 
-	// 获取当前用户
-	username, _ := c.Get("username")
-	
-	client, err := GetSlurmClientForUser(username.(string))
+	client, err := GetSlurmAdminClient()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -147,10 +144,7 @@ func UpdateQoS(c *gin.Context) {
 		return
 	}
 
-	// 获取当前用户
-	username, _ := c.Get("username")
-	
-	client, err := GetSlurmClientForUser(username.(string))
+	client, err := GetSlurmAdminClient()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -174,10 +168,7 @@ func DeleteQoS(c *gin.Context) {
 		return
 	}
 
-	// 获取当前用户
-	username, _ := c.Get("username")
-	
-	client, err := GetSlurmClientForUser(username.(string))
+	client, err := GetSlurmAdminClient()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return

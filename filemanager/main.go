@@ -72,6 +72,9 @@ func main() {
 		
 		// 复制文件
 		api.POST("/copy", CopyFile)
+
+		// 存储配额查询
+		api.GET("/quota", GetQuota)
 	}
 
 	port := os.Getenv("FILEMANAGER_PORT")

@@ -52,15 +52,21 @@
               </div>
             </td>
             <td>
-              <div class="action-buttons">
-                <button class="btn-link" @click="editUser(user)">✏️ 编辑</button>
-                <button class="btn-link" @click="showResetPasswordModal(user)">🔑 重置密码</button>
-                <button v-if="!user.disabled" class="btn-link warning" @click="toggleUserStatus(user)">🚫 禁用</button>
-                <button v-else class="btn-link success" @click="toggleUserStatus(user)">✅ 启用</button>
-                <button class="btn-link" @click="togglePasswordMustChange(user)">
-                  {{ user.passwordMustChange ? '🔓 取消强制改密' : '🔒 强制改密' }}
+              <div class="action-dropdown">
+                <button class="btn-action-toggle" @click.stop="toggleDropdown(user)">
+                  操作 ▾
                 </button>
-                <button class="btn-link danger" @click="confirmDelete(user)">🗑️ 删除</button>
+                <div v-if="openDropdown[user.username]" class="dropdown-menu" @click.stop>
+                  <button class="dropdown-item" @click="editUser(user); closeDropdown(user)">✏️ 编辑</button>
+                  <button class="dropdown-item" @click="showResetPasswordModal(user); closeDropdown(user)">🔑 重置密码</button>
+                  <button v-if="!user.disabled" class="dropdown-item warning" @click="toggleUserStatus(user); closeDropdown(user)">🚫 禁用</button>
+                  <button v-else class="dropdown-item success" @click="toggleUserStatus(user); closeDropdown(user)">✅ 启用</button>
+                  <button class="dropdown-item" @click="togglePasswordMustChange(user); closeDropdown(user)">
+                    {{ user.passwordMustChange ? '🔓 取消强制改密' : '🔒 强制改密' }}
+                  </button>
+                  <div class="dropdown-divider"></div>
+                  <button class="dropdown-item danger" @click="confirmDelete(user); closeDropdown(user)">🗑️ 删除</button>
+                </div>
               </div>
             </td>
           </tr>
@@ -150,10 +156,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { userAPI } from '../api'
 
 const users = ref<any[]>([])
+const openDropdown = reactive<Record<string, boolean>>({})
 const loading = ref(false)
 const error = ref('')
 const saving = ref(false)
@@ -232,29 +239,15 @@ const saveUser = async () => {
         return
       }
       await userAPI.createUser(formData.value)
-      
-      // 直接添加到本地列表，避免重新加载
-      const newUser: Record<string, any> = {
-        ...formData.value,
-        isAdmin: false
-      }
-      delete newUser.password // 不在列表中显示密码
-      users.value.push(newUser)
-      
       alert('用户创建成功！')
+      // 重新从服务器加载
+      await loadUsers()
     } else {
       // 更新用户
       await userAPI.updateUser(formData.value.username, formData.value)
-      
-      // 直接更新本地列表中的用户
-      const index = users.value.findIndex(u => u.username === formData.value.username)
-      if (index !== -1) {
-        const updated: Record<string, any> = { ...formData.value }
-        delete updated.password
-        users.value[index] = updated
-      }
-      
       alert('用户更新成功！')
+      // 重新从服务器加载，确保数据同步
+      await loadUsers()
     }
     
     closeModals()
@@ -365,8 +358,27 @@ const togglePasswordMustChange = async (user: any) => {
   }
 }
 
+const toggleDropdown = (user: any) => {
+  const current = openDropdown[user.username]
+  Object.keys(openDropdown).forEach(k => { openDropdown[k] = false })
+  openDropdown[user.username] = !current
+}
+
+const closeDropdown = (user: any) => {
+  openDropdown[user.username] = false
+}
+
+const closeAllDropdowns = () => {
+  Object.keys(openDropdown).forEach(k => { openDropdown[k] = false })
+}
+
 onMounted(() => {
   loadUsers()
+  document.addEventListener('click', closeAllDropdowns)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('click', closeAllDropdowns)
 })
 </script>
 
@@ -469,35 +481,73 @@ onMounted(() => {
   flex-wrap: wrap;
 }
 
-.action-buttons {
-  display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
+.action-dropdown {
+  position: relative;
+  display: inline-block;
 }
 
-.btn-link {
+.btn-action-toggle {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  padding: 0.4rem 0.9rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.btn-action-toggle:hover {
+  opacity: 0.9;
+}
+
+.dropdown-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  min-width: 150px;
+  z-index: 100;
+  overflow: hidden;
+}
+
+.dropdown-item {
+  display: block;
+  width: 100%;
+  padding: 0.6rem 1rem;
   background: none;
   border: none;
-  color: #667eea;
+  text-align: left;
   cursor: pointer;
   font-size: 0.9rem;
-  padding: 0.25rem 0.5rem;
+  color: #374151;
+  white-space: nowrap;
 }
 
-.btn-link:hover {
-  text-decoration: underline;
+.dropdown-item:hover {
+  background: #f3f4f6;
 }
 
-.btn-link.danger {
+.dropdown-item.danger {
   color: #ef4444;
 }
 
-.btn-link.warning {
+.dropdown-item.warning {
   color: #f59e0b;
 }
 
-.btn-link.success {
+.dropdown-item.success {
   color: #10b981;
+}
+
+.dropdown-divider {
+  height: 1px;
+  background: #e5e7eb;
+  margin: 0.25rem 0;
 }
 
 .btn-primary {

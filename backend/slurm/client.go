@@ -133,6 +133,11 @@ func (c *Client) doRequest(method, path string, body interface{}) ([]byte, error
 	return respBody, nil
 }
 
+// RawRequest 暴露原始 HTTP 请求，用于调试
+func (c *Client) RawRequest(method, path string, body interface{}) ([]byte, error) {
+	return c.doRequest(method, path, body)
+}
+
 // buildAPIPath 构建带版本的API路径
 func (c *Client) buildAPIPath(endpoint string) string {
 	return fmt.Sprintf("/slurmdb/%s%s", c.apiVersion, endpoint)

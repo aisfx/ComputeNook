@@ -2,19 +2,19 @@ package models
 
 // User LDAP 用户模型
 type User struct {
-	Username         string   `json:"username" binding:"required"`
-	UID              int      `json:"uid" binding:"required"`
-	GID              int      `json:"gid" binding:"required"`
-	CNName           string   `json:"cnName" binding:"required"`
-	Email            string   `json:"email"`
-	Phone            string   `json:"phone"`
-	Shell            string   `json:"shell"`
-	HomeDir          string   `json:"homeDir" binding:"required"`
-	Password         string   `json:"password,omitempty"`
-	Groups           []string `json:"groups"`
-	IsAdmin          bool     `json:"isAdmin"`
-	Disabled         bool     `json:"disabled"`         // 用户是否被禁用
-	PasswordMustChange bool   `json:"passwordMustChange"` // 首次登录必须修改密码
+	Username           string   `json:"username" binding:"required"`
+	UID                int      `json:"uid" binding:"required,min=1"`
+	GID                int      `json:"gid" binding:"required,min=1"`
+	CNName             string   `json:"cnName" binding:"required"`
+	Email              string   `json:"email"`
+	Phone              string   `json:"phone"`
+	Shell              string   `json:"shell"`
+	HomeDir            string   `json:"homeDir" binding:"required"`
+	Password           string   `json:"password,omitempty"`
+	Groups             []string `json:"groups"`
+	IsAdmin            bool     `json:"isAdmin"`
+	Disabled           bool     `json:"disabled"`
+	PasswordMustChange bool     `json:"passwordMustChange"`
 }
 
 // Group LDAP 用户组模型
@@ -52,4 +52,17 @@ type UpdateProfile struct {
 	CNName string `json:"cnName"`
 	Email  string `json:"email"`
 	Phone  string `json:"phone"`
+}
+
+// UpdateUserRequest 更新用户请求（管理员用，字段均为可选）
+type UpdateUserRequest struct {
+	UID                int    `json:"uid"`
+	GID                int    `json:"gid"`
+	CNName             string `json:"cnName"`
+	Email              string `json:"email"`
+	Phone              string `json:"phone"`
+	Shell              string `json:"shell"`
+	HomeDir            string `json:"homeDir"`
+	Disabled           bool   `json:"disabled"`
+	PasswordMustChange bool   `json:"passwordMustChange"`
 }

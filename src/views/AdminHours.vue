@@ -7,16 +7,8 @@
 
     <div class="filters-bar">
       <div class="filter-group">
-        <label>类型筛选：</label>
-        <select v-model="filterType">
-          <option value="all">全部</option>
-          <option value="user">用户</option>
-          <option value="account">账户</option>
-        </select>
-      </div>
-      <div class="filter-group">
         <label>搜索：</label>
-        <input v-model="searchQuery" placeholder="搜索用户或账户名称" />
+        <input v-model="searchQuery" placeholder="搜索 QoS 名称" />
       </div>
     </div>
 
@@ -27,35 +19,18 @@
       <table class="data-table">
         <thead>
           <tr>
-            <th>类型</th>
-            <th>用户/账户</th>
+            <th>QoS 名称</th>
+            <th>描述</th>
             <th>总机时(小时)</th>
-            <th>已使用</th>
-            <th>剩余</th>
-            <th>使用率</th>
-            <th>有效期</th>
             <th>状态</th>
             <th>操作</th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="item in filteredHoursList" :key="item.id">
-            <td>
-              <span class="type-badge" :class="item.type === 'user' ? 'type-user' : 'type-account'">
-                {{ item.type === 'user' ? '👤 用户' : '📁 账户' }}
-              </span>
-            </td>
             <td><strong>{{ item.name }}</strong></td>
-            <td>{{ item.total }}</td>
-            <td>{{ item.used }}</td>
-            <td>{{ item.remaining }}</td>
-            <td>
-              <div class="progress-bar">
-                <div class="progress-fill" :style="{ width: item.usage + '%', background: getProgressColor(item.usage) }"></div>
-              </div>
-              <span class="usage-text">{{ item.usage }}%</span>
-            </td>
-            <td>{{ item.expireDate }}</td>
+            <td>{{ item.description || '-' }}</td>
+            <td>{{ item.total.toLocaleString() }}</td>
             <td>
               <span class="status-badge" :class="getStatusClass(item)">
                 {{ getStatusText(item) }}
@@ -64,7 +39,7 @@
             <td>
               <div class="action-buttons">
                 <button class="btn-link" @click="editHours(item)">✏️ 编辑</button>
-                <button class="btn-link danger" @click="deleteHours(item)">🗑️ 删除</button>
+                <button class="btn-link danger" @click="deleteHours(item)">🗑️ 清除</button>
               </div>
             </td>
           </tr>
@@ -88,27 +63,19 @@
           <div v-if="modalError" class="alert alert-error">{{ modalError }}</div>
           
           <div class="form-group">
-            <label>分配类型 *</label>
-            <select v-model="formData.type" :disabled="isEdit">
-              <option value="user">用户</option>
-              <option value="account">账户</option>
-            </select>
-          </div>
-
-          <div class="form-group">
-            <label>{{ formData.type === 'user' ? '用户名' : '账户名' }} *</label>
+            <label>QoS 名称 *</label>
             <input 
               v-if="isEdit" 
               v-model="formData.name" 
               disabled 
             />
             <select v-else v-model="formData.name">
-              <option value="">请选择...</option>
+              <option value="">请选择 QoS...</option>
               <option v-for="item in availableTargets" :key="item" :value="item">
                 {{ item }}
               </option>
             </select>
-            <small class="form-hint">选择要分配机时的{{ formData.type === 'user' ? '用户' : '账户' }}</small>
+            <small class="form-hint">选择要设置机时限制的 QoS</small>
           </div>
 
           <div class="form-group">
@@ -116,26 +83,17 @@
             <input 
               type="number" 
               v-model.number="formData.total" 
-              placeholder="例如: 1000" 
-              min="0"
+              placeholder="例如: 10000" 
+              min="1"
             />
-            <small class="form-hint">分配的总机时数量</small>
-          </div>
-
-          <div class="form-group">
-            <label>有效期 *</label>
-            <input 
-              type="date" 
-              v-model="formData.expireDate"
-            />
-            <small class="form-hint">机时的有效截止日期</small>
+            <small class="form-hint">将转换为 billing-minutes 写入 QoS 的 GrpTRESMins</small>
           </div>
 
           <div class="form-group">
             <label>备注</label>
             <textarea 
               v-model="formData.notes" 
-              placeholder="可选的备注信息"
+              placeholder="可选的备注信息（写入 QoS description）"
               rows="3"
             ></textarea>
           </div>
@@ -153,7 +111,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
-import { userAPI } from '../api'
+import { userAPI, qosAPI, slurmAccountAPI, usageAPI } from '../api'
 
 const hoursList = ref<any[]>([])
 const loading = ref(false)
@@ -165,52 +123,63 @@ const modalError = ref('')
 const filterType = ref('all')
 const searchQuery = ref('')
 
-const users = ref<any[]>([])
+const qosList = ref<any[]>([])
 const accounts = ref<any[]>([])
 
 const formData = ref({
-  type: 'user',
-  name: '',
-  total: 0,
+  type: 'qos',       // 通过 QoS 的 GrpTRESMins 来限制机时
+  name: '',          // QoS 名称
+  total: 0,          // 总机时（小时），转换为 billing-minutes 存入 GrpTRESMins
   expireDate: '',
   notes: ''
 })
 
-// 加载用户列表
-const loadUsersAndAccounts = async () => {
+// 加载 QoS 和账户列表
+const loadQoSAndAccounts = async () => {
   try {
-    const usersData = await userAPI.getUsers()
-    users.value = usersData
-    // 账户功能已移除
-    accounts.value = []
+    const [qosData, accountsData] = await Promise.all([
+      qosAPI.getQoSList(),
+      slurmAccountAPI.getAccounts()
+    ])
+    qosList.value = qosData || []
+    accounts.value = accountsData || []
   } catch (err) {
-    console.error('Failed to load users:', err)
+    console.error('Failed to load QoS/accounts:', err)
   }
 }
 
-// 可选择的目标列表
+// 可选择的目标列表（QoS 名称）
 const availableTargets = computed(() => {
-  if (formData.value.type === 'user') {
-    return users.value.map(u => u.username)
-  } else {
-    // 账户功能已移除
-    return []
-  }
+  return qosList.value.map((q: any) => q.name)
 })
 
-// 过滤后的机时列表
+// 从 QoS 数据中提取 billing 限制（小时）
+const extractBillingHours = (qos: any): number => {
+  // 新版 v0.0.43 嵌套结构
+  const minutesTotal = qos?.limits?.max?.tres?.minutes?.total
+  if (Array.isArray(minutesTotal)) {
+    const billing = minutesTotal.find((t: any) => t.type === 'billing')
+    if (billing && billing.count > 0) return billing.count / 60
+  }
+  // 旧版字段 grp_tres_mins
+  if (qos?.grp_tres_mins) {
+    const mins = parseInt(qos.grp_tres_mins)
+    if (!isNaN(mins) && mins > 0) return mins / 60
+  }
+  return 0
+}
+
+// 过滤后的机时列表（基于 QoS 数据）
 const filteredHoursList = computed(() => {
   let filtered = hoursList.value
 
-  // 类型筛选
   if (filterType.value !== 'all') {
     filtered = filtered.filter(item => item.type === filterType.value)
   }
 
-  // 搜索筛选
   if (searchQuery.value) {
     const query = searchQuery.value.toLowerCase()
-    filtered = filtered.filter(item => 
+    filtered = filtered.filter(item =>
       item.name.toLowerCase().includes(query)
     )
   }
@@ -218,49 +187,32 @@ const filteredHoursList = computed(() => {
   return filtered
 })
 
-// 加载机时列表
+// 加载机时列表（从 QoS 读取 billing 限制）
 const loadHoursList = async () => {
   loading.value = true
   error.value = ''
-  
+
   try {
-    // 这里应该调用实际的 API，目前使用模拟数据
-    // TODO: 实现后端 API
-    hoursList.value = [
-      { 
-        id: 1, 
-        type: 'user',
-        name: 'user1', 
-        total: 1000, 
-        used: 350, 
-        remaining: 650, 
-        usage: 35, 
-        expireDate: '2024-12-31',
-        notes: '研究项目A'
-      },
-      { 
-        id: 2, 
-        type: 'account',
-        name: 'project01', 
-        total: 5000, 
-        used: 2100, 
-        remaining: 2900, 
-        usage: 42, 
-        expireDate: '2024-12-31',
-        notes: '大型计算项目'
-      },
-      { 
-        id: 3, 
-        type: 'user',
-        name: 'user2', 
-        total: 500, 
-        used: 450, 
-        remaining: 50, 
-        usage: 90, 
-        expireDate: '2024-06-30',
-        notes: '即将到期'
-      },
-    ]
+    const qosData = await qosAPI.getQoSList()
+    qosList.value = qosData || []
+
+    hoursList.value = qosList.value
+      .filter((qos: any) => extractBillingHours(qos) > 0)
+      .map((qos: any) => {
+        const total = extractBillingHours(qos)
+        return {
+          id: qos.name,
+          type: 'qos',
+          name: qos.name,
+          description: qos.description || '',
+          total: Math.round(total),
+          used: 0,       // 需要查询实际使用量
+          remaining: Math.round(total),
+          usage: 0,
+          expireDate: '-',
+          notes: qos.description || ''
+        }
+      })
   } catch (err: any) {
     error.value = err.response?.data?.error || '加载机时列表失败'
   } finally {
@@ -277,36 +229,21 @@ const getProgressColor = (usage: number) => {
 
 // 获取状态样式
 const getStatusClass = (item: any) => {
-  const now = new Date()
-  const expireDate = new Date(item.expireDate)
-  const daysLeft = Math.ceil((expireDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-  
-  if (daysLeft < 0) return 'status-expired'
-  if (daysLeft <= 7 || item.usage >= 90) return 'status-warning'
+  if (item.usage >= 100) return 'status-expired'
+  if (item.usage >= 80) return 'status-warning'
   return 'status-normal'
 }
 
 // 获取状态文本
 const getStatusText = (item: any) => {
-  const now = new Date()
-  const expireDate = new Date(item.expireDate)
-  const daysLeft = Math.ceil((expireDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-  
-  if (daysLeft < 0) return '已过期'
-  if (daysLeft <= 7) return `${daysLeft}天后到期`
-  if (item.usage >= 90) return '即将用完'
+  if (item.usage >= 100) return '已超额'
+  if (item.usage >= 80) return '即将用完'
   return '正常'
 }
 
 const openAddModal = () => {
   isEdit.value = false
-  formData.value = {
-    type: 'user',
-    name: '',
-    total: 0,
-    expireDate: '',
-    notes: ''
-  }
+  formData.value = { type: 'qos', name: '', total: 0, expireDate: '', notes: '' }
   showModal.value = true
 }
 
@@ -316,7 +253,7 @@ const editHours = (item: any) => {
     type: item.type,
     name: item.name,
     total: item.total,
-    expireDate: item.expireDate,
+    expireDate: item.expireDate === '-' ? '' : item.expireDate,
     notes: item.notes || ''
   }
   showModal.value = true
@@ -324,33 +261,33 @@ const editHours = (item: any) => {
 
 const saveHours = async () => {
   modalError.value = ''
-  
-  // 验证
+
   if (!formData.value.name) {
-    modalError.value = '请选择用户或账户'
+    modalError.value = '请选择 QoS'
     return
   }
   if (formData.value.total <= 0) {
     modalError.value = '总机时必须大于0'
     return
   }
-  if (!formData.value.expireDate) {
-    modalError.value = '请选择有效期'
-    return
-  }
 
   saving.value = true
-  
+
   try {
-    // TODO: 调用实际的 API
-    if (isEdit.value) {
-      // await hoursAPI.updateHours(formData.value)
-      alert('机时更新成功！')
-    } else {
-      // await hoursAPI.createHours(formData.value)
-      alert('机时分配成功！')
+    // 将小时转换为 billing-minutes，写入 QoS 的 GrpTRESMins
+    const billingMinutes = formData.value.total * 60
+    const qosPayload = {
+      name: formData.value.name,
+      description: formData.value.notes,
+      grp_tres_mins: String(billingMinutes)
     }
-    
+
+    if (isEdit.value) {
+      await qosAPI.updateQoS(formData.value.name, qosPayload)
+    } else {
+      await qosAPI.updateQoS(formData.value.name, qosPayload)
+    }
+
     closeModal()
     await loadHoursList()
   } catch (err: any) {
@@ -361,14 +298,12 @@ const saveHours = async () => {
 }
 
 const deleteHours = async (item: any) => {
-  if (confirm(`确定要删除 ${item.name} 的机时分配吗？`)) {
+  if (confirm(`确定要清除 ${item.name} 的机时限制吗？（将 GrpTRESMins 设为无限制）`)) {
     try {
-      // TODO: 调用实际的 API
-      // await hoursAPI.deleteHours(item.id)
-      alert('机时分配删除成功！')
+      await qosAPI.updateQoS(item.name, { name: item.name, grp_tres_mins: '0' })
       await loadHoursList()
     } catch (err: any) {
-      alert(err.response?.data?.error || '删除失败')
+      alert(err.response?.data?.error || '操作失败')
     }
   }
 }
@@ -380,7 +315,7 @@ const closeModal = () => {
 
 onMounted(() => {
   loadHoursList()
-  loadUsersAndAccounts()
+  loadQoSAndAccounts()
 })
 </script>
 

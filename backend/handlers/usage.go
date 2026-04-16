@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -339,15 +340,14 @@ func GetUserUsage(c *gin.Context) {
 		return
 	}
 
-	// 解析时间参数
 	startTimeStr := c.DefaultQuery("start_time", "")
 	endTimeStr := c.DefaultQuery("end_time", "")
-	
+
 	var startTime, endTime time.Time
 	var err error
-	
+
 	if startTimeStr != "" {
-		if startTimeUnix, err := strconv.ParseInt(startTimeStr, 10, 64); err == nil {
+		if startTimeUnix, err2 := strconv.ParseInt(startTimeStr, 10, 64); err2 == nil {
 			startTime = time.Unix(startTimeUnix, 0)
 		} else {
 			startTime, err = time.Parse("2006-01-02", startTimeStr)
@@ -359,9 +359,9 @@ func GetUserUsage(c *gin.Context) {
 	} else {
 		startTime = time.Now().AddDate(0, 0, -30)
 	}
-	
+
 	if endTimeStr != "" {
-		if endTimeUnix, err := strconv.ParseInt(endTimeStr, 10, 64); err == nil {
+		if endTimeUnix, err2 := strconv.ParseInt(endTimeStr, 10, 64); err2 == nil {
 			endTime = time.Unix(endTimeUnix, 0)
 		} else {
 			endTime, err = time.Parse("2006-01-02", endTimeStr)
@@ -374,18 +374,22 @@ func GetUserUsage(c *gin.Context) {
 		endTime = time.Now()
 	}
 
-	// 获取当前用户
 	username, _ := c.Get("username")
-	
+
 	client, err := GetSlurmClientForUser(username.(string))
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "slurm client error: " + err.Error()})
 		return
 	}
 
 	usage, err := client.GetUserUsage(user, startTime, endTime)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":  err.Error(),
+			"user":   user,
+			"start":  startTime.Format(time.RFC3339),
+			"end":    endTime.Format(time.RFC3339),
+		})
 		return
 	}
 
@@ -450,4 +454,94 @@ func GetAccountUsage(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": usage})
+}
+
+// DebugUserUsage 调试接口：直接返回原始 Slurm jobs 数据，用于排查机时计算问题
+func DebugUserUsage(c *gin.Context) {
+	username, _ := c.Get("username")
+	user := c.DefaultQuery("user", username.(string))
+
+	days := 30
+	if d := c.Query("days"); d != "" {
+		if n, err := strconv.Atoi(d); err == nil {
+			days = n
+		}
+	}
+
+	startTime := time.Now().AddDate(0, 0, -days)
+	endTime := time.Now()
+
+	client, err := GetSlurmClientForUser(username.(string))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	records, err := client.GetUserUsage(user, startTime, endTime)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error(), "detail": fmt.Sprintf("%+v", err)})
+		return
+	}
+
+	// 汇总
+	var totalBillingMins float64
+	var totalCPUHours float64
+	for _, r := range records {
+		totalBillingMins += r.BillingHours * 60
+		totalCPUHours += r.CPUHours
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"user":                user,
+		"period_days":         days,
+		"record_count":        len(records),
+		"total_billing_mins":  totalBillingMins,
+		"total_billing_hours": totalBillingMins / 60,
+		"total_cpu_hours":     totalCPUHours,
+		"records":             records,
+	})
+}
+
+// DebugRawJobs 直接返回 Slurm jobs 原始响应，用于排查字段结构
+func DebugRawJobs(c *gin.Context) {
+	username, _ := c.Get("username")
+	user := c.DefaultQuery("user", username.(string))
+	days := 7
+	if d := c.Query("days"); d != "" {
+		if n, err := strconv.Atoi(d); err == nil {
+			days = n
+		}
+	}
+
+	startTime := time.Now().AddDate(0, 0, -days)
+	endTime := time.Now()
+
+	client, err := GetSlurmClientForUser(username.(string))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 直接调用原始 API
+	path := fmt.Sprintf("/slurmdb/%s/jobs?users=%s&start_time=%d&end_time=%d",
+		"v0.0.43", user, startTime.Unix(), endTime.Unix())
+	raw, err := client.RawRequest("GET", path, nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 返回原始 JSON（只取前2条作业避免数据太多）
+	var result map[string]interface{}
+	if err := json.Unmarshal(raw, &result); err != nil {
+		c.Data(http.StatusOK, "application/json", raw)
+		return
+	}
+
+	if jobs, ok := result["jobs"].([]interface{}); ok && len(jobs) > 2 {
+		result["jobs"] = jobs[:2]
+		result["_truncated"] = fmt.Sprintf("showing 2 of %d jobs", len(jobs))
+	}
+
+	c.JSON(http.StatusOK, result)
 }
