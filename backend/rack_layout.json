@@ -1,0 +1,19 @@
+[
+  {
+    "id": "rack-1",
+    "name": "A01",
+    "location": "数据中心",
+    "units": 42,
+    "devices": [
+      {
+        "id": "dev-1776507675234",
+        "unit": 4,
+        "height": 4,
+        "name": "mn0",
+        "node_name": "mn0",
+        "type": "compute",
+        "model": "联想"
+      }
+    ]
+  }
+]

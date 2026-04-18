@@ -1,21 +1,21 @@
-// API 配置
-// 获取文件管理服务 URL
-export const getFileManagerUrl = () => {
-    // 优先使用环境变量配置
-    const envUrl = import.meta.env.VITE_FILEMANAGER_URL;
-    if (envUrl) {
-        return envUrl;
-    }
-    // 默认使用独立的文件管理服务
-    return 'http://localhost:8081';
-};
-// 获取主后端服务 URL
+// API 运行时配置
+// 优先级: window.__CONFIG__（后端注入）> VITE_* 环境变量（构建时）> 默认值
+const isDev = import.meta.env.DEV;
+const { protocol, hostname } = window.location;
 export const getApiUrl = () => {
-    const envUrl = import.meta.env.VITE_API_URL;
-    if (envUrl) {
-        return envUrl;
-    }
-    return 'http://localhost:8080';
+    if (window.__CONFIG__?.apiUrl)
+        return window.__CONFIG__.apiUrl;
+    if (isDev)
+        return `${protocol}//${hostname}:8080`;
+    return '';
+};
+// 文件管理已合并到主后端，URL 与主后端一致
+export const getFileManagerUrl = () => {
+    if (window.__CONFIG__?.fileManagerUrl)
+        return window.__CONFIG__.fileManagerUrl;
+    if (isDev)
+        return `${protocol}//${hostname}:8080`;
+    return '';
 };
 // 文件管理 API 端点
 export const fileManagerApi = {
@@ -29,17 +29,8 @@ export const fileManagerApi = {
     rename: () => `${getFileManagerUrl()}/api/files/rename`,
     copy: () => `${getFileManagerUrl()}/api/files/copy`,
     info: () => `${getFileManagerUrl()}/api/files/info`,
+    quota: () => `${getFileManagerUrl()}/api/files/quota`,
+    quotaAll: () => `${getFileManagerUrl()}/api/files/quota/all`,
+    compress: () => `${getFileManagerUrl()}/api/files/compress`,
 };
-// 主后端 API 端点
-export const mainApi = {
-    login: () => `${getApiUrl()}/api/login`,
-    jobs: () => `${getApiUrl()}/api/jobs`,
-    users: () => `${getApiUrl()}/api/users`,
-    // ... 其他 API
-};
-export default {
-    getFileManagerUrl,
-    getApiUrl,
-    fileManagerApi,
-    mainApi,
-};
+export default { getApiUrl, getFileManagerUrl, fileManagerApi };

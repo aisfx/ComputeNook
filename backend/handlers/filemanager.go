@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"archive/zip"
 	"io"
 	"net/http"
 	"os"
@@ -545,4 +546,82 @@ func GetFileInfo(c *gin.Context) {
 
 	logger.Info("Got file info for %s", path)
 	c.JSON(http.StatusOK, gin.H{"data": fileInfo})
+}
+
+// CompressDownload 将文件或目录打包为 zip 并下载
+func CompressDownload(c *gin.Context) {
+	username, exists := c.Get("username")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未授权"})
+		return
+	}
+
+	path := c.Query("path")
+	if path == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "路径参数不能为空"})
+		return
+	}
+	if strings.Contains(path, "..") {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "非法路径"})
+		return
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "路径不存在: " + err.Error()})
+		return
+	}
+
+	logger.Debug("CompressDownload: user=%s, path=%s", username, path)
+
+	zipName := filepath.Base(path) + ".zip"
+	c.Header("Content-Type", "application/zip")
+	c.Header("Content-Disposition", "attachment; filename="+zipName)
+
+	zw := zip.NewWriter(c.Writer)
+	defer zw.Close()
+
+	baseName := filepath.Base(path)
+
+	if info.IsDir() {
+		err = filepath.Walk(path, func(filePath string, fi os.FileInfo, walkErr error) error {
+			if walkErr != nil {
+				return nil // 跳过无权限文件
+			}
+			rel, _ := filepath.Rel(filepath.Dir(path), filePath)
+			rel = filepath.ToSlash(rel)
+			if fi.IsDir() {
+				if rel != baseName {
+					_, e := zw.Create(rel + "/")
+					return e
+				}
+				return nil
+			}
+			w, e := zw.Create(rel)
+			if e != nil {
+				return e
+			}
+			f, e := os.Open(filePath)
+			if e != nil {
+				return nil // 跳过无法打开的文件
+			}
+			defer f.Close()
+			_, e = io.Copy(w, f)
+			return e
+		})
+	} else {
+		w, e := zw.Create(baseName)
+		if e == nil {
+			f, e2 := os.Open(path)
+			if e2 == nil {
+				defer f.Close()
+				io.Copy(w, f)
+			}
+		}
+		err = e
+	}
+
+	if err != nil {
+		logger.Error("CompressDownload error: %v", err)
+	}
 }

@@ -55,7 +55,7 @@
             <div class="jd-section-label">工作目录</div>
             <div class="jd-dir-row">
               <code class="jd-dir-path">{{ job.directory || '-' }}</code>
-              <button class="jd-btn-outline" @click="$emit('open-directory', job.id, job.directory)">
+              <button class="jd-btn-outline" @click="$emit('open-directory', job.directory)">
                 打开目录
               </button>
             </div>

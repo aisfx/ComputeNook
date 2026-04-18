@@ -280,6 +280,7 @@ import { FitAddon } from 'xterm-addon-fit'
 import { WebLinksAddon } from 'xterm-addon-web-links'
 import 'xterm/css/xterm.css'
 import notification from '../utils/notification'
+import { getApiBase, getWsBase } from '../utils/auth'
 
 // 响应式数据
 const showNodeSelector = ref(false)
@@ -576,7 +577,7 @@ const loadCurrentUser = async () => {
       return
     }
     
-    const response = await fetch('http://localhost:8080/api/me', {
+    const response = await fetch(`${getApiBase()}/api/me`, {
       headers: {
         'Authorization': `Bearer ${token}`
       }
@@ -634,7 +635,7 @@ const checkPrivateKey = async () => {
       return
     }
     
-    const response = await fetch('http://localhost:8080/api/webshell/keys/check', {
+    const response = await fetch(`${getApiBase()}/api/webshell/keys/check`, {
       headers: {
         'Authorization': `Bearer ${token}`
       }
@@ -660,7 +661,7 @@ const loadNodes = async () => {
       throw new Error('请先登录系统')
     }
     
-    const response = await fetch('http://localhost:8080/api/webshell/nodes', {
+    const response = await fetch(`${getApiBase()}/api/webshell/nodes`, {
       headers: {
         'Authorization': `Bearer ${token}`
       }
@@ -751,7 +752,7 @@ const connectToNode = async (node: any, password: string = '') => {
       return
     }
     
-    let wsUrl = `ws://localhost:8080/api/webshell/connect?node=${node.name}&token=${encodeURIComponent(token)}`
+    let wsUrl = `${getWsBase()}/api/webshell/connect?node=${node.name}&token=${encodeURIComponent(token)}`
     
     // 如果提供了密码，添加到URL参数中
     if (password) {
@@ -803,7 +804,7 @@ const connectToNode = async (node: any, password: string = '') => {
   }
 }
 
-// 初始化终端
+// 初始化终�?
 const initTerminal = () => {
   if (!terminalContainer.value) return
   
@@ -846,7 +847,7 @@ const initTerminal = () => {
   terminal.loadAddon(fitAddon)
   terminal.loadAddon(new WebLinksAddon())
   
-  // 挂载到容器
+  // 挂载到容�?
   terminal.open(terminalContainer.value)
   
   // 自适应大小
@@ -865,7 +866,7 @@ const initTerminal = () => {
     }
   })
   
-  // 发送终端大小
+  // 发送终端大�?
   if (websocket && websocket.readyState === WebSocket.OPEN) {
     websocket.send(JSON.stringify({
       type: 'resize',
@@ -882,7 +883,7 @@ const handleResize = () => {
   if (fitAddon && terminal) {
     fitAddon.fit()
     
-    // 通知服务器终端大小变化
+    // 通知服务器终端大小变�?
     if (websocket && websocket.readyState === WebSocket.OPEN) {
       websocket.send(JSON.stringify({
         type: 'resize',
@@ -901,7 +902,7 @@ const handleWebSocketMessage = (message: any) => {
   
   switch (message.type) {
     case 'output':
-      // 将输出写入终端
+      // 将输出写入终�?
       if (terminal && message.data) {
         terminal.write(message.data)
       }
@@ -911,7 +912,7 @@ const handleWebSocketMessage = (message: any) => {
       connectionStatus.value = 'connected'
       connected.value = true
       
-      // 如果服务器返回了用户名，使用服务器返回的用户名
+      // 如果服务器返回了用户名，使用服务器返回的用户�?
       if (message.data && message.data.username) {
         currentUsername.value = message.data.username
         console.log('Username updated from server:', currentUsername.value)
@@ -920,7 +921,7 @@ const handleWebSocketMessage = (message: any) => {
       if (message.data && message.data.auth_method) {
         // 取消认证方式提示
         // const authMethod = message.data.auth_method === 'private_key' ? '私钥' : '密码'
-        // notification.success(`已连接 (认证方式: ${authMethod})`)
+        // notification.success(`已连�?(认证方式: ${authMethod})`)
       }
       break
       
@@ -961,8 +962,8 @@ const disconnect = () => {
   connected.value = false
   connectionStatus.value = 'disconnected'
   currentNode.value = null
-  isFullscreen.value = false        // 退出全屏，避免断开后页面空白
-  sidebarCollapsed.value = false    // 恢复侧边栏
+  isFullscreen.value = false        // 退出全屏，避免断开后页面空�?
+  sidebarCollapsed.value = false    // 恢复侧边�?
 }
 
 // 切换全屏
@@ -979,7 +980,7 @@ const toggleFullscreen = () => {
     if (fitAddon && terminal) {
       fitAddon.fit()
       
-      // 通知服务器终端大小变化
+      // 通知服务器终端大小变�?
       if (websocket && websocket.readyState === WebSocket.OPEN) {
         websocket.send(JSON.stringify({
           type: 'resize',

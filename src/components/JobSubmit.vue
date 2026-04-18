@@ -126,7 +126,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { getUser } from '../utils/auth'
+import { getUser, getApiBase } from '../utils/auth'
 import { fileManagerApi } from '../config/api'
 import notification from '../utils/notification'
 import { jobTemplates } from '../data/jobTemplates'
@@ -180,7 +180,7 @@ const loadPartitions = async () => {
       return
     }
     
-    const response = await fetch('http://localhost:8080/api/jobs/partitions/list', {
+    const response = await fetch(`${getApiBase()}/api/jobs/partitions/list`, {
       headers: {
         'Authorization': `Bearer ${token}`
       }
@@ -370,7 +370,7 @@ const submitJob = async () => {
     console.log('Submitting job with script content length:', scriptContent.length)
     console.log('Using Slurm default paths for working directory and output files')
     
-    const response = await fetch('http://localhost:8080/api/jobs', {
+    const response = await fetch(`${getApiBase()}/api/jobs`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,

@@ -471,7 +471,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import { getUser } from '../utils/auth'
+import { getUser, getApiBase } from '../utils/auth'
 import axios from 'axios'
 import { usageAPI } from '../api'
 import JobDetailModal from '../components/JobDetailModal.vue'
@@ -561,8 +561,7 @@ const openJobDetail = (job: any) => {
 const cancelJob = async (jobId: any) => {
   try {
     const token = localStorage.getItem('token') || sessionStorage.getItem('token')
-    const apiBase = (import.meta.env.VITE_API_URL || 'http://localhost:8080')
-    const res = await fetch(`${apiBase}/api/jobs/${jobId}`, {
+    const res = await fetch(`${getApiBase()}/api/jobs/${jobId}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` }
     })
@@ -579,8 +578,7 @@ const cancelJob = async (jobId: any) => {
 const resumeJob = async (jobId: any) => {
   try {
     const token = localStorage.getItem('token') || sessionStorage.getItem('token')
-    const apiBase = (import.meta.env.VITE_API_URL || 'http://localhost:8080')
-    const res = await fetch(`${apiBase}/api/jobs/${jobId}/resume`, {
+    const res = await fetch(`${getApiBase()}/api/jobs/${jobId}/resume`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` }
     })
@@ -599,14 +597,12 @@ const resumeJob = async (jobId: any) => {
 const suspendJob = async (jobId: any) => {
   try {
     const token = localStorage.getItem('token') || sessionStorage.getItem('token')
-    const apiBase = (import.meta.env.VITE_API_URL || 'http://localhost:8080')
-    const res = await fetch(`${apiBase}/api/jobs/${jobId}/suspend`, {
+    const res = await fetch(`${getApiBase()}/api/jobs/${jobId}/suspend`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` }
     })
     const result = await res.json()
     if (!res.ok) throw new Error(result.error || '暂停失败')
-    // 更新当前选中作业的状态，而不是关闭弹窗
     if (selectedJob.value) {
       selectedJob.value = { ...selectedJob.value, status: 'SUSPENDED' }
     }
@@ -626,7 +622,7 @@ const loadJobHistory = async () => {
   try {
     const token = localStorage.getItem('token') || sessionStorage.getItem('token')
     const username = currentUser.value?.username || ''
-    let url = `http://localhost:8080/api/jobs?page=1&page_size=500&user=${encodeURIComponent(username)}`
+    let url = `${getApiBase()}/api/jobs?page=1&page_size=500&user=${encodeURIComponent(username)}`
     if (jobStartDate.value) url += `&start_time=${jobStartDate.value}`
     if (jobEndDate.value) url += `&end_time=${jobEndDate.value}`
     const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
@@ -781,7 +777,7 @@ const loadDashboardStats = async () => {
   try {
     const token = localStorage.getItem('token') || sessionStorage.getItem('token')
     if (!token) return
-    const res = await fetch('http://localhost:8080/api/dashboard/stats', { headers: { Authorization: `Bearer ${token}` } })
+    const res = await fetch(`${getApiBase()}/api/dashboard/stats`, { headers: { Authorization: `Bearer ${token}` } })
     if (!res.ok) return
     const { data } = await res.json()
     stats.value = {
@@ -797,7 +793,7 @@ const loadNodes = async () => {
   try {
     const token = localStorage.getItem('token') || sessionStorage.getItem('token')
     if (!token) return
-    const res = await fetch('http://localhost:8080/api/dashboard/nodes', { headers: { Authorization: `Bearer ${token}` } })
+    const res = await fetch(`${getApiBase()}/api/dashboard/nodes`, { headers: { Authorization: `Bearer ${token}` } })
     if (!res.ok) return
     const { data } = await res.json()
     nodes.value = (data || []).map((node: any) => {
@@ -822,7 +818,7 @@ const loadJobStats = async () => {
     const token = localStorage.getItem('token') || sessionStorage.getItem('token')
     if (!token) return
     const username = currentUser.value?.username || ''
-    const res = await fetch(`http://localhost:8080/api/jobs?page=1&page_size=1000&user=${encodeURIComponent(username)}`, { headers: { Authorization: `Bearer ${token}` } })
+    const res = await fetch(`${getApiBase()}/api/jobs?page=1&page_size=1000&user=${encodeURIComponent(username)}`, { headers: { Authorization: `Bearer ${token}` } })
     if (!res.ok) return
     const { data } = await res.json()
     const jobs = data || []

@@ -22,6 +22,7 @@ import JobInfo from '../components/JobInfo.vue'
 import JobSubmit from '../components/JobSubmit.vue'
 import JobTemplates from '../components/JobTemplates.vue'
 import JobDetailModal from '../components/JobDetailModal.vue'
+import { getApiBase } from '../utils/auth'
 
 const emit = defineEmits(['open-directory'])
 
@@ -47,7 +48,7 @@ const handleUseTemplate = (template: any) => {
 const handleCancel = async (jobId: string | number) => {
   if (!confirm(`确定要取消作业 ${jobId} 吗？`)) return
   try {
-    const res = await fetch(`http://localhost:8080/api/jobs/${jobId}`, {
+    const res = await fetch(`${getApiBase()}/api/jobs/${jobId}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${getToken()}` }
     })
@@ -63,7 +64,7 @@ const handleCancel = async (jobId: string | number) => {
 const handlePause = async (jobId: string | number) => {
   if (!confirm(`确定要暂停作业 ${jobId} 吗？`)) return
   try {
-    const res = await fetch(`http://localhost:8080/api/jobs/${jobId}/suspend`, {
+    const res = await fetch(`${getApiBase()}/api/jobs/${jobId}/suspend`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${getToken()}` }
     })

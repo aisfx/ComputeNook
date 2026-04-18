@@ -2,776 +2,498 @@
   <div class="reports-page">
     <div class="page-header">
       <h3>📊 报表中心</h3>
-      <button class="btn-primary" @click="showGenerateModal = true">+ 生成报表</button>
     </div>
 
-    <!-- 报表筛选 -->
+    <!-- 筛选条件 -->
     <div class="card filters-card">
       <div class="filters-row">
         <div class="filter-group">
           <label>报表类型</label>
           <select v-model="filters.type">
-            <option value="">全部类型</option>
-            <option value="usage">资源使用报表</option>
             <option value="job">作业统计报表</option>
             <option value="machine-time">机时消耗报表</option>
-            <option value="user">用户统计报表</option>
             <option value="node">节点运行报表</option>
           </select>
         </div>
         <div class="filter-group">
-          <label>时间范围</label>
-          <select v-model="filters.timeRange">
-            <option value="today">今日</option>
-            <option value="week">本周</option>
-            <option value="month">本月</option>
-            <option value="quarter">本季度</option>
-            <option value="year">本年</option>
-            <option value="custom">自定义</option>
-          </select>
-        </div>
-        <div class="filter-group" v-if="filters.timeRange === 'custom'">
           <label>开始日期</label>
           <input type="date" v-model="filters.startDate" />
         </div>
-        <div class="filter-group" v-if="filters.timeRange === 'custom'">
+        <div class="filter-group">
           <label>结束日期</label>
           <input type="date" v-model="filters.endDate" />
         </div>
-        <button class="btn-secondary" @click="applyFilters">🔍 查询</button>
+        <button class="btn-primary" @click="loadReport" :disabled="loading">
+          {{ loading ? '查询中...' : '🔍 查询' }}
+        </button>
+        <button class="btn-secondary" @click="exportCSV" :disabled="!hasData">📥 导出 CSV</button>
       </div>
     </div>
 
-    <!-- 报表列表 -->
-    <div class="card">
-      <table class="reports-table">
-        <thead>
-          <tr>
-            <th>报表名称</th>
-            <th>报表类型</th>
-            <th>时间范围</th>
-            <th>生成时间</th>
-            <th>状态</th>
-            <th>操作</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="report in filteredReports" :key="report.id">
-            <td>
-              <div class="report-name">
-                <span class="report-icon">{{ getReportIcon(report.type) }}</span>
-                <span>{{ report.name }}</span>
-              </div>
-            </td>
-            <td>{{ getReportTypeName(report.type) }}</td>
-            <td>{{ report.timeRange }}</td>
-            <td>{{ report.createTime }}</td>
-            <td>
-              <span :class="['status-badge', `status-${report.status}`]">
-                {{ getStatusText(report.status) }}
-              </span>
-            </td>
-            <td>
-              <div class="action-buttons">
-                <button class="btn-link" @click="viewReport(report)">👁️ 查看</button>
-                <button class="btn-link" @click="downloadReport(report)">📥 下载</button>
-                <button class="btn-link danger" @click="deleteReport(report.id)">🗑️ 删除</button>
-              </div>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+    <div v-if="loading" class="card" style="text-align:center;padding:3rem;color:#9ca3af">加载中...</div>
+    <div v-else-if="error" class="card" style="text-align:center;padding:3rem;color:#ef4444">{{ error }}</div>
 
-      <div v-if="filteredReports.length === 0" class="empty-state">
-        <div class="empty-icon">📋</div>
-        <p>暂无报表数据</p>
-        <p class="empty-hint">点击"生成报表"创建新的统计报表</p>
-      </div>
-    </div>
-
-    <!-- 生成报表弹窗 -->
-    <div v-if="showGenerateModal" class="modal-overlay" @click="showGenerateModal = false">
-      <div class="modal-content generate-modal" @click.stop>
-        <div class="modal-header">
-          <h2>生成报表</h2>
-          <button @click="showGenerateModal = false" class="btn-close">✕</button>
+    <!-- 作业统计报表 -->
+    <template v-else-if="filters.type === 'job' && hasData">
+      <div class="summary-cards">
+        <div class="s-card">
+          <div class="s-label">总作业数</div>
+          <div class="s-val">{{ jobSummary.total }}</div>
         </div>
-        <div class="modal-body">
-          <form @submit.prevent="generateReport" class="generate-form">
-            <div class="form-group">
-              <label>报表名称 *</label>
-              <input v-model="generateForm.name" type="text" placeholder="例如: 2026年2月资源使用报表" required />
-            </div>
-
-            <div class="form-group">
-              <label>报表类型 *</label>
-              <select v-model="generateForm.type" required>
-                <option value="">请选择报表类型</option>
-                <option value="usage">资源使用报表</option>
-                <option value="job">作业统计报表</option>
-                <option value="machine-time">机时消耗报表</option>
-                <option value="user">用户统计报表</option>
-                <option value="node">节点运行报表</option>
-              </select>
-            </div>
-
-            <div class="form-row">
-              <div class="form-group">
-                <label>开始日期 *</label>
-                <input v-model="generateForm.startDate" type="date" required />
-              </div>
-              <div class="form-group">
-                <label>结束日期 *</label>
-                <input v-model="generateForm.endDate" type="date" required />
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label>报表格式</label>
-              <div class="format-options">
-                <label class="format-option">
-                  <input type="checkbox" v-model="generateForm.formats" value="pdf" />
-                  <span>PDF</span>
-                </label>
-                <label class="format-option">
-                  <input type="checkbox" v-model="generateForm.formats" value="excel" />
-                  <span>Excel</span>
-                </label>
-                <label class="format-option">
-                  <input type="checkbox" v-model="generateForm.formats" value="csv" />
-                  <span>CSV</span>
-                </label>
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label>包含内容</label>
-              <div class="content-options">
-                <label class="content-option">
-                  <input type="checkbox" v-model="generateForm.includeCharts" />
-                  <span>包含图表</span>
-                </label>
-                <label class="content-option">
-                  <input type="checkbox" v-model="generateForm.includeDetails" />
-                  <span>包含详细数据</span>
-                </label>
-                <label class="content-option">
-                  <input type="checkbox" v-model="generateForm.includeSummary" />
-                  <span>包含汇总信息</span>
-                </label>
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label>备注</label>
-              <textarea v-model="generateForm.notes" rows="3" placeholder="可选的备注信息..."></textarea>
-            </div>
-
-            <div class="form-actions">
-              <button type="button" class="btn-secondary" @click="showGenerateModal = false">取消</button>
-              <button type="submit" class="btn-primary" :disabled="generating">
-                {{ generating ? '生成中...' : '生成报表' }}
-              </button>
-            </div>
-          </form>
+        <div class="s-card">
+          <div class="s-label">已完成</div>
+          <div class="s-val" style="color:#10b981">{{ jobSummary.completed }}</div>
+        </div>
+        <div class="s-card">
+          <div class="s-label">失败</div>
+          <div class="s-val" style="color:#ef4444">{{ jobSummary.failed }}</div>
+        </div>
+        <div class="s-card">
+          <div class="s-label">取消</div>
+          <div class="s-val" style="color:#f59e0b">{{ jobSummary.cancelled }}</div>
+        </div>
+        <div class="s-card">
+          <div class="s-label">总 CPU 小时</div>
+          <div class="s-val">{{ jobSummary.cpuHours.toFixed(1) }}</div>
+        </div>
+        <div class="s-card">
+          <div class="s-label">总 GPU 小时</div>
+          <div class="s-val">{{ jobSummary.gpuHours.toFixed(1) }}</div>
         </div>
       </div>
-    </div>
 
-    <!-- 查看报表弹窗 -->
-    <div v-if="showViewModal" class="modal-overlay" @click="showViewModal = false">
-      <div class="modal-content view-modal" @click.stop>
-        <div class="modal-header">
-          <h2>{{ currentReport?.name }}</h2>
-          <button @click="showViewModal = false" class="btn-close">✕</button>
-        </div>
-        <div class="modal-body">
-          <div class="report-info">
-            <div class="info-row">
-              <span class="info-label">报表类型:</span>
-              <span class="info-value">{{ getReportTypeName(currentReport?.type) }}</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">时间范围:</span>
-              <span class="info-value">{{ currentReport?.timeRange }}</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">生成时间:</span>
-              <span class="info-value">{{ currentReport?.createTime }}</span>
-            </div>
-          </div>
-
-          <div class="report-summary">
-            <h4>报表摘要</h4>
-            <div class="summary-grid">
-              <div class="summary-item">
-                <span class="summary-label">总作业数</span>
-                <span class="summary-value">{{ reportData.totalJobs }}</span>
-              </div>
-              <div class="summary-item">
-                <span class="summary-label">成功作业</span>
-                <span class="summary-value success">{{ reportData.successJobs }}</span>
-              </div>
-              <div class="summary-item">
-                <span class="summary-label">失败作业</span>
-                <span class="summary-value failed">{{ reportData.failedJobs }}</span>
-              </div>
-              <div class="summary-item">
-                <span class="summary-label">总机时</span>
-                <span class="summary-value">{{ reportData.totalMachineTime }} 核时</span>
-              </div>
-              <div class="summary-item">
-                <span class="summary-label">平均 CPU 使用率</span>
-                <span class="summary-value">{{ reportData.avgCpuUsage }}%</span>
-              </div>
-              <div class="summary-item">
-                <span class="summary-label">平均内存使用率</span>
-                <span class="summary-value">{{ reportData.avgMemUsage }}%</span>
-              </div>
-            </div>
-          </div>
-
-          <div class="report-chart">
-            <h4>作业趋势</h4>
-            <canvas ref="reportChartRef" width="700" height="300"></canvas>
-          </div>
-
-          <div class="modal-actions">
-            <button class="btn-primary" @click="downloadReport(currentReport)">📥 下载报表</button>
-            <button class="btn-secondary" @click="showViewModal = false">关闭</button>
-          </div>
+      <div class="card">
+        <div class="card-title">作业明细</div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>作业ID</th><th>作业名</th><th>用户</th><th>账户</th>
+                <th>分区</th><th>状态</th><th>开始时间</th><th>运行时长</th>
+                <th>CPU小时</th><th>GPU小时</th><th>计费核时</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="r in jobRecords" :key="r.job_id">
+                <td><code>{{ r.job_id }}</code></td>
+                <td>{{ r.job_name || '-' }}</td>
+                <td>{{ r.user || '-' }}</td>
+                <td>{{ r.account || '-' }}</td>
+                <td>{{ r.partition || '-' }}</td>
+                <td><span :class="['state-badge', `state-${(r.state||'').toLowerCase()}`]">{{ r.state || '-' }}</span></td>
+                <td>{{ fmtTime(r.start_time) }}</td>
+                <td>{{ fmtElapsed(r.elapsed_secs) }}</td>
+                <td>{{ (r.cpu_hours||0).toFixed(2) }}</td>
+                <td>{{ (r.gpu_hours||0).toFixed(2) }}</td>
+                <td><strong>{{ (r.billing_mins||0).toFixed(1) }}</strong></td>
+              </tr>
+              <tr v-if="jobRecords.length === 0">
+                <td colspan="11" class="empty-cell">暂无数据</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
+    </template>
+
+    <!-- 机时消耗报表 -->
+    <template v-else-if="filters.type === 'machine-time' && hasData">
+      <div class="summary-cards">
+        <div class="s-card">
+          <div class="s-label">账户数</div>
+          <div class="s-val">{{ machineRecords.length }}</div>
+        </div>
+        <div class="s-card">
+          <div class="s-label">总 CPU 小时</div>
+          <div class="s-val">{{ machineTotals.cpuHours.toFixed(1) }}</div>
+        </div>
+        <div class="s-card">
+          <div class="s-label">总 GPU 小时</div>
+          <div class="s-val">{{ machineTotals.gpuHours.toFixed(1) }}</div>
+        </div>
+        <div class="s-card">
+          <div class="s-label">总计费核时</div>
+          <div class="s-val" style="color:#667eea">{{ machineTotals.billingMins.toFixed(1) }}</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">账户机时消耗</div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>账户</th><th>作业数</th><th>CPU小时</th>
+                <th>节点小时</th><th>GPU小时</th><th>计费核时</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="r in machineRecords" :key="r.account">
+                <td><strong>{{ r.account }}</strong></td>
+                <td>{{ r.job_count || r.jobs?.length || '-' }}</td>
+                <td>{{ (r.cpu_hours||0).toFixed(2) }}</td>
+                <td>{{ (r.node_hours||0).toFixed(2) }}</td>
+                <td>{{ (r.gpu_hours||0).toFixed(2) }}</td>
+                <td><strong style="color:#667eea">{{ (r.billing_mins||0).toFixed(1) }}</strong></td>
+              </tr>
+              <tr v-if="machineRecords.length === 0">
+                <td colspan="6" class="empty-cell">暂无数据</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </template>
+
+    <!-- 节点运行报表 -->
+    <template v-else-if="filters.type === 'node' && hasData">
+      <div class="summary-cards">
+        <div class="s-card">
+          <div class="s-label">总节点数</div>
+          <div class="s-val">{{ nodeStats.total }}</div>
+        </div>
+        <div class="s-card">
+          <div class="s-label">在线节点</div>
+          <div class="s-val" style="color:#10b981">{{ nodeStats.online }}</div>
+        </div>
+        <div class="s-card">
+          <div class="s-label">离线节点</div>
+          <div class="s-val" style="color:#ef4444">{{ nodeStats.down }}</div>
+        </div>
+        <div class="s-card">
+          <div class="s-label">总 CPU 核</div>
+          <div class="s-val">{{ nodeStats.totalCPU }}</div>
+        </div>
+        <div class="s-card">
+          <div class="s-label">已分配 CPU</div>
+          <div class="s-val" style="color:#667eea">{{ nodeStats.allocCPU }}</div>
+        </div>
+        <div class="s-card">
+          <div class="s-label">CPU 使用率</div>
+          <div class="s-val">{{ nodeStats.cpuPct.toFixed(1) }}%</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">节点详情</div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>节点名</th><th>状态</th><th>CPU总/已分配</th>
+                <th>CPU使用率</th><th>内存总/已分配</th><th>内存使用率</th>
+                <th>GPU</th><th>运行作业</th><th>分区</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="n in nodeRecords" :key="n.name">
+                <td><code>{{ n.name }}</code></td>
+                <td><span :class="['state-badge', nodeStateClass(n.state)]">{{ n.state }}</span></td>
+                <td>{{ n.cpu_total }} / {{ n.cpu_allocated }}</td>
+                <td>
+                  <div class="mini-bar">
+                    <div class="mini-fill" :style="{ width: n.cpu_usage_percent + '%', background: n.cpu_usage_percent > 90 ? '#ef4444' : '#667eea' }"></div>
+                    <span>{{ n.cpu_usage_percent.toFixed(0) }}%</span>
+                  </div>
+                </td>
+                <td>{{ fmtMem(n.memory_total_mb) }} / {{ fmtMem(n.memory_allocated_mb) }}</td>
+                <td>
+                  <div class="mini-bar">
+                    <div class="mini-fill" :style="{ width: n.memory_usage_percent + '%', background: n.memory_usage_percent > 90 ? '#ef4444' : '#10b981' }"></div>
+                    <span>{{ n.memory_usage_percent.toFixed(0) }}%</span>
+                  </div>
+                </td>
+                <td>{{ n.gpu_info || '-' }}</td>
+                <td>{{ n.running_jobs }}</td>
+                <td>{{ (n.partitions||[]).join(', ') || '-' }}</td>
+              </tr>
+              <tr v-if="nodeRecords.length === 0">
+                <td colspan="9" class="empty-cell">暂无数据</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </template>
+
+    <div v-else-if="!loading && !error && !hasData" class="card" style="text-align:center;padding:3rem;color:#9ca3af">
+      <div style="font-size:3rem;margin-bottom:1rem">📊</div>
+      <p>选择报表类型和时间范围后点击查询</p>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { getApiBase, isAdmin } from '../utils/auth'
+import axios from 'axios'
 
-const showGenerateModal = ref(false)
-const showViewModal = ref(false)
-const generating = ref(false)
-const currentReport = ref<any>(null)
-const reportChartRef = ref<HTMLCanvasElement>()
+const loading = ref(false)
+const error = ref('')
+
+// 默认时间范围：本月
+const now = new Date()
+const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
+const today = now.toISOString().split('T')[0]
 
 const filters = ref({
-  type: '',
-  timeRange: 'month',
-  startDate: '',
-  endDate: ''
+  type: 'job',
+  startDate: firstDay,
+  endDate: today,
 })
 
-const generateForm = ref({
-  name: '',
-  type: '',
-  startDate: '',
-  endDate: '',
-  formats: ['pdf'],
-  includeCharts: true,
-  includeDetails: true,
-  includeSummary: true,
-  notes: ''
+// 各类型数据
+const jobRecords = ref<any[]>([])
+const machineRecords = ref<any[]>([])
+const nodeRecords = ref<any[]>([])
+
+const hasData = computed(() => {
+  if (filters.value.type === 'job') return jobRecords.value.length > 0
+  if (filters.value.type === 'machine-time') return machineRecords.value.length > 0
+  if (filters.value.type === 'node') return nodeRecords.value.length > 0
+  return false
 })
 
-const reports = ref([
-  {
-    id: 1,
-    name: '2026年2月资源使用报表',
-    type: 'usage',
-    timeRange: '2026-02-01 ~ 2026-02-28',
-    createTime: '2026-02-14 15:30:00',
-    status: 'completed'
-  },
-  {
-    id: 2,
-    name: '本周作业统计报表',
-    type: 'job',
-    timeRange: '2026-02-10 ~ 2026-02-16',
-    createTime: '2026-02-14 10:20:00',
-    status: 'completed'
-  },
-  {
-    id: 3,
-    name: '2026年Q1机时消耗报表',
-    type: 'machine-time',
-    timeRange: '2026-01-01 ~ 2026-03-31',
-    createTime: '2026-02-13 14:15:00',
-    status: 'generating'
-  },
-  {
-    id: 4,
-    name: '用户统计月报',
-    type: 'user',
-    timeRange: '2026-01-01 ~ 2026-01-31',
-    createTime: '2026-02-01 09:00:00',
-    status: 'completed'
+// 作业汇总
+const jobSummary = computed(() => {
+  const records = jobRecords.value
+  return {
+    total: records.length,
+    completed: records.filter(r => (r.state||'').toUpperCase().includes('COMPLETED')).length,
+    failed: records.filter(r => (r.state||'').toUpperCase().includes('FAILED')).length,
+    cancelled: records.filter(r => (r.state||'').toUpperCase().includes('CANCEL')).length,
+    cpuHours: records.reduce((s, r) => s + (r.cpu_hours || 0), 0),
+    gpuHours: records.reduce((s, r) => s + (r.gpu_hours || 0), 0),
   }
-])
-
-const reportData = ref({
-  totalJobs: 1250,
-  successJobs: 1180,
-  failedJobs: 70,
-  totalMachineTime: 45680,
-  avgCpuUsage: 72,
-  avgMemUsage: 68
 })
 
-const filteredReports = computed(() => {
-  let result = reports.value
-  
-  if (filters.value.type) {
-    result = result.filter(r => r.type === filters.value.type)
+// 机时汇总
+const machineTotals = computed(() => ({
+  cpuHours: machineRecords.value.reduce((s, r) => s + (r.cpu_hours || 0), 0),
+  gpuHours: machineRecords.value.reduce((s, r) => s + (r.gpu_hours || 0), 0),
+  billingMins: machineRecords.value.reduce((s, r) => s + (r.billing_mins || 0), 0),
+}))
+
+// 节点汇总
+const nodeStats = computed(() => {
+  const nodes = nodeRecords.value
+  return {
+    total: nodes.length,
+    online: nodes.filter(n => !n.state?.toLowerCase().includes('down')).length,
+    down: nodes.filter(n => n.state?.toLowerCase().includes('down')).length,
+    totalCPU: nodes.reduce((s, n) => s + (n.cpu_total || 0), 0),
+    allocCPU: nodes.reduce((s, n) => s + (n.cpu_allocated || 0), 0),
+    cpuPct: nodes.length ? nodes.reduce((s, n) => s + (n.cpu_usage_percent || 0), 0) / nodes.length : 0,
   }
-  
-  return result
 })
 
-const getReportIcon = (type: string) => {
-  const icons: Record<string, string> = {
-    usage: '📊',
-    job: '📋',
-    'machine-time': '⏱️',
-    user: '👥',
-    node: '🖥️'
-  }
-  return icons[type] || '📄'
-}
+const token = () => localStorage.getItem('token') || sessionStorage.getItem('token') || ''
 
-const getReportTypeName = (type: string) => {
-  const names: Record<string, string> = {
-    usage: '资源使用报表',
-    job: '作业统计报表',
-    'machine-time': '机时消耗报表',
-    user: '用户统计报表',
-    node: '节点运行报表'
-  }
-  return names[type] || type
-}
+const loadReport = async () => {
+  loading.value = true
+  error.value = ''
+  jobRecords.value = []
+  machineRecords.value = []
+  nodeRecords.value = []
 
-const getStatusText = (status: string) => {
-  const texts: Record<string, string> = {
-    completed: '已完成',
-    generating: '生成中',
-    failed: '失败'
-  }
-  return texts[status] || status
-}
+  try {
+    const { startDate, endDate, type } = filters.value
 
-const applyFilters = () => {
-  console.log('应用筛选:', filters.value)
-}
+    if (type === 'job') {
+      // 管理员拉全量，普通用户拉自己的
+      const userParam = isAdmin() ? '' : `&user=${encodeURIComponent(getUserName())}`
+      let url = `${getApiBase()}/api/jobs?page=1&page_size=2000&start_time=${startDate}&end_time=${endDate}${userParam}`
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${token()}` } })
+      if (!res.ok) throw new Error((await res.json()).error || '获取作业数据失败')
+      const data = await res.json()
+      // jobs API 返回的是 job_state 字段，需要映射到 state
+      jobRecords.value = (data.data || []).map((j: any) => ({
+        job_id: j.job_id,
+        job_name: j.name,
+        user: j.user_name || j.user_id || j.user,
+        account: j.account,
+        partition: j.partition,
+        state: j.job_state,
+        start_time: j.start_time,
+        elapsed_secs: j.run_time,
+        cpu_hours: j.cpus ? (j.run_time || 0) * (j.cpus || 0) / 3600 : 0,
+        gpu_hours: 0,
+        billing_mins: 0,
+      }))
+      // 尝试用 usage API 补充机时数据
+      try {
+        const uRes = await fetch(
+          `${getApiBase()}/api/usage/user?user=${encodeURIComponent(getUserName())}&start_time=${startDate}&end_time=${endDate}`,
+          { headers: { Authorization: `Bearer ${token()}` } }
+        )
+        if (uRes.ok) {
+          const uData = await uRes.json()
+          const usageMap: Record<string, any> = {}
+          for (const r of (uData.data || [])) usageMap[r.job_id] = r
+          jobRecords.value = jobRecords.value.map((j: any) => {
+            const u = usageMap[j.job_id]
+            if (u) return { ...j, cpu_hours: u.cpu_hours, gpu_hours: u.gpu_hours, billing_mins: u.billing_mins || u.billing_hours * 60 }
+            return j
+          })
+        }
+      } catch { /* 忽略，用基础数据 */ }
 
-const generateReport = () => {
-  generating.value = true
-  
-  setTimeout(() => {
-    const newReport = {
-      id: Date.now(),
-      name: generateForm.value.name,
-      type: generateForm.value.type,
-      timeRange: `${generateForm.value.startDate} ~ ${generateForm.value.endDate}`,
-      createTime: new Date().toLocaleString(),
-      status: 'completed'
+    } else if (type === 'machine-time') {
+      const res = await fetch(
+        `${getApiBase()}/api/usage/accounts?start_time=${startDate}&end_time=${endDate}`,
+        { headers: { Authorization: `Bearer ${token()}` } }
+      )
+      if (!res.ok) throw new Error((await res.json()).error || '获取机时数据失败')
+      const data = await res.json()
+      machineRecords.value = data.data || []
+
+    } else if (type === 'node') {
+      const res = await fetch(`${getApiBase()}/api/dashboard/nodes`, {
+        headers: { Authorization: `Bearer ${token()}` }
+      })
+      if (!res.ok) throw new Error((await res.json()).error || '获取节点数据失败')
+      const data = await res.json()
+      nodeRecords.value = data.data || []
     }
-    
-    reports.value.unshift(newReport)
-    showGenerateModal.value = false
-    generating.value = false
-    
-    alert(`报表"${newReport.name}"已生成！`)
-    
-    // 重置表单
-    generateForm.value = {
-      name: '',
-      type: '',
-      startDate: '',
-      endDate: '',
-      formats: ['pdf'],
-      includeCharts: true,
-      includeDetails: true,
-      includeSummary: true,
-      notes: ''
-    }
-  }, 2000)
-}
-
-const viewReport = (report: any) => {
-  currentReport.value = report
-  showViewModal.value = true
-  
-  // 延迟绘制图表
-  setTimeout(() => {
-    drawReportChart()
-  }, 100)
-}
-
-const drawReportChart = () => {
-  const canvas = reportChartRef.value
-  if (!canvas) return
-  
-  const ctx = canvas.getContext('2d')
-  if (!ctx) return
-  
-  const width = canvas.width
-  const height = canvas.height
-  const padding = 50
-  
-  // 清空画布
-  ctx.clearRect(0, 0, width, height)
-  
-  // 绘制背景
-  ctx.fillStyle = '#f9fafb'
-  ctx.fillRect(0, 0, width, height)
-  
-  // 模拟数据
-  const data = [120, 150, 180, 160, 200, 190, 220]
-  const labels = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
-  const maxValue = Math.max(...data) * 1.2
-  
-  // 绘制网格线
-  ctx.strokeStyle = '#e5e7eb'
-  ctx.lineWidth = 1
-  
-  for (let i = 0; i <= 4; i++) {
-    const y = padding + (height - padding * 2) * i / 4
-    ctx.beginPath()
-    ctx.moveTo(padding, y)
-    ctx.lineTo(width - padding, y)
-    ctx.stroke()
-  }
-  
-  // 绘制柱状图
-  const barWidth = (width - padding * 2) / data.length * 0.6
-  const barSpacing = (width - padding * 2) / data.length
-  
-  data.forEach((value, index) => {
-    const x = padding + index * barSpacing + (barSpacing - barWidth) / 2
-    const barHeight = (value / maxValue) * (height - padding * 2)
-    const y = height - padding - barHeight
-    
-    // 绘制柱子
-    const gradient = ctx.createLinearGradient(0, y, 0, height - padding)
-    gradient.addColorStop(0, '#667eea')
-    gradient.addColorStop(1, '#764ba2')
-    
-    ctx.fillStyle = gradient
-    ctx.fillRect(x, y, barWidth, barHeight)
-    
-    // 绘制数值
-    ctx.fillStyle = '#333'
-    ctx.font = 'bold 12px sans-serif'
-    ctx.textAlign = 'center'
-    ctx.fillText(value.toString(), x + barWidth / 2, y - 5)
-    
-    // 绘制标签
-    ctx.fillStyle = '#666'
-    ctx.font = '12px sans-serif'
-    ctx.fillText(labels[index], x + barWidth / 2, height - padding + 20)
-  })
-}
-
-const downloadReport = (report: any) => {
-  alert(`下载报表: ${report.name}\n格式: PDF, Excel, CSV`)
-}
-
-const deleteReport = (id: number) => {
-  if (confirm('确定要删除此报表吗？')) {
-    const index = reports.value.findIndex(r => r.id === id)
-    if (index > -1) {
-      reports.value.splice(index, 1)
-      alert('报表已删除')
-    }
+  } catch (e: any) {
+    error.value = e.message || '查询失败'
+  } finally {
+    loading.value = false
   }
 }
+
+const getUserName = () => {
+  try {
+    const u = JSON.parse(localStorage.getItem('user') || sessionStorage.getItem('user') || '{}')
+    return u.username || ''
+  } catch { return '' }
+}
+
+// 导出 CSV
+const exportCSV = () => {
+  let rows: string[] = []
+  const { type, startDate, endDate } = filters.value
+
+  if (type === 'job') {
+    rows = [
+      '作业ID,作业名,用户,账户,分区,状态,开始时间,运行时长(秒),CPU小时,GPU小时,计费核时',
+      ...jobRecords.value.map(r =>
+        [r.job_id, `"${r.job_name||''}"`, r.user||'', r.account||'', r.partition||'',
+         r.state||'', fmtTime(r.start_time), r.elapsed_secs||0,
+         (r.cpu_hours||0).toFixed(2), (r.gpu_hours||0).toFixed(2), (r.billing_mins||0).toFixed(1)].join(',')
+      )
+    ]
+  } else if (type === 'machine-time') {
+    rows = [
+      '账户,作业数,CPU小时,节点小时,GPU小时,计费核时',
+      ...machineRecords.value.map(r =>
+        [r.account, r.job_count||0, (r.cpu_hours||0).toFixed(2),
+         (r.node_hours||0).toFixed(2), (r.gpu_hours||0).toFixed(2), (r.billing_mins||0).toFixed(1)].join(',')
+      )
+    ]
+  } else if (type === 'node') {
+    rows = [
+      '节点名,状态,CPU总数,已分配CPU,CPU使用率%,内存总MB,已分配内存MB,内存使用率%,运行作业,分区',
+      ...nodeRecords.value.map(n =>
+        [n.name, n.state, n.cpu_total, n.cpu_allocated, n.cpu_usage_percent.toFixed(1),
+         n.memory_total_mb, n.memory_allocated_mb, n.memory_usage_percent.toFixed(1),
+         n.running_jobs, (n.partitions||[]).join(';')].join(',')
+      )
+    ]
+  }
+
+  const bom = '\uFEFF'
+  const blob = new Blob([bom + rows.join('\n')], { type: 'text/csv;charset=utf-8' })
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = `report_${type}_${startDate}_${endDate}.csv`
+  a.click()
+}
+
+// 格式化工具
+const fmtTime = (ts: any) => {
+  if (!ts || ts === 0) return '-'
+  try { return new Date(ts * 1000).toLocaleString('zh-CN') } catch { return '-' }
+}
+
+const fmtElapsed = (secs: any) => {
+  if (!secs || secs <= 0) return '-'
+  const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60), s = secs % 60
+  return h > 0 ? `${h}时${m}分` : m > 0 ? `${m}分${s}秒` : `${s}秒`
+}
+
+const fmtMem = (mb: number) => {
+  if (!mb) return '-'
+  return mb >= 1024 ? (mb / 1024).toFixed(1) + ' GB' : mb + ' MB'
+}
+
+const nodeStateClass = (state: string) => {
+  const s = (state || '').toLowerCase()
+  if (s.includes('idle')) return 'state-idle'
+  if (s.includes('alloc') || s.includes('mix')) return 'state-running'
+  if (s.includes('down') || s.includes('drain')) return 'state-failed'
+  return 'state-unknown'
+}
+
+onMounted(() => loadReport())
 </script>
 
 <style scoped>
-.reports-page {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
+.reports-page { display: flex; flex-direction: column; gap: 1.5rem; }
 
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
+.page-header { display: flex; justify-content: space-between; align-items: center; }
+.page-header h3 { margin: 0; font-size: 1.3rem; color: #333; }
 
-.page-header h3 {
-  margin: 0;
-  font-size: 1.3rem;
-  color: #333;
+.filters-card { padding: 1.25rem 1.5rem; }
+.filters-row { display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap; }
+.filter-group { display: flex; flex-direction: column; gap: 0.4rem; min-width: 140px; }
+.filter-group label { font-size: 0.85rem; color: #666; font-weight: 600; }
+.filter-group select, .filter-group input {
+  padding: 0.55rem 0.75rem; border: 2px solid #e5e7eb;
+  border-radius: 6px; font-size: 0.9rem; background: #fff;
 }
+.filter-group select:focus, .filter-group input:focus { outline: none; border-color: #667eea; }
 
-.filters-card {
-  padding: 1.5rem;
+.summary-cards {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 1rem;
 }
-
-.filters-row {
-  display: flex;
-  gap: 1rem;
-  align-items: flex-end;
-  flex-wrap: wrap;
+.s-card {
+  background: #fff; border-radius: 10px; padding: 1.25rem 1rem;
+  box-shadow: 0 1px 4px rgba(0,0,0,.06); text-align: center;
 }
+.s-label { font-size: 0.8rem; color: #9ca3af; margin-bottom: 0.5rem; }
+.s-val { font-size: 1.6rem; font-weight: 700; color: #1f2937; }
 
-.filter-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  min-width: 150px;
+.card-title { font-size: 1rem; font-weight: 700; color: #374151; margin-bottom: 1rem; }
+
+.table-wrap { overflow-x: auto; }
+.data-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.data-table th {
+  padding: 0.65rem 0.9rem; background: #f8f9fc; text-align: left;
+  font-size: 0.78rem; font-weight: 700; color: #6b7280;
+  border-bottom: 1.5px solid #e8eaf0; white-space: nowrap;
 }
+.data-table td { padding: 0.6rem 0.9rem; border-bottom: 1px solid #f3f4f8; color: #374151; }
+.data-table tbody tr:hover { background: #f8f9fc; }
+.empty-cell { text-align: center; color: #9ca3af; padding: 2rem !important; }
 
-.filter-group label {
-  font-size: 0.9rem;
-  color: #666;
-  font-weight: 600;
+.state-badge {
+  display: inline-block; padding: 0.2rem 0.55rem; border-radius: 10px;
+  font-size: 0.75rem; font-weight: 600;
 }
+.state-completed, .state-idle { background: #d1fae5; color: #065f46; }
+.state-running, .state-alloc { background: #dbeafe; color: #1e40af; }
+.state-failed, .state-down { background: #fee2e2; color: #991b1b; }
+.state-cancelled, .state-cancel { background: #fef3c7; color: #92400e; }
+.state-unknown { background: #f3f4f6; color: #6b7280; }
 
-.filter-group select,
-.filter-group input {
-  padding: 0.625rem;
-  border: 2px solid #e5e7eb;
-  border-radius: 6px;
-  font-size: 0.95rem;
-}
-
-.filter-group select:focus,
-.filter-group input:focus {
-  outline: none;
-  border-color: #667eea;
-}
-
-.reports-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.reports-table thead {
-  background: #f9fafb;
-}
-
-.reports-table th {
-  padding: 1rem;
-  text-align: left;
-  font-weight: 600;
-  color: #555;
-  border-bottom: 2px solid #e5e7eb;
-}
-
-.reports-table td {
-  padding: 1rem;
-  border-bottom: 1px solid #e5e7eb;
-  color: #333;
-}
-
-.reports-table tbody tr:hover {
-  background: #f9fafb;
-}
-
-.report-name {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.report-icon {
-  font-size: 1.5rem;
-}
-
-.status-badge {
-  padding: 0.375rem 0.75rem;
-  border-radius: 12px;
-  font-size: 0.85rem;
-  font-weight: 600;
-}
-
-.status-completed {
-  background: #d1fae5;
-  color: #065f46;
-}
-
-.status-generating {
-  background: #fef3c7;
-  color: #92400e;
-}
-
-.status-failed {
-  background: #fee2e2;
-  color: #991b1b;
-}
-
-.action-buttons {
-  display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-}
-
-.empty-state {
-  text-align: center;
-  padding: 4rem 2rem;
-  color: #999;
-}
-
-.empty-icon {
-  font-size: 4rem;
-  margin-bottom: 1rem;
-}
-
-.empty-hint {
-  font-size: 0.9rem;
-  margin-top: 0.5rem;
-}
-
-/* 生成报表弹窗 */
-.generate-modal {
-  max-width: 600px;
-}
-
-.generate-form {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
-
-.form-row {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 1rem;
-}
-
-.format-options,
-.content-options {
-  display: flex;
-  gap: 1.5rem;
-  flex-wrap: wrap;
-}
-
-.format-option,
-.content-option {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  cursor: pointer;
-}
-
-.format-option input,
-.content-option input {
-  cursor: pointer;
-}
-
-/* 查看报表弹窗 */
-.view-modal {
-  max-width: 900px;
-  max-height: 90vh;
-}
-
-.report-info {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  padding: 1rem;
-  background: #f9fafb;
-  border-radius: 8px;
-  margin-bottom: 1.5rem;
-}
-
-.info-row {
-  display: flex;
-  gap: 1rem;
-}
-
-.info-label {
-  font-weight: 600;
-  color: #666;
+.mini-bar {
+  display: flex; align-items: center; gap: 0.4rem;
   min-width: 100px;
 }
-
-.info-value {
-  color: #333;
+.mini-fill {
+  height: 6px; border-radius: 3px; min-width: 2px;
+  transition: width 0.3s;
 }
-
-.report-summary {
-  margin-bottom: 2rem;
-}
-
-.report-summary h4 {
-  margin: 0 0 1rem 0;
-  color: #667eea;
-}
-
-.summary-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 1rem;
-}
-
-.summary-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 1rem;
-  background: #f9fafb;
-  border-radius: 8px;
-}
-
-.summary-label {
-  font-size: 0.85rem;
-  color: #666;
-}
-
-.summary-value {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: #333;
-}
-
-.summary-value.success {
-  color: #10b981;
-}
-
-.summary-value.failed {
-  color: #ef4444;
-}
-
-.report-chart {
-  margin-bottom: 2rem;
-}
-
-.report-chart h4 {
-  margin: 0 0 1rem 0;
-  color: #667eea;
-}
-
-.report-chart canvas {
-  width: 100%;
-  border-radius: 8px;
-  background: #f9fafb;
-}
-
-.modal-actions {
-  display: flex;
-  gap: 1rem;
-  justify-content: flex-end;
-  padding-top: 1rem;
-  border-top: 1px solid #e5e7eb;
-}
-
-@media (max-width: 768px) {
-  .filters-row {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .filter-group {
-    width: 100%;
-  }
-
-  .summary-grid {
-    grid-template-columns: 1fr;
-  }
-}
+.mini-bar span { font-size: 0.78rem; color: #6b7280; white-space: nowrap; }
 </style>

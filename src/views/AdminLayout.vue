@@ -82,6 +82,16 @@
             <span class="nav-item-icon">📈</span>
             <span class="nav-item-label">集群监控</span>
           </a>
+
+          <!-- 机柜管理 -->
+          <a
+            :class="['nav-item', { active: adminTab === 'rack' }]"
+            @click="adminTab = 'rack'"
+            :title="sidebarCollapsed ? '机柜管理' : ''"
+          >
+            <span class="nav-item-icon">🗄️</span>
+            <span class="nav-item-label">机柜管理</span>
+          </a>
         </div>
       </nav>
 
@@ -120,6 +130,7 @@
 
       <main class="content-area">
         <Monitoring v-if="adminTab === 'monitoring'" />
+        <RackView v-else-if="adminTab === 'rack'" />
         <AdminUsers v-else-if="adminTab === 'users'" />
         <AdminGroups v-else-if="adminTab === 'groups'" />
         <AdminQoS v-else-if="adminTab === 'qos'" />
@@ -147,6 +158,7 @@ import AdminSlurmAccounts from './AdminSlurmAccounts.vue'
 import AdminSlurmUsers from './AdminSlurmUsers.vue'
 import AdminAssociations from './AdminAssociations.vue'
 import Monitoring from './Monitoring.vue'
+import RackView from './RackView.vue'
 import { getUser, logout, setupAxiosInterceptors, isAdmin as checkAdmin } from '../utils/auth'
 
 const router = useRouter()
@@ -159,6 +171,7 @@ const theme = ref<'light' | 'dark'>('light')
 const currentTitle = computed(() => {
   const map: Record<string, string> = {
     monitoring: '集群监控',
+    rack: '机柜管理',
     users: '用户',
     groups: '用户组',
     'slurm-accounts': 'Slurm账户',

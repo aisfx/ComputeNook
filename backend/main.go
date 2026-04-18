@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"log"
 	"net/http"
 	"os"
@@ -15,9 +14,21 @@ import (
 )
 
 func main() {
-	// 加载环境变量
-	if err := godotenv.Load(); err != nil {
-		log.Println("Warning: .env file not found")
+	// 加载环境变量：优先读 ENV_FILE 指定的文件，否则依次尝试当前目录和上级目录的 .env
+	envFile := os.Getenv("ENV_FILE")
+	if envFile == "" {
+		if _, err := os.Stat(".env"); err == nil {
+			envFile = ".env"
+		} else if _, err := os.Stat("../.env"); err == nil {
+			envFile = "../.env"
+		}
+	}
+	if envFile != "" {
+		if err := godotenv.Load(envFile); err != nil {
+			log.Printf("Warning: failed to load env file %s: %v", envFile, err)
+		} else {
+			log.Printf("Loaded env from: %s", envFile)
+		}
 	}
 
 	// 程序退出时关闭日志文件
@@ -49,28 +60,14 @@ func main() {
 	// 创建 Gin 路由
 	r := gin.Default()
 
-	// 自定义模板函数（必须在加载模板之前设置）
-	r.SetFuncMap(map[string]interface{}{
-		"lower": func(s string) string {
-			return strings.ToLower(s)
-		},
-		"json": func(v interface{}) string {
-			b, _ := json.MarshalIndent(v, "", "  ")
-			return string(b)
-		},
-		"contains": func(s, substr string) bool {
-			return strings.Contains(s, substr)
-		},
-	})
-
-	// 加载 HTML 模板
-	r.LoadHTMLGlob("templates/*")
-
 	// CORS 中间件
 	r.Use(middleware.CORSMiddleware())
 
 	// 审计日志中间件（在认证之后）
 	r.Use(middleware.AuditMiddleware())
+
+	// 运行时配置（前端通过 /config.js 读取）
+	r.GET("/config.js", handlers.GetRuntimeConfig)
 
 	// API 文档（公开访问）
 	r.GET("/api", handlers.GetAPIDocs)
@@ -244,45 +241,44 @@ func main() {
 		// 文件管理 API
 		files := auth.Group("/files")
 		{
-			// 列出目录内容
 			files.GET("/list", handlers.ListDirectory)
-			
-			// 获取文件信息
 			files.GET("/info", handlers.GetFileInfo)
-			
-			// 读取文件内容
 			files.GET("/read", handlers.ReadFile)
-			
-			// 下载文件
 			files.GET("/download", handlers.DownloadFile)
-			
-			// 写入文件
 			files.POST("/write", handlers.WriteFile)
-			
-			// 上传文件
 			files.POST("/upload", handlers.UploadFile)
-			
-			// 删除文件或目录
 			files.DELETE("/delete", handlers.DeleteFile)
-			
-			// 创建目录
 			files.POST("/mkdir", handlers.CreateDirectory)
-			
-			// 重命名文件或目录
 			files.POST("/rename", handlers.RenameFile)
-			
-			// 复制文件
 			files.POST("/copy", handlers.CopyFile)
+			// 配额
+			files.GET("/quota", handlers.GetQuota)
+			files.GET("/quota/all", handlers.GetAllQuotas)
+			files.POST("/quota", handlers.SetQuota)
+			files.GET("/compress", handlers.CompressDownload)
 		}
 
 		// 仪表盘统计 API
 		dashboard := auth.Group("/dashboard")
 		{
-			// 获取集群统计信息
 			dashboard.GET("/stats", handlers.GetDashboardStats)
-			
-			// 获取节点列表
 			dashboard.GET("/nodes", handlers.GetDashboardNodes)
+		}
+
+		// 监控 API
+		monitoring := auth.Group("/monitoring")
+		{
+			monitoring.GET("/metrics", handlers.GetNodeMetrics)
+			monitoring.GET("/node-metrics", handlers.GetNodeExporterMetrics)
+			monitoring.GET("/local-metrics", handlers.GetLocalMetrics)
+			monitoring.GET("/rack", handlers.GetRackLayout)
+			monitoring.POST("/rack", handlers.CreateRack)
+			monitoring.PUT("/rack/:id", handlers.UpdateRack)
+			monitoring.DELETE("/rack/:id", handlers.DeleteRack)
+			monitoring.POST("/rack/auto", handlers.AutoGenerateRacks)
+			monitoring.GET("/prom-alerts", handlers.GetPromAlerts)
+			monitoring.GET("/prom-targets", handlers.GetPromTargets)
+			monitoring.GET("/prom-rules", handlers.GetPromRules)
 		}
 	}
 

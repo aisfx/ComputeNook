@@ -1,10 +1,20 @@
 import axios from 'axios'
-import { useRouter } from 'vue-router'
 
-const API_BASE_URL = 'http://localhost:8080/api'
+// 运行时动态获取 API 地址
+// 生产环境 window.__CONFIG__.apiUrl 为空字符串，走同域相对路径由 nginx 代理
+// 开发环境直连 8080
+function getBaseURL(): string {
+  const w = window as any
+  // 优先使用后端注入的运行时配置（非空才用）
+  if (w.__CONFIG__?.apiUrl) return w.__CONFIG__.apiUrl + '/api'
+  // 开发模式直连后端
+  if (import.meta.env.DEV) return `${location.protocol}//${location.hostname}:8080/api`
+  // 生产：走同域相对路径，由 nginx 代理
+  return '/api'
+}
 
 // 配置 axios 默认值
-axios.defaults.baseURL = API_BASE_URL
+axios.defaults.baseURL = getBaseURL()
 
 // 请求拦截器 - 添加 token
 axios.interceptors.request.use(

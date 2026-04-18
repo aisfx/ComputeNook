@@ -1,6 +1,29 @@
 import axios from 'axios'
 
-const API_BASE_URL = 'http://localhost:8080/api'
+// 运行时动态获取 API 地址，与 api/index.ts 保持一致
+function getBaseURL(): string {
+  const w = window as any
+  if (w.__CONFIG__?.apiUrl) return w.__CONFIG__.apiUrl + '/api'
+  if (import.meta.env.DEV) return `${location.protocol}//${location.hostname}:8080/api`
+  return '/api'
+}
+
+const API_BASE_URL = getBaseURL()
+
+// 供各组件直接 fetch 使用的 API 根路径（不含 /api 后缀）
+export const getApiBase = (): string => {
+  const w = window as any
+  if (w.__CONFIG__?.apiUrl) return w.__CONFIG__.apiUrl
+  if (import.meta.env.DEV) return `${location.protocol}//${location.hostname}:8080`
+  return ''
+}
+
+// 供 WebShell 使用的 WS 根路径
+export const getWsBase = (): string => {
+  const w = window as any
+  const httpBase = w.__CONFIG__?.apiUrl || (import.meta.env.DEV ? `${location.protocol}//${location.hostname}:8080` : '')
+  return httpBase.replace(/^http/, 'ws')
+}
 
 // 开发模式配置（已禁用）
 const DEV_MODE = false // 强制关闭开发模式

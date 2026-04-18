@@ -127,11 +127,11 @@
         :disabled="pagination.page <= 1"
         @click="changePage(pagination.page - 1)"
       >
-        ← 上一页
+        « 上一页
       </button>
       
       <span class="pagination-info">
-        第 {{ pagination.page }} / {{ pagination.totalPages }} 页，共 {{ pagination.total }} 个作业
+        第{{ pagination.page }} / {{ pagination.totalPages }} 页，共{{ pagination.total }} 个作业
       </span>
       
       <button 
@@ -139,7 +139,7 @@
         :disabled="pagination.page >= pagination.totalPages"
         @click="changePage(pagination.page + 1)"
       >
-        下一页 →
+        下一页 »
       </button>
     </div>
   </div>
@@ -147,7 +147,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { getUser, isAdmin } from '../utils/auth'
+import { getUser, getApiBase, isAdmin } from '../utils/auth'
 import notification from '../utils/notification'
 // import { jobAPI } from '../api' // TODO: 取消注释以启用真实API调用
 
@@ -219,8 +219,7 @@ const canControlJob = (job: any) => {
 }
 
 const cancelJob = async (job: any) => {
-  // 使用简单的确认对话框
-  const confirmed = confirm(`🗑️ 取消作业\n\n确定要取消作业 ${job.id} - ${job.name} 吗？\n\n此操作不可恢复。`)
+  const confirmed = confirm(`取消作业\n\n确定要取消作业 ${job.id} - ${job.name} 吗？\n\n此操作不可恢复。`)
   
   if (!confirmed) {
     return
@@ -234,7 +233,7 @@ const cancelJob = async (job: any) => {
       throw new Error('请先登录系统')
     }
     
-    const response = await fetch(`http://localhost:8080/api/jobs/${job.id}`, {
+    const response = await fetch(`${getApiBase()}/api/jobs/${job.id}`, {
       method: 'DELETE',
       headers: {
         'Authorization': `Bearer ${token}`
@@ -276,7 +275,7 @@ const loadJobs = async () => {
     }
     
     // 构建 API URL
-    let url = `http://localhost:8080/api/jobs?page=${pagination.value.page}&page_size=${pagination.value.pageSize}`
+    let url = `${getApiBase()}/api/jobs?page=${pagination.value.page}&page_size=${pagination.value.pageSize}`
     
     // 如果是"我的作业"模式，添加用户名参数
     if (viewMode.value === 'my') {

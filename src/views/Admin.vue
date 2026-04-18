@@ -522,7 +522,7 @@ import axios from 'axios'
 import AdminAssociations from './AdminAssociations.vue'
 import AdminSlurmAccounts from './AdminSlurmAccounts.vue'
 
-const API_BASE_URL = 'http://localhost:8080/api'
+const API_BASE_URL = ''
 
 const currentTab = ref('users')
 const showAddUserModal = ref(false)

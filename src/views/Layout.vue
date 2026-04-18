@@ -121,6 +121,7 @@
         <Dashboard v-if="currentView === 'dashboard'" @navigate="currentView = $event" />
         <JobManagement v-else-if="currentView === 'jobs'" @open-directory="handleOpenDirectory" />
         <Monitoring v-else-if="currentView === 'monitoring' && isAdmin" />
+        <RackView v-else-if="currentView === 'rack' && isAdmin" />
         <WebShell v-else-if="currentView === 'shell'" />
         <Desktop v-else-if="currentView === 'desktop'" />
         <FileManager ref="fileManagerRef" v-else-if="currentView === 'files'" />
@@ -135,7 +136,7 @@
         <AdminAudit v-else-if="currentView === 'admin' && adminTab === 'audit' && isAdmin" />
         <AdminSlurmAccounts v-else-if="currentView === 'admin' && adminTab === 'slurm-accounts' && isAdmin" />
         <AdminSlurmUsers v-else-if="currentView === 'admin' && adminTab === 'slurm-users' && isAdmin" />
-        <div v-else-if="!isAdmin && (currentView === 'monitoring' || currentView === 'admin')" class="no-permission">
+        <div v-else-if="!isAdmin && (currentView === 'monitoring' || currentView === 'admin' || currentView === 'rack')" class="no-permission">
           <div class="no-perm-icon">🔒</div>
           <h3>无访问权限</h3>
           <p>请联系管理员获取权限</p>
@@ -168,6 +169,7 @@ import AdminSlurmUsers from './AdminSlurmUsers.vue'
 import AdminAssociations from './AdminAssociations.vue'
 import Monitoring from './Monitoring.vue'
 import Profile from './Profile.vue'
+import RackView from './RackView.vue'
 import AIAssistant from '../components/AIAssistant.vue'
 import { getUser, logout, setupAxiosInterceptors, isAdmin as checkAdmin } from '../utils/auth'
 
@@ -244,6 +246,7 @@ const currentTitle = computed(() => {
     { id: 'dashboard', label: '仪表盘' },
     ...otherMenuItems,
     { id: 'monitoring', label: '集群监控' },
+    { id: 'rack', label: '机柜管理' },
     { id: 'profile', label: '个人信息' }
   ]
   return all.find(i => i.id === currentView.value)?.label || ''

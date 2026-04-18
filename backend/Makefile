@@ -1,12 +1,12 @@
 .PHONY: run build clean test install create-user
 
-# 运行服务
+# 运行服务（自动查找 .env 或 ../.env）
 run:
-	go run main.go
+	go run .
 
 # 编译
 build:
-	go build -o hpc-backend main.go
+	go build -o hpc-backend .
 
 # 清理
 clean:
@@ -16,13 +16,3 @@ clean:
 install:
 	go mod download
 	go mod tidy
-
-# 创建测试用户
-create-user:
-	chmod +x create_user.sh
-	./create_user.sh
-
-# 启动（带检查）
-start:
-	chmod +x start.sh
-	./start.sh

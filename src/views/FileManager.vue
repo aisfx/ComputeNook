@@ -120,6 +120,14 @@
                         <svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
                         下载
                       </button>
+                      <button v-if="!file.is_dir" class="fm-dropdown-item" @click="editFile(file); openOps = null">
+                        <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                        编辑
+                      </button>
+                      <button class="fm-dropdown-item" @click="compressDownload(file); openOps = null">
+                        <svg viewBox="0 0 24 24"><path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-4 6h-3v3h-2v-3H8v-2h3V7h2v3h3v2z"/></svg>
+                        压缩下载
+                      </button>
                       <button class="fm-dropdown-item" @click="renameFile(file); openOps = null">
                         <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
                         重命名
@@ -139,7 +147,7 @@
       </template>
     </div>
 
-    <!-- 文件查看弹窗 -->
+    <!-- 文件查看/编辑弹窗 -->
     <Teleport to="body">
       <div v-if="showFileViewer" class="fm-modal-overlay" @click="closeFileViewer">
         <div class="fm-modal" @click.stop>
@@ -149,17 +157,27 @@
                 <component :is="getFileIconComp(viewingFile?.name || '')" />
               </div>
               <span>{{ viewingFile?.name }}</span>
+              <span v-if="isEditing" class="fm-edit-badge">编辑中</span>
             </div>
             <button class="fm-modal-close" @click="closeFileViewer">
               <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
             </button>
           </div>
           <div class="fm-modal-body">
-            <pre class="fm-file-content">{{ fileContent }}</pre>
+            <pre v-if="!isEditing" class="fm-file-content">{{ fileContent }}</pre>
+            <textarea v-else v-model="fileContent" class="fm-file-editor" spellcheck="false"></textarea>
           </div>
           <div class="fm-modal-footer">
             <button class="fm-btn fm-btn-secondary" @click="closeFileViewer">关闭</button>
-            <button class="fm-btn fm-btn-primary" @click="downloadFile(viewingFile)">
+            <button v-if="!isEditing" class="fm-btn fm-btn-secondary" @click="isEditing = true">
+              <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+              编辑
+            </button>
+            <button v-if="isEditing" class="fm-btn fm-btn-secondary" @click="isEditing = false">取消编辑</button>
+            <button v-if="isEditing" class="fm-btn fm-btn-primary" @click="saveFile" :disabled="saving">
+              {{ saving ? '保存中...' : '💾 保存' }}
+            </button>
+            <button v-if="!isEditing" class="fm-btn fm-btn-primary" @click="downloadFile(viewingFile)">
               <svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
               下载
             </button>
@@ -223,6 +241,8 @@ const showFileViewer = ref(false)
 const viewingFile = ref<any>(null)
 const fileContent = ref('')
 const openOps = ref<string | null>(null)
+const isEditing = ref(false)
+const saving = ref(false)
 
 // 计算下拉菜单的绝对定位位置
 const getDropdownStyle = (filePath: string) => {
@@ -324,7 +344,36 @@ const viewFile = async (file: any) => {
   } catch (e: any) { notification.error(e.message) }
 }
 
-const closeFileViewer = () => { showFileViewer.value = false; viewingFile.value = null; fileContent.value = '' }
+const closeFileViewer = () => { showFileViewer.value = false; viewingFile.value = null; fileContent.value = ''; isEditing.value = false }
+
+const editFile = async (file: any) => {
+  await viewFile(file)
+  isEditing.value = true
+}
+
+const saveFile = async () => {
+  if (!viewingFile.value) return
+  saving.value = true
+  try {
+    const res = await fetch(fileManagerApi.write(), {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: viewingFile.value.path, content: fileContent.value })
+    })
+    if (!res.ok) throw new Error((await res.json()).error || '保存失败')
+    notification.success('保存成功')
+    isEditing.value = false
+  } catch (e: any) { notification.error(e.message) }
+  finally { saving.value = false }
+}
+
+const compressDownload = (file: any) => {
+  const url = `${fileManagerApi.compress()}?path=${encodeURIComponent(file.path)}&token=${token()}`
+  const a = document.createElement('a')
+  a.href = url; a.download = file.name + '.zip'; a.style.display = 'none'
+  document.body.appendChild(a); a.click(); document.body.removeChild(a)
+  notification.success('开始压缩下载')
+}
 
 const downloadFile = (file: any) => {
   const url = `${fileManagerApi.download()}?path=${encodeURIComponent(file.path)}&token=${token()}`
@@ -660,6 +709,21 @@ onUnmounted(() => { document.removeEventListener('click', handleGlobalClick) })
   border-radius: 8px; font-family: 'SF Mono','Fira Code',monospace;
   font-size: 0.85rem; line-height: 1.65;
   white-space: pre-wrap; word-break: break-all;
+}
+.fm-file-editor {
+  width: 100%; height: 100%; min-height: 400px;
+  padding: 1rem 1.25rem; box-sizing: border-box;
+  background: #1e1e2e; color: #cdd6f4;
+  border: none; border-radius: 8px;
+  font-family: 'SF Mono','Fira Code',monospace;
+  font-size: 0.85rem; line-height: 1.65;
+  resize: vertical; outline: none;
+}
+.fm-edit-badge {
+  font-size: 0.72rem; font-weight: 600;
+  background: #fef3c7; color: #d97706;
+  padding: 0.15rem 0.5rem; border-radius: 4px;
+  margin-left: 0.5rem;
 }
 .fm-modal-footer {
   display: flex; justify-content: flex-end; gap: 0.75rem;
