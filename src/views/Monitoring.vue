@@ -183,52 +183,61 @@
             <span v-if="cfgSaved" class="save-tip">✅ 已保存</span>
           </div>
         </div>
-        <div class="alerts-rules-title">
-          🔔 活跃告警
-          <span :class="['prom-badge', promAlertsOk ? 'prom-ok' : 'prom-na']">{{ promAlertsOk ? '已连接' : '未连接' }}</span>
-          <span v-if="promAlerts.length" class="alert-badge">{{ promAlerts.length }}</span>
-        </div>
-        <div v-if="!promAlertsOk" class="prom-tip">未配置 Prometheus 或无法连接</div>
-        <div v-else-if="promAlerts.length===0" class="empty-sm" style="margin-bottom:1rem">✅ 无活跃告警</div>
-        <div v-else style="overflow-x:auto;margin-bottom:1rem">
-          <table class="mtable">
-            <thead><tr><th>级别</th><th>告警名称</th><th>实例</th><th>摘要</th><th>触发时间</th></tr></thead>
-            <tbody>
-              <tr v-for="a in promAlerts" :key="a.fingerprint" :class="a.labels?.severity==='critical' ? 'tr-critical' : 'tr-warning'">
-                <td><span :class="['sev-badge', 'sev-'+(a.labels?.severity||'info')]">{{ a.labels?.severity || 'info' }}</span></td>
-                <td><code>{{ a.labels?.alertname || '-' }}</code></td>
-                <td class="small-text">{{ a.labels?.instance || a.labels?.job || '-' }}</td>
-                <td class="small-text">{{ a.annotations?.summary || a.annotations?.description || '-' }}</td>
-                <td class="small-text">{{ fmtTime(a.activeAt) }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div class="alerts-rules-title">
-          📋 告警规则
-          <span :class="['prom-badge', rulesConnected ? 'prom-ok' : 'prom-na']">{{ rulesConnected ? '已连接' : '未连接' }}</span>
-          <span class="nodes-count">{{ allRules.length }} 条</span>
-          <input v-model="ruleSearch" placeholder="搜索规则..." class="rule-search" style="margin-left:auto" />
-          <button class="btn-sec" @click="loadRules" :disabled="rulesLoading" style="font-size:0.78rem;padding:0.3rem 0.6rem">{{ rulesLoading ? '...' : '🔄' }}</button>
-        </div>
-        <div v-if="!rulesConnected" class="prom-tip">无法连接 Prometheus</div>
-        <div v-else style="overflow-x:auto">
-          <table class="mtable">
-            <thead><tr><th>规则名</th><th>表达式</th><th>持续时间</th><th>严重级别</th><th>状态</th><th>摘要</th></tr></thead>
-            <tbody>
-              <template v-for="group in filteredRuleGroups" :key="group.name">
-                <tr v-for="r in group.rules" :key="r.name">
-                  <td><code>{{ r.name }}</code></td>
-                  <td class="expr-cell" :title="r.query">{{ r.query }}</td>
-                  <td>{{ r.duration ? r.duration+'s' : '-' }}</td>
-                  <td><span :class="['sev-badge', 'sev-'+(r.labels?.severity||'info')]">{{ r.labels?.severity || 'info' }}</span></td>
-                  <td><span :class="['state-badge2', r.state==='firing' ? 'st-firing' : r.state==='pending' ? 'st-pending' : 'st-ok']">{{ r.state || 'inactive' }}</span></td>
-                  <td class="small-text">{{ r.annotations?.summary || r.annotations?.description || '-' }}</td>
-                </tr>
-              </template>
-              <tr v-if="filteredRuleGroups.length===0"><td colspan="6" class="empty-sm">暂无告警规则</td></tr>
-            </tbody>
-          </table>
+        <div class="alerts-grid">
+          <!-- 活跃告警 -->
+          <div class="alert-card">
+            <div class="alert-card-header">
+              <span>🔔 活跃告警</span>
+              <span :class="['prom-badge', promAlertsOk ? 'prom-ok' : 'prom-na']">{{ promAlertsOk ? '已连接' : '未连接' }}</span>
+              <span v-if="promAlerts.length" class="alert-badge">{{ promAlerts.length }}</span>
+            </div>
+            <div v-if="!promAlertsOk" class="prom-tip" style="margin:0.75rem">未配置 Prometheus 或无法连接</div>
+            <div v-else-if="promAlerts.length===0" class="empty-sm">✅ 无活跃告警</div>
+            <div v-else style="overflow-x:auto">
+              <table class="mtable">
+                <thead><tr><th>级别</th><th>告警名称</th><th>实例</th><th>摘要</th><th>触发时间</th></tr></thead>
+                <tbody>
+                  <tr v-for="a in promAlerts" :key="a.fingerprint" :class="a.labels?.severity==='critical' ? 'tr-critical' : 'tr-warning'">
+                    <td><span :class="['sev-badge', 'sev-'+(a.labels?.severity||'info')]">{{ a.labels?.severity || 'info' }}</span></td>
+                    <td><code>{{ a.labels?.alertname || '-' }}</code></td>
+                    <td class="small-text">{{ a.labels?.instance || a.labels?.job || '-' }}</td>
+                    <td class="small-text">{{ a.annotations?.summary || a.annotations?.description || '-' }}</td>
+                    <td class="small-text">{{ fmtTime(a.activeAt) }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- 告警规则 -->
+          <div class="alert-card">
+            <div class="alert-card-header">
+              <span>📋 告警规则</span>
+              <span :class="['prom-badge', rulesConnected ? 'prom-ok' : 'prom-na']">{{ rulesConnected ? '已连接' : '未连接' }}</span>
+              <span class="nodes-count">{{ allRules.length }} 条</span>
+              <input v-model="ruleSearch" placeholder="搜索规则..." class="rule-search" style="margin-left:auto" />
+              <button class="btn-sec" @click="loadRules" :disabled="rulesLoading" style="font-size:0.78rem;padding:0.25rem 0.5rem">{{ rulesLoading ? '...' : '🔄' }}</button>
+            </div>
+            <div v-if="!rulesConnected" class="prom-tip" style="margin:0.75rem">无法连接 Prometheus</div>
+            <div v-else style="overflow-x:auto">
+              <table class="mtable">
+                <thead><tr><th>规则名</th><th>表达式</th><th>持续</th><th>级别</th><th>状态</th><th>摘要</th></tr></thead>
+                <tbody>
+                  <template v-for="group in filteredRuleGroups" :key="group.name">
+                    <tr v-for="r in group.rules" :key="r.name">
+                      <td><code>{{ r.name }}</code></td>
+                      <td class="expr-cell" :title="r.query">{{ r.query }}</td>
+                      <td>{{ r.duration ? r.duration+'s' : '-' }}</td>
+                      <td><span :class="['sev-badge', 'sev-'+(r.labels?.severity||'info')]">{{ r.labels?.severity || 'info' }}</span></td>
+                      <td><span :class="['state-badge2', r.state==='firing' ? 'st-firing' : r.state==='pending' ? 'st-pending' : 'st-ok']">{{ r.state || 'inactive' }}</span></td>
+                      <td class="small-text">{{ r.annotations?.summary || r.annotations?.description || '-' }}</td>
+                    </tr>
+                  </template>
+                  <tr v-if="filteredRuleGroups.length===0"><td colspan="6" class="empty-sm">暂无告警规则</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -277,7 +286,20 @@ const promTargets = ref<any[]>([])
 const promTargetsOk = ref(false)
 const localMetrics = ref<any>({ connected: false, hostname: '', cpu_usage: 0, mem_usage: 0, mem_total_gb: 0, mem_used_gb: 0, disk_usage: 0, disk_total_gb: 0, disk_used_gb: 0, net_rx_bps: 0, net_tx_bps: 0, load1: 0, load5: 0, load15: 0, uptime_seconds: 0 })
 
-type HistoryPoint = { time: string; nodes: Record<string, { cpu: number; mem: number; disk: number; net_rx: number; net_tx: number }> }
+type HistoryPoint = {
+  time: string
+  nodes: Record<string, {
+    cpu: number        // %
+    mem: number        // % 
+    mem_used: number   // GB
+    mem_total: number  // GB
+    disk: number       // %
+    disk_used: number  // GB
+    disk_total: number // GB
+    net_rx: number     // bytes/s
+    net_tx: number     // bytes/s
+  }>
+}
 const history = ref<HistoryPoint[]>([])
 const historyNode = ref('')
 const cpuChartEl = ref<HTMLElement>()
@@ -357,7 +379,17 @@ const loadAll = async () => {
     lastRefresh.value = new Date().toLocaleTimeString('zh-CN')
     if (nodeMetrics.value.length > 0) {
       const point: HistoryPoint = { time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }), nodes: {} }
-      for (const n of nodeMetrics.value) point.nodes[n.instance] = { cpu: n.cpu_usage, mem: n.mem_usage, disk: n.disk_usage, net_rx: n.net_rx_bps, net_tx: n.net_tx_bps }
+      for (const n of nodeMetrics.value) point.nodes[n.instance] = {
+          cpu: n.cpu_usage,
+          mem: n.mem_usage,
+          mem_used: n.mem_used_gb ?? (n.mem_total_gb * n.mem_usage / 100),
+          mem_total: n.mem_total_gb ?? 0,
+          disk: n.disk_usage,
+          disk_used: n.disk_used_gb ?? (n.disk_total_gb * n.disk_usage / 100),
+          disk_total: n.disk_total_gb ?? 0,
+          net_rx: n.net_rx_bps,
+          net_tx: n.net_tx_bps,
+        }
       history.value.push(point)
       if (history.value.length > 60) history.value.shift()
     }
@@ -454,79 +486,134 @@ const initChart = (el: HTMLElement | undefined, instance: echarts.ECharts | null
 // 多节点颜色池
 const NODE_COLORS = ['#667eea','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#f97316','#84cc16','#ec4899','#14b8a6']
 
-const buildOption = (seriesKey: 'cpu'|'mem'|'disk'|'net') => {
+type ChartKey = 'cpu' | 'mem' | 'disk' | 'net'
+
+const chartMeta: Record<ChartKey, {
+  label: string
+  getVal: (n: HistoryPoint['nodes'][string]) => number | number[]
+  fmt: (v: number) => string
+  yFmt: (v: number) => string
+  yMax?: number
+  seriesNames?: (node: string) => string[]
+}> = {
+  cpu: {
+    label: 'CPU%',
+    getVal: n => n.cpu,
+    fmt: v => v.toFixed(1) + '%',
+    yFmt: v => v.toFixed(0) + '%',
+    yMax: 100,
+  },
+  mem: {
+    label: '内存 (GB)',
+    getVal: n => n.mem_used,
+    fmt: v => v.toFixed(2) + ' GB',
+    yFmt: v => v.toFixed(1) + ' GB',
+  },
+  disk: {
+    label: '磁盘 (GB)',
+    getVal: n => n.disk_used,
+    fmt: v => v.toFixed(2) + ' GB',
+    yFmt: v => v.toFixed(1) + ' GB',
+  },
+  net: {
+    label: '网络',
+    getVal: n => [n.net_rx, n.net_tx],
+    fmt: v => fmtBytes(v),
+    yFmt: v => fmtBytes(v),
+    seriesNames: node => [`${node} ↓`, `${node} ↑`],
+  },
+}
+
+const buildOption = (seriesKey: ChartKey) => {
   const data = history.value
   const inst = historyNode.value
   const times = data.map(p => p.time)
+  const meta = chartMeta[seriesKey]
   const isNet = seriesKey === 'net'
-  const isPct = !isNet
-
-  // 收集所有节点实例名
   const allNodes = Array.from(new Set(data.flatMap(p => Object.keys(p.nodes))))
 
-  const markLine = isPct && (seriesKey === 'cpu' || seriesKey === 'mem') ? {
+  const markLine = seriesKey === 'cpu' ? {
     silent: true,
     lineStyle: { color: '#ef4444', type: 'dashed' as const, width: 1 },
-    data: [{ yAxis: seriesKey === 'cpu' ? cfg.value.cpuWarn : cfg.value.memWarn, label: { formatter: '阈值', color: '#ef4444', fontSize: 10 } }]
+    data: [{ yAxis: cfg.value.cpuWarn, label: { formatter: `${cfg.value.cpuWarn}%`, color: '#ef4444', fontSize: 10 } }]
   } : undefined
 
   let series: any[] = []
+  const nodes = inst ? [inst] : allNodes
 
-  if (inst) {
-    // 单节点模式
-    const nodeName = shortName(inst)
+  nodes.forEach((node, i) => {
+    const color = NODE_COLORS[i % NODE_COLORS.length]
+    const name = shortName(node)
     if (isNet) {
-      series = [
-        { name: `${nodeName} 下行`, type: 'line', smooth: true, symbol: 'none', lineStyle: { color: '#10b981', width: 2 }, areaStyle: { color: '#10b981', opacity: 0.08 }, data: data.map(p => +(( p.nodes[inst]?.net_rx ?? 0).toFixed(2))) },
-        { name: `${nodeName} 上行`, type: 'line', smooth: true, symbol: 'none', lineStyle: { color: '#667eea', width: 2 }, areaStyle: { color: '#667eea', opacity: 0.08 }, data: data.map(p => +((p.nodes[inst]?.net_tx ?? 0).toFixed(2))) },
-      ]
-    } else {
-      const key = seriesKey as keyof HistoryPoint['nodes'][string]
-      const color = seriesKey === 'cpu' ? '#667eea' : seriesKey === 'mem' ? '#10b981' : '#f59e0b'
-      series = [{ name: nodeName, type: 'line', smooth: true, symbol: 'none', lineStyle: { color, width: 2 }, areaStyle: { color, opacity: 0.08 }, data: data.map(p => +((p.nodes[inst]?.[key] ?? 0).toFixed(2))), markLine }]
-    }
-  } else {
-    // 集群模式：每个节点一条线
-    if (isNet) {
-      allNodes.forEach((node, i) => {
-        const rxColor = NODE_COLORS[i % NODE_COLORS.length]
-        const txColor = NODE_COLORS[(i + 5) % NODE_COLORS.length]
-        const name = shortName(node)
-        series.push({ name: `${name} 下行`, type: 'line', smooth: true, symbol: 'none', lineStyle: { color: rxColor, width: 1.5 }, data: data.map(p => +((p.nodes[node]?.net_rx ?? 0).toFixed(2))) })
-        series.push({ name: `${name} 上行`, type: 'line', smooth: true, symbol: 'none', lineStyle: { color: txColor, width: 1.5, type: 'dashed' }, data: data.map(p => +((p.nodes[node]?.net_tx ?? 0).toFixed(2))) })
+      const rxColor = NODE_COLORS[i % NODE_COLORS.length]
+      const txColor = NODE_COLORS[(i + 5) % NODE_COLORS.length]
+      series.push({
+        name: `${name} ↓`, type: 'line', smooth: true, symbol: 'none',
+        lineStyle: { color: rxColor, width: 2 },
+        areaStyle: { color: rxColor, opacity: 0.06 },
+        data: data.map(p => +(p.nodes[node]?.net_rx ?? 0).toFixed(0)),
+      })
+      series.push({
+        name: `${name} ↑`, type: 'line', smooth: true, symbol: 'none',
+        lineStyle: { color: txColor, width: 2, type: 'dashed' as const },
+        data: data.map(p => +(p.nodes[node]?.net_tx ?? 0).toFixed(0)),
       })
     } else {
-      const key = seriesKey as keyof HistoryPoint['nodes'][string]
-      allNodes.forEach((node, i) => {
-        const color = NODE_COLORS[i % NODE_COLORS.length]
-        series.push({ name: shortName(node), type: 'line', smooth: true, symbol: 'none', lineStyle: { color, width: 2 }, areaStyle: { color, opacity: 0.05 }, data: data.map(p => +((p.nodes[node]?.[key] ?? 0).toFixed(2))), markLine })
+      const getV = meta.getVal as (n: HistoryPoint['nodes'][string]) => number
+      series.push({
+        name, type: 'line', smooth: true, symbol: 'none',
+        lineStyle: { color, width: 2 },
+        areaStyle: { color, opacity: inst ? 0.1 : 0.05 },
+        data: data.map(p => +((p.nodes[node] ? getV(p.nodes[node]) : 0)).toFixed(3)),
+        markLine: i === 0 ? markLine : undefined,
       })
     }
+  })
+
+  // 计算 yAxis max：内存/磁盘用节点最大 total 值
+  let yMax: number | undefined = meta.yMax
+  if ((seriesKey === 'mem' || seriesKey === 'disk') && data.length > 0) {
+    const totalKey = seriesKey === 'mem' ? 'mem_total' : 'disk_total'
+    const maxTotal = Math.max(...data.flatMap(p => Object.values(p.nodes).map(n => n[totalKey] ?? 0)))
+    if (maxTotal > 0) yMax = Math.ceil(maxTotal * 1.05)
   }
 
   return {
-    backgroundColor: '#ffffff',
-    grid: { top: 36, right: 16, bottom: 36, left: 58 },
+    backgroundColor: 'transparent',
+    grid: { top: 32, right: 12, bottom: 32, left: 62 },
     tooltip: {
       trigger: 'axis' as const,
+      confine: true,
       formatter: (params: any[]) => {
         const t = params[0]?.axisValue || ''
         return `<div style="font-size:12px;font-weight:600;margin-bottom:4px">${t}</div>` +
           params.map((p: any) => {
-            const val = isNet ? fmtBytes(p.value) : (p.value?.toFixed(1) + '%')
-            return `<div><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p.color};margin-right:4px"></span>${p.seriesName}: <b>${val}</b></div>`
+            const val = meta.fmt(p.value)
+            return `<div style="display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${p.color}"></span><span>${p.seriesName}</span><b style="margin-left:auto;padding-left:12px">${val}</b></div>`
           }).join('')
       }
     },
-    legend: { top: 4, right: 8, textStyle: { fontSize: 11 }, itemWidth: 14, itemHeight: 8 },
-    xAxis: { type: 'category' as const, data: times, axisLabel: { fontSize: 10, color: '#9ca3af' }, axisLine: { lineStyle: { color: '#e5e7eb' } }, splitLine: { show: false } },
+    legend: {
+      top: 2, right: 4,
+      textStyle: { fontSize: 11 },
+      itemWidth: 14, itemHeight: 6,
+      type: 'scroll' as const,
+    },
+    xAxis: {
+      type: 'category' as const, data: times,
+      axisLabel: { fontSize: 10, color: '#9ca3af', interval: 'auto' as const },
+      axisLine: { lineStyle: { color: '#e5e7eb' } },
+      splitLine: { show: false },
+    },
     yAxis: {
-      type: 'value' as const, max: isPct ? 100 : undefined,
-      axisLabel: { fontSize: 10, color: '#9ca3af', formatter: isPct ? '{value}%' : (v: number) => fmtBytes(v) },
-      splitLine: { lineStyle: { color: '#f3f4f6' } }
+      type: 'value' as const,
+      max: yMax,
+      min: 0,
+      axisLabel: { fontSize: 10, color: '#9ca3af', formatter: meta.yFmt },
+      splitLine: { lineStyle: { color: '#f3f4f6' } },
     },
     dataZoom: [{ type: 'inside' as const, start: 0, end: 100 }],
-    series
+    series,
   }
 }
 
@@ -946,6 +1033,32 @@ onUnmounted(() => { if (timer) clearInterval(timer); stopAlertSound(); clearSoun
   border-bottom: 1px solid hsl(var(--border));
 }
 
+.alerts-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.alert-card {
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.alert-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.65rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+  border-bottom: 1px solid hsl(var(--border));
+  background: hsl(var(--muted) / 0.3);
+}
+
 .rule-search {
   padding: 4px 8px; font-size: 0.78rem;
   border-radius: var(--radius-sm); width: 180px;
@@ -993,6 +1106,6 @@ onUnmounted(() => { if (timer) clearInterval(timer); stopAlertSound(); clearSoun
 
 /* ── Responsive ── */
 @media (max-width: 900px) {
-  .charts-grid, .slurm-grid { grid-template-columns: 1fr; }
+  .charts-grid, .slurm-grid, .alerts-grid { grid-template-columns: 1fr; }
 }
 </style>
