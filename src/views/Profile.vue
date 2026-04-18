@@ -68,8 +68,10 @@
       </div>
     </div>
 
+  </div>
+  <Teleport to="body">
     <!-- 编辑个人信息模态框 -->
-    <div v-if="showEditModal" class="modal-overlay">
+    <div v-if="showEditModal" class="modal-overlay" @click.self="closeEditModal">
       <div class="modal">
         <div class="modal-header">
           <h3>编辑个人信息</h3>
@@ -101,7 +103,7 @@
         </div>
       </div>
     </div>
-  </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">

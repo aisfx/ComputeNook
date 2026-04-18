@@ -50,7 +50,7 @@
   </div>
   <Teleport to="body">
     <!-- 添加/编辑 QoS 模态框 -->
-    <div v-if="showModal" class="modal-overlay">
+    <div v-if="showModal" class="modal-overlay" @click.self="closeModal">
       <div class="modal">
         <div class="modal-header">
           <h3>{{ isEdit ? '编辑 QoS' : '添加 QoS' }}</h3>

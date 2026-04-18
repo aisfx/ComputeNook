@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-04-18
+
+### Fixed
+- 修复按钮及图标 emoji 乱码问题，字体栈新增中文字体（Noto Sans SC、PingFang SC、Microsoft YaHei）及 emoji 字体支持
+- 修复所有对话框（modal）在输入内容时因点击背景意外关闭的问题，统一添加 `@click.self` 事件保护
+- 修复 Profile.vue 编辑个人信息弹窗未使用 `Teleport to="body"` 导致层叠上下文异常的问题
+
 ## [0.2.0] - 2026-04-16
 
 ### Added

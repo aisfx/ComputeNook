@@ -105,7 +105,7 @@
     </div>
 
     <!-- 配置模态框 -->
-    <div v-if="showConfigModal" class="modal-overlay">
+    <div v-if="showConfigModal" class="modal-overlay" @click.self="showConfigModal = false">
       <div class="modal">
         <div class="modal-header">
           <h3>⚙️ 监控配置</h3>
@@ -160,7 +160,7 @@
     </div>
 
     <!-- 报警规则模态框 -->
-    <div v-if="showAlertModal" class="modal-overlay">
+    <div v-if="showAlertModal" class="modal-overlay" @click.self="showAlertModal = false">
       <div class="modal large">
         <div class="modal-header">
           <h3>🔔 报警规则管理</h3>

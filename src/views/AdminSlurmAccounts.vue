@@ -46,7 +46,7 @@
   </div>
   <Teleport to="body">
     <!-- 添加/编辑账户模态框 -->
-    <div v-if="showModal" class="modal-overlay">
+    <div v-if="showModal" class="modal-overlay" @click.self="closeModal">
       <div class="modal">
         <div class="modal-header">
           <h3>{{ isEditing ? '编辑账户' : '添加账户' }}</h3>

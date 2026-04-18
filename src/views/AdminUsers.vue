@@ -76,7 +76,7 @@
   </div>
   <Teleport to="body">
     <!-- 添加/编辑用户模态框 -->
-    <div v-if="showAddModal || showEditModal" class="modal-overlay">
+    <div v-if="showAddModal || showEditModal" class="modal-overlay" @click.self="closeModals">
       <div class="modal">
         <div class="modal-header">
           <h3>{{ showEditModal ? '编辑用户' : '添加用户' }}</h3>
@@ -132,7 +132,7 @@
     </div>
 
     <!-- 重置密码模态框 -->
-    <div v-if="showPasswordModal" class="modal-overlay">
+    <div v-if="showPasswordModal" class="modal-overlay" @click.self="showPasswordModal = false">
       <div class="modal">
         <div class="modal-header">
           <h3>重置密码 - {{ selectedUser?.username }}</h3>
