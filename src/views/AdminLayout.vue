@@ -63,25 +63,21 @@
             <a :class="['nav-sub-item', { active: adminTab === 'quota' }]" @click.stop="adminTab = 'quota'">存储配额</a>
           </div>
 
-          <!-- 数据审计 -->
+          <!-- 集群监控 expandable -->
           <a
-            :class="['nav-item', { active: adminTab === 'audit' }]"
-            @click="adminTab = 'audit'"
-            :title="sidebarCollapsed ? '数据审计' : ''"
-          >
-            <span class="nav-item-icon">📋</span>
-            <span class="nav-item-label">数据审计</span>
-          </a>
-
-          <!-- 集群监控 -->
-          <a
-            :class="['nav-item', { active: adminTab === 'monitoring' }]"
-            @click="adminTab = 'monitoring'"
+            :class="['nav-item', { active: adminTab === 'monitoring' || adminTab === 'custom-dashboard' }]"
+            @click="groupExpanded.monitoring = !groupExpanded.monitoring"
             :title="sidebarCollapsed ? '集群监控' : ''"
           >
             <span class="nav-item-icon">📈</span>
             <span class="nav-item-label">集群监控</span>
+            <span class="nav-item-chevron" v-if="!sidebarCollapsed">{{ groupExpanded.monitoring ? '▾' : '▸' }}</span>
           </a>
+          <div v-if="groupExpanded.monitoring && !sidebarCollapsed" class="nav-sub">
+            <a :class="['nav-sub-item', { active: adminTab === 'monitoring' && monitoringTab === 'cluster' }]" @click.stop="adminTab = 'monitoring'; monitoringTab = 'cluster'">集群状态</a>
+            <a :class="['nav-sub-item', { active: adminTab === 'custom-dashboard' }]" @click.stop="adminTab = 'custom-dashboard'">监控面板</a>
+            <a :class="['nav-sub-item', { active: adminTab === 'monitoring' && monitoringTab === 'alerts' }]" @click.stop="adminTab = 'monitoring'; monitoringTab = 'alerts'">告警规则</a>
+          </div>
 
           <!-- 机柜管理 -->
           <a
@@ -91,6 +87,16 @@
           >
             <span class="nav-item-icon">🗄️</span>
             <span class="nav-item-label">机柜管理</span>
+          </a>
+
+          <!-- 数据审计（始终最后） -->
+          <a
+            :class="['nav-item', { active: adminTab === 'audit' }]"
+            @click="adminTab = 'audit'"
+            :title="sidebarCollapsed ? '数据审计' : ''"
+          >
+            <span class="nav-item-icon">📋</span>
+            <span class="nav-item-label">数据审计</span>
           </a>
         </div>
       </nav>
@@ -129,7 +135,7 @@
       </header>
 
       <main class="content-area">
-        <Monitoring v-if="adminTab === 'monitoring'" />
+        <Monitoring v-if="adminTab === 'monitoring'" :active-tab="monitoringTab" @tab-change="monitoringTab = $event" />
         <RackView v-else-if="adminTab === 'rack'" />
         <AdminUsers v-else-if="adminTab === 'users'" />
         <AdminGroups v-else-if="adminTab === 'groups'" />
@@ -140,6 +146,7 @@
         <AdminAudit v-else-if="adminTab === 'audit'" />
         <AdminSlurmAccounts v-else-if="adminTab === 'slurm-accounts'" />
         <AdminSlurmUsers v-else-if="adminTab === 'slurm-users'" />
+        <CustomDashboard v-else-if="adminTab === 'custom-dashboard'" />
       </main>
     </div>
   </div>
@@ -159,11 +166,13 @@ import AdminSlurmUsers from './AdminSlurmUsers.vue'
 import AdminAssociations from './AdminAssociations.vue'
 import Monitoring from './Monitoring.vue'
 import RackView from './RackView.vue'
+import CustomDashboard from './CustomDashboard.vue'
 import { getUser, logout, setupAxiosInterceptors, isAdmin as checkAdmin } from '../utils/auth'
 
 const router = useRouter()
 const adminTab = ref('users')
-const groupExpanded = reactive({ user: true, account: false, resource: false })
+const monitoringTab = ref('cluster')
+const groupExpanded = reactive({ user: true, account: false, resource: false, monitoring: true })
 const sidebarCollapsed = ref(false)
 const currentUser = ref<any>(null)
 const theme = ref<'light' | 'dark'>('light')
@@ -180,7 +189,8 @@ const currentTitle = computed(() => {
     qos: 'QoS配置',
     hours: '机时管理',
     quota: '存储配额',
-    audit: '数据审计'
+    audit: '数据审计',
+    'custom-dashboard': '监控面板',
   }
   return map[adminTab.value] || '管理后台'
 })

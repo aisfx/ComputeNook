@@ -2,245 +2,170 @@
   <div class="mon">
     <div class="mon-header">
       <div class="mon-header-left">
-        <h3>📊 集群监控</h3>
         <span class="refresh-tip">{{ lastRefresh ? `刷新于 ${lastRefresh}` : '' }}</span>
       </div>
       <button class="btn-sec" @click="loadAll" :disabled="loading">{{ loading ? '刷新中...' : '🔄 刷新' }}</button>
     </div>
 
-    <!-- ── 主 Tab 区 ── -->
+    <!-- Tab 导航 -->
+
     <div class="page-section">
-      <div class="page-section-title">
-        <div class="cs-tabs">
-          <button :class="['cs-tab', { active: mainTab==='nodes' }]" @click="mainTab='nodes'">
-            📊 节点状态
-            <span :class="['prom-badge', promOk ? 'prom-ok' : 'prom-na']" style="margin-left:0.3rem">{{ promOk ? '已连接' : '未连接' }}</span>
-          </button>
-          <button :class="['cs-tab', { active: mainTab==='jobs' }]" @click="mainTab='jobs'">⚙️ 作业情况</button>
-          <button :class="['cs-tab', { active: mainTab==='cluster' }]" @click="mainTab='cluster'">
-            🖥️ 集群状态
-            <span :class="['prom-badge', promTargetsOk ? 'prom-ok' : 'prom-na']" style="margin-left:0.3rem">{{ promTargetsOk ? '已连接' : '未连接' }}</span>
-          </button>
-          <button :class="['cs-tab', { active: mainTab==='alerts' }]" @click="mainTab='alerts'">
-            🔔 告警 & 规则
-            <span v-if="promAlerts.length" class="alert-badge" style="margin-left:0.3rem">{{ promAlerts.length }}</span>
-          </button>
+      <div v-if="mainTab==='cluster'" class="cluster-view">
+        <div class="cluster-toolbar">
+          <span class="cluster-count">{{ nodeMetrics.length }} 个节点</span>
+          <div style="display:flex;align-items:center;gap:0.5rem;margin-left:auto">
+            <span :class="['prom-badge', promOk ? 'prom-ok' : 'prom-na']">{{ promOk ? '已连接' : '未连接' }}</span>
+          </div>
         </div>
-      </div>
 
-      <!-- ── 节点状态 ── -->
-      <div v-if="mainTab==='nodes'">
-        <div class="tab-sub-header">
-          <span class="nodes-count">{{ nodeMetrics.length }} 个节点</span>
-          <div class="history-node-sel" style="margin-left:auto">
-            <label>节点：</label>
-            <select v-model="historyNode" class="hist-sel">
-              <option value="">集群平均</option>
-              <option v-for="n in nodeMetrics" :key="n.instance" :value="n.instance">{{ shortName(n.instance) }}</option>
-            </select>
-          </div>
-        </div>
-        <div v-if="!promOk" class="prom-tip">⚠️ Prometheus 未连接，请检查后端 PROMETHEUS_URL 配置</div>
-        <div class="charts-grid">
-          <div class="metric-section">
-            <div class="ms-title">⚡ CPU 使用率</div>
-            <div ref="cpuChartEl" class="echarts-box"></div>
-          </div>
-          <div class="metric-section">
-            <div class="ms-title">💾 内存使用率</div>
-            <div ref="memChartEl" class="echarts-box"></div>
-          </div>
-          <div class="metric-section">
-            <div class="ms-title">💿 磁盘使用率（根分区）</div>
-            <div ref="diskChartEl" class="echarts-box"></div>
-          </div>
-          <div class="metric-section">
-            <div class="ms-title">🌐 网络流量</div>
-            <div ref="netChartEl" class="echarts-box"></div>
-          </div>
-        </div>
-        <div class="metric-section" style="margin:0 1rem 1rem">
-          <div class="ms-title">📋 节点总览</div>
-          <div style="overflow-x:auto">
-            <table class="mtable">
-              <thead><tr><th>节点</th><th>CPU%</th><th>内存%</th><th>磁盘%</th><th>网络↓</th><th>网络↑</th><th>负载1m</th><th>运行时间</th></tr></thead>
-              <tbody>
-                <tr v-for="n in nodeMetrics" :key="n.instance">
-                  <td><code>{{ shortName(n.instance) }}</code></td>
-                  <td><span :class="['pct-badge', pctClass(n.cpu_usage, cfg.cpuWarn)]">{{ fmt1(n.cpu_usage) }}%</span></td>
-                  <td><span :class="['pct-badge', pctClass(n.mem_usage, cfg.memWarn)]">{{ fmt1(n.mem_usage) }}%</span></td>
-                  <td><span :class="['pct-badge', pctClass(n.disk_usage, 85)]">{{ fmt1(n.disk_usage) }}%</span></td>
-                  <td>{{ fmtBytes(n.net_rx_bps) }}</td><td>{{ fmtBytes(n.net_tx_bps) }}</td>
-                  <td>{{ fmt1(n.load1) }}</td><td>{{ fmtUptime(n.uptime_seconds) }}</td>
-                </tr>
-                <tr v-if="nodeMetrics.length===0"><td colspan="8" class="empty-sm">暂无数据</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-      <!-- ── 作业情况 ── -->
-      <div v-if="mainTab==='jobs'">
-        <div class="slurm-grid">
-          <div class="chart-panel">
-            <div class="chart-panel-title">🔵 节点状态分布</div>
-            <div class="slurm-state-grid">
-              <div v-for="g in slurmStateGroups" :key="g.label" class="slurm-state-card" :class="'ssc-'+g.cls">
-                <div class="ssc-count">{{ g.nodes.length }}</div>
-                <div class="ssc-label">{{ g.label }}</div>
-                <div class="ssc-nodes">{{ g.nodes.slice(0,6).join(', ') }}{{ g.nodes.length>6 ? '...' : '' }}</div>
-              </div>
+        <!-- 卡片视图 -->
+        <div class="node-card-grid">
+          <div v-for="n in nodeMetrics" :key="n.instance"
+            :class="['node-card', nodeCardCls(n)]">
+            <div class="nc-header">
+              <span class="nc-name">{{ shortName(n.instance) }}</span>
+              <span :class="['nc-state', nodeStateCls(n)]">{{ nodeStateText(n) }}</span>
             </div>
-          </div>
-          <div class="chart-panel">
-            <div class="chart-panel-title">📋 节点运行作业数</div>
-            <div class="bar-chart">
-              <div v-for="n in nodesWithJobs" :key="n.name" class="bc-row">
-                <span class="bc-label">{{ n.name }}</span>
-                <div class="bc-bar-wrap">
-                  <div class="bc-bar-bg"><div class="bc-bar-fg" :style="{ width: clamp((n.running_jobs/maxJobs)*100)+'%', background: '#667eea' }"></div></div>
-                  <span class="bc-val">{{ n.running_jobs }} 个</span>
+            <div class="nc-metrics">
+              <div class="nc-metric">
+                <div class="nc-bar-label">
+                  <span>CPU</span><span>{{ fmt1(n.cpu_usage) }}%</span>
                 </div>
-                <span :class="['ns-badge', nsClass(n.state)]">{{ n.state }}</span>
+                <div class="nc-bar-bg">
+                  <div class="nc-bar-fg" :class="barCls(n.cpu_usage, cfg.cpuWarn)"
+                    :style="{ width: Math.min(n.cpu_usage||0,100)+'%' }"></div>
+                </div>
               </div>
-              <div v-if="nodesWithJobs.length===0" class="empty-sm">暂无运行中作业</div>
+              <div class="nc-metric">
+                <div class="nc-bar-label">
+                  <span>内存</span><span>{{ fmt1(n.mem_usage) }}%</span>
+                </div>
+                <div class="nc-bar-bg">
+                  <div class="nc-bar-fg" :class="barCls(n.mem_usage, cfg.memWarn)"
+                    :style="{ width: Math.min(n.mem_usage||0,100)+'%' }"></div>
+                </div>
+              </div>
+              <div class="nc-metric">
+                <div class="nc-bar-label">
+                  <span>磁盘</span><span>{{ fmt1(n.disk_usage) }}%</span>
+                </div>
+                <div class="nc-bar-bg">
+                  <div class="nc-bar-fg" :class="barCls(n.disk_usage, 85)"
+                    :style="{ width: Math.min(n.disk_usage||0,100)+'%' }"></div>
+                </div>
+              </div>
+            </div>
+            <div class="nc-footer">
+              <span>负载 {{ fmt1(n.load1) }}</span>
+              <span>{{ fmtBytes(n.net_rx_bps) }}</span>
+              <span>{{ fmtBytes(n.net_tx_bps) }}</span>
+              <span>{{ fmtUptime(n.uptime_seconds) }}</span>
             </div>
           </div>
-        </div>
-      </div>
-
-      <!-- ── 集群状态（本机 + 服务监控）── -->
-      <div v-if="mainTab==='cluster'">
-        <div class="cs-tabs" style="margin-bottom:1rem">
-          <button :class="['cs-tab', { active: clusterTab==='local' }]" @click="clusterTab='local'">本机状态</button>
-          <button :class="['cs-tab', { active: clusterTab==='targets' }]" @click="clusterTab='targets'">
-            服务监控
-            <span :class="['prom-badge', promTargetsOk ? 'prom-ok' : 'prom-na']" style="margin-left:0.3rem">{{ promTargetsOk ? '已连接' : '未连接' }}</span>
-          </button>
-        </div>
-        <div v-if="clusterTab==='local'">
-          <div v-if="!localMetrics.connected" class="prom-tip">Prometheus 未连接或本机未安装 node_exporter</div>
-          <table v-else class="mtable">
-            <thead><tr><th>主机</th><th>CPU%</th><th>内存%</th><th>磁盘%</th><th>网络↓</th><th>网络↑</th><th>负载 1/5/15</th><th>运行时间</th></tr></thead>
-            <tbody>
-              <tr>
-                <td><code>{{ localMetrics.hostname }}</code></td>
-                <td><span :class="['pct-badge', pctClass(localMetrics.cpu_usage, cfg.cpuWarn)]">{{ fmt1(localMetrics.cpu_usage) }}%</span></td>
-                <td><span :class="['pct-badge', pctClass(localMetrics.mem_usage, cfg.memWarn)]">{{ fmt1(localMetrics.mem_usage) }}%</span><span class="small-text" style="margin-left:0.3rem">{{ fmt1(localMetrics.mem_used_gb) }}/{{ fmt1(localMetrics.mem_total_gb) }}GB</span></td>
-                <td><span :class="['pct-badge', pctClass(localMetrics.disk_usage, 85)]">{{ fmt1(localMetrics.disk_usage) }}%</span><span class="small-text" style="margin-left:0.3rem">{{ fmt1(localMetrics.disk_used_gb) }}/{{ fmt1(localMetrics.disk_total_gb) }}GB</span></td>
-                <td>{{ fmtBytes(localMetrics.net_rx_bps) }}</td>
-                <td>{{ fmtBytes(localMetrics.net_tx_bps) }}</td>
-                <td class="small-text">{{ fmt1(localMetrics.load1) }} / {{ fmt1(localMetrics.load5) }} / {{ fmt1(localMetrics.load15) }}</td>
-                <td class="small-text">{{ fmtUptime(localMetrics.uptime_seconds) }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div v-if="clusterTab==='targets'">
-          <div v-if="!promTargetsOk" class="prom-tip">Prometheus 未连接，无法获取服务状态</div>
-          <table v-else class="mtable">
-            <thead><tr><th>Job</th><th>实例</th><th>状态</th><th>最后采集</th><th>错误信息</th></tr></thead>
-            <tbody>
-              <template v-for="(targets, job) in targetsByJob" :key="job">
-                <tr v-for="(t, idx) in (targets as any[])" :key="t.instance" :class="t.health==='up' ? '' : 'tr-critical'">
-                  <td v-if="idx===0" :rowspan="(targets as any[]).length" style="font-weight:700;color:#374151">{{ job }}</td>
-                  <td><code>{{ t.instance }}</code></td>
-                  <td><span :class="['state-badge2', t.health==='up' ? 'st-ok' : 'st-firing']">{{ t.health==='up' ? '✅ up' : '🔴 down' }}</span></td>
-                  <td class="small-text">{{ fmtTime(t.last_scrape) }}</td>
-                  <td class="small-text" style="color:#ef4444">{{ t.last_error || '-' }}</td>
-                </tr>
-              </template>
-              <tr v-if="Object.keys(targetsByJob).length===0"><td colspan="5" class="empty-sm">暂无 Target 数据</td></tr>
-            </tbody>
-          </table>
+          <div v-if="nodeMetrics.length===0" class="db-na" style="grid-column:1/-1;text-align:center;padding:3rem">
+            暂无节点数据，请检查 Prometheus 连接
+          </div>
         </div>
       </div>
 
       <!-- ── 告警 & 规则 ── -->
       <div v-if="mainTab==='alerts'">
-        <div class="local-cfg-card" style="margin-bottom:1rem">
-          <div class="lcc-title">⚙️ 告警通知配置</div>
-          <div class="lcc-row">
-            <label>CPU 警告 <input type="number" v-model.number="cfg.cpuWarn" min="50" max="100" class="num-input" /> %</label>
-            <label>内存警告 <input type="number" v-model.number="cfg.memWarn" min="50" max="100" class="num-input" /> %</label>
-            <label>弹框通知 <label class="toggle"><input type="checkbox" v-model="cfg.popupEnabled" /><span class="toggle-slider"></span></label></label>
-            <label>声音告警 <label class="toggle"><input type="checkbox" v-model="cfg.soundEnabled" /><span class="toggle-slider"></span></label></label>
-            <label>告警间隔 <input type="number" v-model.number="cfg.alertInterval" min="30" max="3600" class="num-input" /> 秒</label>
+        <!-- 二级 Tab 导航 -->
+        <div class="alert-subtabs">
+          <button :class="['alert-subtab', alertTab==='active' && 'active']" @click="alertTab='active'">
+            🔔 活跃告警
+            <span v-if="promAlerts.length" class="alert-badge" style="margin-left:4px">{{ promAlerts.length }}</span>
+          </button>
+          <button :class="['alert-subtab', alertTab==='rules' && 'active']" @click="alertTab='rules'">
+            📋 告警规则
+            <span v-if="allRules.length" class="nodes-count" style="margin-left:4px">{{ allRules.length }} 条</span>
+          </button>
+          <button :class="['alert-subtab', alertTab==='config' && 'active']" @click="alertTab='config'">
+            ⚙️ 告警通知配置
+          </button>
+        </div>
+
+        <!-- 活跃告警 -->
+        <div v-if="alertTab==='active'" style="padding:1rem">
+          <div class="alert-tab-toolbar">
+            <span :class="['prom-badge', promAlertsOk ? 'prom-ok' : 'prom-na']">{{ promAlertsOk ? '已连接' : '未连接' }}</span>
           </div>
-          <div class="sound-upload-row">
-            <span class="lcc-title" style="margin:0">🎵 告警音乐</span>
-            <div class="sound-upload-area">
-              <label class="sound-upload-btn">📁 上传音频<input type="file" accept="audio/*" @change="onSoundUpload" style="display:none" /></label>
-              <span v-if="customSoundName" class="sound-name">{{ customSoundName }}</span>
-              <button v-if="customSoundUrl" class="btn-sec" style="font-size:0.78rem;padding:0.25rem 0.6rem" @click="testSound">▶ 试听</button>
-              <button v-if="customSoundUrl" class="btn-sec" style="font-size:0.78rem;padding:0.25rem 0.6rem;color:#ef4444" @click="clearSound">✕</button>
-              <span v-if="!customSoundUrl" class="sound-hint">支持 mp3/wav/ogg，未上传则用默认蜂鸣音</span>
-            </div>
-          </div>
-          <div class="lcc-row" style="margin-top:0.5rem">
-            <button class="btn-pri" @click="saveCfg">💾 保存</button>
-            <span v-if="cfgSaved" class="save-tip">✅ 已保存</span>
+          <div v-if="!promAlertsOk" class="prom-tip">未配置 Prometheus 或无法连接</div>
+          <div v-else-if="promAlerts.length===0" class="empty-sm">✅ 无活跃告警</div>
+          <div v-else style="overflow-x:auto">
+            <table class="mtable">
+              <thead><tr><th>级别</th><th>告警名称</th><th>实例</th><th>摘要</th><th>触发时间</th></tr></thead>
+              <tbody>
+                <tr v-for="a in promAlerts" :key="a.fingerprint" :class="a.labels?.severity==='critical' ? 'tr-critical' : 'tr-warning'">
+                  <td><span :class="['sev-badge', 'sev-'+(a.labels?.severity||'info')]">{{ a.labels?.severity || 'info' }}</span></td>
+                  <td><code>{{ a.labels?.alertname || '-' }}</code></td>
+                  <td class="small-text">{{ a.labels?.instance || a.labels?.job || '-' }}</td>
+                  <td class="small-text">{{ a.annotations?.summary || a.annotations?.description || '-' }}</td>
+                  <td class="small-text">{{ fmtTime(a.activeAt) }}</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
-        <div class="alerts-grid">
-          <!-- 活跃告警 -->
-          <div class="alert-card">
-            <div class="alert-card-header">
-              <span>🔔 活跃告警</span>
-              <span :class="['prom-badge', promAlertsOk ? 'prom-ok' : 'prom-na']">{{ promAlertsOk ? '已连接' : '未连接' }}</span>
-              <span v-if="promAlerts.length" class="alert-badge">{{ promAlerts.length }}</span>
-            </div>
-            <div v-if="!promAlertsOk" class="prom-tip" style="margin:0.75rem">未配置 Prometheus 或无法连接</div>
-            <div v-else-if="promAlerts.length===0" class="empty-sm">✅ 无活跃告警</div>
-            <div v-else style="overflow-x:auto">
-              <table class="mtable">
-                <thead><tr><th>级别</th><th>告警名称</th><th>实例</th><th>摘要</th><th>触发时间</th></tr></thead>
-                <tbody>
-                  <tr v-for="a in promAlerts" :key="a.fingerprint" :class="a.labels?.severity==='critical' ? 'tr-critical' : 'tr-warning'">
-                    <td><span :class="['sev-badge', 'sev-'+(a.labels?.severity||'info')]">{{ a.labels?.severity || 'info' }}</span></td>
-                    <td><code>{{ a.labels?.alertname || '-' }}</code></td>
-                    <td class="small-text">{{ a.labels?.instance || a.labels?.job || '-' }}</td>
-                    <td class="small-text">{{ a.annotations?.summary || a.annotations?.description || '-' }}</td>
-                    <td class="small-text">{{ fmtTime(a.activeAt) }}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
 
-          <!-- 告警规则 -->
-          <div class="alert-card">
-            <div class="alert-card-header">
-              <span>📋 告警规则</span>
-              <span :class="['prom-badge', rulesConnected ? 'prom-ok' : 'prom-na']">{{ rulesConnected ? '已连接' : '未连接' }}</span>
-              <span class="nodes-count">{{ allRules.length }} 条</span>
-              <input v-model="ruleSearch" placeholder="搜索规则..." class="rule-search" style="margin-left:auto" />
-              <button class="btn-sec" @click="loadRules" :disabled="rulesLoading" style="font-size:0.78rem;padding:0.25rem 0.5rem">{{ rulesLoading ? '...' : '🔄' }}</button>
+        <!-- 告警规则 -->
+        <div v-if="alertTab==='rules'" style="padding:1rem">
+          <div class="alert-tab-toolbar">
+            <span :class="['prom-badge', rulesConnected ? 'prom-ok' : 'prom-na']">{{ rulesConnected ? '已连接' : '未连接' }}</span>
+            <input v-model="ruleSearch" placeholder="搜索规则..." class="rule-search" style="margin-left:auto" />
+            <button class="btn-sec" @click="loadRules" :disabled="rulesLoading" style="font-size:0.78rem;padding:0.25rem 0.5rem">{{ rulesLoading ? '...' : '🔄' }}</button>
+          </div>
+          <div v-if="!rulesConnected" class="prom-tip">无法连接 Prometheus</div>
+          <div v-else style="overflow-x:auto">
+            <table class="mtable">
+              <thead><tr><th>规则名</th><th>表达式</th><th>持续</th><th>级别</th><th>状态</th><th>摘要</th></tr></thead>
+              <tbody>
+                <template v-for="group in filteredRuleGroups" :key="group.name">
+                  <tr v-for="r in group.rules" :key="r.name">
+                    <td><code>{{ r.name }}</code></td>
+                    <td class="expr-cell" :title="r.query">{{ r.query }}</td>
+                    <td>{{ r.duration ? r.duration+'s' : '-' }}</td>
+                    <td><span :class="['sev-badge', 'sev-'+(r.labels?.severity||'info')]">{{ r.labels?.severity || 'info' }}</span></td>
+                    <td><span :class="['state-badge2', r.state==='firing' ? 'st-firing' : r.state==='pending' ? 'st-pending' : 'st-ok']">{{ r.state || 'inactive' }}</span></td>
+                    <td class="small-text">{{ r.annotations?.summary || r.annotations?.description || '-' }}</td>
+                  </tr>
+                </template>
+                <tr v-if="filteredRuleGroups.length===0"><td colspan="6" class="empty-sm">暂无告警规则</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 告警通知配置 -->
+        <div v-if="alertTab==='config'" style="padding:1rem">
+          <div class="local-cfg-card">
+            <div class="lcc-row">
+              <label>CPU 警告 <input type="number" v-model.number="cfg.cpuWarn" min="50" max="100" class="num-input" /> %</label>
+              <label>内存警告 <input type="number" v-model.number="cfg.memWarn" min="50" max="100" class="num-input" /> %</label>
+              <label>弹框通知 <label class="toggle"><input type="checkbox" v-model="cfg.popupEnabled" /><span class="toggle-slider"></span></label></label>
+              <label>声音告警 <label class="toggle"><input type="checkbox" v-model="cfg.soundEnabled" /><span class="toggle-slider"></span></label></label>
+              <label>告警间隔 <input type="number" v-model.number="cfg.alertInterval" min="30" max="3600" class="num-input" /> 秒</label>
             </div>
-            <div v-if="!rulesConnected" class="prom-tip" style="margin:0.75rem">无法连接 Prometheus</div>
-            <div v-else style="overflow-x:auto">
-              <table class="mtable">
-                <thead><tr><th>规则名</th><th>表达式</th><th>持续</th><th>级别</th><th>状态</th><th>摘要</th></tr></thead>
-                <tbody>
-                  <template v-for="group in filteredRuleGroups" :key="group.name">
-                    <tr v-for="r in group.rules" :key="r.name">
-                      <td><code>{{ r.name }}</code></td>
-                      <td class="expr-cell" :title="r.query">{{ r.query }}</td>
-                      <td>{{ r.duration ? r.duration+'s' : '-' }}</td>
-                      <td><span :class="['sev-badge', 'sev-'+(r.labels?.severity||'info')]">{{ r.labels?.severity || 'info' }}</span></td>
-                      <td><span :class="['state-badge2', r.state==='firing' ? 'st-firing' : r.state==='pending' ? 'st-pending' : 'st-ok']">{{ r.state || 'inactive' }}</span></td>
-                      <td class="small-text">{{ r.annotations?.summary || r.annotations?.description || '-' }}</td>
-                    </tr>
-                  </template>
-                  <tr v-if="filteredRuleGroups.length===0"><td colspan="6" class="empty-sm">暂无告警规则</td></tr>
-                </tbody>
-              </table>
+            <div class="sound-upload-row">
+              <span class="lcc-title" style="margin:0">🎵 告警音乐</span>
+              <div class="sound-upload-area">
+                <label class="sound-upload-btn">📁 上传音频<input type="file" accept="audio/*" @change="onSoundUpload" style="display:none" /></label>
+                <span v-if="customSoundName" class="sound-name">{{ customSoundName }}</span>
+                <button v-if="customSoundUrl" class="btn-sec" style="font-size:0.78rem;padding:0.25rem 0.6rem" @click="testSound">▶ 试听</button>
+                <button v-if="customSoundUrl" class="btn-sec" style="font-size:0.78rem;padding:0.25rem 0.6rem;color:#ef4444" @click="clearSound">✕</button>
+                <span v-if="!customSoundUrl" class="sound-hint">支持 mp3/wav/ogg，未上传则用默认蜂鸣音</span>
+              </div>
+            </div>
+            <div class="lcc-row" style="margin-top:0.5rem">
+              <button class="btn-pri" @click="saveCfg">💾 保存</button>
+              <span v-if="cfgSaved" class="save-tip">✅ 已保存</span>
             </div>
           </div>
         </div>
       </div>
     </div>
+
+    <!-- PromQL 探索已移除 -->
 
     <!-- 🚨 告警弹框 -->
     <Teleport to="body">
@@ -255,7 +180,7 @@
               </div>
             </div>
           </div>
-          <button class="ap-close" @click="dismissPopup">×</button>
+          <button class="ap-close" @click="dismissPopup">知道了</button>
         </div>
       </div>
     </Teleport>
@@ -273,7 +198,11 @@ echarts.use([LineChart, GridComponent, TooltipComponent, LegendComponent, DataZo
 
 const loading = ref(false)
 const lastRefresh = ref('')
-const mainTab = ref<'nodes'|'jobs'|'cluster'|'alerts'>('nodes')
+const props = defineProps<{ activeTab?: string }>()
+const emit = defineEmits<{ (e: 'tab-change', tab: string): void }>()
+const mainTab = ref<'cluster'|'alerts'>(props.activeTab as any || 'cluster')
+watch(() => props.activeTab, (v) => { if (v) mainTab.value = v as any }, { immediate: true })
+const alertTab = ref<'active'|'rules'|'config'>('active')
 const clusterTab = ref<'local'|'targets'>('local')
 
 const clusterStats = ref<any>({})
@@ -636,6 +565,14 @@ const fmtUptime = (s: number) => { if (!s) return '-'; const d = Math.floor(s/86
 const fmtTime = (t: string) => { try { return new Date(t).toLocaleString('zh-CN') } catch { return t } }
 const pctColor = (v: number, warn: number) => v > warn ? '#ef4444' : v > warn * 0.8 ? '#f59e0b' : '#10b981'
 const pctClass = (v: number, warn: number) => v > warn ? 'pct-crit' : v > warn * 0.8 ? 'pct-warn' : 'pct-ok'
+const ringColor = (v: number, warn: number) => v > warn ? '#ef4444' : v > warn * 0.8 ? '#f59e0b' : '#10b981'
+const clusterViewMode = ref<'card'|'table'>('card')
+const nodeCardCls = (n: any) => { const v = Math.max(n.cpu_usage||0, n.mem_usage||0); return v > 85 ? 'nc-crit' : v > 70 ? 'nc-warn' : 'nc-ok' }
+const nodeStateCls = (n: any) => { const v = Math.max(n.cpu_usage||0, n.mem_usage||0); return v > 85 ? 'ncs-crit' : v > 70 ? 'ncs-warn' : 'ncs-ok' }
+const nodeStateText = (n: any) => { const v = Math.max(n.cpu_usage||0, n.mem_usage||0); return v > 85 ? '高负载' : v > 70 ? '繁忙' : '正常' }
+const nodeRowCls = (n: any) => { const v = Math.max(n.cpu_usage||0, n.mem_usage||0); return v > 85 ? 'tr-critical' : v > 70 ? 'tr-warning' : '' }
+const barCls = (v: number, warn: number) => v > warn ? 'bar-crit' : v > warn*0.8 ? 'bar-warn' : 'bar-ok'
+const ringStyle = (v: number, warn: number) => ({ '--ring-color': ringColor(v, warn) })
 const nsClass = (s: string) => { const l = (s||'').toLowerCase(); if (l.includes('idle')) return 'ns-idle'; if (l.includes('alloc')||l.includes('mix')) return 'ns-alloc'; if (l.includes('down')||l.includes('drain')) return 'ns-down'; return 'ns-unk' }
 
 const saveCfg = () => { localStorage.setItem('mon_cfg', JSON.stringify(cfg.value)); cfgSaved.value = true; setTimeout(() => { cfgSaved.value = false }, 2000) }
@@ -679,6 +616,39 @@ onUnmounted(() => { if (timer) clearInterval(timer); stopAlertSound(); clearSoun
 .refresh-tip {
   font-size: 0.78rem;
   color: hsl(var(--muted-foreground));
+}
+
+/* ── Tab 导航 ── */
+.mon-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid hsl(var(--border));
+  margin-bottom: 1rem;
+}
+
+.mon-tab {
+  padding: 0.6rem 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: hsl(var(--muted-foreground));
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+
+.mon-tab:hover {
+  color: hsl(var(--foreground));
+  background: hsl(var(--muted) / 0.4);
+}
+
+.mon-tab.active {
+  color: hsl(var(--primary));
+  border-bottom-color: hsl(var(--primary));
+  font-weight: 600;
 }
 
 /* ── Page section card ── */
@@ -1078,34 +1048,223 @@ onUnmounted(() => { if (timer) clearInterval(timer); stopAlertSound(); clearSoun
 
 /* ── Alert popup ── */
 .alert-popup-overlay {
-  position: fixed; inset: 0; background: rgba(0,0,0,0.4);
-  display: flex; align-items: flex-start; justify-content: flex-end;
-  padding: 1.5rem; z-index: 9999;
+  position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 9999;
 }
 
 .alert-popup {
-  display: flex; align-items: flex-start; gap: 0.75rem;
-  padding: 1rem 1.25rem; border-radius: var(--radius-lg);
-  max-width: 380px; box-shadow: var(--shadow-xl);
-  border: 1px solid;
+  display: flex; flex-direction: column;
+  width: 90%; max-width: 560px;
+  background: hsl(var(--background));
+  border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+  border: 2px solid; overflow: hidden;
 }
 
-.ap-critical { background: hsl(var(--destructive) / 0.05); border-color: hsl(var(--destructive) / 0.3); }
-.ap-warning { background: hsl(var(--warning) / 0.05); border-color: hsl(var(--warning) / 0.3); }
+.ap-critical { border-color: hsl(var(--destructive) / 0.5); }
+.ap-warning { border-color: hsl(var(--warning) / 0.5); }
 
-.ap-icon { font-size: 1.4rem; flex-shrink: 0; }
-.ap-body { flex: 1; }
-.ap-title { font-size: 0.9rem; font-weight: 700; color: hsl(var(--foreground)); margin-bottom: 0.4rem; }
-.ap-list { display: flex; flex-direction: column; gap: 0.25rem; }
-.ap-item { display: flex; align-items: center; gap: 0.4rem; font-size: 0.82rem; color: hsl(var(--foreground)); }
+/* 顶部色条 */
+.alert-popup::before {
+  content: ''; display: block; height: 5px; width: 100%;
+}
+.ap-critical::before { background: hsl(var(--destructive)); }
+.ap-warning::before { background: hsl(var(--warning)); }
+
+.ap-icon {
+  font-size: 3.5rem; text-align: center;
+  padding: 1.5rem 0 0.5rem;
+}
+.ap-body { flex: 1; padding: 0 2rem 1.5rem; }
+.ap-title {
+  font-size: 1.4rem; font-weight: 800;
+  color: hsl(var(--foreground));
+  text-align: center; margin-bottom: 1rem;
+}
+.ap-list {
+  display: flex; flex-direction: column; gap: 0.5rem;
+  max-height: 280px; overflow-y: auto;
+}
+.ap-item {
+  display: flex; align-items: center; gap: 0.6rem;
+  font-size: 0.95rem; color: hsl(var(--foreground));
+  padding: 0.5rem 0.75rem;
+  background: hsl(var(--muted) / 0.5);
+  border-radius: 8px;
+}
 .ap-close {
-  background: none; border: none; cursor: pointer; font-size: 1.2rem;
-  color: hsl(var(--muted-foreground)); flex-shrink: 0; line-height: 1;
+  display: block; width: 100%;
+  background: hsl(var(--muted)); border: none; cursor: pointer;
+  font-size: 0.9rem; font-weight: 600;
+  color: hsl(var(--muted-foreground));
+  padding: 0.75rem; border-top: 1px solid hsl(var(--border));
+  transition: background 0.15s;
 }
-.ap-close:hover { color: hsl(var(--foreground)); }
+.ap-close:hover { background: hsl(var(--accent)); color: hsl(var(--accent-foreground)); }
+
+/*  Dashboard Grid  */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  padding: 0.5rem 0;
+}
+.db-card {
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.db-span2 { grid-column: span 2; }
+.db-card-hd {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: hsl(var(--foreground));
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid hsl(var(--border));
+  padding-bottom: 0.5rem;
+}
+.db-na { color: hsl(var(--muted-foreground)); font-size: 0.82rem; padding: 0.5rem 0; }
+
+/* 资源环形图 */
+.db-metrics-row { display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap; }
+.db-metric { display: flex; flex-direction: column; align-items: center; gap: 0.3rem; }
+.db-metric-ring { position: relative; width: 80px; height: 80px; }
+.db-metric-ring svg { width: 100%; height: 100%; }
+.db-ring-val {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.9rem; font-weight: 700; color: hsl(var(--foreground));
+}
+.db-metric-label { font-size: 0.72rem; color: hsl(var(--muted-foreground)); text-align: center; }
+.db-stat-col { display: flex; flex-direction: column; gap: 0.35rem; flex: 1; min-width: 160px; }
+.db-stat-row { display: flex; gap: 0.5rem; font-size: 0.8rem; }
+.db-stat-k { color: hsl(var(--muted-foreground)); min-width: 60px; }
+.db-stat-v { color: hsl(var(--foreground)); font-weight: 500; }
+
+/* 节点状态分布 */
+.db-state-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 0.5rem; }
+.db-state-item { border-radius: 8px; padding: 0.6rem 0.4rem; text-align: center; border: 1px solid transparent; }
+.dsi-count { font-size: 1.6rem; font-weight: 800; line-height: 1; }
+.dsi-label { font-size: 0.68rem; margin-top: 0.2rem; }
+.dsi-idle { background: #d1fae5; border-color: #6ee7b7; color: #065f46; }
+.dsi-alloc { background: #dbeafe; border-color: #93c5fd; color: #1e40af; }
+.dsi-mix { background: #fef3c7; border-color: #fcd34d; color: #92400e; }
+.dsi-down { background: #fee2e2; border-color: #fca5a5; color: #991b1b; }
+.dsi-drain { background: #f3f4f6; border-color: #d1d5db; color: #374151; }
+.dsi-default { background: #f3f4f6; border-color: #e5e7eb; color: #6b7280; }
+
+/* 作业统计 */
+.db-job-stats { display: flex; flex-direction: column; gap: 0.4rem; }
+.db-job-row { display: flex; align-items: center; gap: 0.5rem; font-size: 0.78rem; }
+.db-job-name { min-width: 60px; color: hsl(var(--foreground)); font-weight: 500; }
+.db-job-bar-wrap { flex: 1; height: 8px; background: hsl(var(--muted)); border-radius: 4px; overflow: hidden; }
+.db-job-bar { height: 100%; background: linear-gradient(90deg, #667eea, #764ba2); border-radius: 4px; transition: width 0.3s; }
+.db-job-val { min-width: 24px; text-align: right; color: hsl(var(--muted-foreground)); }
+
+/* 服务状态 */
+.db-targets-grid { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.db-target {
+  display: flex; align-items: center; gap: 0.4rem;
+  padding: 0.35rem 0.75rem; border-radius: 20px;
+  font-size: 0.78rem; border: 1px solid transparent;
+}
+.dt-up { background: #d1fae5; border-color: #6ee7b7; color: #065f46; }
+.dt-down { background: #fee2e2; border-color: #fca5a5; color: #991b1b; }
+.dt-dot { font-size: 0.6rem; }
+.dt-job { font-weight: 600; }
+.dt-inst { opacity: 0.75; }
+
+/*  Cluster View  */
+.cluster-view { display: flex; flex-direction: column; gap: 0.75rem; padding: 0.5rem 0; }
+.cluster-toolbar { display: flex; align-items: center; gap: 0.75rem; }
+.cluster-count { font-size: 0.82rem; color: hsl(var(--muted-foreground)); }
+
+.node-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.75rem;
+}
+.node-card {
+  border-radius: 10px; padding: 0.85rem;
+  border: 1.5px solid hsl(var(--border));
+  background: hsl(var(--card));
+  transition: box-shadow 0.15s, transform 0.15s;
+}
+.node-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.1); transform: translateY(-1px); }
+.nc-ok  { border-color: #6ee7b7; }
+.nc-warn { border-color: #fcd34d; }
+.nc-crit { border-color: #fca5a5; }
+
+.nc-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem; }
+.nc-name { font-size: 0.88rem; font-weight: 700; color: hsl(var(--foreground)); font-family: monospace; }
+.nc-state { font-size: 0.7rem; font-weight: 600; padding: 0.15rem 0.5rem; border-radius: 10px; }
+.ncs-ok   { background: #d1fae5; color: #065f46; }
+.ncs-warn { background: #fef3c7; color: #92400e; }
+.ncs-crit { background: #fee2e2; color: #991b1b; }
+
+.nc-metrics { display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 0.6rem; }
+.nc-metric {}
+.nc-bar-label { display: flex; justify-content: space-between; font-size: 0.72rem; color: hsl(var(--muted-foreground)); margin-bottom: 0.15rem; }
+.nc-bar-bg { height: 6px; background: hsl(var(--muted)); border-radius: 3px; overflow: hidden; }
+.nc-bar-fg { height: 100%; border-radius: 3px; transition: width 0.4s; }
+.bar-ok   { background: #10b981; }
+.bar-warn { background: #f59e0b; }
+.bar-crit { background: #ef4444; }
+
+.nc-footer { display: flex; gap: 0.5rem; flex-wrap: wrap; font-size: 0.68rem; color: hsl(var(--muted-foreground)); border-top: 1px solid hsl(var(--border)); padding-top: 0.4rem; }
+
+/* ── Alerts sub-tabs ── */
+.alert-subtabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid hsl(var(--border));
+  background: hsl(var(--card));
+  padding: 0 1rem;
+}
+
+.alert-subtab {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.65rem 1.1rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: hsl(var(--muted-foreground));
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+
+.alert-subtab:hover {
+  color: hsl(var(--foreground));
+  background: hsl(var(--muted) / 0.4);
+}
+
+.alert-subtab.active {
+  color: hsl(var(--primary));
+  border-bottom-color: hsl(var(--primary));
+  font-weight: 600;
+}
+
+.alert-tab-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
 
 /* ── Responsive ── */
 @media (max-width: 900px) {
   .charts-grid, .slurm-grid, .alerts-grid { grid-template-columns: 1fr; }
 }
 </style>
+
+

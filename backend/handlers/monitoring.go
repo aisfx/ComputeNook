@@ -102,6 +102,12 @@ type NodeMetrics struct {
 
 // GetNodeMetrics 从 Prometheus 查询节点温度/功耗，无 Prometheus 时用模拟数据
 func GetNodeMetrics(c *gin.Context) {
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Warn("GetNodeMetrics panic recovered: %v", r)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "监控数据获取异常"})
+		}
+	}()
 	_, exists := c.Get("username")
 	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "未授权"})
@@ -149,9 +155,18 @@ func GetNodeMetrics(c *gin.Context) {
 			wg.Add(1)
 			go func(idx int) {
 				defer wg.Done()
+				defer func() {
+					if r := recover(); r != nil {
+						logger.Warn("Prometheus query panic recovered: %v", r)
+					}
+				}()
 				m, err := promQuery(queries[idx].q)
 				if err != nil {
-					logger.Warn("Prometheus query failed [%s]: %v", queries[idx].q[:30], err)
+					q := queries[idx].q
+					if len(q) > 30 {
+						q = q[:30]
+					}
+					logger.Warn("Prometheus query failed [%s]: %v", q, err)
 					return
 				}
 				*queries[idx].m = m
@@ -835,4 +850,59 @@ func GetLocalMetrics(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, result)
+}
+
+// ─────────────────────────────────────────────
+// PromQL 直接查询接口
+// ─────────────────────────────────────────────
+
+// PromQueryInstant  GET /api/monitoring/promql?query=xxx
+func PromQueryInstant(c *gin.Context) {
+	query := c.Query("query")
+	if query == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "query is required"})
+		return
+	}
+	base := getPrometheusURL()
+	if base == "" {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "PROMETHEUS_URL not configured"})
+		return
+	}
+	apiURL := base + "/api/v1/query?query=" + url.QueryEscape(query)
+	resp, err := http.Get(apiURL)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		return
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	c.Data(resp.StatusCode, "application/json", body)
+}
+
+// PromQueryRange  GET /api/monitoring/promql/range?query=xxx&start=xxx&end=xxx&step=xxx
+func PromQueryRange(c *gin.Context) {
+	query := c.Query("query")
+	if query == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "query is required"})
+		return
+	}
+	base := getPrometheusURL()
+	if base == "" {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "PROMETHEUS_URL not configured"})
+		return
+	}
+	start := c.DefaultQuery("start", fmt.Sprintf("%d", time.Now().Add(-1*time.Hour).Unix()))
+	end := c.DefaultQuery("end", fmt.Sprintf("%d", time.Now().Unix()))
+	step := c.DefaultQuery("step", "60")
+
+	apiURL := fmt.Sprintf("%s/api/v1/query_range?query=%s&start=%s&end=%s&step=%s",
+		base, url.QueryEscape(query), start, end, step)
+	resp, err := http.Get(apiURL)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		return
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	c.Data(resp.StatusCode, "application/json", body)
 }

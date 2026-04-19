@@ -238,6 +238,17 @@ func main() {
 			webshell.POST("/nodes/:node_name/test", handlers.TestNodeConnection)
 		}
 
+		// 远程桌面 API
+		desktop := auth.Group("/desktop")
+		{
+			desktop.GET("/sessions", handlers.GetDesktopSessions)
+			desktop.POST("/sessions", handlers.CreateDesktopSession)
+			desktop.POST("/sessions/:id/start", handlers.StartDesktopSession)
+			desktop.POST("/sessions/:id/stop", handlers.StopDesktopSession)
+			desktop.GET("/sessions/:id/status", handlers.GetDesktopSessionStatus)
+			desktop.DELETE("/sessions/:id", handlers.DeleteDesktopSession)
+		}
+
 		// 文件管理 API
 		files := auth.Group("/files")
 		{
@@ -279,6 +290,8 @@ func main() {
 			monitoring.GET("/prom-alerts", handlers.GetPromAlerts)
 			monitoring.GET("/prom-targets", handlers.GetPromTargets)
 			monitoring.GET("/prom-rules", handlers.GetPromRules)
+		monitoring.GET("/promql", handlers.PromQueryInstant)
+		monitoring.GET("/promql/range", handlers.PromQueryRange)
 		}
 	}
 

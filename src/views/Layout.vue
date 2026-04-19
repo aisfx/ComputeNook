@@ -22,7 +22,7 @@
             @click="currentView = 'dashboard'"
             :title="sidebarCollapsed ? '仪表盘' : ''"
           >
-            <span class="nav-item-icon">▦</span>
+            <span class="nav-item-icon">🏠</span>
             <span class="nav-item-label">仪表盘</span>
           </a>
 
@@ -31,7 +31,7 @@
             @click="currentView = 'shell'"
             :title="sidebarCollapsed ? 'Web Shell' : ''"
           >
-            <span class="nav-item-icon">></span>
+            <span class="nav-item-icon">🖥️</span>
             <span class="nav-item-label">Web Shell</span>
           </a>
 
@@ -40,7 +40,7 @@
             @click="currentView = 'desktop'"
             :title="sidebarCollapsed ? '远程桌面' : ''"
           >
-            <span class="nav-item-icon">#</span>
+            <span class="nav-item-icon">🖱️</span>
             <span class="nav-item-label">远程桌面</span>
           </a>
 
@@ -50,7 +50,7 @@
             @click="currentView = 'jobs'; jobsExpanded = !jobsExpanded"
             :title="sidebarCollapsed ? '作业管理' : ''"
           >
-            <span class="nav-item-icon">≡</span>
+            <span class="nav-item-icon">⚙️</span>
             <span class="nav-item-label">作业管理</span>
             <span class="nav-item-chevron" v-if="!sidebarCollapsed">{{ jobsExpanded ? '▾' : '▸' }}</span>
           </a>
@@ -63,15 +63,24 @@
             >{{ tab.label }}</a>
           </div>
 
+          <!-- 文件管理 -->
           <a
-            v-for="item in otherMenuItems"
-            :key="item.id"
-            :class="['nav-item', { active: currentView === item.id }]"
-            @click="currentView = item.id"
-            :title="sidebarCollapsed ? item.label : ''"
+            :class="['nav-item', { active: currentView === 'files' }]"
+            @click="currentView = 'files'"
+            :title="sidebarCollapsed ? '文件管理' : ''"
           >
-            <span class="nav-item-icon">{{ item.icon }}</span>
-            <span class="nav-item-label">{{ item.label }}</span>
+            <span class="nav-item-icon">📁</span>
+            <span class="nav-item-label">文件管理</span>
+          </a>
+
+          <!-- 报表中心 -->
+          <a
+            :class="['nav-item', { active: currentView === 'reports' }]"
+            @click="currentView = 'reports'"
+            :title="sidebarCollapsed ? '报表中心' : ''"
+          >
+            <span class="nav-item-icon">📈</span>
+            <span class="nav-item-label">报表中心</span>
           </a>
         </div>
 
@@ -106,6 +115,8 @@
           <button class="icon-btn" @click="toggleTheme" :title="theme === 'dark' ? '切换亮色' : '切换暗色'">
             <span>{{ theme === 'dark' ? '☀️' : '🌙' }}</span>
           </button>
+          <!-- 报警铃铛 -->
+          <AlertNotification :show-bell="true" />
           <button v-if="isAdmin" class="btn-admin" @click="goToAdmin" title="管理后台">⚙️ 管理后台</button>
           <button class="icon-btn" @click="goToProfile" title="个人信息">
             <span>👤</span>
@@ -117,10 +128,10 @@
       </header>
 
       <!-- Content -->
-      <main class="content-area">
+      <main class="content-area" :class="{ 'content-area--noscroll': currentView === 'rack' }">
         <Dashboard v-if="currentView === 'dashboard'" @navigate="currentView = $event" />
         <JobManagement v-else-if="currentView === 'jobs'" @open-directory="handleOpenDirectory" />
-        <Monitoring v-else-if="currentView === 'monitoring' && isAdmin" />
+        <Monitoring v-else-if="currentView === 'monitoring' && isAdmin" :active-tab="monitoringTab" @tab-change="monitoringTab = $event" />
         <RackView v-else-if="currentView === 'rack' && isAdmin" />
         <WebShell v-else-if="currentView === 'shell'" />
         <Desktop v-else-if="currentView === 'desktop'" />
@@ -171,6 +182,7 @@ import Monitoring from './Monitoring.vue'
 import Profile from './Profile.vue'
 import RackView from './RackView.vue'
 import AIAssistant from '../components/AIAssistant.vue'
+import AlertNotification from '../components/AlertNotification.vue'
 import { getUser, logout, setupAxiosInterceptors, isAdmin as checkAdmin } from '../utils/auth'
 
 const router = useRouter()
@@ -178,6 +190,8 @@ const currentView = ref('dashboard')
 const jobManagementTab = ref('info')
 const jobsExpanded = ref(true)
 const shellExpanded = ref(true)
+const monitoringExpanded = ref(true)
+const monitoringTab = ref('cluster')
 const adminTab = ref('users')
 const adminExpanded = ref(false)
 const sidebarCollapsed = ref(false)
@@ -206,6 +220,11 @@ const handleOpenDirectory = (path: string) => {
     }
   }, 100)
 }
+
+const monitoringSubItems = [
+  { id: 'cluster', label: '集群状态' },
+  { id: 'alerts', label: '告警规则' },
+]
 
 const otherMenuItems = [
   { id: 'files', label: '文件管理', icon: '-' },
@@ -247,8 +266,13 @@ const currentTitle = computed(() => {
     ...otherMenuItems,
     { id: 'monitoring', label: '集群监控' },
     { id: 'rack', label: '机柜管理' },
-    { id: 'profile', label: '个人信息' }
+    { id: 'profile', label: '个人信息' },
+    { id: 'custom-dashboard', label: '自定义看板' },
   ]
+  if (currentView.value === 'monitoring') {
+    const sub = monitoringSubItems.find(s => s.id === monitoringTab.value)
+    return sub ? `集群监控 · ${sub.label}` : '集群监控'
+  }
   return all.find(i => i.id === currentView.value)?.label || ''
 })
 
@@ -603,6 +627,11 @@ onMounted(() => {
   overflow-y: auto;
   background: hsl(var(--background));
   padding: 24px;
+}
+.content-area--noscroll {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 /* No permission */

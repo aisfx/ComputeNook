@@ -42,7 +42,7 @@
             <td>
               <div class="action-buttons">
                 <button class="btn-action btn-start" @click="startSession(session)">启动</button>
-                <button class="btn-action btn-delete" @click="deleteSession(session.id)">删除</button>
+                <button class="btn-action btn-delete" @click="deleteSession(session)">删除</button>
               </div>
             </td>
           </tr>
@@ -76,7 +76,7 @@
                 <option value="">请选择桌面类型</option>
                 <option value="xfce">Xfce (轻量级)</option>
                 <option value="kde">KDE (功能丰富)</option>
-                <option value="gnome">GNOME (现代化)</option>
+                <option value="gnome">GNOME (现代)</option>
               </select>
             </div>
 
@@ -88,7 +88,7 @@
               </select>
               <div class="help-text">
                 <span v-if="createForm.protocol === 'vnc'">VNC 支持浏览器直接访问，无需安装客户端</span>
-                <span v-if="createForm.protocol === 'rdp'">RDP 需要使用远程桌面客户端连接，性能更好</span>
+                <span v-if="createForm.protocol === 'vnc'">VNC 支持浏览器直接访问，无需安装客户端</span>
               </div>
             </div>
 
@@ -124,6 +124,12 @@
             </div>
 
             <div class="form-group">
+              <label>容器镜像路径</label>
+              <input v-model="createForm.image" type="text" placeholder="留空使用默认镜像，如 /opt/containers/desktop.sif" />
+              <div class="help-text">Singularity/Apptainer 镜像路径，留空使用系统默认</div>
+            </div>
+
+            <div class="form-group">
               <label>用途说明</label>
               <textarea v-model="createForm.purpose" rows="3" placeholder="请简要说明使用远程桌面的目的..."></textarea>
             </div>
@@ -149,7 +155,7 @@
         <div class="modal-body">
           <div class="session-status">
             <div v-if="startingStatus === 'starting'" class="status-starting">
-              <div class="loading-icon">⏳</div>
+              <div class="loading-icon"></div>
               <h4>正在启动桌面...</h4>
               <p>作业 ID: <code>{{ currentJobId }}</code></p>
               <p>预计等待时间: 1-3 分钟</p>
@@ -159,7 +165,7 @@
             </div>
 
             <div v-else-if="startingStatus === 'ready'" class="status-ready">
-              <div class="success-icon">✅</div>
+              <div class="success-icon"></div>
               <h4>桌面已就绪</h4>
               
               <div class="connection-info">
@@ -189,17 +195,15 @@
                     <label>用户名:</label>
                     <div class="credential-value">
                       <code>{{ sessionCredentials.username }}</code>
-                      <button class="btn-copy" @click="copyToClipboard(sessionCredentials.username)">📋</button>
+                      <button class="btn-copy" @click="copyToClipboard(sessionCredentials.username)">复制</button>
                     </div>
                   </div>
                   <div class="credential-item">
                     <label>密码:</label>
                     <div class="credential-value">
-                      <code>{{ showPassword ? sessionCredentials.password : '••••••••••••' }}</code>
-                      <button class="btn-copy" @click="togglePassword">
-                        {{ showPassword ? '👁️' : '👁️‍🗨️' }}
-                      </button>
-                      <button class="btn-copy" @click="copyToClipboard(sessionCredentials.password)">📋</button>
+                      <code>{{ showPassword ? sessionCredentials.password : '•••••••••••' }}</code>
+                      <button class="btn-copy" @click="togglePassword">{{ showPassword ? '隐藏' : '显示' }}</button>
+                      <button class="btn-copy" @click="copyToClipboard(sessionCredentials.password)">复制</button>
                     </div>
                   </div>
                   <div class="credential-note">
@@ -234,7 +238,7 @@
                     <!-- RDP 连接方式 -->
                     <template v-else-if="selectedSession?.protocol === 'rdp'">
                       <div class="method-item">
-                        <span class="method-icon">🖥️</span>
+                        <span class="method-icon"></span>
                         <div class="method-content">
                           <strong>Windows 远程桌面</strong>
                           <p>使用 Windows 自带的"远程桌面连接"工具</p>
@@ -277,7 +281,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import axios from 'axios'
 
 const selectedType = ref('')
 const showCreateModal = ref(false)
@@ -288,6 +293,8 @@ const startingStatus = ref<'starting' | 'ready'>('starting')
 const startProgress = ref(0)
 const currentJobId = ref('')
 const selectedSession = ref<any>(null)
+const loading = ref(false)
+const errorMsg = ref('')
 
 const createForm = ref({
   name: '',
@@ -297,35 +304,26 @@ const createForm = ref({
   duration: 4,
   resolution: '1920x1080',
   port: null,
+  image: '',
   purpose: ''
 })
 
-const sessions = ref([
-  {
-    id: 1,
-    name: 'desktop-20250206-173123',
-    type: 'xfce',
-    protocol: 'vnc',
-    address: 'hpc01_login01',
-    createTime: '2025-02-06T18:15:24'
-  },
-  {
-    id: 4,
-    name: 'desktop-20231114-213706',
-    type: 'kde',
-    protocol: 'rdp',
-    address: 'hpc01_login01',
-    createTime: '2023-11-14T22:14:09'
-  },
-  {
-    id: 6,
-    name: 'desktop-20260204-172952',
-    type: 'kde',
-    protocol: 'vnc',
-    address: 'hpc01_login01',
-    createTime: '2026-02-04T18:32:09'
+const sessions = ref<any[]>([])
+
+const loadSessions = async () => {
+  loading.value = true
+  errorMsg.value = ''
+  try {
+    const res = await axios.get('/desktop/sessions')
+    sessions.value = res.data.data || []
+  } catch (e: any) {
+    errorMsg.value = e.response?.data?.error || '加载失败'
+  } finally {
+    loading.value = false
   }
-])
+}
+
+onMounted(loadSessions)
 
 const sessionCredentials = ref({
   username: '',
@@ -343,89 +341,95 @@ const filteredSessions = computed(() => {
 
 const createDesktop = async () => {
   submitting.value = true
-  
-  setTimeout(() => {
-    const newSession = {
-      id: Date.now(),
+  try {
+    const res = await axios.post('/desktop/sessions', {
       name: createForm.value.name,
       type: createForm.value.type,
       protocol: createForm.value.protocol,
-      address: 'hpc01_login01',
-      createTime: new Date().toISOString()
-    }
-    
-    sessions.value.unshift(newSession)
+      image: createForm.value.image,
+      address: 'login01'
+    })
+    sessions.value.unshift(res.data.data)
     showCreateModal.value = false
+    createForm.value = { name: '', type: '', protocol: 'vnc', nodeType: 'standard', duration: 4, resolution: '1920x1080', port: null, image: '', purpose: '' }
+  } catch (e: any) {
+    alert('创建失败: ' + (e.response?.data?.error || e.message))
+  } finally {
     submitting.value = false
-    
-    alert(`远程桌面已创建！\n名称: ${newSession.name}\n类型: ${newSession.type}\n协议: ${newSession.protocol.toUpperCase()}`)
-    
-    // 重置表单
-    createForm.value = {
-      name: '',
-      type: '',
-      protocol: 'vnc',
-      nodeType: 'standard',
-      duration: 4,
-      resolution: '1920x1080',
-      port: null,
-      purpose: ''
-    }
-  }, 1000)
+  }
 }
 
-const startSession = (session: any) => {
+const deleteSession = async (session: any) => {
+  if (!confirm(`确认删除桌面 "${session.name}"？`)) return
+  try {
+    await axios.delete(`/desktop/sessions/${session.id}`)
+    sessions.value = sessions.value.filter(s => s.id !== session.id)
+  } catch (e: any) {
+    alert('删除失败: ' + (e.response?.data?.error || e.message))
+  }
+}
+
+const startSession = async (session: any) => {
   selectedSession.value = session
   showStartModal.value = true
   startingStatus.value = 'starting'
   startProgress.value = 0
-  currentJobId.value = 'DESKTOP-' + Date.now()
-  
-  // 模拟启动进度
-  const interval = setInterval(() => {
-    startProgress.value += 20
-    if (startProgress.value >= 100) {
-      clearInterval(interval)
-      startingStatus.value = 'ready'
-      
-      // 生成临时凭据
-      if (session.protocol === 'rdp') {
-        sessionCredentials.value = {
-          username: 'rdpuser_' + Math.random().toString(36).substr(2, 6),
-          password: generatePassword(),
-          vncPort: 0,
-          rdpPort: 3389 + Math.floor(Math.random() * 100),
-          webUrl: '',
-          guacamoleUrl: `https://hpc.example.com/guacamole/#/client/${session.id}`
-        }
-      } else {
-        sessionCredentials.value = {
-          username: 'vncuser_' + Math.random().toString(36).substr(2, 6),
-          password: generatePassword(),
-          vncPort: 5900 + Math.floor(Math.random() * 100),
-          rdpPort: 0,
-          webUrl: `https://hpc.example.com/vnc/${session.id}`,
-          guacamoleUrl: ''
-        }
-      }
-    }
-  }, 600)
-}
+  currentJobId.value = ''
 
-const stopSession = () => {
-  if (confirm('确定要停止此桌面会话吗？')) {
+  try {
+    const res = await axios.post(`/desktop/sessions/${session.id}/start`)
+    currentJobId.value = String(res.data.jobId || '')
+    // poll status
+    pollSessionStatus(session.id)
+  } catch (e: any) {
+    startingStatus.value = 'ready' // show error state
+    alert('启动失败: ' + (e.response?.data?.error || e.message))
     showStartModal.value = false
-    alert('桌面会话已停止')
   }
 }
 
-const deleteSession = (id: number) => {
-  if (confirm('确定要删除此桌面会话吗？\n删除后无法恢复。')) {
-    const index = sessions.value.findIndex(s => s.id === id)
-    if (index > -1) {
-      sessions.value.splice(index, 1)
-      alert('桌面会话已删除')
-    }
+let pollTimer: any = null
+const pollSessionStatus = (sessionId: number) => {
+  if (pollTimer) clearInterval(pollTimer)
+  pollTimer = setInterval(async () => {
+    try {
+      const res = await axios.get(`/desktop/sessions/${sessionId}/status`)
+      const s = res.data.data
+      startProgress.value = s.status === 'running' ? 100 : s.status === 'pending' ? 50 : startProgress.value
+      if (s.status === 'running') {
+        clearInterval(pollTimer)
+        startingStatus.value = 'ready'
+        // update session in list
+        const idx = sessions.value.findIndex((x: any) => x.id === sessionId)
+        if (idx >= 0) sessions.value[idx] = s
+        selectedSession.value = s
+        sessionCredentials.value = {
+          username: s.username || '',
+          password: s.password || '',
+          vncPort: s.vncPort || 5910 + sessionId,
+          rdpPort: s.rdpPort || 3389,
+          webUrl: s.webUrl || '',
+          guacamoleUrl: ''
+        }
+      } else if (s.status === 'failed') {
+        clearInterval(pollTimer)
+        alert('桌面启动失败，请检查 Slurm 作业日志')
+        showStartModal.value = false
+      }
+    } catch { /* ignore */ }
+  }, 3000)
+}
+
+const stopSession = async () => {
+  if (!selectedSession.value) return
+  if (!confirm('确定要停止此桌面会话吗？')) return
+  try {
+    await axios.post(`/desktop/sessions/${selectedSession.value.id}/stop`)
+    if (pollTimer) clearInterval(pollTimer)
+    showStartModal.value = false
+    await loadSessions()
+  } catch (e: any) {
+    alert('停止失败: ' + (e.response?.data?.error || e.message))
   }
 }
 
@@ -527,7 +531,7 @@ kdcproxyname:s:`
 const copyRDPConnection = () => {
   const connectionInfo = `主机: ${selectedSession.value?.address}
 端口: ${sessionCredentials.value.rdpPort}
-用户名: ${sessionCredentials.value.username}
+用户 ${sessionCredentials.value.username}
 密码: ${sessionCredentials.value.password}`
   
   navigator.clipboard.writeText(connectionInfo)
