@@ -79,6 +79,9 @@ func main() {
 		api.POST("/login", handlers.Login)
 	}
 
+	// 客户端下载页面（公开）
+	r.GET("/download", handlers.DownloadPage)
+
 	// 需要认证的路由
 	auth := r.Group("/api")
 	auth.Use(middleware.AuthMiddleware())
@@ -86,7 +89,10 @@ func main() {
 		auth.GET("/me", handlers.GetCurrentUser)
 		auth.GET("/me/resources", handlers.GetMyResources)
 		auth.POST("/ai/chat", handlers.AIChat)
-		
+
+		// 客户端下载文件（需认证）
+		auth.GET("/download/:file", handlers.DownloadClient)
+
 		// 普通用户可以访问的路由
 		auth.POST("/profile/change-password", handlers.ChangePassword)
 		auth.PUT("/profile", handlers.UpdateProfile)
@@ -170,6 +176,9 @@ func main() {
 			audit.GET("/logs/:id", handlers.GetAuditLog)
 			audit.GET("/stats", handlers.GetAuditStats)
 			audit.GET("/export", handlers.ExportAuditLogs)
+			// SSH 隧道行为日志
+			audit.GET("/ssh-logs", handlers.GetSSHTunnelLogs)
+			audit.GET("/ssh-logs/download", handlers.DownloadSSHTunnelLog)
 		}
 
 		// 机时管理 API
@@ -233,6 +242,7 @@ func main() {
 			// 私钥管理
 			webshell.GET("/keys/check", handlers.CheckPrivateKey)
 			webshell.POST("/keys/upload", handlers.UploadPrivateKey)
+			webshell.POST("/keys/generate", handlers.GenerateKeyPair)
 			
 			// 连接测试
 			webshell.POST("/nodes/:node_name/test", handlers.TestNodeConnection)
@@ -247,7 +257,18 @@ func main() {
 			desktop.POST("/sessions/:id/stop", handlers.StopDesktopSession)
 			desktop.GET("/sessions/:id/status", handlers.GetDesktopSessionStatus)
 			desktop.DELETE("/sessions/:id", handlers.DeleteDesktopSession)
+			desktop.GET("/sessions/:id/logs", handlers.GetDesktopSessionLogs)
+			desktop.GET("/sessions/:id/script", handlers.GetDesktopScript)
+			// VNC WebSocket 代理：通过 SSH 隧道连接计算节点 VNC
+			desktop.GET("/sessions/:id/vnc-ws", handlers.VNCWebSocketProxy)
 		}
+
+		// SSH WebSocket 隧道：转发到计算节点 SSH 端口
+		auth.GET("/ssh/proxy", handlers.SSHWebSocketProxy)
+
+		// WebDAV 文件系统挂载（供 hpc-client mount 使用）
+		// 挂载用户 home 目录，支持 Windows/macOS/Linux 本地挂载
+		auth.Any("/webdav/*path", handlers.WebDAVHandler)
 
 		// 文件管理 API
 		files := auth.Group("/files")
@@ -293,6 +314,12 @@ func main() {
 		monitoring.GET("/promql", handlers.PromQueryInstant)
 		monitoring.GET("/promql/range", handlers.PromQueryRange)
 		}
+	}
+
+	// noVNC 静态文件（从 node_modules 提供）
+	novncDir := "../node_modules/@novnc/novnc"
+	if _, err := os.Stat(novncDir); err == nil {
+		r.Static("/novnc", novncDir)
 	}
 
 	port := os.Getenv("SERVER_PORT")

@@ -10,6 +10,8 @@ release/
 # Go
 backend/hpc-backend
 backend/logs/
+backend/clients/
+backend/tools/rdp-tunnel/go.sum
 
 # OS
 .DS_Store

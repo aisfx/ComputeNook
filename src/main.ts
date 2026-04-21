@@ -5,6 +5,7 @@ import Login from './views/Login.vue'
 import ForceChangePassword from './views/ForceChangePassword.vue'
 import Layout from './views/Layout.vue'
 import AdminLayout from './views/AdminLayout.vue'
+import Download from './views/Download.vue'
 import { isAuthenticated, getUser, isAdmin } from './utils/auth'
 import './styles/main.css'
 
@@ -38,6 +39,12 @@ const router = createRouter({
       name: 'Admin',
       component: AdminLayout,
       meta: { requiresAuth: true, requiresAdmin: true }
+    },
+    {
+      path: '/download',
+      name: 'Download',
+      component: Download,
+      meta: { requiresAuth: true }
     },
     {
       path: '/:pathMatch(.*)*',

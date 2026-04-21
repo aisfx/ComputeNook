@@ -193,6 +193,15 @@
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 
+/* select 保留原生下拉箭头，右侧留出空间 */
+.form-select,
+.form-group select {
+  appearance: auto;
+  -webkit-appearance: auto;
+  padding-right: 2rem;
+  cursor: pointer;
+}
+
 .form-input:focus,
 .form-textarea:focus,
 .form-select:focus,

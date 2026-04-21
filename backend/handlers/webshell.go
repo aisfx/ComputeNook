@@ -1,6 +1,9 @@
 package handlers
 
 import (
+	"crypto/ed25519"
+	"crypto/x509"
+	"encoding/pem"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -8,12 +11,14 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"github.com/google/uuid"
 	"hpc-backend/webshell"
+	gossh "golang.org/x/crypto/ssh"
 )
 
 var (
@@ -616,4 +621,69 @@ func init() {
 			sessionManager.CleanupExpiredSessions(30 * time.Minute)
 		}
 	}()
+}
+
+// GenerateKeyPair 为当前用户生成 SSH 密钥对
+// POST /api/webshell/keys/generate
+// 私钥存 keys/{uid}/id_rsa，公钥返回给前端（用于添加到计算节点 authorized_keys）
+func GenerateKeyPair(c *gin.Context) {
+	userInterface, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+	user := userInterface.(map[string]interface{})
+	userID := user["uid"].(string)
+	username := user["username"].(string)
+
+	// 生成 ED25519 密钥对
+	pubKey, privKey, err := generateED25519KeyPair(username)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "生成密钥失败: " + err.Error()})
+		return
+	}
+
+	// 保存私钥
+	keyDir := filepath.Join("keys", userID)
+	if err := os.MkdirAll(keyDir, 0700); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建目录失败"})
+		return
+	}
+	keyPath := filepath.Join(keyDir, "id_rsa")
+	if err := os.WriteFile(keyPath, []byte(privKey), 0600); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存私钥失败"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"public_key":  pubKey,
+		"private_key": privKey,
+		"message":     "密钥生成成功，请将公钥添加到计算节点的 ~/.ssh/authorized_keys",
+	})
+}
+
+// generateED25519KeyPair 生成 ED25519 密钥对，返回 (公钥, 私钥PEM, error)
+func generateED25519KeyPair(comment string) (string, string, error) {
+	pub, priv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		return "", "", err
+	}
+
+	// 私钥转 PEM
+	privBytes, err := x509.MarshalPKCS8PrivateKey(priv)
+	if err != nil {
+		return "", "", err
+	}
+	privPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privBytes})
+
+	// 公钥转 authorized_keys 格式
+	sshPub, err := gossh.NewPublicKey(pub)
+	if err != nil {
+		return "", "", err
+	}
+	pubStr := string(gossh.MarshalAuthorizedKey(sshPub))
+	// 追加注释
+	pubStr = strings.TrimRight(pubStr, "\n") + " " + comment + "\n"
+
+	return pubStr, string(privPEM), nil
 }

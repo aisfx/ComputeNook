@@ -11,6 +11,7 @@
     "release:arm": "node scripts/release.cjs --arch=arm"
   },
   "dependencies": {
+    "@novnc/novnc": "^1.6.0",
     "axios": "^1.6.0",
     "echarts": "^6.0.0",
     "vue": "^3.4.0",

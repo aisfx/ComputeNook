@@ -88,32 +88,45 @@
     <div v-if="showKeyUpload" class="modal-overlay" @click="showKeyUpload = false">
       <div class="modal-content" @click.stop>
         <div class="modal-header">
-          <h4>上传SSH私钥</h4>
+          <h4>🔑 SSH 密钥管理</h4>
           <button class="close-btn" @click="showKeyUpload = false">×</button>
         </div>
         <div class="modal-body">
-          <div class="upload-area">
-            <input 
-              type="file" 
-              ref="keyFileInput" 
-              @change="handleKeyUpload"
-              accept=".pem,.key,*"
-              style="display: none"
-            />
+          <!-- Tab 切换 -->
+          <div class="key-tabs">
+            <button :class="['key-tab', { active: keyTab === 'generate' }]" @click="keyTab = 'generate'">自动生成</button>
+            <button :class="['key-tab', { active: keyTab === 'upload' }]" @click="keyTab = 'upload'">手动上传</button>
+          </div>
+
+          <!-- 自动生成 -->
+          <div v-if="keyTab === 'generate'">
+            <p style="color:#555;font-size:0.9rem;margin-bottom:1rem">
+              平台自动生成 ED25519 密钥对，私钥保存在服务端，公钥需要添加到计算节点。
+            </p>
+            <button class="btn-primary" @click="generateKey" :disabled="generatingKey" style="width:100%;margin-bottom:1rem">
+              {{ generatingKey ? '生成中...' : '🔐 一键生成密钥对' }}
+            </button>
+
+            <div v-if="generatedPubKey" class="pubkey-box">
+              <div class="pubkey-header">
+                <span>公钥（添加到计算节点 ~/.ssh/authorized_keys）</span>
+                <button class="btn-copy-small" @click="copyPubKey">复制</button>
+              </div>
+              <pre class="pubkey-content">{{ generatedPubKey }}</pre>
+              <div class="pubkey-hint">
+                在计算节点执行：<code>echo "{{ generatedPubKey.trim() }}" >> ~/.ssh/authorized_keys</code>
+              </div>
+            </div>
+          </div>
+
+          <!-- 手动上传 -->
+          <div v-if="keyTab === 'upload'">
+            <input type="file" ref="keyFileInput" @change="handleKeyUpload" accept=".pem,.key,*" style="display:none" />
             <div class="upload-zone" @click="($refs.keyFileInput as HTMLInputElement).click()">
               <div class="upload-icon">📁</div>
               <p>点击选择SSH私钥文件</p>
-              <p class="upload-hint">支持 .pem, .key 等格式</p>
+              <p class="upload-hint">支持 OpenSSH / PEM 格式</p>
             </div>
-          </div>
-          <div class="upload-info">
-            <h5>注意事项：</h5>
-            <ul>
-              <li>请确保私钥文件格式正确</li>
-              <li>私钥将安全存储在服务器上</li>
-              <li>建议使用专门的SSH密钥对</li>
-              <li>上传后可以连接到配置的节点</li>
-            </ul>
           </div>
         </div>
       </div>
@@ -235,6 +248,11 @@
             <div class="host-status" :class="{ connected: currentNode?.name === node.name && connected }">
               <span v-if="currentNode?.name === node.name && connected">●</span>
             </div>
+            <button
+              class="btn-tunnel"
+              title="通过客户端 SSH 隧道连接"
+              @click.stop="launchSSHTunnel(node)"
+            >🔗</button>
           </div>
         </div>
       </div>
@@ -289,6 +307,9 @@ const showPasswordInput = ref(false)
 const showSessions = ref(false)
 const showLogs = ref(false)
 const showKeyUpload = ref(false)
+const keyTab = ref<'generate' | 'upload'>('generate')
+const generatingKey = ref(false)
+const generatedPubKey = ref('')
 const showSettings = ref(false)
 const loading = ref(false)
 const error = ref('')
@@ -681,6 +702,14 @@ const loadNodes = async () => {
   }
 }
 
+// 通过 hpcc:// 拉起客户端建立 SSH 隧道
+const launchSSHTunnel = (node: any) => {
+  const token = localStorage.getItem('token') || sessionStorage.getItem('token') || ''
+  const user = currentUsername.value || ''
+  const uri = `hpcc://ssh?server=${encodeURIComponent(location.origin)}&token=${encodeURIComponent(token)}&host=${encodeURIComponent(node.host || node.name)}&port=12222&user=${encodeURIComponent(user)}`
+  window.location.href = uri
+}
+
 // 选择节点
 const selectNode = async (node: any) => {
   selectedNode.value = node
@@ -1021,21 +1050,15 @@ const testConnection = async (node: any) => {
 const handleKeyUpload = async (event: Event) => {
   const target = event.target as HTMLInputElement
   const file = target.files?.[0]
-  
   if (!file) return
-  
   const formData = new FormData()
   formData.append('private_key', file)
-  
   try {
     const response = await fetch('/api/webshell/keys/upload', {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token') || sessionStorage.getItem('token')}`
-      },
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || sessionStorage.getItem('token')}` },
       body: formData
     })
-    
     if (response.ok) {
       notification.success('SSH私钥上传成功')
       showKeyUpload.value = false
@@ -1047,6 +1070,32 @@ const handleKeyUpload = async (event: Event) => {
   } catch (err: any) {
     notification.error('上传失败: ' + err.message)
   }
+}
+
+// 生成密钥对
+const generateKey = async () => {
+  generatingKey.value = true
+  generatedPubKey.value = ''
+  try {
+    const res = await fetch('/api/webshell/keys/generate', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('token') || sessionStorage.getItem('token')}` }
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error)
+    generatedPubKey.value = data.public_key
+    hasPrivateKey.value = true
+    notification.success('密钥生成成功')
+  } catch (err: any) {
+    notification.error('生成失败: ' + err.message)
+  } finally {
+    generatingKey.value = false
+  }
+}
+
+const copyPubKey = () => {
+  navigator.clipboard.writeText(generatedPubKey.value)
+  notification.success('公钥已复制')
 }
 </script>
 
@@ -1185,6 +1234,20 @@ const handleKeyUpload = async (event: Event) => {
   font-size: 1.2rem;
   flex-shrink: 0;
 }
+
+.btn-tunnel {
+  background: none;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-size: 14px;
+  cursor: pointer;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.host-item:hover .btn-tunnel { opacity: 1; }
+.btn-tunnel:hover { background: #f3f4f6; border-color: #6366f1; }
 
 .host-info {
   flex: 1;
@@ -1476,6 +1539,75 @@ const handleKeyUpload = async (event: Event) => {
 
 .upload-zone:hover {
   border-color: #667eea;
+}
+
+.key-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.key-tab {
+  flex: 1;
+  padding: 0.5rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: #f9fafb;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.15s;
+}
+
+.key-tab.active {
+  background: #667eea;
+  color: #fff;
+  border-color: #667eea;
+}
+
+.pubkey-box {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.pubkey-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  background: #f3f4f6;
+  font-size: 0.8rem;
+  color: #555;
+}
+
+.btn-copy-small {
+  padding: 0.2rem 0.6rem;
+  background: #667eea;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.pubkey-content {
+  padding: 0.75rem;
+  font-size: 0.75rem;
+  font-family: monospace;
+  word-break: break-all;
+  white-space: pre-wrap;
+  margin: 0;
+  max-height: 100px;
+  overflow-y: auto;
+}
+
+.pubkey-hint {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8rem;
+  color: #666;
+  border-top: 1px solid #e5e7eb;
+  word-break: break-all;
 }
 
 .upload-icon {

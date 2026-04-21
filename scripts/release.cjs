@@ -100,6 +100,36 @@ function zipDir(sourceDir, zipPath, innerFolder) {
     { GOOS: target.GOOS, GOARCH: target.GOARCH, CGO_ENABLED: '0' }
   )
 
+  // 3.5 构建客户端（三平台）
+  console.log('\n🖥️  构建 hpc-client（Linux / Windows / macOS）...')
+  const clientSrc = path.join(ROOT, 'backend', 'tools', 'rdp-tunnel')
+  const clientsDir = path.join(STAGE_DIR, 'clients')
+  // 同时写到后端 clients/ 目录，供 /download 接口提供下载
+  const backendClientsDir = path.join(ROOT, 'backend', 'clients')
+  fs.mkdirSync(clientsDir, { recursive: true })
+  fs.mkdirSync(backendClientsDir, { recursive: true })
+
+  const clientTargets = [
+    { GOOS: 'linux',   GOARCH: 'amd64', out: 'hpc-client-linux'       },
+    { GOOS: 'windows', GOARCH: 'amd64', out: 'hpc-client-windows.exe' },
+    { GOOS: 'darwin',  GOARCH: 'amd64', out: 'hpc-client-mac'         },
+  ]
+
+  // 先 go mod tidy
+  run('go mod tidy', clientSrc)
+
+  for (const ct of clientTargets) {
+    const outPath = path.join(clientsDir, ct.out)
+    console.log(`   → ${ct.GOOS}/${ct.GOARCH}: ${ct.out}`)
+    run(
+      `go build -ldflags="-s -w" -o "${outPath}" .`,
+      clientSrc,
+      { GOOS: ct.GOOS, GOARCH: ct.GOARCH, CGO_ENABLED: '0' }
+    )
+    // 同步到 backend/clients/
+    fs.copyFileSync(outPath, path.join(backendClientsDir, ct.out))
+  }
+
   // 4. 复制前端产物
   console.log('\n📁 复制前端产物...')
   copyDir(path.join(ROOT, 'dist'), path.join(STAGE_DIR, 'static'))
@@ -129,6 +159,7 @@ function zipDir(sourceDir, zipPath, innerFolder) {
   const zipSize = (fs.statSync(ZIP_PATH).size / 1024 / 1024).toFixed(2)
   console.log(`\n✅ 构建完成!`)
   console.log(`   ${path.basename(ZIP_PATH)}  (${zipSize} MB)`)
+  console.log(`   客户端已同步到 backend/clients/（供 /download 接口提供下载）`)
   console.log(`\n使用方法:`)
   console.log(`  unzip ${PKG_NAME}.zip`)
   console.log(`  cd ${PKG_NAME}`)

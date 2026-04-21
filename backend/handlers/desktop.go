@@ -1,34 +1,34 @@
-package handlers
+﻿package handlers
 
 import (
-	"encoding/json"
-	"fmt"
-	"net/http"
-	"os"
-	"strconv"
-	"strings"
-	"sync"
-	"time"
+"encoding/json"
+"fmt"
+"net/http"
+"os"
+"strconv"
+"strings"
+"sync"
+"time"
 
-	"hpc-backend/slurm"
+"hpc-backend/slurm"
 
-	"github.com/gin-gonic/gin"
+"github.com/gin-gonic/gin"
 )
 
 type DesktopSession struct {
 	ID         int    `json:"id"`
 	Name       string `json:"name"`
 	Type       string `json:"type"`
-	Protocol   string `json:"protocol"`
 	Address    string `json:"address"`
 	Username   string `json:"username"`
+	Resolution string `json:"resolution,omitempty"`
+	Duration   int    `json:"duration,omitempty"`
+	NodeType   string `json:"nodeType,omitempty"`
+	Partition  string `json:"partition,omitempty"`
 	CreateTime string `json:"createTime"`
 	Status     string `json:"status"`
-	Image      string `json:"image,omitempty"`
 	SlurmJobID int64  `json:"slurmJobId,omitempty"`
 	VNCPort    int    `json:"vncPort,omitempty"`
-	RDPPort    int    `json:"rdpPort,omitempty"`
-	Password   string `json:"password,omitempty"`
 	WebURL     string `json:"webUrl,omitempty"`
 }
 
@@ -37,352 +37,450 @@ const desktopDataFile = "desktop_sessions.json"
 var desktopMu sync.Mutex
 
 func loadDesktopSessions() ([]DesktopSession, error) {
-	desktopMu.Lock()
-	defer desktopMu.Unlock()
-	data, err := os.ReadFile(desktopDataFile)
-	if os.IsNotExist(err) {
-		return []DesktopSession{}, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	var sessions []DesktopSession
-	if err := json.Unmarshal(data, &sessions); err != nil {
-		return nil, err
-	}
-	return sessions, nil
+desktopMu.Lock()
+defer desktopMu.Unlock()
+data, err := os.ReadFile(desktopDataFile)
+if os.IsNotExist(err) {
+return []DesktopSession{}, nil
+}
+if err != nil {
+return nil, err
+}
+var sessions []DesktopSession
+if err := json.Unmarshal(data, &sessions); err != nil {
+return nil, err
+}
+return sessions, nil
 }
 
 func saveDesktopSessions(sessions []DesktopSession) error {
-	desktopMu.Lock()
-	defer desktopMu.Unlock()
-	data, err := json.MarshalIndent(sessions, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(desktopDataFile, data, 0644)
+desktopMu.Lock()
+defer desktopMu.Unlock()
+data, err := json.MarshalIndent(sessions, "", "  ")
+if err != nil {
+return err
 }
-
-func updateDesktopSession(updated DesktopSession) error {
-	sessions, err := loadDesktopSessions()
-	if err != nil {
-		return err
-	}
-	for i, s := range sessions {
-		if s.ID == updated.ID {
-			sessions[i] = updated
-			return saveDesktopSessions(sessions)
-		}
-	}
-	return fmt.Errorf("session not found")
+return os.WriteFile(desktopDataFile, data, 0644)
 }
 
 // GET /api/desktop/sessions
 func GetDesktopSessions(c *gin.Context) {
-	sessions, err := loadDesktopSessions()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	username, _ := c.Get("username")
-	isAdmin, _ := c.Get("is_admin")
-	if isAdmin != true {
-		filtered := []DesktopSession{}
-		for _, s := range sessions {
-			if s.Username == username {
-				filtered = append(filtered, s)
-			}
-		}
-		sessions = filtered
-	}
-	c.JSON(http.StatusOK, gin.H{"data": sessions})
+sessions, err := loadDesktopSessions()
+if err != nil {
+c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+return
+}
+username, _ := c.Get("username")
+isAdmin, _ := c.Get("is_admin")
+if isAdmin != true {
+filtered := []DesktopSession{}
+for _, s := range sessions {
+if s.Username == username {
+filtered = append(filtered, s)
+}
+}
+sessions = filtered
+}
+c.JSON(http.StatusOK, gin.H{"data": sessions})
 }
 
 // POST /api/desktop/sessions
 func CreateDesktopSession(c *gin.Context) {
-	var req struct {
-		Name     string `json:"name" binding:"required"`
-		Type     string `json:"type" binding:"required"`
-		Protocol string `json:"protocol" binding:"required"`
-		Address  string `json:"address"`
-		Image    string `json:"image"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	sessions, err := loadDesktopSessions()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-
-	maxID := 0
-	for _, s := range sessions {
-		if s.ID > maxID {
-			maxID = s.ID
-		}
-	}
-
-	username, _ := c.Get("username")
-	session := DesktopSession{
-		ID:         maxID + 1,
-		Name:       req.Name,
-		Type:       req.Type,
-		Protocol:   req.Protocol,
-		Address:    req.Address,
-		Image:      req.Image,
-		Username:   username.(string),
-		CreateTime: time.Now().Format("2006-01-02T15:04:05"),
-		Status:     "stopped",
-	}
-
-	sessions = append([]DesktopSession{session}, sessions...)
-	if err := saveDesktopSessions(sessions); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"data": session})
+var req struct {
+Name       string `json:"name" binding:"required"`
+Type       string `json:"type" binding:"required"`
+Resolution string `json:"resolution"`
+Duration   int    `json:"duration"`
+NodeType   string `json:"nodeType"`
+Partition  string `json:"partition"`
+}
+if err := c.ShouldBindJSON(&req); err != nil {
+c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+return
 }
 
-// POST /api/desktop/sessions/:id/start  — submit Slurm job to launch desktop container
+sessions, err := loadDesktopSessions()
+if err != nil {
+c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+return
+}
+
+maxID := 0
+for _, s := range sessions {
+if s.ID > maxID {
+maxID = s.ID
+}
+}
+
+username, _ := c.Get("username")
+
+resolution := req.Resolution
+if resolution == "" {
+resolution = "1920x1080"
+}
+duration := req.Duration
+if duration == 0 {
+duration = 4
+}
+
+session := DesktopSession{
+ID:         maxID + 1,
+Name:       req.Name,
+Type:       req.Type,
+Username:   username.(string),
+Resolution: resolution,
+Duration:   duration,
+NodeType:   req.NodeType,
+Partition:  req.Partition,
+CreateTime: time.Now().Format("2006-01-02T15:04:05"),
+Status:     "stopped",
+}
+
+sessions = append([]DesktopSession{session}, sessions...)
+if err := saveDesktopSessions(sessions); err != nil {
+c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+return
+}
+c.JSON(http.StatusOK, gin.H{"data": session})
+}
+
+// POST /api/desktop/sessions/:id/start
 func StartDesktopSession(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := strconv.Atoi(idStr)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
-		return
-	}
+idStr := c.Param("id")
+id, err := strconv.Atoi(idStr)
+if err != nil {
+c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+return
+}
 
-	sessions, err := loadDesktopSessions()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
+sessions, err := loadDesktopSessions()
+if err != nil {
+c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+return
+}
 
-	var session *DesktopSession
-	for i := range sessions {
-		if sessions[i].ID == id {
-			session = &sessions[i]
-			break
-		}
-	}
-	if session == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
-		return
-	}
+var session *DesktopSession
+for i := range sessions {
+if sessions[i].ID == id {
+session = &sessions[i]
+break
+}
+}
+if session == nil {
+c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+return
+}
 
-	username, _ := c.Get("username")
-	if session.Username != username.(string) {
-		isAdmin, _ := c.Get("is_admin")
-		if isAdmin != true {
-			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
-			return
-		}
-	}
+username, _ := c.Get("username")
+if session.Username != username.(string) {
+isAdmin, _ := c.Get("is_admin")
+if isAdmin != true {
+c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+return
+}
+}
 
-	// Build the sbatch script
-	script := buildDesktopScript(session)
+script := buildDesktopScript(session)
 
-	// Submit via Slurm
-	client, err := GetSlurmClientForUser(username.(string))
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "slurm client error: " + err.Error()})
-		return
-	}
+client, err := GetSlurmClientForUser(username.(string))
+if err != nil {
+c.JSON(http.StatusInternalServerError, gin.H{"error": "slurm client error: " + err.Error()})
+return
+}
 
-	partition := os.Getenv("DESKTOP_PARTITION")
-	if partition == "" {
-		partition = "compute"
-	}
+var startReq struct {
+Partition string `json:"partition"`
+}
+_ = c.ShouldBindJSON(&startReq)
 
-	jobID, err := client.SubmitJob(slurm.JobSubmitParams{
-		Name:      "desktop-" + session.Name,
-		Partition: partition,
-		Script:    script,
-		Nodes:     1,
-		CPUs:      2,
-		Memory:    4, // 4GB
-		TimeLimit: 8, // 8 hours
-		WorkDir:   fmt.Sprintf("/home/%s", username.(string)),
-		Output:    fmt.Sprintf("/home/%s/.desktop/%d.out", username.(string), session.ID),
-		Error:     fmt.Sprintf("/home/%s/.desktop/%d.err", username.(string), session.ID),
-		Username:  username.(string),
-	})
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "submit job failed: " + err.Error()})
-		return
-	}
+partition := startReq.Partition
+if partition == "" {
+partition = session.Partition
+}
+if partition == "" {
+partition = os.Getenv("DESKTOP_PARTITION")
+}
+if partition == "" {
+partition = "compute"
+}
+session.Partition = partition
 
-	session.SlurmJobID = jobID
-	session.Status = "pending"
-	if err := saveDesktopSessions(sessions); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
+timeLimit := session.Duration
+if timeLimit == 0 {
+timeLimit = 8
+}
 
-	// Start background polling
-	go pollDesktopJob(session.ID, jobID, username.(string))
+homeBase := os.Getenv("HOME_BASE_PATH")
+if homeBase == "" {
+homeBase = "/home"
+}
 
-	c.JSON(http.StatusOK, gin.H{"data": session, "jobId": jobID})
+cpus, memory := 2, 4
+switch session.NodeType {
+case "small":
+	cpus, memory = 1, 2
+case "medium":
+	cpus, memory = 2, 4
+case "large":
+	cpus, memory = 4, 8
+case "debug":
+	cpus, memory = 1, 2
+case "standard":
+	cpus, memory = 2, 4
+case "high-mem":
+	cpus, memory = 4, 8
+case "gpu":
+	cpus, memory = 4, 8
+}
+
+jobID, err := client.SubmitJob(slurm.JobSubmitParams{
+Name:      "desktop-" + session.Name,
+Partition: partition,
+Script:    script,
+Nodes:     1,
+CPUs:      cpus,
+Memory:    memory,
+TimeLimit: timeLimit,
+WorkDir:   fmt.Sprintf("%s/%s", homeBase, username.(string)),
+Output:    fmt.Sprintf("%s/%s/.desktop/%d.out", homeBase, username.(string), session.ID),
+Error:     fmt.Sprintf("%s/%s/.desktop/%d.err", homeBase, username.(string), session.ID),
+Username:  username.(string),
+})
+if err != nil {
+c.JSON(http.StatusInternalServerError, gin.H{"error": "submit job failed: " + err.Error()})
+return
+}
+
+session.SlurmJobID = jobID
+session.Status = "pending"
+if err := saveDesktopSessions(sessions); err != nil {
+c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+return
+}
+
+go pollDesktopJob(session.ID, jobID, username.(string))
+
+c.JSON(http.StatusOK, gin.H{"data": session, "jobId": jobID})
 }
 
 // GET /api/desktop/sessions/:id/status
 func GetDesktopSessionStatus(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := strconv.Atoi(idStr)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
-		return
-	}
+idStr := c.Param("id")
+id, err := strconv.Atoi(idStr)
+if err != nil {
+c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+return
+}
 
-	sessions, err := loadDesktopSessions()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
+sessions, err := loadDesktopSessions()
+if err != nil {
+c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+return
+}
 
-	for _, s := range sessions {
-		if s.ID == id {
-			c.JSON(http.StatusOK, gin.H{"data": s})
-			return
-		}
-	}
-	c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+for _, s := range sessions {
+if s.ID == id {
+c.JSON(http.StatusOK, gin.H{"data": s})
+return
+}
+}
+c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
 }
 
 // POST /api/desktop/sessions/:id/stop
 func StopDesktopSession(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := strconv.Atoi(idStr)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
-		return
-	}
+idStr := c.Param("id")
+id, err := strconv.Atoi(idStr)
+if err != nil {
+c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+return
+}
 
-	sessions, err := loadDesktopSessions()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
+sessions, err := loadDesktopSessions()
+if err != nil {
+c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+return
+}
 
-	for i := range sessions {
-		if sessions[i].ID == id {
-			if sessions[i].SlurmJobID > 0 {
-				username, _ := c.Get("username")
-				client, err := GetSlurmClientForUser(username.(string))
-				if err == nil {
-					_ = client.CancelJob(sessions[i].SlurmJobID)
-				}
-			}
-			sessions[i].Status = "stopped"
-			sessions[i].SlurmJobID = 0
-			sessions[i].VNCPort = 0
-			sessions[i].Password = ""
-			_ = saveDesktopSessions(sessions)
-			c.JSON(http.StatusOK, gin.H{"data": sessions[i]})
-			return
-		}
-	}
-	c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+for i := range sessions {
+if sessions[i].ID == id {
+if sessions[i].SlurmJobID > 0 {
+username, _ := c.Get("username")
+client, err := GetSlurmClientForUser(username.(string))
+if err == nil {
+_ = client.CancelJob(sessions[i].SlurmJobID)
+}
+}
+sessions[i].Status = "stopped"
+sessions[i].SlurmJobID = 0
+sessions[i].VNCPort = 0
+_ = saveDesktopSessions(sessions)
+c.JSON(http.StatusOK, gin.H{"data": sessions[i]})
+return
+}
+}
+c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
 }
 
 // DELETE /api/desktop/sessions/:id
 func DeleteDesktopSession(c *gin.Context) {
-	idStr := c.Param("id")
-	sessions, err := loadDesktopSessions()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	filtered := []DesktopSession{}
-	for _, s := range sessions {
-		if fmt.Sprintf("%d", s.ID) != idStr {
-			filtered = append(filtered, s)
-		}
-	}
-	if err := saveDesktopSessions(filtered); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"message": "deleted"})
+idStr := c.Param("id")
+sessions, err := loadDesktopSessions()
+if err != nil {
+c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+return
+}
+filtered := []DesktopSession{}
+for _, s := range sessions {
+if fmt.Sprintf("%d", s.ID) != idStr {
+filtered = append(filtered, s)
+}
+}
+if err := saveDesktopSessions(filtered); err != nil {
+c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+return
+}
+c.JSON(http.StatusOK, gin.H{"message": "deleted"})
 }
 
-// buildDesktopScript generates the sbatch script to launch a desktop container
+// buildDesktopScript 生成 sbatch 脚本：TurboVNC + xfce4
+// 网页通过 noVNC WebSocket 代理访问，客户端通过 SSH 隧道直连 VNC
 func buildDesktopScript(session *DesktopSession) string {
-	// VNC display number based on session ID to avoid conflicts
 	display := 10 + session.ID
-	vncPort := 5900 + display
+	vncPort := 5900 + display // 5911, 5912, ...
 
-	// Container image: session-specific > env default > fallback path
-	image := session.Image
-	if image == "" {
-		image = os.Getenv("DESKTOP_IMAGE")
+	resolution := session.Resolution
+	if resolution == "" {
+		resolution = "1920x1080"
 	}
-	if image == "" {
-		image = "/opt/containers/desktop.sif"
+	desktopType := session.Type
+	if desktopType == "" {
+		desktopType = "xfce"
 	}
 
-	statusDir := fmt.Sprintf("/home/%s/.desktop", session.Username)
+	homeBase := os.Getenv("HOME_BASE_PATH")
+	if homeBase == "" {
+		homeBase = "/home"
+	}
+	statusDir := fmt.Sprintf("%s/%s/.desktop", homeBase, session.Username)
 	statusFile := fmt.Sprintf("%s/%d.status", statusDir, session.ID)
 
-	var scriptLines []string
-	scriptLines = append(scriptLines, "#!/bin/bash")
-	scriptLines = append(scriptLines, fmt.Sprintf("mkdir -p %s", statusDir))
+	var b strings.Builder
+	b.WriteString("#!/bin/bash\n")
+	b.WriteString(fmt.Sprintf("mkdir -p %s\n\n", statusDir))
+	// 补全环境变量，Slurm 有时不传 HOME
+	b.WriteString(fmt.Sprintf("export HOME=${HOME:-%s/%s}\n", homeBase, session.Username))
+	b.WriteString("export PATH=/opt/TurboVNC/bin:/usr/bin:/usr/local/bin:/bin:/usr/sbin:/sbin:$PATH\n\n")
 
-	// Write initial status
-	scriptLines = append(scriptLines, fmt.Sprintf(`echo "status=starting" > %s`, statusFile))
-	scriptLines = append(scriptLines, fmt.Sprintf(`echo "node=$(hostname)" >> %s`, statusFile))
-	scriptLines = append(scriptLines, fmt.Sprintf(`echo "vnc_port=%d" >> %s`, vncPort, statusFile))
+	// ── xstartup：启动 xfce4 桌面 ──
+	b.WriteString("mkdir -p ~/.vnc\n")
+	b.WriteString("cat > ~/.vnc/xstartup << 'XSTARTUP'\n")
+	b.WriteString("#!/bin/bash\n")
+	b.WriteString("unset SESSION_MANAGER\n")
+	b.WriteString("unset DBUS_SESSION_BUS_ADDRESS\n")
+	b.WriteString("export XDG_SESSION_TYPE=x11\n")
+	switch desktopType {
+	case "xfce", "xfce4":
+		b.WriteString("exec startxfce4\n")
+	case "gnome":
+		b.WriteString("exec gnome-session\n")
+	case "kde":
+		b.WriteString("exec startkde\n")
+	default:
+		b.WriteString("exec startxfce4\n")
+	}
+	b.WriteString("XSTARTUP\n")
+	b.WriteString("chmod +x ~/.vnc/xstartup\n\n")
 
-	// Check if Singularity/Apptainer is available
-	scriptLines = append(scriptLines, ``)
-	scriptLines = append(scriptLines, `# Detect container runtime`)
-	scriptLines = append(scriptLines, `if command -v apptainer &>/dev/null; then CONTAINER_CMD=apptainer`)
-	scriptLines = append(scriptLines, `elif command -v singularity &>/dev/null; then CONTAINER_CMD=singularity`)
-	scriptLines = append(scriptLines, `else CONTAINER_CMD=""; fi`)
-	scriptLines = append(scriptLines, ``)
+	// ── 生成 VNC 密码（随机8位）──
+	b.WriteString("VNC_PASS=$(openssl rand -base64 6 | tr -d '/+=' | head -c 8)\n")
+	b.WriteString("echo \"$VNC_PASS\" | vncpasswd -f > ~/.vnc/passwd\n")
+	b.WriteString("chmod 600 ~/.vnc/passwd\n\n")
 
-	// Generate VNC password
-	scriptLines = append(scriptLines, `VNC_PASS=$(openssl rand -base64 8 | tr -d '/+=' | head -c 8)`)
-	scriptLines = append(scriptLines, fmt.Sprintf(`echo "password=$VNC_PASS" >> %s`, statusFile))
+	// ── 状态文件 ──
+	b.WriteString(fmt.Sprintf("echo 'status=starting' > %s\n", statusFile))
+	b.WriteString(fmt.Sprintf("echo \"node=$(hostname)\" >> %s\n", statusFile))
+	b.WriteString(fmt.Sprintf("echo \"vnc_port=%d\" >> %s\n", vncPort, statusFile))
+	b.WriteString(fmt.Sprintf("echo \"display=%d\" >> %s\n", display, statusFile))
+	b.WriteString(fmt.Sprintf("echo \"password=$VNC_PASS\" >> %s\n", statusFile))
 
-	// Start VNC server
-	scriptLines = append(scriptLines, ``)
-	scriptLines = append(scriptLines, fmt.Sprintf(`if [ -n "$CONTAINER_CMD" ] && [ -f "%s" ]; then`, image))
-	scriptLines = append(scriptLines, fmt.Sprintf(`  # Launch via container`))
-	scriptLines = append(scriptLines, fmt.Sprintf(`  $CONTAINER_CMD exec --bind /home %s \`, image))
-	scriptLines = append(scriptLines, fmt.Sprintf(`    vncserver :%d -geometry 1920x1080 -depth 24 -SecurityTypes VncAuth -PasswordFile /tmp/vnc%d.pass`, display, display))
-	scriptLines = append(scriptLines, `else`)
-	scriptLines = append(scriptLines, `  # Fallback: use system VNC if available`)
-	scriptLines = append(scriptLines, fmt.Sprintf(`  if command -v vncserver &>/dev/null; then`))
-	scriptLines = append(scriptLines, fmt.Sprintf(`    mkdir -p ~/.vnc`))
-	scriptLines = append(scriptLines, fmt.Sprintf(`    echo "$VNC_PASS" | vncpasswd -f > ~/.vnc/passwd`))
-	scriptLines = append(scriptLines, fmt.Sprintf(`    chmod 600 ~/.vnc/passwd`))
-	scriptLines = append(scriptLines, fmt.Sprintf(`    vncserver :%d -geometry 1920x1080 -depth 24`, display))
-	scriptLines = append(scriptLines, `  fi`)
-	scriptLines = append(scriptLines, `fi`)
-	scriptLines = append(scriptLines, ``)
-	scriptLines = append(scriptLines, fmt.Sprintf(`echo "status=running" >> %s`, statusFile))
-	scriptLines = append(scriptLines, ``)
-	scriptLines = append(scriptLines, `# Keep job alive`)
-	scriptLines = append(scriptLines, `echo "Desktop started, waiting..."`)
-	scriptLines = append(scriptLines, `wait`)
+	// ── 清理可能残留的旧 VNC server ──
+	b.WriteString(fmt.Sprintf("vncserver -kill :%d 2>/dev/null || true\n", display))
+	b.WriteString(fmt.Sprintf("rm -f /tmp/.X%d-lock /tmp/.X11-unix/X%d 2>/dev/null || true\n\n", display, display))
 
-	return strings.Join(scriptLines, "\n")
+	// ── 启动 TurboVNC server（后台运行）──
+	b.WriteString(fmt.Sprintf("vncserver :%d \\\n", display))
+	b.WriteString(fmt.Sprintf("  -geometry %s \\\n", resolution))
+	b.WriteString("  -depth 24 \\\n")
+	b.WriteString("  -rfbauth ~/.vnc/passwd \\\n")
+	b.WriteString("  -localhost \\\n")
+	b.WriteString("  -alwaysshared \\\n")
+	b.WriteString(fmt.Sprintf("  -rfbport %d\n", vncPort))
+	b.WriteString("VNC_EXIT=$?\n")
+	b.WriteString("if [ $VNC_EXIT -ne 0 ]; then\n")
+	b.WriteString(fmt.Sprintf("  echo 'status=failed' >> %s\n", statusFile))
+	b.WriteString("  echo '[desktop] vncserver failed, exit code: '$VNC_EXIT >&2\n")
+	b.WriteString("  exit 1\n")
+	b.WriteString("fi\n\n")
+
+	// 等待 VNC 端口就绪（最多15秒）
+	b.WriteString(fmt.Sprintf("for i in $(seq 1 15); do\n"))
+	b.WriteString(fmt.Sprintf("  ss -tlnp 2>/dev/null | grep -q ':%d' && break\n", vncPort))
+	b.WriteString("  sleep 1\n")
+	b.WriteString("done\n\n")
+
+	b.WriteString(fmt.Sprintf("echo 'status=running' >> %s\n\n", statusFile))
+
+	// 保持 job 运行到时间到期，每30秒检查 VNC 是否还在
+	durationSec := session.Duration * 3600
+	if durationSec <= 0 {
+		durationSec = 4 * 3600
+	}
+	b.WriteString(fmt.Sprintf("END_TIME=$(($(date +%%s) + %d))\n", durationSec))
+	b.WriteString("while [ $(date +%s) -lt $END_TIME ]; do\n")
+	b.WriteString(fmt.Sprintf("  ss -tlnp 2>/dev/null | grep -q ':%d' || break\n", vncPort))
+	b.WriteString("  sleep 30\n")
+	b.WriteString("done\n\n")
+
+	b.WriteString(fmt.Sprintf("vncserver -kill :%d 2>/dev/null || true\n", display))
+	b.WriteString(fmt.Sprintf("echo 'status=stopped' >> %s\n", statusFile))
+
+	return b.String()
 }
 
-// pollDesktopJob polls Slurm job status and updates session when running
+// pollDesktopJob 轮询 Slurm 作业状态：
+// 阶段1：等待作业进入 RUNNING，更新 session 地址和端口
+// 阶段2：持续监控，作业结束后自动将 session 标记为 stopped
 func pollDesktopJob(sessionID int, jobID int64, username string) {
 	client, err := GetSlurmClientForUser(username)
 	if err != nil {
 		return
 	}
 
-	statusFile := fmt.Sprintf("/home/%s/.desktop/%d.status", username, sessionID)
+	homeBase := os.Getenv("HOME_BASE_PATH")
+	if homeBase == "" {
+		homeBase = "/home"
+	}
+	statusFile := fmt.Sprintf("%s/%s/.desktop/%d.status", homeBase, username, sessionID)
 
-	for i := 0; i < 60; i++ { // poll up to 5 minutes
+	setStatus := func(status string) {
+		sessions, _ := loadDesktopSessions()
+		for i := range sessions {
+			if sessions[i].ID == sessionID {
+				sessions[i].Status = status
+				if status == "stopped" || status == "failed" {
+					sessions[i].SlurmJobID = 0
+					sessions[i].VNCPort = 0
+				}
+				_ = saveDesktopSessions(sessions)
+				break
+			}
+		}
+	}
+
+	// 阶段1：等待 RUNNING，最多等 5 分钟
+	running := false
+	for i := 0; i < 60; i++ {
 		time.Sleep(5 * time.Second)
 
 		job, err := client.GetJob(jobID)
@@ -390,30 +488,22 @@ func pollDesktopJob(sessionID int, jobID int64, username string) {
 			continue
 		}
 
-		state := job.GetJobState()
-		if state == "FAILED" || state == "CANCELLED" || state == "TIMEOUT" {
-			sessions, _ := loadDesktopSessions()
-			for i := range sessions {
-				if sessions[i].ID == sessionID {
-					sessions[i].Status = "failed"
-					_ = saveDesktopSessions(sessions)
-					break
-				}
+		state := strings.ToUpper(strings.TrimSpace(job.GetJobState()))
+		if state == "FAILED" || state == "CANCELLED" || state == "TIMEOUT" || state == "COMPLETED" {
+			// 检查状态文件，判断是 failed 还是 stopped
+			data, _ := os.ReadFile(statusFile)
+			if strings.Contains(string(data), "status=failed") {
+				setStatus("failed")
+			} else {
+				setStatus("failed") // 还没到 running 就结束了，算失败
 			}
 			return
 		}
 
-		if state == "RUNNING" {
-			// Try to read status file written by the job script
-			node := job.BatchHost
-			if node == "" {
-				node = job.Nodes
-			}
+		if strings.HasPrefix(state, "RUNNING") {
+			node := job.Nodes
+			rdpPort := 3389 + sessionID
 
-			vncPort := 5910 + sessionID
-			password := ""
-
-			// Try to read the status file
 			data, err := os.ReadFile(statusFile)
 			if err == nil {
 				for _, line := range strings.Split(string(data), "\n") {
@@ -421,16 +511,14 @@ func pollDesktopJob(sessionID int, jobID int64, username string) {
 					if len(parts) != 2 {
 						continue
 					}
-					switch parts[0] {
+					switch strings.TrimSpace(parts[0]) {
 					case "vnc_port":
 						if p, err := strconv.Atoi(strings.TrimSpace(parts[1])); err == nil {
-							vncPort = p
+							rdpPort = p
 						}
-					case "password":
-						password = strings.TrimSpace(parts[1])
 					case "node":
-						if parts[1] != "" {
-							node = strings.TrimSpace(parts[1])
+						if v := strings.TrimSpace(parts[1]); v != "" {
+							node = v
 						}
 					}
 				}
@@ -441,13 +529,189 @@ func pollDesktopJob(sessionID int, jobID int64, username string) {
 				if sessions[i].ID == sessionID {
 					sessions[i].Status = "running"
 					sessions[i].Address = node
-					sessions[i].VNCPort = vncPort
-					sessions[i].Password = password
+					sessions[i].VNCPort = rdpPort
 					_ = saveDesktopSessions(sessions)
 					break
 				}
 			}
-			return
+			running = true
+			break
 		}
 	}
+
+	if !running {
+		setStatus("failed")
+		return
+	}
+
+	// 阶段2：持续监控，直到作业结束
+	// 连续查询失败超过 3 次才认为作业结束，避免网络抖动误判
+	failCount := 0
+	for {
+		time.Sleep(10 * time.Second)
+
+		job, err := client.GetJob(jobID)
+		if err != nil {
+			failCount++
+			if failCount >= 3 {
+				// 查不到作业，尝试从状态文件判断
+				data, ferr := os.ReadFile(statusFile)
+				if ferr == nil && strings.Contains(string(data), "status=stopped") {
+					setStatus("stopped")
+				} else {
+					setStatus("stopped") // 默认标记 stopped，不标 failed
+				}
+				return
+			}
+			continue
+		}
+		failCount = 0
+
+		state := strings.ToUpper(strings.TrimSpace(job.GetJobState()))
+		switch {
+		case state == "FAILED" || state == "TIMEOUT" || state == "NODE_FAIL" || state == "PREEMPTED":
+			setStatus("failed")
+			return
+		case state == "CANCELLED" || state == "COMPLETED":
+			setStatus("stopped")
+			return
+		case strings.HasPrefix(state, "RUNNING"):
+			// 继续监控，同时检查状态文件是否有 stopped 标记
+			data, ferr := os.ReadFile(statusFile)
+			if ferr == nil && strings.Contains(string(data), "status=stopped") {
+				// job 脚本自己写了 stopped，取消 job
+				_ = client.CancelJob(jobID)
+				setStatus("stopped")
+				return
+			}
+		case state == "COMPLETING":
+			// 正在收尾
+		}
+	}
+}
+
+// GET /api/desktop/sessions/:id/logs?type=out|err&lines=100
+func GetDesktopSessionLogs(c *gin.Context) {
+idStr := c.Param("id")
+id, err := strconv.Atoi(idStr)
+if err != nil {
+c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+return
+}
+
+sessions, err := loadDesktopSessions()
+if err != nil {
+c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+return
+}
+
+var session *DesktopSession
+for i := range sessions {
+if sessions[i].ID == id {
+session = &sessions[i]
+break
+}
+}
+if session == nil {
+c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+return
+}
+
+username, _ := c.Get("username")
+isAdmin, _ := c.Get("is_admin")
+if session.Username != username.(string) && isAdmin != true {
+c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+return
+}
+
+logType := c.DefaultQuery("type", "out")
+linesStr := c.DefaultQuery("lines", "100")
+maxLines, _ := strconv.Atoi(linesStr)
+if maxLines <= 0 || maxLines > 500 {
+maxLines = 100
+}
+
+homeBase := os.Getenv("HOME_BASE_PATH")
+if homeBase == "" {
+homeBase = "/home"
+}
+logFile := fmt.Sprintf("%s/%s/.desktop/%d.%s", homeBase, session.Username, id, logType)
+data, err := os.ReadFile(logFile)
+if err != nil {
+if os.IsNotExist(err) {
+c.JSON(http.StatusOK, gin.H{"lines": []string{}, "file": logFile, "exists": false})
+return
+}
+c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+return
+}
+
+allLines := strings.Split(string(data), "\n")
+if len(allLines) > maxLines {
+allLines = allLines[len(allLines)-maxLines:]
+}
+
+c.JSON(http.StatusOK, gin.H{
+"lines":  allLines,
+"file":   logFile,
+"exists": true,
+"total":  len(allLines),
+})
+}
+
+// GET /api/desktop/sessions/:id/script
+func GetDesktopScript(c *gin.Context) {
+idStr := c.Param("id")
+id, err := strconv.Atoi(idStr)
+if err != nil {
+c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+return
+}
+
+sessions, err := loadDesktopSessions()
+if err != nil {
+c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+return
+}
+
+var session *DesktopSession
+for i := range sessions {
+if sessions[i].ID == id {
+session = &sessions[i]
+break
+}
+}
+if session == nil {
+c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+return
+}
+
+username, _ := c.Get("username")
+isAdmin, _ := c.Get("is_admin")
+if session.Username != username.(string) && isAdmin != true {
+c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+return
+}
+
+script := buildDesktopScript(session)
+
+homeBase := os.Getenv("HOME_BASE_PATH")
+if homeBase == "" {
+homeBase = "/home"
+}
+partition := session.Partition
+if partition == "" {
+partition = os.Getenv("DESKTOP_PARTITION")
+}
+if partition == "" {
+partition = "compute"
+}
+
+c.JSON(http.StatusOK, gin.H{
+"script":    script,
+"partition": partition,
+"workdir":   fmt.Sprintf("%s/%s", homeBase, session.Username),
+"output":    fmt.Sprintf("%s/%s/.desktop/%d.out", homeBase, session.Username, id),
+"error":     fmt.Sprintf("%s/%s/.desktop/%d.err", homeBase, session.Username, id),
+})
 }

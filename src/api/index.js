@@ -411,6 +411,37 @@ export const usageAPI = {
         return response.data;
     }
 };
+// 远程桌面 API
+export const desktopAPI = {
+    getSessions: async () => {
+        const response = await axios.get('/desktop/sessions');
+        return response.data.data;
+    },
+    createSession: async (data) => {
+        const response = await axios.post('/desktop/sessions', data);
+        return response.data.data;
+    },
+    startSession: async (id, partition) => {
+        const response = await axios.post(`/desktop/sessions/${id}/start`, partition ? { partition } : {});
+        return response.data;
+    },
+    stopSession: async (id) => {
+        const response = await axios.post(`/desktop/sessions/${id}/stop`);
+        return response.data;
+    },
+    getStatus: async (id) => {
+        const response = await axios.get(`/desktop/sessions/${id}/status`);
+        return response.data.data;
+    },
+    deleteSession: async (id) => {
+        const response = await axios.delete(`/desktop/sessions/${id}`);
+        return response.data;
+    },
+    getVncWsUrl: (id) => {
+        const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+        return `${proto}://${location.host}/api/desktop/sessions/${id}/vnc-ws`;
+    },
+};
 export default {
     auth: authAPI,
     user: userAPI,
@@ -420,5 +451,6 @@ export default {
     audit: auditAPI,
     slurmAccount: slurmAccountAPI,
     slurmUser: slurmUserAPI,
-    usage: usageAPI
+    usage: usageAPI,
+    desktop: desktopAPI
 };

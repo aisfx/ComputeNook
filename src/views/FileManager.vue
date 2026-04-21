@@ -24,6 +24,10 @@
         </div>
       </div>
       <div class="fm-actions">
+        <button class="fm-btn fm-btn-mount" @click="launchMount" title="通过 HPC 客户端挂载为本地盘符">
+          <svg viewBox="0 0 24 24"><path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-5 3v2h2v2h-2v2h-2v-2H11v-2h2V9h2z"/></svg>
+          挂载到本地
+        </button>
         <button class="fm-btn fm-btn-primary" @click="showUploadDialog">
           <svg viewBox="0 0 24 24"><path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z"/></svg>
           上传
@@ -435,8 +439,25 @@ const showCreateFileDialog = async () => {
   } catch (e: any) { notification.error(e.message) }
 }
 
-const showUploadDialog = () => {
-  const input = document.createElement('input')
+// 通过 hpcc:// 拉起客户端挂载 WebDAV 为本地盘符/挂载点
+const launchMount = () => {
+  const t = localStorage.getItem('token') || sessionStorage.getItem('token') || ''
+  if (!t) { notification.error('请先登录'); return }
+  // 根据系统给出默认挂载点提示
+  const ua = navigator.userAgent
+  let defaultMount = '/mnt/hpc'
+  if (ua.includes('Windows')) defaultMount = 'Z:'
+  else if (ua.includes('Mac')) defaultMount = '/Volumes/HPC'
+
+  const mountPoint = prompt(`挂载点（Windows: Z:，macOS: /Volumes/HPC，Linux: /mnt/hpc）`, defaultMount)
+  if (mountPoint === null) return // 用户取消
+
+  const uri = `hpcc://mount?server=${encodeURIComponent(location.origin)}&token=${encodeURIComponent(t)}&mountpoint=${encodeURIComponent(mountPoint)}&port=18080`
+  window.location.href = uri
+  notification.success(`正在启动挂载，挂载点: ${mountPoint}`)
+}
+
+const showUploadDialog = () => {  const input = document.createElement('input')
   input.type = 'file'; input.multiple = true
   input.onchange = async (e: any) => {
     for (const file of e.target.files) {
@@ -514,6 +535,9 @@ onUnmounted(() => { document.removeEventListener('click', handleGlobalClick) })
 
 .fm-btn-secondary { background: #fff; color: #5b6ef5; border: 1.5px solid #5b6ef5; }
 .fm-btn-secondary:hover { background: #f0f1ff; }
+
+.fm-btn-mount { background: #fff; color: #059669; border: 1.5px solid #059669; }
+.fm-btn-mount:hover { background: #ecfdf5; }
 
 .fm-path-wrap {
   display: flex; align-items: center; gap: 0.5rem;

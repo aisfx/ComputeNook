@@ -44,6 +44,8 @@
             <span class="nav-item-label">远程桌面</span>
           </a>
 
+          <!-- 客户端下载入口已移至远程桌面和 WebShell 页面内 -->
+
           <!-- 作业管理 expandable -->
           <a
             :class="['nav-item', { active: currentView === 'jobs' }]"
@@ -118,6 +120,7 @@
           <!-- 报警铃铛 -->
           <AlertNotification :show-bell="true" />
           <button v-if="isAdmin" class="btn-admin" @click="goToAdmin" title="管理后台">⚙️ 管理后台</button>
+          <button class="btn-admin" @click="currentView = 'download'" title="下载客户端" style="background:#10b981">⬇️ 客户端</button>
           <button class="icon-btn" @click="goToProfile" title="个人信息">
             <span>👤</span>
           </button>
@@ -134,10 +137,11 @@
         <Monitoring v-else-if="currentView === 'monitoring' && isAdmin" :active-tab="monitoringTab" @tab-change="monitoringTab = $event" />
         <RackView v-else-if="currentView === 'rack' && isAdmin" />
         <WebShell v-else-if="currentView === 'shell'" />
-        <Desktop v-else-if="currentView === 'desktop'" />
+        <Desktop v-else-if="currentView === 'desktop'" @open-download="currentView = 'download'" />
         <FileManager ref="fileManagerRef" v-else-if="currentView === 'files'" />
         <Reports v-else-if="currentView === 'reports'" />
         <Profile v-else-if="currentView === 'profile'" />
+        <Download v-else-if="currentView === 'download'" />
         <AdminUsers v-else-if="currentView === 'admin' && adminTab === 'users' && isAdmin" />
         <AdminGroups v-else-if="currentView === 'admin' && adminTab === 'groups' && isAdmin" />
         <AdminQoS v-else-if="currentView === 'admin' && adminTab === 'qos' && isAdmin" />
@@ -167,6 +171,7 @@ import Dashboard from './Dashboard.vue'
 import JobManagement from './JobManagement.vue'
 import WebShell from './WebShell.vue'
 import Desktop from './Desktop.vue'
+import Download from './Download.vue'
 import FileManager from './FileManager.vue'
 import Reports from './Reports.vue'
 import AdminUsers from './AdminUsers.vue'

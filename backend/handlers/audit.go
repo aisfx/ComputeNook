@@ -2,7 +2,10 @@ package handlers
 
 import (
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -128,4 +131,151 @@ func ExportAuditLogs(c *gin.Context) {
 		c.Writer.WriteString("\"" + log.ErrorMsg + "\",")
 		c.Writer.WriteString(strconv.FormatInt(log.Duration, 10) + "\n")
 	}
+}
+
+// GetSSHTunnelLogs 获取 SSH 隧道行为日志（管理员）
+// GET /api/audit/ssh-logs?username=xxx&date=2006-01-02
+func GetSSHTunnelLogs(c *gin.Context) {
+	username := c.Query("username")
+	date := c.Query("date") // 可选，格式 2006-01-02
+
+	baseDir := "logs/ssh_tunnel"
+	type fileInfo struct {
+		Username string `json:"username"`
+		File     string `json:"file"`
+		Path     string `json:"path"`
+		Size     int64  `json:"size"`
+		ModTime  string `json:"mod_time"`
+	}
+
+	var results []fileInfo
+
+	// 遍历用户目录
+	userDirs, err := os.ReadDir(baseDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			c.JSON(http.StatusOK, gin.H{"data": []fileInfo{}})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	for _, ud := range userDirs {
+		if !ud.IsDir() {
+			continue
+		}
+		if username != "" && ud.Name() != username {
+			continue
+		}
+		userDir := filepath.Join(baseDir, ud.Name())
+		files, _ := os.ReadDir(userDir)
+		for _, f := range files {
+			if f.IsDir() || filepath.Ext(f.Name()) != ".log" {
+				continue
+			}
+			if date != "" && !strings.HasPrefix(f.Name(), strings.ReplaceAll(date, "-", "")) {
+				continue
+			}
+			info, _ := f.Info()
+			results = append(results, fileInfo{
+				Username: ud.Name(),
+				File:     f.Name(),
+				Path:     filepath.Join(userDir, f.Name()),
+				Size:     info.Size(),
+				ModTime:  info.ModTime().Format("2006-01-02T15:04:05"),
+			})
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": results, "total": len(results)})
+}
+
+// DownloadSSHTunnelLog 下载 SSH 隧道日志文件
+// GET /api/audit/ssh-logs/download?username=xxx&file=xxx.log
+func DownloadSSHTunnelLog(c *gin.Context) {
+	username := c.Query("username")
+	file := c.Query("file")
+	if username == "" || file == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "username and file required"})
+		return
+	}
+	file = filepath.Base(file)
+	logPath := filepath.Join("logs", "ssh_tunnel", username, file)
+	if _, err := os.Stat(logPath); os.IsNotExist(err) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "file not found"})
+		return
+	}
+
+	// 读取并清洗非 UTF-8 / 非可打印字节，避免前端乱码
+	raw, err := os.ReadFile(logPath)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	clean := sanitizeLogBytes(raw)
+
+	c.Header("Content-Disposition", "attachment; filename="+file)
+	c.Data(http.StatusOK, "text/plain; charset=utf-8", []byte(clean))
+}
+
+// sanitizeLogBytes 清洗日志字节：保留可打印 ASCII、UTF-8 多字节字符、换行/制表符，
+// 将无法解码的字节替换为 <0xXX> 占位符
+func sanitizeLogBytes(data []byte) string {
+	var b strings.Builder
+	i := 0
+	for i < len(data) {
+		// 换行、回车、制表符直接保留
+		if data[i] == '\n' || data[i] == '\r' || data[i] == '\t' {
+			b.WriteByte(data[i])
+			i++
+			continue
+		}
+		// 可打印 ASCII
+		if data[i] >= 0x20 && data[i] < 0x7f {
+			b.WriteByte(data[i])
+			i++
+			continue
+		}
+		// 尝试解码 UTF-8 多字节字符
+		if data[i] >= 0x80 {
+			r, size := decodeUTF8(data[i:])
+			if r != 0xFFFD && size > 1 {
+				b.WriteRune(r)
+				i += size
+				continue
+			}
+		}
+		// 无法识别的字节，跳过（不写入，避免乱码）
+		i++
+	}
+	return b.String()
+}
+
+func decodeUTF8(b []byte) (rune, int) {
+	if len(b) == 0 {
+		return 0xFFFD, 1
+	}
+	// 2字节
+	if b[0]&0xE0 == 0xC0 && len(b) >= 2 && b[1]&0xC0 == 0x80 {
+		r := rune(b[0]&0x1F)<<6 | rune(b[1]&0x3F)
+		if r >= 0x80 {
+			return r, 2
+		}
+	}
+	// 3字节
+	if b[0]&0xF0 == 0xE0 && len(b) >= 3 && b[1]&0xC0 == 0x80 && b[2]&0xC0 == 0x80 {
+		r := rune(b[0]&0x0F)<<12 | rune(b[1]&0x3F)<<6 | rune(b[2]&0x3F)
+		if r >= 0x800 {
+			return r, 3
+		}
+	}
+	// 4字节
+	if b[0]&0xF8 == 0xF0 && len(b) >= 4 && b[1]&0xC0 == 0x80 && b[2]&0xC0 == 0x80 && b[3]&0xC0 == 0x80 {
+		r := rune(b[0]&0x07)<<18 | rune(b[1]&0x3F)<<12 | rune(b[2]&0x3F)<<6 | rune(b[3]&0x3F)
+		if r >= 0x10000 {
+			return r, 4
+		}
+	}
+	return 0xFFFD, 1
 }

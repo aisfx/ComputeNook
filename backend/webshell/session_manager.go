@@ -231,7 +231,7 @@ func (s *WebShellSession) Start() error {
 // handleInput 处理输入
 func (s *WebShellSession) handleInput(stdin io.WriteCloser) {
 	defer stdin.Close()
-	
+
 	for {
 		select {
 		case data := <-s.input:
@@ -239,8 +239,8 @@ func (s *WebShellSession) handleInput(stdin io.WriteCloser) {
 				log.Printf("Failed to write to stdin: %v", err)
 				return
 			}
-			// 记录用户输入
-			s.logger.LogCommand(string(data))
+			// 解析并记录用户命令（按回车识别完整命令）
+			s.logger.LogInput(data)
 		case <-s.done:
 			return
 		}

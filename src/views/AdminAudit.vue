@@ -12,7 +12,14 @@
       </div>
     </div>
 
+    <!-- 标签页切换 -->
+    <div class="tab-bar">
+      <button :class="['tab-btn', { active: activeTab === 'audit' }]" @click="activeTab = 'audit'">📋 操作审计</button>
+      <button :class="['tab-btn', { active: activeTab === 'ssh' }]" @click="activeTab = 'ssh'; loadSSHLogs()">🔐 SSH 行为日志</button>
+    </div>
+
     <!-- 统计卡片 -->
+    <div v-if="activeTab === 'audit'">
     <div v-if="showStats" class="stats-section">
       <div class="stats-cards">
         <div class="stat-card">
@@ -162,8 +169,60 @@
         <span class="total-count">共 {{ logs.length }} 条记录</span>
       </div>
     </div>
+    </div> <!-- end audit tab -->
+
+    <!-- SSH 行为日志面板 -->
+    <div v-if="activeTab === 'ssh'" class="ssh-logs-panel">
+      <div class="filters-bar" style="margin-bottom:1rem">
+        <input v-model="sshFilter.username" placeholder="🔍 用户名..." class="filter-input" @input="loadSSHLogs" />
+        <input v-model="sshFilter.date" type="date" class="filter-input" @change="loadSSHLogs" />
+        <button class="btn-secondary" @click="sshFilter.username=''; sshFilter.date=''; loadSSHLogs()">🔄 重置</button>
+      </div>
+
+      <div v-if="sshLoading" class="loading">加载中...</div>
+      <div v-else-if="sshLogs.length === 0" class="empty-state"><p>暂无 SSH 日志</p></div>
+      <div v-else class="logs-table-container">
+        <table class="logs-table">
+          <thead>
+            <tr>
+              <th>用户</th>
+              <th>文件名</th>
+              <th>大小</th>
+              <th>最后修改</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="item in sshLogs" :key="item.path">
+              <td>{{ item.username }}</td>
+              <td style="font-family:monospace;font-size:0.85rem">{{ item.file }}</td>
+              <td>{{ formatSize(item.size) }}</td>
+              <td>{{ item.mod_time }}</td>
+              <td>
+                <button class="btn-link" @click="viewSSHLog(item)">👁️ 查看</button>
+                <a :href="`/api/audit/ssh-logs/download?username=${item.username}&file=${item.file}`" class="btn-link" style="margin-left:0.5rem">⬇️ 下载</a>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <div class="pagination"><span class="total-count">共 {{ sshLogs.length }} 个日志文件</span></div>
+      </div>
+    </div>
+
   </div>
   <Teleport to="body">
+    <!-- SSH 日志内容查看弹窗 -->
+    <div v-if="showSSHLogModal" class="modal-overlay" @click.self="showSSHLogModal = false">
+      <div class="modal modal-large">
+        <div class="modal-header">
+          <h3>🔐 SSH 行为日志 — {{ sshLogFile?.file }}</h3>
+          <button class="btn-close" @click="showSSHLogModal = false">×</button>
+        </div>
+        <div class="modal-body">
+          <pre class="ssh-log-content">{{ sshLogContent }}</pre>
+        </div>
+      </div>
+    </div>
     <!-- 详情对话框 -->
     <div v-if="showDetailsDialog" class="modal-overlay" @click.self="closeDetails">
       <div class="modal modal-large">
@@ -247,6 +306,51 @@ const stats = ref<any>({})
 const showStats = ref(false)
 const showDetailsDialog = ref(false)
 const selectedLog = ref<any>(null)
+const activeTab = ref<'audit' | 'ssh'>('audit')
+
+// SSH 日志
+const sshLogs = ref<any[]>([])
+const sshLoading = ref(false)
+const sshFilter = ref({ username: '', date: '' })
+const showSSHLogModal = ref(false)
+const sshLogFile = ref<any>(null)
+const sshLogContent = ref('')
+
+const loadSSHLogs = async () => {
+  sshLoading.value = true
+  try {
+    const params: any = {}
+    if (sshFilter.value.username) params.username = sshFilter.value.username
+    if (sshFilter.value.date) params.date = sshFilter.value.date
+    const res = await axios.get('/audit/ssh-logs', { params })
+    sshLogs.value = res.data.data || []
+  } catch (e: any) {
+    notification.error(e.response?.data?.error || e.message, '加载SSH日志失败')
+  } finally {
+    sshLoading.value = false
+  }
+}
+
+const viewSSHLog = async (item: any) => {
+  sshLogFile.value = item
+  sshLogContent.value = '加载中...'
+  showSSHLogModal.value = true
+  try {
+    const res = await axios.get(`/audit/ssh-logs/download`, {
+      params: { username: item.username, file: item.file },
+      responseType: 'text',
+    })
+    sshLogContent.value = res.data
+  } catch (e: any) {
+    sshLogContent.value = '加载失败: ' + (e.response?.data?.error || e.message)
+  }
+}
+
+const formatSize = (bytes: number) => {
+  if (bytes < 1024) return bytes + ' B'
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+  return (bytes / 1024 / 1024).toFixed(1) + ' MB'
+}
 
 // 过滤器
 const filters = ref({
@@ -455,6 +559,45 @@ onMounted(() => {
 <style scoped>
 .audit-logs {
   padding: 2rem;
+}
+
+.tab-bar {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 2px solid #e5e7eb;
+  padding-bottom: 0;
+}
+
+.tab-btn {
+  padding: 0.6rem 1.2rem;
+  border: none;
+  background: none;
+  font-size: 0.95rem;
+  cursor: pointer;
+  color: #6b7280;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  transition: all 0.15s;
+}
+
+.tab-btn.active {
+  color: #667eea;
+  border-bottom-color: #667eea;
+  font-weight: 600;
+}
+
+.ssh-log-content {
+  background: #1e1e1e;
+  color: #d4d4d4;
+  padding: 1rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-family: 'Courier New', monospace;
+  max-height: 500px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 
 .page-header {

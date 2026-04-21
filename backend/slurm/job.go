@@ -613,6 +613,16 @@ func (c *Client) SubmitJob(params JobSubmitParams) (int64, error) {
 	// 不设置输出和错误文件路径，让Slurm使用默认值
 	logger.Info("ℹ Using Slurm default paths for output and error files")
 	
+	// 设置输出和错误文件路径
+	if params.Output != "" {
+		job["standard_output"] = params.Output
+		logger.Info("✓ Standard output: %s", params.Output)
+	}
+	if params.Error != "" {
+		job["standard_error"] = params.Error
+		logger.Info("✓ Standard error: %s", params.Error)
+	}
+	
 	// 根据API版本构建请求体
 	// v0.0.44格式: {"script": "...", "job": {"environment": {...}, ...}}
 	body := map[string]interface{}{

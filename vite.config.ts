@@ -25,6 +25,12 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    emptyOutDir: true
+    emptyOutDir: true,
+    rollupOptions: {
+      external: [],
+    }
+  },
+  optimizeDeps: {
+    include: ['@novnc/novnc/lib/rfb.js']
   }
 })
