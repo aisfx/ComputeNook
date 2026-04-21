@@ -157,6 +157,12 @@
             <div class="connection-info">
               <div class="info-item"><span class="info-label">节点:</span><code>{{ selectedSession?.address }}</code></div>
               <div class="info-item"><span class="info-label">VNC 端口:</span><code>{{ selectedSession?.vncPort }}</code></div>
+              <div class="info-item">
+                <span class="info-label">VNC 密码:</span>
+                <code>{{ showVNCPass ? selectedSession?.vncPassword : '••••••••' }}</code>
+                <button class="btn-eye-small" @click="showVNCPass = !showVNCPass">{{ showVNCPass ? '隐藏' : '显示' }}</button>
+                <button class="btn-eye-small" @click="copyText(selectedSession?.vncPassword)">复制</button>
+              </div>
             </div>
             <div class="connection-methods">
               <div class="method-item">
@@ -238,6 +244,13 @@ const logBodyRef = ref<HTMLElement | null>(null)
 const vncContainer = ref<HTMLElement | null>(null)
 const vncFrame = ref<HTMLIFrameElement | null>(null)
 const vncIframeUrl = ref('')
+const showVNCPass = ref(false)
+
+const copyText = (text: string) => {
+  if (!text) return
+  navigator.clipboard.writeText(text)
+  alert('已复制')
+}
 const scriptInfo = ref({ script: '', partition: '', workdir: '' })
 const pageOrigin = location.origin
 
@@ -389,11 +402,21 @@ const openVNCInPage = async () => {
   if (!selectedSession.value) return
   const token = localStorage.getItem('token') || sessionStorage.getItem('token') || ''
   const id = selectedSession.value.id
-  // WebSocket path 带 token（noVNC 通过 path 参数连接，无法设置 header）
+  const pass = selectedSession.value.vncPassword || ''
   const wsPath = `/api/desktop/sessions/${id}/vnc-ws?token=${encodeURIComponent(token)}`
-  // noVNC vnc.html 的参数：path=WebSocket路径, autoconnect=true, resize=scale
-  vncIframeUrl.value = `/novnc/vnc.html?path=${encodeURIComponent(wsPath)}&autoconnect=true&resize=scale&show_dot=true`
-  showVNCModal.value = true
+
+  // 优先用本地 noVNC，不存在则用 CDN
+  const novncBase = await fetch('/novnc/vnc.html', { method: 'HEAD' })
+    .then(r => r.ok ? '/novnc' : null)
+    .catch(() => null)
+
+  if (novncBase) {
+    vncIframeUrl.value = `${novncBase}/vnc.html?path=${encodeURIComponent(wsPath)}&password=${encodeURIComponent(pass)}&autoconnect=true&resize=scale`
+    showVNCModal.value = true
+  } else {
+    // noVNC 文件不存在，提示用户
+    alert(`noVNC 文件未找到。\n\n请手动连接：\n节点: ${selectedSession.value.address}\nVNC 端口: ${selectedSession.value.vncPort}\n密码: ${pass}\n\n或使用 HPC 客户端一键连接。`)
+  }
 }
 
 const connectVNC = async () => {
@@ -499,8 +522,10 @@ const copyScript = () => {
 .success-icon { font-size: 2.5rem; text-align: center; margin-bottom: .75rem; }
 .status-ready h4 { text-align: center; margin: 0 0 1.5rem; font-size: 1.2rem; }
 .connection-info { display: flex; gap: 2rem; background: #f9fafb; padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem; }
-.info-item { display: flex; align-items: center; gap: .5rem; }
+.info-item { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
 .info-label { font-size: .85rem; color: #666; }
+.btn-eye-small { padding: .15rem .5rem; background: #e5e7eb; border: none; border-radius: 4px; font-size: .8rem; cursor: pointer; }
+.btn-eye-small:hover { background: #667eea; color: #fff; }
 .connection-methods { display: flex; flex-direction: column; gap: .75rem; margin-bottom: 1.5rem; }
 .method-item { display: flex; align-items: center; gap: 1rem; padding: 1rem; background: #f9fafb; border-radius: 8px; border: 1px solid #e5e7eb; }
 .method-icon { font-size: 1.8rem; }

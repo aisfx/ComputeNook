@@ -134,6 +134,17 @@ function zipDir(sourceDir, zipPath, innerFolder) {
   console.log('\n📁 复制前端产物...')
   copyDir(path.join(ROOT, 'dist'), path.join(STAGE_DIR, 'static'))
 
+  // 4.5 复制 noVNC 到 static/novnc（供后端提供 VNC 网页客户端）
+  console.log('\n🖥️  复制 noVNC...')
+  const novncSrc = path.join(ROOT, 'node_modules', '@novnc', 'novnc')
+  const novncDst = path.join(STAGE_DIR, 'static', 'novnc')
+  if (fs.existsSync(novncSrc)) {
+    copyDir(novncSrc, novncDst)
+    console.log('   → noVNC copied to static/novnc')
+  } else {
+    console.warn('   ⚠ noVNC not found in node_modules, skipping')
+  }
+
   // 5. 复制配置文件
   console.log('\n⚙️  复制配置文件...')
   const rootEnv = path.join(ROOT, '.env')

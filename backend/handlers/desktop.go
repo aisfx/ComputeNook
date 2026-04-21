@@ -16,20 +16,21 @@ import (
 )
 
 type DesktopSession struct {
-	ID         int    `json:"id"`
-	Name       string `json:"name"`
-	Type       string `json:"type"`
-	Address    string `json:"address"`
-	Username   string `json:"username"`
-	Resolution string `json:"resolution,omitempty"`
-	Duration   int    `json:"duration,omitempty"`
-	NodeType   string `json:"nodeType,omitempty"`
-	Partition  string `json:"partition,omitempty"`
-	CreateTime string `json:"createTime"`
-	Status     string `json:"status"`
-	SlurmJobID int64  `json:"slurmJobId,omitempty"`
-	VNCPort    int    `json:"vncPort,omitempty"`
-	WebURL     string `json:"webUrl,omitempty"`
+	ID          int    `json:"id"`
+	Name        string `json:"name"`
+	Type        string `json:"type"`
+	Address     string `json:"address"`
+	Username    string `json:"username"`
+	VNCPassword string `json:"vncPassword,omitempty"` // 明文密码，仅 session 所有者可见
+	Resolution  string `json:"resolution,omitempty"`
+	Duration    int    `json:"duration,omitempty"`
+	NodeType    string `json:"nodeType,omitempty"`
+	Partition   string `json:"partition,omitempty"`
+	CreateTime  string `json:"createTime"`
+	Status      string `json:"status"`
+	SlurmJobID  int64  `json:"slurmJobId,omitempty"`
+	VNCPort     int    `json:"vncPort,omitempty"`
+	WebURL      string `json:"webUrl,omitempty"`
 }
 
 const desktopDataFile = "desktop_sessions.json"
@@ -379,6 +380,8 @@ func buildDesktopScript(session *DesktopSession) string {
 	b.WriteString("unset SESSION_MANAGER\n")
 	b.WriteString("unset DBUS_SESSION_BUS_ADDRESS\n")
 	b.WriteString("export XDG_SESSION_TYPE=x11\n")
+	b.WriteString("export XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/tmp/runtime-$(id -u)}\n")
+	b.WriteString("mkdir -p $XDG_RUNTIME_DIR && chmod 700 $XDG_RUNTIME_DIR\n")
 	switch desktopType {
 	case "xfce", "xfce4":
 		b.WriteString("exec startxfce4\n")
@@ -503,6 +506,7 @@ func pollDesktopJob(sessionID int, jobID int64, username string) {
 		if strings.HasPrefix(state, "RUNNING") {
 			node := job.Nodes
 			rdpPort := 3389 + sessionID
+			vncPassword := ""
 
 			data, err := os.ReadFile(statusFile)
 			if err == nil {
@@ -520,6 +524,8 @@ func pollDesktopJob(sessionID int, jobID int64, username string) {
 						if v := strings.TrimSpace(parts[1]); v != "" {
 							node = v
 						}
+					case "password":
+						vncPassword = strings.TrimSpace(parts[1])
 					}
 				}
 			}
@@ -530,6 +536,9 @@ func pollDesktopJob(sessionID int, jobID int64, username string) {
 					sessions[i].Status = "running"
 					sessions[i].Address = node
 					sessions[i].VNCPort = rdpPort
+					if vncPassword != "" {
+						sessions[i].VNCPassword = vncPassword
+					}
 					_ = saveDesktopSessions(sessions)
 					break
 				}

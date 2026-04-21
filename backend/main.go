@@ -316,10 +316,13 @@ func main() {
 		}
 	}
 
-	// noVNC 静态文件（从 node_modules 提供）
-	novncDir := "../node_modules/@novnc/novnc"
-	if _, err := os.Stat(novncDir); err == nil {
-		r.Static("/novnc", novncDir)
+	// noVNC 静态文件，优先从 static/novnc，其次从 node_modules
+	for _, novncDir := range []string{"static/novnc", "../node_modules/@novnc/novnc", "novnc"} {
+		if _, err := os.Stat(novncDir); err == nil {
+			r.Static("/novnc", novncDir)
+			log.Printf("noVNC served from %s", novncDir)
+			break
+		}
 	}
 
 	port := os.Getenv("SERVER_PORT")
