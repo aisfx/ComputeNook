@@ -1,0 +1,15 @@
+diff --git a/node_modules/@novnc/novnc/lib/util/browser.js b/node_modules/@novnc/novnc/lib/util/browser.js
+index 8121bc1..6d6516e 100644
+--- a/node_modules/@novnc/novnc/lib/util/browser.js
++++ b/node_modules/@novnc/novnc/lib/util/browser.js
+@@ -176,7 +176,9 @@ function _checkWebCodecsH264DecodeSupport2() {
+   }));
+   return _checkWebCodecsH264DecodeSupport2.apply(this, arguments);
+ }
+-exports.supportsWebCodecsH264Decode = supportsWebCodecsH264Decode = await _checkWebCodecsH264DecodeSupport();
++// patched: wrap top-level await in IIFE to fix Rollup/Vite CJS compatibility
++exports.supportsWebCodecsH264Decode = supportsWebCodecsH264Decode = false;
++(async () => { exports.supportsWebCodecsH264Decode = supportsWebCodecsH264Decode = await _checkWebCodecsH264DecodeSupport(); })();
+ 
+ /*
+  * The functions for detection of platforms and browsers below are exported

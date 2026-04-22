@@ -68,9 +68,15 @@ func printManualInstructions(port int, mountPoint string) {
 		} else {
 			unc = fmt.Sprintf(`\\127.0.0.1@%d\DavWWWRoot`, port)
 		}
-		log.Printf("[mount] 方法1 - 文件管理器: 地址栏输入 %s", unc)
-		log.Printf("[mount] 方法2 - 命令行(管理员): net use %s %s", mountPoint, unc)
-		log.Printf("[mount] 方法3 - 映射网络驱动器: 右键「此电脑」-> 映射网络驱动器 -> 输入 %s", unc)
+		davURL := fmt.Sprintf("http://127.0.0.1:%d", port)
+		log.Printf("[mount] ── 挂载方式（任选其一）──")
+		log.Printf("[mount] 方法1 - rclone（推荐，需安装 rclone + WinFsp）:")
+		log.Printf("[mount]   rclone mount \":webdav,url=%s,vendor=other:\" %s --vfs-cache-mode writes", davURL, mountPoint)
+		log.Printf("[mount] 方法2 - 文件管理器: 地址栏输入 %s", unc)
+		log.Printf("[mount] 方法3 - 命令行(管理员): net use %s %s", mountPoint, unc)
+		log.Printf("[mount] 方法4 - 映射网络驱动器: 右键「此电脑」-> 映射网络驱动器 -> 输入 %s", unc)
+		log.Printf("[mount] rclone 下载: https://rclone.org/downloads/")
+		log.Printf("[mount] WinFsp 下载: https://winfsp.dev/rel/")
 	default:
 		log.Printf("[mount] 手动挂载: mount -t davfs http://127.0.0.1:%d %s", port, mountPoint)
 	}

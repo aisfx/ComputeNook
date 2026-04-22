@@ -2,7 +2,7 @@
   <div class="desktop-page">
     <div class="page-header">
       <h3>远程桌面</h3>
-      <button class="btn-primary" @click="showCreateModal = true">+ 新建桌面</button>
+      <button class="btn-primary" @click="openCreateModal">+ 新建桌面</button>
     </div>
 
     <div class="card">
@@ -58,44 +58,25 @@
               <label>桌面名称 *</label>
               <input v-model="createForm.name" type="text" placeholder="my-desktop" required />
             </div>
-            <div class="form-group">
-              <label>桌面类型 *</label>
-              <select v-model="createForm.type" required>
-                <option value="xfce">Xfce (轻量级)</option>
-                <option value="kde">KDE</option>
-                <option value="gnome">GNOME</option>
-              </select>
-            </div>
             <div class="form-row">
               <div class="form-group">
                 <label>分区 *</label>
-                <select v-model="createForm.partition" required>
+                <select v-model="createForm.partition" required @change="loadResourcePresets">
                   <option value="" disabled>{{ partitionsLoading ? '加载中...' : '请选择' }}</option>
                   <option v-for="p in partitions" :key="p.name" :value="p.name">{{ p.name }}</option>
                 </select>
               </div>
               <div class="form-group">
                 <label>资源规格</label>
-                <select v-model="createForm.nodeType">
-                  <option value="small">1核/2GB</option>
-                  <option value="medium">2核/4GB</option>
-                  <option value="large">4核/8GB</option>
+                <select v-model="createForm.presetIndex">
+                  <option v-if="presetsLoading" value="" disabled>加载中...</option>
+                  <option v-for="(p, i) in resourcePresets" :key="i" :value="i">{{ p.label }}</option>
                 </select>
               </div>
             </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label>时长(小时)</label>
-                <input v-model.number="createForm.duration" type="number" min="1" max="24" />
-              </div>
-              <div class="form-group">
-                <label>分辨率</label>
-                <select v-model="createForm.resolution">
-                  <option value="1920x1080">1920x1080</option>
-                  <option value="1440x900">1440x900</option>
-                  <option value="1280x720">1280x720</option>
-                </select>
-              </div>
+            <div class="form-group">
+              <label>时长(小时)</label>
+              <input v-model.number="createForm.duration" type="number" min="1" max="24" style="width:120px" />
             </div>
             <div class="form-actions">
               <button type="button" class="btn-secondary" @click="showCreateModal = false">取消</button>
@@ -195,12 +176,13 @@
     <div v-if="showVNCModal" class="vnc-overlay">
       <div class="vnc-toolbar">
         <span>🖥️ {{ selectedSession?.name }} — {{ selectedSession?.address }}</span>
-        <div style="display:flex;gap:8px">
+        <div style="display:flex;gap:8px;align-items:center">
+          <span v-if="vncStatus" :style="{fontSize:'0.8rem', color: vncStatus==='已连接' ? '#10b981' : '#f59e0b'}">{{ vncStatus }}</span>
           <button class="btn-secondary" @click="toggleFullscreen">全屏</button>
           <button class="btn-secondary" @click="closeVNC">断开</button>
         </div>
       </div>
-      <iframe ref="vncFrame" :src="vncIframeUrl" class="vnc-frame" allow="fullscreen"></iframe>
+      <div ref="vncContainer" class="vnc-canvas-wrap"></div>
     </div>
 
     <!-- 脚本预览弹窗 -->
@@ -222,13 +204,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import axios from 'axios'
 import { desktopAPI } from '../api/index'
+import { loadRFB } from '../utils/rfb-wrapper'
 
 const sessions = ref<any[]>([])
 const partitions = ref<any[]>([])
 const partitionsLoading = ref(false)
+const presetsLoading = ref(false)
+const resourcePresets = ref<any[]>([])
 const submitting = ref(false)
 const showCreateModal = ref(false)
 const showStartModal = ref(false)
@@ -242,9 +227,9 @@ const logLines = ref<string[]>([])
 const logType = ref<'out' | 'err'>('out')
 const logBodyRef = ref<HTMLElement | null>(null)
 const vncContainer = ref<HTMLElement | null>(null)
-const vncFrame = ref<HTMLIFrameElement | null>(null)
-const vncIframeUrl = ref('')
+const vncStatus = ref('')
 const showVNCPass = ref(false)
+let rfb: any = null
 
 const copyText = (text: string) => {
   if (!text) return
@@ -257,11 +242,9 @@ const pageOrigin = location.origin
 let logTimer: any = null
 let pollTimer: any = null
 let listTimer: any = null
-let rfb: any = null
 
 const createForm = ref({
-  name: '', type: 'xfce', nodeType: 'small',
-  partition: '', duration: 4, resolution: '1920x1080'
+  name: '', partition: '', duration: 4, presetIndex: 1
 })
 
 const statusLabel = (s: string) => ({ stopped: '未启动', pending: '排队中', running: '运行中', failed: '失败' }[s] || s)
@@ -272,20 +255,57 @@ const loadSessions = async () => {
 
 const loadPartitions = async () => {
   partitionsLoading.value = true
+  console.log('[Desktop] loadPartitions start, token:', !!(localStorage.getItem('token') || sessionStorage.getItem('token')))
   try {
     const res = await axios.get('/jobs/partitions/list')
+    console.log('[Desktop] partitions response:', res.data)
     partitions.value = res.data.data || []
-  } catch { partitions.value = [] }
+    if (partitions.value.length > 0 && !createForm.value.partition) {
+      createForm.value.partition = partitions.value[0].name
+      await loadResourcePresets()
+    }
+  } catch (e: any) {
+    partitions.value = []
+    console.error('[Desktop] 加载分区失败:', e.response?.status, e.response?.data?.error || e.message)
+  }
   finally { partitionsLoading.value = false }
+}
+
+const loadResourcePresets = async () => {
+  presetsLoading.value = true
+  console.log('[Desktop] loadResourcePresets, partition:', createForm.value.partition)
+  try {
+    const res = await axios.get('/desktop/resource-presets', {
+      params: { partition: createForm.value.partition }
+    })
+    console.log('[Desktop] presets response:', res.data)
+    resourcePresets.value = res.data.data || []
+    createForm.value.presetIndex = 1
+  } catch (e: any) {
+    console.warn('[Desktop] resource-presets failed, using fallback:', e.response?.status, e.message)
+    resourcePresets.value = [
+      { label: '小型  1核/2GB', cpus: 1, memory: 2 },
+      { label: '中型  2核/4GB', cpus: 2, memory: 4 },
+      { label: '大型  4核/8GB', cpus: 4, memory: 8 },
+      { label: '超大  8核/16GB', cpus: 8, memory: 16 },
+    ]
+    createForm.value.presetIndex = 1
+  }
+  finally { presetsLoading.value = false }
 }
 
 onMounted(() => {
   loadSessions()
-  loadPartitions()
   listTimer = setInterval(() => {
     if (sessions.value.some((s: any) => s.status === 'pending' || s.status === 'running')) loadSessions()
   }, 8000)
 })
+
+const openCreateModal = async () => {
+  showCreateModal.value = true
+  // 每次打开弹窗都重新加载分区，确保数据最新
+  await loadPartitions()
+}
 
 onUnmounted(() => {
   if (listTimer) clearInterval(listTimer)
@@ -297,14 +317,19 @@ onUnmounted(() => {
 const createDesktop = async () => {
   submitting.value = true
   try {
+    const preset = resourcePresets.value[createForm.value.presetIndex] || resourcePresets.value[0]
     const data = await desktopAPI.createSession({
-      name: createForm.value.name, type: createForm.value.type,
-      resolution: createForm.value.resolution, duration: createForm.value.duration,
-      nodeType: createForm.value.nodeType, partition: createForm.value.partition,
+      name: createForm.value.name,
+      type: 'auto',
+      resolution: 'auto',
+      duration: createForm.value.duration,
+      cpus: preset?.cpus,
+      memory: preset?.memory,
+      partition: createForm.value.partition,
     })
     sessions.value.unshift(data)
     showCreateModal.value = false
-    createForm.value = { name: '', type: 'xfce', nodeType: 'small', partition: '', duration: 4, resolution: '1920x1080' }
+    createForm.value = { name: '', partition: partitions.value[0]?.name || '', duration: 4, presetIndex: 1 }
   } catch (e: any) { alert('创建失败: ' + (e.response?.data?.error || e.message)) }
   finally { submitting.value = false }
 }
@@ -396,36 +421,51 @@ const stopSessionById = async (session: any) => {
   catch (e: any) { alert('停止失败: ' + (e.response?.data?.error || e.message)) }
 }
 
-// noVNC 连接 - 用 iframe 加载 noVNC 页面
+// noVNC 直连 - 用 RFB 库直接在页面内建立 WebSocket VNC 连接
 const openVNCInPage = async () => {
   showStartModal.value = false
   if (!selectedSession.value) return
-  const token = localStorage.getItem('token') || sessionStorage.getItem('token') || ''
-  const id = selectedSession.value.id
-  const pass = selectedSession.value.vncPassword || ''
-  const wsPath = `/api/desktop/sessions/${id}/vnc-ws?token=${encodeURIComponent(token)}`
-
-  // 优先用本地 noVNC，不存在则用 CDN
-  const novncBase = await fetch('/novnc/vnc.html', { method: 'HEAD' })
-    .then(r => r.ok ? '/novnc' : null)
-    .catch(() => null)
-
-  if (novncBase) {
-    vncIframeUrl.value = `${novncBase}/vnc.html?path=${encodeURIComponent(wsPath)}&password=${encodeURIComponent(pass)}&autoconnect=true&resize=scale`
-    showVNCModal.value = true
-  } else {
-    // noVNC 文件不存在，提示用户
-    alert(`noVNC 文件未找到。\n\n请手动连接：\n节点: ${selectedSession.value.address}\nVNC 端口: ${selectedSession.value.vncPort}\n密码: ${pass}\n\n或使用 HPC 客户端一键连接。`)
-  }
+  showVNCModal.value = true
+  vncStatus.value = '连接中...'
+  await nextTick()
+  await connectVNC()
 }
 
 const connectVNC = async () => {
-  // iframe 模式不需要此函数
+  if (!selectedSession.value || !vncContainer.value) return
+  disconnectVNC()
+
+  const token = localStorage.getItem('token') || sessionStorage.getItem('token') || ''
+  const id = selectedSession.value.id
+  const pass = selectedSession.value.vncPassword || ''
+  const wsProto = location.protocol === 'https:' ? 'wss' : 'ws'
+  const wsUrl = `${wsProto}://${location.host}/api/desktop/sessions/${id}/vnc-ws?token=${encodeURIComponent(token)}`
+
+  try {
+    // 动态加载 RFB（从 public/novnc-lib，绕开 Rollup 顶层 await 问题）
+    const RFB = await loadRFB()
+    rfb = new RFB(vncContainer.value, wsUrl, {
+      credentials: { password: pass },
+    })
+    rfb.scaleViewport = true
+    rfb.resizeSession = true
+    rfb.addEventListener('connect', () => { vncStatus.value = '已连接' })
+    rfb.addEventListener('disconnect', (e: any) => {
+      vncStatus.value = e.detail?.clean ? '已断开' : '连接断开'
+      rfb = null
+    })
+    rfb.addEventListener('credentialsrequired', () => { rfb?.sendCredentials({ password: pass }) })
+  } catch (e: any) {
+    vncStatus.value = '连接失败: ' + e.message
+  }
 }
 
 const disconnectVNC = () => {
-  vncIframeUrl.value = ''
-  rfb = null
+  if (rfb) {
+    try { rfb.disconnect() } catch { /* ignore */ }
+    rfb = null
+  }
+  vncStatus.value = ''
 }
 
 const closeVNC = () => {
@@ -547,7 +587,8 @@ const copyScript = () => {
 /* noVNC */
 .vnc-overlay { position: fixed; inset: 0; background: #000; z-index: 2000; display: flex; flex-direction: column; }
 .vnc-toolbar { display: flex; justify-content: space-between; align-items: center; padding: .5rem 1rem; background: #1e1e1e; color: #fff; font-size: .9rem; flex-shrink: 0; }
-.vnc-frame { flex: 1; border: none; width: 100%; height: 100%; }
+.vnc-canvas-wrap { flex: 1; overflow: hidden; background: #000; }
+.vnc-canvas-wrap :deep(canvas) { width: 100% !important; height: 100% !important; }
 
 /* 脚本 */
 .script-actions { margin-bottom: .75rem; }

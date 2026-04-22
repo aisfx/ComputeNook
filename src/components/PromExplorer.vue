@@ -363,7 +363,14 @@ const activeDs = computed(() => dataSources.value.find(d => d.id === activeDsId.
 function getPromBase(dsId?: string): string {
   const id = dsId ?? activeDsId.value
   const ds = dataSources.value.find(d => d.id === id)
-  return ds ? ds.url.replace(/\/$/, '') : ''
+  if (!ds) return ''
+  const url = ds.url.replace(/\/$/, '')
+  // localhost/127.0.0.1 直连会被浏览器 CORS 拦截，自动走后端代理
+  try {
+    const u = new URL(url)
+    if (u.hostname === 'localhost' || u.hostname === '127.0.0.1') return ''
+  } catch { /* ignore */ }
+  return url
 }
 
 
@@ -404,6 +411,16 @@ function removeDs(id: string) {
 
 async function testDs(ds: DataSource) {
   try {
+    const u = new URL(ds.url)
+    // localhost/127.0.0.1 不能从浏览器直连，走后端代理测试
+    if (u.hostname === 'localhost' || u.hostname === '127.0.0.1') {
+      const token = localStorage.getItem('token') || sessionStorage.getItem('token')
+      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
+      const res = await fetch(`/api/monitoring/promql?query=1`, { headers, signal: AbortSignal.timeout(5000) })
+      const json = await res.json()
+      ds.status = json.status === 'success' ? 'ok' : 'err'
+      saveDs(); return
+    }
     const res = await fetch(`${ds.url.replace(/\/$/, '')}/api/v1/query?query=1`, { signal: AbortSignal.timeout(5000) })
     const json = await res.json()
     ds.status = json.status === 'success' ? 'ok' : 'err'

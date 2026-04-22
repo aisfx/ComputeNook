@@ -30,11 +30,12 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    target: 'esnext',
     rollupOptions: {
       external: [],
     }
   },
   optimizeDeps: {
-    include: ['@novnc/novnc/lib/rfb.js']
+    exclude: ['@novnc/novnc'],
   }
 })

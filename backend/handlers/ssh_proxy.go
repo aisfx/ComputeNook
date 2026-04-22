@@ -25,6 +25,14 @@ CheckOrigin:     func(r *http.Request) bool { return true },
 ReadBufferSize:  32 * 1024,
 WriteBufferSize: 32 * 1024,
 }
+
+// vncWsUpgrader 专用于 VNC 代理，支持 binary 子协议
+var vncWsUpgrader = websocket.Upgrader{
+	CheckOrigin:    func(r *http.Request) bool { return true },
+	ReadBufferSize:  32 * 1024,
+	WriteBufferSize: 32 * 1024,
+	Subprotocols:   []string{"binary"},
+}
 // GET /api/ssh/proxy?host=cn1&port=22&user=alice
 // TCP 透传：给客户端 ssh/PuTTY 使用，WebSocket 里是原始 SSH 协议流。
 // 安全：白名单 + JWT + user 必须与平台用户名一致。

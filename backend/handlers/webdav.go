@@ -9,11 +9,20 @@ import (
 	"golang.org/x/net/webdav"
 )
 
-// WebDAV 处理器，挂载用户 home 目录
-// GET/PUT/DELETE/MKCOL/COPY/MOVE/PROPFIND/PROPPATCH/LOCK/UNLOCK
-// 路由：/api/webdav/*path
+// WebDAVHandler 处理 WebDAV 请求
+// 支持两种认证方式：
+//  1. Bearer Token（前端/API 调用）
+//  2. Basic Auth（Windows/macOS 原生 WebDAV 挂载）
 func WebDAVHandler(c *gin.Context) {
-	username, _ := c.Get("username")
+	username, exists := c.Get("username")
+
+	// 如果 AuthMiddleware 没有设置用户（不应该发生），尝试 Basic Auth
+	if !exists || username == nil || username.(string) == "" {
+		c.Header("WWW-Authenticate", `Basic realm="HPC WebDAV"`)
+		c.AbortWithStatus(http.StatusUnauthorized)
+		return
+	}
+
 	uname := username.(string)
 
 	homeBase := os.Getenv("HOME_BASE_PATH")
@@ -22,13 +31,11 @@ func WebDAVHandler(c *gin.Context) {
 	}
 	root := homeBase + "/" + uname
 
-	// 确保目录存在
 	if _, err := os.Stat(root); os.IsNotExist(err) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "home directory not found"})
 		return
 	}
 
-	// 从路径中去掉 /api/webdav 前缀，交给 webdav.Handler 处理
 	prefix := "/api/webdav"
 	handler := &webdav.Handler{
 		Prefix:     prefix,
@@ -36,7 +43,6 @@ func WebDAVHandler(c *gin.Context) {
 		LockSystem: webdav.NewMemLS(),
 	}
 
-	// 安全检查：防止路径穿越
 	reqPath := c.Request.URL.Path
 	if strings.Contains(reqPath, "..") {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid path"})

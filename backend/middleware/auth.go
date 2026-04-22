@@ -150,3 +150,58 @@ func AdminMiddleware() gin.HandlerFunc {
 		c.Next()
 	}
 }
+
+// WebDAVAuthMiddleware 支持 Bearer Token 和 Basic Auth 两种认证方式
+// Windows/macOS 原生 WebDAV 客户端使用 Basic Auth
+func WebDAVAuthMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// 1. 先尝试 Bearer Token（和 AuthMiddleware 一样）
+		tokenString := ""
+		authHeader := c.GetHeader("Authorization")
+		if strings.HasPrefix(authHeader, "Bearer ") {
+			tokenString = strings.TrimPrefix(authHeader, "Bearer ")
+		}
+		if tokenString == "" {
+			tokenString = c.Query("token")
+		}
+
+		if tokenString != "" {
+			token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+				return []byte(os.Getenv("JWT_SECRET")), nil
+			})
+			if err == nil && token.Valid {
+				if claims, ok := token.Claims.(jwt.MapClaims); ok {
+					username := claims["username"].(string)
+					uid := int(claims["uid"].(float64))
+					isAdmin := claims["isAdmin"].(bool)
+					c.Set("username", username)
+					c.Set("uid", uid)
+					c.Set("isAdmin", isAdmin)
+					c.Next()
+					return
+				}
+			}
+		}
+
+		// 2. 尝试 Basic Auth（Windows/macOS 原生挂载）
+		user, pass, ok := c.Request.BasicAuth()
+		if ok && user != "" && pass != "" {
+			client, err := ldap.NewClient()
+			if err == nil {
+				defer client.Close()
+				ldapUser, authErr := client.Authenticate(user, pass)
+				if authErr == nil && ldapUser != nil && !ldapUser.Disabled {
+					c.Set("username", user)
+					c.Set("uid", ldapUser.UID)
+					c.Set("isAdmin", ldapUser.IsAdmin)
+					c.Next()
+					return
+				}
+			}
+		}
+
+		// 3. 未认证：返回 401 并要求 Basic Auth
+		c.Header("WWW-Authenticate", `Basic realm="HPC WebDAV", charset="UTF-8"`)
+		c.AbortWithStatus(http.StatusUnauthorized)
+	}
+}

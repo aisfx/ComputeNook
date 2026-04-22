@@ -259,6 +259,7 @@ func main() {
 			desktop.DELETE("/sessions/:id", handlers.DeleteDesktopSession)
 			desktop.GET("/sessions/:id/logs", handlers.GetDesktopSessionLogs)
 			desktop.GET("/sessions/:id/script", handlers.GetDesktopScript)
+			desktop.GET("/resource-presets", handlers.GetDesktopResourcePresets)
 			// VNC WebSocket 代理：通过 SSH 隧道连接计算节点 VNC
 			desktop.GET("/sessions/:id/vnc-ws", handlers.VNCWebSocketProxy)
 		}
@@ -267,8 +268,8 @@ func main() {
 		auth.GET("/ssh/proxy", handlers.SSHWebSocketProxy)
 
 		// WebDAV 文件系统挂载（供 hpc-client mount 使用）
-		// 挂载用户 home 目录，支持 Windows/macOS/Linux 本地挂载
-		auth.Any("/webdav/*path", handlers.WebDAVHandler)
+		// 支持 Bearer Token 和 Basic Auth（Windows/macOS 原生挂载）
+		r.Any("/api/webdav/*path", middleware.WebDAVAuthMiddleware(), handlers.WebDAVHandler)
 
 		// 文件管理 API
 		files := auth.Group("/files")
