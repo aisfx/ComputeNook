@@ -136,6 +136,7 @@
         <JobManagement v-else-if="currentView === 'jobs'" @open-directory="handleOpenDirectory" />
         <Monitoring v-else-if="currentView === 'monitoring' && isAdmin" :active-tab="monitoringTab" @tab-change="monitoringTab = $event" />
         <RackView v-else-if="currentView === 'rack' && isAdmin" />
+        <NetworkTopology v-else-if="currentView === 'network' && isAdmin" />
         <WebShell v-else-if="currentView === 'shell'" />
         <Desktop v-else-if="currentView === 'desktop'" @open-download="currentView = 'download'" />
         <FileManager ref="fileManagerRef" v-else-if="currentView === 'files'" />
@@ -151,7 +152,7 @@
         <AdminAudit v-else-if="currentView === 'admin' && adminTab === 'audit' && isAdmin" />
         <AdminSlurmAccounts v-else-if="currentView === 'admin' && adminTab === 'slurm-accounts' && isAdmin" />
         <AdminSlurmUsers v-else-if="currentView === 'admin' && adminTab === 'slurm-users' && isAdmin" />
-        <div v-else-if="!isAdmin && (currentView === 'monitoring' || currentView === 'admin' || currentView === 'rack')" class="no-permission">
+        <div v-else-if="!isAdmin && (currentView === 'monitoring' || currentView === 'admin' || currentView === 'rack' || currentView === 'network')" class="no-permission">
           <div class="no-perm-icon">🔒</div>
           <h3>无访问权限</h3>
           <p>请联系管理员获取权限</p>
@@ -186,6 +187,7 @@ import AdminAssociations from './AdminAssociations.vue'
 import Monitoring from './Monitoring.vue'
 import Profile from './Profile.vue'
 import RackView from './RackView.vue'
+import NetworkTopology from './NetworkTopology.vue'
 import AIAssistant from '../components/AIAssistant.vue'
 import AlertNotification from '../components/AlertNotification.vue'
 import { getUser, logout, setupAxiosInterceptors, isAdmin as checkAdmin } from '../utils/auth'

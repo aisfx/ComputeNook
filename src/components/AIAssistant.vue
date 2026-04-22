@@ -15,8 +15,8 @@
           <div class="ai-header-left">
             <span class="ai-header-icon">🐒</span>
             <div>
-              <div class="ai-header-title">HPC 智能助手</div>
-              <div class="ai-header-sub">孙大圣为您服务</div>
+              <div class="ai-header-title">HPC 应用助手</div>
+              <div class="ai-header-sub">并行计算 · 科学软件 · 编程环境</div>
             </div>
           </div>
           <div class="ai-header-actions">
@@ -33,7 +33,7 @@
           <!-- Welcome -->
           <div v-if="messages.length === 0" class="ai-welcome">
             <div class="ai-welcome-icon">🐒</div>
-            <div class="ai-welcome-text">俺老孙来也！有什么 HPC 问题尽管问，作业提交、资源配置、脚本编写都难不倒俺！</div>
+            <div class="ai-welcome-text">你好！我是 HPC 应用助手，可以帮你解答并行计算、科学软件使用、编程环境配置等问题。</div>
             <div class="ai-suggestions">
               <button v-for="s in suggestions" :key="s" class="ai-suggest-btn" @click="sendSuggestion(s)">
                 {{ s }}
@@ -104,10 +104,12 @@ const messagesEl = ref<HTMLElement>()
 const inputEl = ref<HTMLTextAreaElement>()
 
 const suggestions = [
-  '如何提交一个 GPU 作业？',
-  '怎么查看我的作业状态？',
-  '如何写一个 Slurm 脚本？',
-  '集群资源不够用怎么办？',
+  '如何用 MPI 并行运行程序？',
+  'OpenMP 多线程怎么设置？',
+  '如何安装 Python 科学计算环境？',
+  '作业一直排队怎么办？',
+  '如何使用 GPU 加速计算？',
+  '模块化软件 module 怎么用？',
 ]
 
 const toggleChat = () => {

@@ -81,12 +81,27 @@
 
           <!-- 机柜管理 -->
           <a
-            :class="['nav-item', { active: adminTab === 'rack' }]"
-            @click="adminTab = 'rack'"
-            :title="sidebarCollapsed ? '机柜管理' : ''"
+            :class="['nav-item', { active: adminTab === 'rack' || adminTab === 'network' }]"
+            @click="groupExpanded.infra = !groupExpanded.infra"
+            :title="sidebarCollapsed ? '基础设施' : ''"
           >
             <span class="nav-item-icon">🗄️</span>
-            <span class="nav-item-label">机柜管理</span>
+            <span class="nav-item-label">基础设施</span>
+            <span class="nav-item-chevron" v-if="!sidebarCollapsed">{{ groupExpanded.infra ? '▾' : '▸' }}</span>
+          </a>
+          <div v-if="groupExpanded.infra && !sidebarCollapsed" class="nav-sub">
+            <a :class="['nav-sub-item', { active: adminTab === 'rack' }]" @click.stop="adminTab = 'rack'">机柜管理</a>
+            <a :class="['nav-sub-item', { active: adminTab === 'network' }]" @click.stop="adminTab = 'network'">网络拓扑</a>
+          </div>
+
+          <!-- AI 诊断 -->
+          <a
+            :class="['nav-item', { active: adminTab === 'ai-diagnostics' }]"
+            @click="adminTab = 'ai-diagnostics'"
+            :title="sidebarCollapsed ? 'AI 诊断' : ''"
+          >
+            <span class="nav-item-icon">🤖</span>
+            <span class="nav-item-label">AI 诊断</span>
           </a>
 
           <!-- 数据审计（始终最后） -->
@@ -137,6 +152,7 @@
       <main class="content-area">
         <Monitoring v-if="adminTab === 'monitoring'" :active-tab="monitoringTab" @tab-change="monitoringTab = $event" />
         <RackView v-else-if="adminTab === 'rack'" />
+        <NetworkTopology v-else-if="adminTab === 'network'" />
         <AdminUsers v-else-if="adminTab === 'users'" />
         <AdminGroups v-else-if="adminTab === 'groups'" />
         <AdminQoS v-else-if="adminTab === 'qos'" />
@@ -147,6 +163,7 @@
         <AdminSlurmAccounts v-else-if="adminTab === 'slurm-accounts'" />
         <AdminSlurmUsers v-else-if="adminTab === 'slurm-users'" />
         <CustomDashboard v-else-if="adminTab === 'custom-dashboard'" />
+        <AIDiagnostics v-else-if="adminTab === 'ai-diagnostics'" />
       </main>
     </div>
   </div>
@@ -166,13 +183,15 @@ import AdminSlurmUsers from './AdminSlurmUsers.vue'
 import AdminAssociations from './AdminAssociations.vue'
 import Monitoring from './Monitoring.vue'
 import RackView from './RackView.vue'
+import NetworkTopology from './NetworkTopology.vue'
 import CustomDashboard from './CustomDashboard.vue'
+import AIDiagnostics from './AIDiagnostics.vue'
 import { getUser, logout, setupAxiosInterceptors, isAdmin as checkAdmin } from '../utils/auth'
 
 const router = useRouter()
 const adminTab = ref('users')
 const monitoringTab = ref('cluster')
-const groupExpanded = reactive({ user: true, account: false, resource: false, monitoring: true })
+const groupExpanded = reactive({ user: true, account: false, resource: false, monitoring: true, infra: true })
 const sidebarCollapsed = ref(false)
 const currentUser = ref<any>(null)
 const theme = ref<'light' | 'dark'>('light')
@@ -181,6 +200,8 @@ const currentTitle = computed(() => {
   const map: Record<string, string> = {
     monitoring: '集群监控',
     rack: '机柜管理',
+    network: '网络拓扑',
+    'ai-diagnostics': 'AI 故障诊断',
     users: '用户',
     groups: '用户组',
     'slurm-accounts': 'Slurm账户',

@@ -48,7 +48,7 @@ func AIChat(c *gin.Context) {	apiURL := os.Getenv("AI_API_URL")
 		model = "gpt-3.5-turbo"
 	}
 	if systemPrompt == "" {
-		systemPrompt = "你是一个 HPC 集群智能助手，帮助用户解答集群使用相关问题。"
+		systemPrompt = "你是一个 HPC 高性能计算集群的应用助手，专门帮助用户解答并行计算（MPI/OpenMP）、科学软件使用（Python/R/MATLAB/GROMACS等）、编程环境配置、作业脚本编写等问题。回答简洁专业，用中文回答。不涉及集群运维管理内容。"
 	}
 
 	var req AIChatRequest

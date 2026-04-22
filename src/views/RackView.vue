@@ -6,6 +6,7 @@
           <span class="leg-item"><span class="leg-dot dot-compute"></span>计算节点</span>
           <span class="leg-item"><span class="leg-dot dot-gpu"></span>GPU 节点</span>
           <span class="leg-item"><span class="leg-dot dot-switch"></span>交换机</span>
+          <span class="leg-item"><span class="leg-dot dot-pdu"></span>PDU</span>
           <span class="leg-item"><span class="leg-dot dot-warn"></span>告警</span>
           <span class="leg-item"><span class="leg-dot dot-down"></span>离线</span>
         </div>
@@ -20,17 +21,6 @@
     <span v-if="rackError" class="rack-err">{{ rackError }}</span>
     <div v-if="racks.length === 0 && !loading" class="empty">暂无机柜，点击「自动生成」或「新建机柜」</div>
     <div v-else class="rack-scroll-area">
-      <svg class="cable-svg" :width="svgWidth" :height="svgHeight" ref="svgRef">
-        <g v-for="(cable, idx) in cables" :key="cable.id" class="cable-group">
-          <path :d="cablePath(cable)" fill="none" stroke="rgba(0,0,0,0.1)" stroke-width="4" stroke-linecap="round"/>
-          <path :d="cablePath(cable)" fill="none" :stroke="cableColor(idx)" stroke-width="2" stroke-linecap="round" class="cable-line" @click="removeCable(cable.id)">
-            <title>{{ cableLabel(cable) }}  点击删除</title>
-          </path>
-          <circle v-if="cableEndpoints(cable).from" :cx="(cableEndpoints(cable).from as any).x" :cy="(cableEndpoints(cable).from as any).y" r="4" :fill="cableColor(idx)" stroke="#fff" stroke-width="1.5" style="pointer-events:none"/>
-          <circle v-if="cableEndpoints(cable).to" :cx="(cableEndpoints(cable).to as any).x" :cy="(cableEndpoints(cable).to as any).y" r="4" :fill="cableColor(idx)" stroke="#fff" stroke-width="1.5" style="pointer-events:none"/>
-        </g>
-        <path v-if="draggingCable" :d="draggingPath" fill="none" stroke="#667eea" stroke-width="2" stroke-linecap="round" stroke-dasharray="6,3" opacity="0.8"/>
-      </svg>
       <div class="rack-list" ref="rackListRef">
         <div v-for="rack in racks" :key="rack.id" class="rack-col">
           <div class="rack-name">
@@ -42,39 +32,62 @@
             </div>
           </div>
           <div class="rack-body" :style="{ height: SLOT_H * rack.units + 8 + 'px' }" :data-rack-id="rack.id">
-            <div v-for="u in rack.units" :key="'bg-'+u" class="rack-slot slot-empty rack-bg-slot"
-              :style="{ top: (rack.units - u) * SLOT_H + 'px', height: SLOT_H - 2 + 'px' }"
-              @click="openAddDevice(rack, u)">
-              <span class="slot-u">{{ u }}U</span>
-              <span class="slot-add">+</span>
+            <!-- PDU 左侧 -->
+            <div class="pdu-side pdu-left">
+              <div v-for="dev in sortedDevices(rack).filter((d:any) => d.type === 'pdu' && d.unit % 2 === 1)"
+                :key="'pdu-l-'+dev.id" class="pdu-bar"
+                :title="dev.name" @click="openEditDevice(rack, dev)">
+                <span class="pdu-label">{{ dev.name }}</span>
+              </div>
+              <div v-if="sortedDevices(rack).filter((d:any) => d.type === 'pdu' && d.unit % 2 === 1).length === 0"
+                class="pdu-bar pdu-empty" :title="'添加 PDU'" @click="openAddPdu(rack, 1)">
+                <span class="pdu-add">+</span>
+              </div>
             </div>
-            <div v-for="dev in sortedDevices(rack)" :key="dev.id"
-              class="rack-slot rack-dev-slot" :class="slotClass(rack, dev)"
-              :style="{ top: (rack.units - dev.unit - dev.height + 1) * SLOT_H + 'px', height: dev.height * SLOT_H - 2 + 'px' }"
-              :data-dev-id="dev.id" :data-rack-id="rack.id"
-              :title="slotTitle(rack, dev)" @click="openEditDevice(rack, dev)">
-              <span class="slot-u">{{ dev.unit }}U</span>
-              <span class="slot-label">{{ dev.name }}</span>
-              <span v-if="dev.ip" class="slot-ip">{{ dev.ip }}</span>
-              <span v-if="dev.node_name" class="slot-state">{{ nodeStateLabel(dev.node_name) }}</span>
-              <template v-if="dev.type === 'switch' && dev.ports && dev.ports.length">
-                <span v-for="(port, pi) in dev.ports" :key="port.id"
-                  class="port-pin" :class="{ 'port-used': isCablePort(dev.id, port.id) }"
-                  :style="portPinStyle(Number(pi), dev.ports.length)"
-                  :data-dev-id="dev.id" :data-rack-id="rack.id" :data-port-id="port.id"
-                  :title="port.name + (port.speed ? ' ' + port.speed : '')"
-                  @mousedown.stop="startCable($event, rack.id, dev.id, port.id)"
-                  @mouseup.stop="endCable($event, rack.id, dev.id, port.id)">
-                </span>
-              </template>
-              <template v-else-if="dev.type === 'compute' || dev.type === 'gpu' || dev.type === 'storage'">
-                <span class="port-dot port-right"
-                  :data-dev-id="dev.id" :data-rack-id="rack.id" :data-port-id="'eth0'"
-                  @mousedown.stop="startCable($event, rack.id, dev.id, 'eth0')"></span>
-                <span class="port-dot port-left"
-                  :data-dev-id="dev.id" :data-rack-id="rack.id" :data-port-id="'eth0'"
-                  @mouseup.stop="endCable($event, rack.id, dev.id, 'eth0')"></span>
-              </template>
+            <!-- 主体 slots -->
+            <div class="rack-inner">
+              <div v-for="u in rack.units" :key="'bg-'+u" class="rack-slot slot-empty rack-bg-slot"
+                :style="{ top: (rack.units - u) * SLOT_H + 'px', height: SLOT_H - 2 + 'px' }"
+                @click="openAddDevice(rack, u)">
+                <span class="slot-u">{{ u }}U</span>
+                <span class="slot-add">+</span>
+              </div>
+              <div v-for="dev in sortedDevices(rack).filter((d:any) => d.type !== 'pdu')" :key="dev.id"
+                class="rack-slot rack-dev-slot" :class="slotClass(rack, dev)"
+                :style="{ top: (rack.units - dev.unit - dev.height + 1) * SLOT_H + 'px', height: dev.height * SLOT_H - 2 + 'px' }"
+                :data-dev-id="dev.id" :data-rack-id="rack.id"
+                :title="slotTitle(rack, dev)" @click="openEditDevice(rack, dev)">
+                <span class="slot-u">{{ dev.unit }}U</span>
+                <span class="slot-label">{{ dev.name }}</span>
+                <span v-if="dev.ip" class="slot-ip">{{ dev.ip }}</span>
+                <span v-if="dev.node_name" class="slot-state">{{ nodeStateLabel(dev.node_name) }}</span>
+                <template v-if="dev.type === 'switch' && dev.ports && dev.ports.length">
+                  <span v-for="(port, pi) in dev.ports" :key="port.id"
+                    class="port-pin" :class="{ 'port-used': isCablePort(dev.id, port.id) }"
+                    :style="portPinStyle(Number(pi), dev.ports.length)"
+                    :data-dev-id="dev.id" :data-rack-id="rack.id" :data-port-id="port.id"
+                    :title="port.name + (port.speed ? ' ' + port.speed : '')"
+                    @mousedown.stop="startCable($event, rack.id, dev.id, port.id)"
+                    @mouseup.stop="endCable($event, rack.id, dev.id, port.id)">
+                  </span>
+                </template>
+                <template v-else-if="dev.type === 'compute' || dev.type === 'gpu' || dev.type === 'storage'">
+                  <span class="port-dot port-right"></span>
+                  <span class="port-dot port-left"></span>
+                </template>
+              </div>
+            </div>
+            <!-- PDU 右侧 -->
+            <div class="pdu-side pdu-right">
+              <div v-for="dev in sortedDevices(rack).filter((d:any) => d.type === 'pdu' && d.unit % 2 === 0)"
+                :key="'pdu-r-'+dev.id" class="pdu-bar"
+                :title="dev.name" @click="openEditDevice(rack, dev)">
+                <span class="pdu-label">{{ dev.name }}</span>
+              </div>
+              <div v-if="sortedDevices(rack).filter((d:any) => d.type === 'pdu' && d.unit % 2 === 0).length === 0"
+                class="pdu-bar pdu-empty" :title="'添加 PDU'" @click="openAddPdu(rack, 2)">
+                <span class="pdu-add">+</span>
+              </div>
             </div>
           </div>
         </div>
@@ -390,6 +403,7 @@ const slotClass = (rack: any, dev: any) => {
   if (dev.type==='gpu') return 'slot-gpu'
   if (dev.type==='switch') return 'slot-switch'
   if (dev.type==='compute') return 'slot-compute'
+  if (dev.type==='pdu') return 'slot-pdu'
   return 'slot-empty'
 }
 
@@ -444,6 +458,11 @@ const autoGenRacks = async () => {
 const openAddDevice = (rack: any, unit: number) => {
   editingRackId.value = rack.id
   editingDevice.value = { name:'', type:'compute', node_name:'', model:'', height:2, unit, ports:[] }
+  devTab.value = 'basic'; showDeviceModal.value = true
+}
+const openAddPdu = (rack: any, unit: number) => {
+  editingRackId.value = rack.id
+  editingDevice.value = { name: unit === 1 ? 'PDU-01' : 'PDU-02', type:'pdu', node_name:'', model:'', height:1, unit, ports:[] }
   devTab.value = 'basic'; showDeviceModal.value = true
 }
 const openEditDevice = (rack: any, dev: any) => {
@@ -553,7 +572,7 @@ onUnmounted(() => { window.removeEventListener('resize', updateContainerH); wind
 .leg-item { display:flex; align-items:center; gap:0.3rem; }
 .leg-dot { width:11px; height:11px; border-radius:3px; border:1.5px solid rgba(0,0,0,.1); }
 .dot-compute{background:#dbeafe;border-color:#93c5fd}.dot-gpu{background:#ede9fe;border-color:#c4b5fd}
-.dot-switch{background:#e2e8f0;border-color:#94a3b8}.dot-warn{background:#fef3c7;border-color:#fcd34d}
+.dot-switch{background:#e2e8f0;border-color:#94a3b8}.dot-pdu{background:#fef3c7;border-color:#fbbf24}.dot-warn{background:#fef3c7;border-color:#fcd34d}
 .dot-down{background:#f3f4f6;border-color:#d1d5db}
 .rack-err{color:#ef4444;font-size:0.82rem;flex-shrink:0}
 .empty{text-align:center;padding:3rem;color:#9ca3af}
@@ -565,16 +584,24 @@ onUnmounted(() => { window.removeEventListener('resize', updateContainerH); wind
 .cable-group .cable-line{pointer-events:stroke}
 .rack-list{display:flex;gap:1.25rem;align-items:flex-start;padding:4px 4px 8px;width:max-content}
 .rack-col{display:flex;flex-direction:column;flex-shrink:0}
-.rack-name{font-size:0.82rem;font-weight:700;color:#374151;margin-bottom:0.4rem;display:flex;align-items:center;gap:0.4rem;width:160px}
+.rack-name{font-size:0.82rem;font-weight:700;color:#374151;margin-bottom:0.4rem;display:flex;align-items:center;gap:0.4rem;width:180px}
 .rack-loc{font-size:0.7rem;color:#9ca3af;font-weight:400}
 .rack-actions{display:flex;gap:0.2rem;margin-left:auto}
 .rack-btn{background:none;border:none;cursor:pointer;font-size:0.78rem;padding:0.1rem 0.25rem;border-radius:4px;opacity:0.7}
 .rack-btn:hover{opacity:1;background:#f3f4f6}
 .rack-btn-del:hover{background:#fee2e2}
-.rack-body{border:2px solid #cbd5e1;border-radius:6px;background:#f1f5f9;padding:4px;position:relative;width:160px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08);flex-shrink:0}
+.rack-body{border:2px solid #cbd5e1;border-radius:6px;background:#f1f5f9;padding:4px;position:relative;width:180px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.08);flex-shrink:0;display:flex;flex-direction:row;gap:2px}
+.rack-inner{flex:1;position:relative;min-width:0;height:100%}
+.pdu-side{width:12px;flex-shrink:0;display:flex;flex-direction:column;gap:2px;border-radius:3px;overflow:hidden}
+.pdu-bar{flex:1;background:#fef3c7;border:1px solid #fbbf24;border-radius:3px;cursor:pointer;display:flex;align-items:center;justify-content:center;min-height:20px;transition:filter 0.15s}
+.pdu-bar:hover{filter:brightness(0.9)}
+.pdu-bar.pdu-empty{background:#f1f5f9;border:1px dashed #e2e8f0;cursor:pointer}
+.pdu-bar.pdu-empty:hover{background:#eff6ff;border-color:#93c5fd}
+.pdu-add{font-size:0.7rem;color:#94a3b8}
+.pdu-label{font-size:0.45rem;color:#92400e;font-weight:700;writing-mode:vertical-rl;text-orientation:mixed;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-height:60px}
 .rack-slot{border-radius:3px;display:flex;align-items:center;padding:0 5px;gap:3px;cursor:pointer;transition:filter 0.15s;font-size:0.6rem;position:relative}
-.rack-bg-slot{position:absolute;left:4px;right:4px;z-index:1}
-.rack-dev-slot{position:absolute;left:4px;right:4px;z-index:2}
+.rack-bg-slot{position:absolute;left:0;right:0;z-index:1}
+.rack-dev-slot{position:absolute;left:0;right:0;z-index:2}
 .rack-slot:hover{filter:brightness(0.92)}
 .slot-u{color:rgba(0,0,0,0.3);min-width:18px;font-size:0.55rem}
 .slot-label{flex:1;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -584,6 +611,7 @@ onUnmounted(() => { window.removeEventListener('resize', updateContainerH); wind
 .slot-compute{background:#dbeafe;border:1px solid #93c5fd}.slot-compute .slot-label{color:#1d4ed8}
 .slot-gpu{background:#ede9fe;border:1px solid #c4b5fd}.slot-gpu .slot-label{color:#6d28d9}
 .slot-switch{background:#e2e8f0;border:1px solid #94a3b8}.slot-switch .slot-label{color:#334155}
+.slot-pdu{background:#fef3c7;border:1px solid #fbbf24}.slot-pdu .slot-label{color:#92400e}
 .slot-empty{background:#f8fafc;border:1px dashed #e2e8f0}
 .slot-empty:hover{background:#f0f9ff;border-color:#bae6fd}
 .slot-down{background:#f3f4f6;border:1px solid #d1d5db;opacity:0.55}

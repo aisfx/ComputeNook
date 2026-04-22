@@ -311,18 +311,22 @@ const loadJobs = async () => {
           runTime = Math.floor(Date.now() / 1000) - job.start_time
         }
         
-        // 解析节点数量
+        // 解析节点数量和节点名称列表
         let nodeCount = 0
+        let nodeNames: string[] = []
         if (typeof job.nodes === 'number') {
           nodeCount = job.nodes
         } else if (typeof job.nodes === 'string' && job.nodes) {
-          // 节点字符串可能是 "node01,node02" 或 "node[01-04]" 或 "cn1"
           if (job.nodes === 'None assigned' || job.nodes === '') {
             nodeCount = 0
           } else {
-            const nodeList = job.nodes.split(',')
-            nodeCount = nodeList.length
+            nodeNames = job.nodes.split(',').map((n: string) => n.trim()).filter(Boolean)
+            nodeCount = nodeNames.length
           }
+        }
+        // batch_host 是单节点作业的运行节点
+        if (nodeNames.length === 0 && job.batch_host) {
+          nodeNames = [job.batch_host]
         }
         
         return {
@@ -332,6 +336,7 @@ const loadJobs = async () => {
           status: job.job_state || job.status || 'UNKNOWN',
           partition: job.partition || '-',
           nodes: nodeCount,
+          nodeNames,
           cpus: job.cpus || 0,
           submitTime: formatTime(job.submit_time),
           runTime: formatDuration(runTime),

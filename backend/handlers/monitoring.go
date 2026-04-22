@@ -15,6 +15,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"hpc-backend/logger"
+	"hpc-backend/slurm"
 )
 
 // ─────────────────────────────────────────────
@@ -380,35 +381,57 @@ func AutoGenerateRacks(c *gin.Context) {
 		return
 	}
 
-	const nodesPerRack = 20
-	newRacks := []RackLayout{}
+	// 尝试从 Prometheus targets 读取 rack 标签
+	// node_exporter relabel_configs 示例:
+	//   - target_label: rack
+	//     replacement: "A01"
+	promRackMap := fetchPromRackLabels() // map[nodeName/IP] -> rackName
 
-	for i := 0; i < len(nodes); i += nodesPerRack {
-		rackIdx := i/nodesPerRack + 1
+	// 按 rack 标签分组，保持插入顺序
+	rackOrder := []string{}
+	rackNodeMap := map[string][]slurm.Node{}
+
+	for _, node := range nodes {
+		rackName := promRackMap[node.Name]
+		if rackName != "" {
+			if _, exists := rackNodeMap[rackName]; !exists {
+				rackOrder = append(rackOrder, rackName)
+			}
+			rackNodeMap[rackName] = append(rackNodeMap[rackName], node)
+		}
+	}
+
+	// 没有任何 Prometheus rack 标签时，按每20个节点一组
+	if len(rackOrder) == 0 {
+		const nodesPerRack = 20
+		for i := 0; i < len(nodes); i += nodesPerRack {
+			rackName := fmt.Sprintf("A%02d", i/nodesPerRack+1)
+			rackOrder = append(rackOrder, rackName)
+			end := i + nodesPerRack
+			if end > len(nodes) {
+				end = len(nodes)
+			}
+			rackNodeMap[rackName] = append(rackNodeMap[rackName], nodes[i:end]...)
+		}
+	}
+
+	newRacks := []RackLayout{}
+	for rackIdx, rackName := range rackOrder {
 		rack := RackLayout{
-			ID:       fmt.Sprintf("rack-%d", rackIdx),
-			Name:     fmt.Sprintf("A%02d", rackIdx),
+			ID:       fmt.Sprintf("rack-%d", rackIdx+1),
+			Name:     rackName,
 			Location: "数据中心",
 			Units:    42,
 			Devices:  []RackDevice{},
 		}
-		// 顶部交换机
 		rack.Devices = append(rack.Devices,
-			RackDevice{ID: fmt.Sprintf("sw-core-%d", rackIdx), Unit: 42, Height: 1, Name: "万兆交换机", Type: "switch", Model: "Cisco 9300"},
-			RackDevice{ID: fmt.Sprintf("sw-acc-%d", rackIdx), Unit: 41, Height: 1, Name: "千兆交换机", Type: "switch", Model: "H3C S5130"},
+			RackDevice{ID: fmt.Sprintf("sw-core-%d", rackIdx+1), Unit: 42, Height: 1, Name: "万兆交换机", Type: "switch", Model: "Cisco 9300"},
+			RackDevice{ID: fmt.Sprintf("sw-acc-%d", rackIdx+1), Unit: 41, Height: 1, Name: "千兆交换机", Type: "switch", Model: "H3C S5130"},
+			RackDevice{ID: fmt.Sprintf("pdu1-%d", rackIdx+1), Unit: 1, Height: 1, Name: "PDU-01", Type: "pdu"},
+			RackDevice{ID: fmt.Sprintf("pdu2-%d", rackIdx+1), Unit: 2, Height: 1, Name: "PDU-02", Type: "pdu"},
 		)
-		// 底部 PDU
-		rack.Devices = append(rack.Devices,
-			RackDevice{ID: fmt.Sprintf("pdu1-%d", rackIdx), Unit: 1, Height: 1, Name: "PDU-01", Type: "pdu"},
-			RackDevice{ID: fmt.Sprintf("pdu2-%d", rackIdx), Unit: 2, Height: 1, Name: "PDU-02", Type: "pdu"},
-		)
-		// 节点从 U39 往下
 		unit := 39
-		end := i + nodesPerRack
-		if end > len(nodes) {
-			end = len(nodes)
-		}
-		for _, node := range nodes[i:end] {
+		for _, node := range rackNodeMap[rackName] {
 			devType := "compute"
 			if strings.Contains(strings.ToLower(node.Gres), "gpu") {
 				devType = "gpu"
@@ -422,6 +445,9 @@ func AutoGenerateRacks(c *gin.Context) {
 				Type:     devType,
 			})
 			unit -= 2
+			if unit < 3 {
+				unit = 3
+			}
 		}
 		newRacks = append(newRacks, rack)
 	}
@@ -432,6 +458,54 @@ func AutoGenerateRacks(c *gin.Context) {
 	rackMu.Unlock()
 
 	c.JSON(http.StatusOK, gin.H{"data": newRacks, "message": fmt.Sprintf("已生成 %d 个机柜", len(newRacks))})
+}
+
+// fetchPromRackLabels 从 Prometheus targets 读取 rack 标签
+// 返回 map[instance/nodeName] -> rackName
+func fetchPromRackLabels() map[string]string {
+	base := getPrometheusURL()
+	if base == "" {
+		return map[string]string{}
+	}
+
+	resp, err := http.Get(base + "/api/v1/targets?state=any")
+	if err != nil {
+		return map[string]string{}
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+
+	var raw struct {
+		Status string `json:"status"`
+		Data   struct {
+			ActiveTargets []struct {
+				Labels map[string]string `json:"labels"`
+			} `json:"activeTargets"`
+		} `json:"data"`
+	}
+	if json.Unmarshal(body, &raw) != nil || raw.Status != "success" {
+		return map[string]string{}
+	}
+
+	result := map[string]string{}
+	for _, t := range raw.Data.ActiveTargets {
+		instance := t.Labels["instance"]
+		rack := t.Labels["rack"]
+		if rack == "" {
+			continue
+		}
+		// 去掉端口
+		host := instance
+		if idx := strings.LastIndex(instance, ":"); idx > 0 {
+			host = instance[:idx]
+		}
+		result[host] = rack
+		// 也尝试用 hostname 标签
+		if hostname := t.Labels["hostname"]; hostname != "" {
+			result[hostname] = rack
+		}
+	}
+	return result
 }
 
 // ─────────────────────────────────────────────
