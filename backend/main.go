@@ -88,6 +88,7 @@ func main() {
 	{
 		auth.GET("/me", handlers.GetCurrentUser)
 		auth.GET("/me/resources", handlers.GetMyResources)
+		auth.POST("/logout", handlers.Logout)
 		auth.POST("/ai/chat", handlers.AIChat)
 
 		// 客户端下载文件（需认证）
@@ -180,6 +181,8 @@ func main() {
 			audit.GET("/ssh-logs", handlers.GetSSHTunnelLogs)
 			audit.GET("/ssh-logs/download", handlers.DownloadSSHTunnelLog)
 		}
+		// 页面访问审计（所有登录用户均可上报，不限管理员）
+		auth.POST("/audit/page-view", handlers.PageView)
 
 		// 机时管理 API
 		usage := auth.Group("/usage")
@@ -314,6 +317,19 @@ func main() {
 			monitoring.GET("/prom-rules", handlers.GetPromRules)
 		monitoring.GET("/promql", handlers.PromQueryInstant)
 		monitoring.GET("/promql/range", handlers.PromQueryRange)
+		}
+
+		// CMDB 主机资产管理
+		cmdb := auth.Group("/cmdb")
+		cmdb.Use(middleware.AdminMiddleware())
+		{
+			cmdb.GET("/hosts", handlers.GetHosts)
+			cmdb.POST("/hosts", handlers.CreateHost)
+			cmdb.PUT("/hosts/:id", handlers.UpdateHost)
+			cmdb.DELETE("/hosts/:id", handlers.DeleteHost)
+			cmdb.POST("/hosts/import", handlers.ImportHosts)
+			cmdb.GET("/hosts/template", handlers.DownloadTemplate)
+			cmdb.GET("/hosts/export", handlers.ExportHosts)
 		}
 	}
 

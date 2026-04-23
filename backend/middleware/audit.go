@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"net"
 	"strings"
 	"time"
 
@@ -11,6 +12,101 @@ import (
 	"hpc-backend/audit"
 	"hpc-backend/models"
 )
+
+// getRealIP 优先读取反向代理传递的真实客户端 IP
+// 依次尝试：X-Real-IP → X-Forwarded-For 第一个公网 IP → Origin → RemoteAddr
+func getRealIP(c *gin.Context) string {
+	// X-Real-IP（nginx proxy_set_header X-Real-IP $remote_addr）
+	if ip := c.GetHeader("X-Real-IP"); ip != "" {
+		if parsed := net.ParseIP(strings.TrimSpace(ip)); parsed != nil {
+			return parsed.String()
+		}
+	}
+
+	// X-Forwarded-For: client, proxy1, proxy2 — 取第一个合法公网 IP
+	if xff := c.GetHeader("X-Forwarded-For"); xff != "" {
+		for _, part := range strings.Split(xff, ",") {
+			ip := strings.TrimSpace(part)
+			if parsed := net.ParseIP(ip); parsed != nil && !isPrivateIP(parsed) {
+				return parsed.String()
+			}
+		}
+		first := strings.TrimSpace(strings.SplitN(xff, ",", 2)[0])
+		if parsed := net.ParseIP(first); parsed != nil {
+			return parsed.String()
+		}
+	}
+
+	// Cloudflare / CDN
+	if ip := c.GetHeader("CF-Connecting-IP"); ip != "" {
+		if parsed := net.ParseIP(strings.TrimSpace(ip)); parsed != nil {
+			return parsed.String()
+		}
+	}
+
+	// 获取 RemoteAddr（去掉端口）
+	remoteIP := c.Request.RemoteAddr
+	if host, _, err := net.SplitHostPort(remoteIP); err == nil {
+		remoteIP = host
+	}
+	parsed := net.ParseIP(remoteIP)
+
+	// 如果是本地回环（hpc-client 隧道场景），从 Origin 或 Host 头提取来源标识
+	if parsed != nil && isLoopback(parsed) {
+		// Origin 头格式：http://101.132.157.167:3981
+		if origin := c.GetHeader("Origin"); origin != "" {
+			// 提取 host 部分作为来源标识（不一定是真实客户端 IP，但能区分来源）
+			origin = strings.TrimPrefix(origin, "http://")
+			origin = strings.TrimPrefix(origin, "https://")
+			if host, _, err := net.SplitHostPort(origin); err == nil {
+				origin = host
+			}
+			if originIP := net.ParseIP(origin); originIP != nil && !isLoopback(originIP) {
+				return originIP.String() + " (via-tunnel)"
+			}
+			if origin != "" {
+				return origin + " (via-tunnel)"
+			}
+		}
+		// Host 头
+		if host := c.Request.Host; host != "" {
+			h := host
+			if hp, _, err := net.SplitHostPort(host); err == nil {
+				h = hp
+			}
+			if hIP := net.ParseIP(h); hIP != nil && !isLoopback(hIP) {
+				return hIP.String() + " (via-tunnel)"
+			}
+		}
+		return "127.0.0.1 (via-tunnel)"
+	}
+
+	return c.ClientIP()
+}
+
+// isLoopback 判断是否为回环地址
+func isLoopback(ip net.IP) bool {
+	return ip.IsLoopback()
+}
+
+// isPrivateIP 判断是否为私网/回环地址
+func isPrivateIP(ip net.IP) bool {
+	privateRanges := []string{
+		"10.0.0.0/8",
+		"172.16.0.0/12",
+		"192.168.0.0/16",
+		"127.0.0.0/8",
+		"::1/128",
+		"fc00::/7",
+	}
+	for _, cidr := range privateRanges {
+		_, network, _ := net.ParseCIDR(cidr)
+		if network != nil && network.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
 
 // AuditMiddleware 审计日志中间件
 func AuditMiddleware() gin.HandlerFunc {
@@ -84,7 +180,8 @@ func AuditMiddleware() gin.HandlerFunc {
 			Resource:   resource,
 			ResourceID: resourceID,
 			Details:    details,
-			IPAddress:  c.ClientIP(),
+			IPAddress:  getRealIP(c),
+			AccessHost: c.Request.Host,
 			UserAgent:  c.Request.UserAgent(),
 			Status:     status,
 			ErrorMsg:   errorMsg,
@@ -112,6 +209,7 @@ func shouldSkipAudit(path string) bool {
 		"/api/health",
 		"/api/ping",
 		"/api/metrics",
+		"/api/audit/page-view", // 页面访问由专用 handler 记录，避免重复
 	}
 
 	for _, skipPath := range skipPaths {

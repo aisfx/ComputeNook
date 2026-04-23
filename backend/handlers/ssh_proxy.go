@@ -123,6 +123,7 @@ return
 recorder.mu.Lock()
 recorder.inputBytes += len(msg)
 recorder.mu.Unlock()
+recorder.writeInput(msg)
 sshConn.Write(msg) //nolint:errcheck
 }
 }()
@@ -225,6 +226,7 @@ return
 recorder.mu.Lock()
 recorder.inputBytes += len(msg)
 recorder.mu.Unlock()
+recorder.writeInput(msg)
 io.WriteString(stdin, string(msg)) //nolint:errcheck
 }
 }()
@@ -309,6 +311,18 @@ if r.logFile == nil {
 return
 }
 r.logFile.WriteString(time.Now().Format("2006-01-02T15:04:05") + " " + s + "\n")
+}
+
+// writeInput 记录用户输入，过滤 ANSI 转义码和不可打印字符
+func (r *sshTunnelRecorder) writeInput(data []byte) {
+if r.logFile == nil {
+return
+}
+clean := stripANSIBytes(data)
+if strings.TrimSpace(clean) == "" {
+return
+}
+r.logFile.WriteString(time.Now().Format("2006-01-02T15:04:05") + " [INPUT] " + clean + "\n")
 }
 
 func (r *sshTunnelRecorder) close() {

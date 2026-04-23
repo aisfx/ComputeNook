@@ -84,6 +84,16 @@
             <span class="nav-item-icon">📈</span>
             <span class="nav-item-label">报表中心</span>
           </a>
+
+          <!-- 主机资产 CMDB -->
+          <a
+            :class="['nav-item', { active: currentView === 'cmdb' }]"
+            @click="currentView = 'cmdb'"
+            :title="sidebarCollapsed ? '主机资产' : ''"
+          >
+            <span class="nav-item-icon">🖥️</span>
+            <span class="nav-item-label">主机资产</span>
+          </a>
         </div>
 
       </nav>
@@ -141,6 +151,7 @@
         <Desktop v-else-if="currentView === 'desktop'" @open-download="currentView = 'download'" />
         <FileManager ref="fileManagerRef" v-else-if="currentView === 'files'" />
         <Reports v-else-if="currentView === 'reports'" />
+        <AdminCMDB v-else-if="currentView === 'cmdb'" />
         <Profile v-else-if="currentView === 'profile'" />
         <Download v-else-if="currentView === 'download'" />
         <AdminUsers v-else-if="currentView === 'admin' && adminTab === 'users' && isAdmin" />
@@ -150,6 +161,7 @@
         <AdminHours v-else-if="currentView === 'admin' && adminTab === 'hours' && isAdmin" />
         <AdminQuota v-else-if="currentView === 'admin' && adminTab === 'quota' && isAdmin" />
         <AdminAudit v-else-if="currentView === 'admin' && adminTab === 'audit' && isAdmin" />
+        <AdminCMDB v-else-if="currentView === 'admin' && adminTab === 'cmdb' && isAdmin" />
         <AdminSlurmAccounts v-else-if="currentView === 'admin' && adminTab === 'slurm-accounts' && isAdmin" />
         <AdminSlurmUsers v-else-if="currentView === 'admin' && adminTab === 'slurm-users' && isAdmin" />
         <div v-else-if="!isAdmin && (currentView === 'monitoring' || currentView === 'admin' || currentView === 'rack' || currentView === 'network')" class="no-permission">
@@ -166,8 +178,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, provide, onMounted } from 'vue'
+import { ref, computed, provide, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import axios from 'axios'
 import Dashboard from './Dashboard.vue'
 import JobManagement from './JobManagement.vue'
 import WebShell from './WebShell.vue'
@@ -181,6 +194,7 @@ import AdminQoS from './AdminQoS.vue'
 import AdminHours from './AdminHours.vue'
 import AdminQuota from './AdminQuota.vue'
 import AdminAudit from './AdminAudit.vue'
+import AdminCMDB from './AdminCMDB.vue'
 import AdminSlurmAccounts from './AdminSlurmAccounts.vue'
 import AdminSlurmUsers from './AdminSlurmUsers.vue'
 import AdminAssociations from './AdminAssociations.vue'
@@ -283,15 +297,38 @@ const currentTitle = computed(() => {
   return all.find(i => i.id === currentView.value)?.label || ''
 })
 
-const handleLogout = () => {
+const handleLogout = async () => {
   if (confirm('确定要退出登录吗？')) {
-    logout()
+    await logout()
     router.push('/login')
   }
 }
 
 const goToProfile = () => { currentView.value = 'profile' }
 const goToAdmin = () => { router.push('/admin') }
+
+// 页面标题映射，用于上报可读名称
+const PAGE_TITLES: Record<string, string> = {
+  dashboard: '仪表盘', shell: 'Web Shell', desktop: '远程桌面',
+  jobs: '作业管理', files: '文件管理', reports: '报表中心',
+  cmdb: '主机资产',
+  monitoring: '集群监控', rack: '机柜管理', network: '网络拓扑',
+  profile: '个人信息', download: '客户端下载', admin: '系统管理',
+}
+
+// 上报页面访问，防抖避免快速切换时重复上报
+let pageViewTimer: ReturnType<typeof setTimeout> | null = null
+const reportPageView = (page: string) => {
+  if (pageViewTimer) clearTimeout(pageViewTimer)
+  pageViewTimer = setTimeout(() => {
+    const title = PAGE_TITLES[page] || page
+    axios.post('/audit/page-view', { page, title }).catch(() => {/* 静默失败 */})
+  }, 500)
+}
+
+watch(currentView, (page) => {
+  reportPageView(page)
+})
 
 onMounted(() => {
   setupAxiosInterceptors()

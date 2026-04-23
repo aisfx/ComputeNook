@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"hpc-backend/ldap"
+	"hpc-backend/middleware"
 	"hpc-backend/models"
 )
 
@@ -143,4 +144,55 @@ func GetCurrentUser(c *gin.Context) {
 
 	log.Printf("GetCurrentUser: Successfully retrieved user: %s", user.Username)
 	c.JSON(http.StatusOK, gin.H{"data": user})
+}
+
+// Logout 登出：将当前 token 加入黑名单，使所有持有该 token 的客户端（含 SSH 隧道）立即失效
+func Logout(c *gin.Context) {
+	tokenString := ""
+	authHeader := c.GetHeader("Authorization")
+	if len(authHeader) > 7 && authHeader[:7] == "Bearer " {
+		tokenString = authHeader[7:]
+	}
+	if tokenString == "" {
+		c.JSON(http.StatusOK, gin.H{"message": "已登出"})
+		return
+	}
+
+	// 解析 token 获取过期时间，用于黑名单自动清理
+	token, err := jwt.Parse(tokenString, func(t *jwt.Token) (interface{}, error) {
+		return []byte(os.Getenv("JWT_SECRET")), nil
+	})
+	expiry := time.Now().Add(25 * time.Hour) // 默认 25h，比 token 有效期略长
+	if err == nil {
+		if claims, ok := token.Claims.(jwt.MapClaims); ok {
+			if exp, ok := claims["exp"].(float64); ok {
+				expiry = time.Unix(int64(exp), 0)
+			}
+		}
+	}
+
+	middleware.RevokeToken(tokenString, expiry)
+	log.Printf("Logout: token revoked for user session")
+	c.JSON(http.StatusOK, gin.H{"message": "已登出"})
+}
+
+// DebugIP 调试接口：显示后端收到的所有 IP 相关请求头（仅开发/排查用）
+// GET /api/debug/ip
+func DebugIP(c *gin.Context) {
+	remoteIP := c.Request.RemoteAddr
+	info := map[string]string{
+		"remote_addr":       remoteIP,
+		"x_real_ip":         c.GetHeader("X-Real-IP"),
+		"x_forwarded_for":   c.GetHeader("X-Forwarded-For"),
+		"x_forwarded_proto": c.GetHeader("X-Forwarded-Proto"),
+		"x_forwarded_host":  c.GetHeader("X-Forwarded-Host"),
+		"cf_connecting_ip":  c.GetHeader("CF-Connecting-IP"),
+		"true_client_ip":    c.GetHeader("True-Client-IP"),
+		"origin":            c.GetHeader("Origin"),
+		"referer":           c.GetHeader("Referer"),
+		"host":              c.Request.Host,
+		"user_agent":        c.Request.UserAgent(),
+		"gin_client_ip":     c.ClientIP(),
+	}
+	c.JSON(200, info)
 }

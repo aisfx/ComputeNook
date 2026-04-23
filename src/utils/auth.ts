@@ -69,8 +69,19 @@ export const isAdmin = (): boolean => {
   return user?.isAdmin === true
 }
 
-// 登出
-export const logout = () => {
+// 登出（同时通知后端吊销 token）
+export const logout = async () => {
+  const token = getToken()
+  if (token) {
+    try {
+      await fetch(`${getApiBase()}/api/logout`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+    } catch (_) {
+      // 网络失败也继续清除本地状态
+    }
+  }
   localStorage.removeItem('token')
   localStorage.removeItem('user')
   sessionStorage.removeItem('token')

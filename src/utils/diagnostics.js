@@ -61,24 +61,21 @@ export async function fetchSnapshot() {
 }
 export function buildSystemPrompt(snap) {
     const s = snap.stats;
-    const downList = snap.downNodeNames.length > 0 ? snap.downNodeNames.join(', ') : 'none';
+    const downList = snap.downNodeNames.length > 0 ? snap.downNodeNames.join(', ') : '无';
     const alertLines = snap.alerts.length > 0
-        ? snap.alerts.map(a => `  [${a.severity}] ${a.name} | ${a.instance} | ${a.summary} | ${a.activeAt}`).join('\n')
-        : '  none';
-    // top 5 high-load nodes
+        ? snap.alerts.map(a => `  [${a.severity}] ${a.name} | ${a.instance} | ${a.summary}`).join('\n')
+        : '  无活跃告警';
     const topNodes = [...snap.nodeMetrics]
         .sort((a, b) => b.cpuUsage - a.cpuUsage)
         .slice(0, 10);
     const nodeLines = topNodes.length > 0
         ? topNodes.map(n => `  ${n.instance}: CPU ${n.cpuUsage}% | MEM ${n.memUsage}% | DISK ${n.diskUsage}% | Load ${n.load1} | Net ↓${n.netRx}KB/s ↑${n.netTx}KB/s`).join('\n')
-        : '  no data';
-    return `你是一个专业的 HPC 高性能计算集群运维 AI，具备故障诊断和解决方案建议能力，请用中文回答。
+        : '  暂无数据';
+    return `你是一个专业的 HPC 集群监控分析 AI，请用中文回答，基于以下实时数据进行分析。
 
-【当前集群状态快照 - ${snap.fetchedAt}】
-节点: 总计 ${s.totalNodes} 个，在线 ${s.onlineNodes} 个，离线 ${s.downNodes} 个
-CPU 使用率: ${s.cpuUsage.toFixed(1)}%
-内存使用率: ${s.memUsage.toFixed(1)}%
-GPU: 总计 ${s.totalGPUs} 个，已分配 ${s.allocGPUs} 个
+【集群状态 - ${snap.fetchedAt}】
+节点: 总计 ${s.totalNodes} | 在线 ${s.onlineNodes} | 离线 ${s.downNodes}
+CPU: ${s.cpuUsage.toFixed(1)}% | 内存: ${s.memUsage.toFixed(1)}% | GPU: ${s.allocGPUs}/${s.totalGPUs}
 
 【离线节点】
 ${downList}
@@ -86,10 +83,10 @@ ${downList}
 【活跃告警 (${snap.alerts.length} 条)】
 ${alertLines}
 
-【节点实时指标 (Prometheus, 按 CPU 排序前10)】
+【节点实时指标 (按 CPU 排序前10)】
 ${nodeLines}
 
-【Prometheus 监控】${snap.promConnected ? '已连接' : '未连接 - 监控数据不可用'}
+【Prometheus】${snap.promConnected ? '已连接' : '未连接'}
 
-请基于以上实时数据，帮助管理员诊断问题并给出具体的操作建议（包括 Slurm 命令）。`;
+请直接基于以上数据进行分析，给出具体结论和建议。`;
 }

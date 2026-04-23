@@ -41,6 +41,13 @@ func AuthMiddleware() gin.HandlerFunc {
 
 			if err == nil && token.Valid {
 				if claims, ok := token.Claims.(jwt.MapClaims); ok {
+					// 检查 token 是否已被吊销（用户已登出）
+					if IsTokenRevoked(tokenString) {
+						c.JSON(http.StatusUnauthorized, gin.H{"error": "token已失效，请重新登录"})
+						c.Abort()
+						return
+					}
+
 					username := claims["username"].(string)
 					
 					// 从 LDAP 获取用户最新状态

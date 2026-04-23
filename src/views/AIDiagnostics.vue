@@ -133,17 +133,97 @@ async function loadSnapshot() {
   }
 }
 
+// 前端主动查询 Prometheus，把实时数据注入到用户消息里
+// 根据用户问题关键词决定查哪些指标
+async function enrichWithPromData(userText: string): Promise<string> {
+  if (!snapshot.value?.promConnected) return ''
+
+  const text = userText.toLowerCase()
+  const queries: { label: string; q: string }[] = []
+
+  // 根据问题内容选择相关查询
+  const wantCPU = text.includes('cpu') || text.includes('负载') || text.includes('瓶颈') || text.includes('性能') || text.includes('健康') || text.includes('告警')
+  const wantMem = text.includes('内存') || text.includes('mem') || text.includes('瓶颈') || text.includes('性能') || text.includes('健康')
+  const wantDisk = text.includes('磁盘') || text.includes('disk') || text.includes('存储') || text.includes('健康')
+  const wantNet = text.includes('网络') || text.includes('net') || text.includes('带宽') || text.includes('健康')
+  const wantAlerts = text.includes('告警') || text.includes('alert') || text.includes('健康') || text.includes('异常')
+  const wantLoad = text.includes('负载') || text.includes('load') || text.includes('健康') || text.includes('性能')
+
+  // 默认至少查 CPU + 内存
+  if (wantCPU || (!wantMem && !wantDisk && !wantNet)) {
+    queries.push({ label: 'CPU使用率(%)', q: '100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)' })
+  }
+  if (wantMem || (!wantCPU && !wantDisk && !wantNet)) {
+    queries.push({ label: '内存使用率(%)', q: '100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)' })
+  }
+  if (wantLoad) {
+    queries.push({ label: '系统负载(load1)', q: 'node_load1' })
+  }
+  if (wantDisk) {
+    queries.push({ label: '磁盘使用率(%)', q: '100 - (node_filesystem_avail_bytes{mountpoint="/",fstype!="tmpfs"} / node_filesystem_size_bytes{mountpoint="/",fstype!="tmpfs"} * 100)' })
+  }
+  if (wantNet) {
+    queries.push({ label: '网络接收(KB/s)', q: 'sum by (instance) (rate(node_network_receive_bytes_total{device!~"lo|docker.*|veth.*"}[5m])) / 1024' })
+  }
+  if (wantAlerts) {
+    queries.push({ label: '活跃告警', q: 'ALERTS{alertstate="firing"}' })
+  }
+
+  if (queries.length === 0) return ''
+
+  const results: string[] = []
+  await Promise.all(queries.map(async ({ label, q }) => {
+    const r = await execPromQL(q)
+    results.push(`${label}:\n${r}`)
+  }))
+
+  return `\n\n【Prometheus 实时数据 - ${new Date().toLocaleTimeString('zh-CN')}】\n${results.join('\n\n')}`
+}
+
+// 执行 PromQL 查询，返回格式化结果字符串
+async function execPromQL(query: string): Promise<string> {
+  try {
+    const res = await fetch(
+      getApiBase() + '/api/monitoring/promql?query=' + encodeURIComponent(query),
+      { headers: { Authorization: 'Bearer ' + token() } }
+    )
+    if (!res.ok) return `查询失败: ${res.statusText}`
+    const data = await res.json()
+    if (data.status !== 'success') return `查询错误`
+    const results: any[] = data.data?.result || []
+    if (results.length === 0) return '无数据'
+    return results.slice(0, 20).map(r => {
+      const inst = r.metric?.instance || r.metric?.nodename || Object.values(r.metric || {}).join(',') || '-'
+      const val = Array.isArray(r.value) ? parseFloat(r.value[1]).toFixed(2) : '-'
+      return `  ${inst}: ${val}`
+    }).join('\n')
+  } catch {
+    return '查询异常'
+  }
+}
+
 async function send(text: string) {
   const t = text.trim()
   if (!t || chatLoading.value) return
   inputText.value = ''
   if (inputEl.value) inputEl.value.style.height = 'auto'
-  messages.value.push({ role: 'user', content: t, time: now() })
   chatLoading.value = true
+
+  // 前端主动查询 Prometheus，把实时数据附加到用户消息
+  const promData = await enrichWithPromData(t)
+  const enrichedContent = t + promData
+
+  messages.value.push({ role: 'user', content: t, time: now() }) // 显示原始问题
   scrollToBottom()
+
   try {
-    const history = messages.value.slice(-10).map(m => ({ role: m.role, content: m.content }))
-    const systemContent = snapshot.value ? buildSystemPrompt(snapshot.value) : '你是一个专业的 HPC 集群监控分析 AI，专注于基于 Prometheus 实时数据进行性能诊断、告警分析和基础设施健康评估，请用中文回答。'
+    // 发给 AI 的历史用 enriched 内容（含实时数据），但显示给用户的是原始问题
+    const history = messages.value.slice(-10).map((m, idx, arr) => ({
+      role: m.role,
+      // 最后一条 user 消息替换为带数据的版本
+      content: (m.role === 'user' && idx === arr.length - 1) ? enrichedContent : m.content,
+    }))
+    const systemContent = snapshot.value ? buildSystemPrompt(snapshot.value) : '你是一个专业的 HPC 集群监控分析 AI，请用中文回答。'
     const res = await fetch(getApiBase() + '/api/ai/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token() },
@@ -151,9 +231,9 @@ async function send(text: string) {
     })
     if (!res.ok) { const err = await res.json().catch(() => ({ error: res.statusText })); throw new Error(err.error || 'Request failed') }
     const data = await res.json()
-    messages.value.push({ role: 'assistant', content: data.content || 'No response', time: now() })
+    messages.value.push({ role: 'assistant', content: data.content || '无响应', time: now() })
   } catch (e: any) {
-    messages.value.push({ role: 'assistant', content: 'Error: ' + e.message, time: now() })
+    messages.value.push({ role: 'assistant', content: '❌ ' + e.message, time: now() })
   } finally {
     chatLoading.value = false
     scrollToBottom()
@@ -166,14 +246,18 @@ function scrollToBottom() { nextTick(() => { if (messagesEl.value) messagesEl.va
 function autoResize() { if (!inputEl.value) return; inputEl.value.style.height = 'auto'; inputEl.value.style.height = Math.min(inputEl.value.scrollHeight, 140) + 'px' }
 
 function renderContent(text: string): string {
-  const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const escaped = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
   return escaped
     .replace(/```(\w*)\n?([\s\S]*?)```/g, (_m, lang, code) => {
       const id = 'cb-' + Math.random().toString(36).slice(2, 8)
-      return `<div class="code-block"><div class="code-header"><span class="code-lang">${lang || 'code'}</span><button class="copy-btn" onclick="(function(){var el=document.getElementById('${id}');navigator.clipboard.writeText(el.innerText).then(function(){var b=el.parentElement.querySelector('.copy-btn');b.textContent='Copied';setTimeout(function(){b.textContent='Copy'},1500)})})()">Copy</button></div><pre id="${id}"><code>${code.trim()}</code></pre></div>`
+      return `<div class="code-block"><div class="code-header"><span class="code-lang">${lang || 'code'}</span><button class="copy-btn" onclick="(function(){var el=document.getElementById('${id}');navigator.clipboard.writeText(el.innerText).then(function(){var b=el.parentElement.querySelector('.copy-btn');b.textContent='✓ 已复制';setTimeout(function(){b.textContent='复制'},1500)})})()">复制</button></div><pre id="${id}"><code>${code.trim()}</code></pre></div>`
     })
     .replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>')
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/^#{1,3} (.+)$/gm, '<div class="msg-heading">$1</div>')
     .replace(/\n/g, '<br>')
 }
 
@@ -223,9 +307,9 @@ onMounted(() => loadSnapshot())
 .msg-avatar { font-size:1.1rem; flex-shrink:0; width:26px; text-align:center; margin-top:2px; }
 .msg-bubble { max-width:82%; display:flex; flex-direction:column; gap:2px; }
 .msg-user .msg-bubble { align-items:flex-end; }
-.msg-content { padding:8px 12px; border-radius:10px; font-size:0.82rem; line-height:1.6; word-break:break-word; }
-.msg-user .msg-content { background:#3b82f6; color:#fff; border-bottom-right-radius:3px; }
-.msg-assistant .msg-content { background:#f1f5f9; color:#1e293b; border-bottom-left-radius:3px; }
+.msg-content { padding:10px 14px; border-radius:12px; font-size:0.83rem; line-height:1.65; word-break:break-word; }
+.msg-user .msg-content { background:#2563eb; color:#fff; border-bottom-right-radius:3px; }
+.msg-assistant .msg-content { background:#fff; color:#1e293b; border:1px solid #e2e8f0; border-bottom-left-radius:3px; box-shadow:0 1px 3px rgba(0,0,0,0.06); }
 .msg-time { font-size:0.65rem; color:#94a3b8; padding:0 4px; }
 
 /* typing */
@@ -251,12 +335,13 @@ onMounted(() => loadSnapshot())
 
 <style>
 /* global: code block styles (not scoped so v-html can use them) */
-.code-block { margin:6px 0; border:1px solid #e2e8f0; border-radius:8px; overflow:hidden; font-size:0.78rem; }
-.code-header { display:flex; justify-content:space-between; align-items:center; padding:4px 10px; background:#f8fafc; border-bottom:1px solid #e2e8f0; }
-.code-lang { font-size:0.7rem; color:#64748b; font-family:monospace; }
-.copy-btn { padding:2px 8px; border:1px solid #e2e8f0; border-radius:4px; font-size:0.7rem; background:#fff; cursor:pointer; color:#64748b; }
-.copy-btn:hover { background:#f1f5f9; }
-.code-block pre { margin:0; padding:10px 12px; overflow-x:auto; background:#1e293b; }
-.code-block code { color:#e2e8f0; font-family:monospace; white-space:pre; }
-.inline-code { background:#f1f5f9; border:1px solid #e2e8f0; border-radius:3px; padding:1px 4px; font-family:monospace; font-size:0.8em; color:#1e293b; }
+.code-block { margin:8px 0; border:1px solid #334155; border-radius:8px; overflow:hidden; font-size:0.78rem; }
+.code-header { display:flex; justify-content:space-between; align-items:center; padding:5px 12px; background:#1e293b; border-bottom:1px solid #334155; }
+.code-lang { font-size:0.7rem; color:#94a3b8; font-family:monospace; }
+.copy-btn { padding:2px 8px; border:1px solid #475569; border-radius:4px; font-size:0.7rem; background:transparent; cursor:pointer; color:#94a3b8; transition:all 0.15s; }
+.copy-btn:hover { background:#334155; color:#e2e8f0; }
+.code-block pre { margin:0; padding:12px 14px; overflow-x:auto; background:#0f172a; }
+.code-block code { color:#e2e8f0; font-family:'Fira Code',Consolas,monospace; white-space:pre; font-size:0.78rem; }
+.inline-code { background:#f1f5f9; border:1px solid #cbd5e1; border-radius:3px; padding:1px 5px; font-family:Consolas,monospace; font-size:0.8em; color:#0f172a; }
+.msg-heading { font-weight:700; font-size:0.88rem; color:#1e293b; margin:6px 0 2px; }
 </style>

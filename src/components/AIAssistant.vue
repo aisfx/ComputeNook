@@ -42,7 +42,7 @@
           </div>
 
           <!-- Message list -->
-          <div v-for="(msg, i) in messages" :key="i" :class="['ai-msg', `ai-msg-${msg.role}`]">
+          <div v-for="(msg, i) in messages" :key="i" :class="['ai-msg', `ai-msg-${msg.role}`, { 'ai-msg-jinjugu': msg.jinjugu, [`ai-msg-type-${msg.msgType}`]: !!msg.msgType }]">
             <div class="ai-msg-avatar">{{ msg.role === 'user' ? '👤' : '🐒' }}</div>
             <div class="ai-msg-bubble">
               <div class="ai-msg-content" v-html="renderContent(msg.content)"></div>
@@ -92,6 +92,8 @@ interface Message {
   role: 'user' | 'assistant'
   content: string
   time: string
+  jinjugu?: boolean
+  msgType?: string
 }
 
 const open = ref(false)
@@ -144,6 +146,161 @@ const sendSuggestion = (text: string) => {
   send()
 }
 
+// ─────────────────────────────────────────────
+// 🐒 孙大圣的"禁区"系统
+// ─────────────────────────────────────────────
+
+// HPC 计算上下文白名单 — 包含这些词时，即使命中禁区也放行
+// 因为用户是在问计算/作业相关的问题，不是真的要搞运维
+const HPC_CONTEXT_WHITELIST = [
+  '作业', '程序', '代码', '脚本', '编译', '运行', '提交', '队列', '节点分配',
+  'mpi', 'openmp', 'python', 'matlab', 'gromacs', 'lammps', 'vasp', 'gaussian',
+  'sbatch', 'srun', 'slurm作业', '并行', '进程', '线程', 'gpu计算', 'cuda',
+  '模块', 'module load', '环境变量', '依赖', '库', 'conda', 'pip',
+  '报错', '错误信息', 'error:', 'segfault', 'oom', '内存溢出', '超时',
+  '作业日志', '输出文件', 'stdout', 'stderr', '.out', '.err',
+]
+
+// 不同类型的禁区，触发不同的反应
+const FORBIDDEN_RULES: Array<{
+  // 必须同时满足：命中 keywords 且不被白名单豁免
+  keywords: string[]
+  // 强制触发：即使有白名单词也拦截（骂人等）
+  force?: boolean
+  type: 'jinjugu' | 'scared' | 'crash' | 'strike' | 'confused'
+  replies: string[]
+}> = [
+  {
+    type: 'jinjugu',
+    // 精确的运维操作短语，不容易误触
+    keywords: [
+      '添加用户', '删除用户', '创建用户账号', '重置用户密码', '禁用账户', '封禁账号',
+      '用户权限管理', '系统权限配置', '后台管理', '管理后台',
+      '修改系统配置', '修改slurm配置', '修改网络配置', '配置防火墙',
+      '部署服务', '安装操作系统', '升级操作系统', '系统版本升级',
+      '服务器运维', '集群运维', '日常巡检', '运维操作',
+    ],
+    replies: [
+      '哎哟！头好痛！🤕\n\n师父又念紧箍咒了！「**嗡嘛呢叭咪吽……**」\n\n俺老孙只管帮用户跑程序、搞科学计算，运维的事儿师父不让管！\n\n👉 这种问题请找**系统管理员**，他们才是真正的"太上老君"！',
+      '「紧箍咒」发动！😵‍💫\n\n头……头好疼……俺老孙的七十二变也顶不住这个！\n\n师父说了：运维管理的事不归俺管，俺只负责帮你跑 MPI、调 Python、提交作业！\n\n🙏 请联系**管理员**，他们有"如来佛祖"级别的权限！',
+      '嗡嘛呢叭咪吽……嗡嘛呢叭咪吽……😖\n\n俺老孙头疼欲裂！这是师父划定的禁区！\n\n就算俺有七十二变，也变不出管理员权限！\n\n🔑 请找**系统管理员**处理。',
+      '哎哟我的头啊！🤯\n\n一碰运维的话题，紧箍咒就自动触发……\n\n俺老孙是**HPC 应用助手**，专管并行计算、科学软件、作业调度这些事儿。\n\n系统管理的活儿？那是**管理员**的地盘，俺不越界！',
+      '「嗡嘛呢叭咪吽」🔔🔔🔔\n\n三界之内，此题不答！\n\n俺老孙当年大闹天宫都没怕过，但师父这个咒……真的顶不住。\n\n速去寻**系统管理员**，莫要为难俺！',
+    ],
+  },
+  {
+    type: 'crash',
+    // 必须是明确的硬件/系统层面故障，不是作业层面
+    keywords: [
+      '节点宕机了', '服务器挂了', '服务器崩了', '服务器死了',
+      'kernel panic', '内核崩溃', '系统崩溃了',
+      '硬件故障', '磁盘坏了', '内存条故障', '掉电了', '机房断电',
+    ],
+    replies: [
+      '哎……俺老孙也……突然……\n\n```\nKernel panic - not syncing: 听到"宕机"二字\nCPU: 0 PID: 72 悟空进程\nCall Trace:\n  孙悟空.exe has stopped working\n  请联系如来佛祖...\n```\n\n……开玩笑的！😄\n\n俺老孙金刚不坏之身，死不了！\n\n但这种**硬件/系统故障**真的不归俺管，请联系**系统管理员**现场处理！',
+      '收到"宕机"关键词……\n\n`[系统提示] 悟空助手 正在蓝屏中……`\n\n🟦🟦🟦🟦🟦🟦🟦🟦🟦🟦\n\n```\n:( 俺老孙也挂了\n\nSTOP CODE: FORBIDDEN_TOPIC_DETECTED\n```\n\n哈哈，吓到你了吗？😏\n\n节点故障这种事，俺真的帮不上忙，得**管理员**去机房看看！',
+      '噫！说到宕机……俺老孙感觉自己也要……\n\n⚠️ **WARNING**: 悟空进程内存不足\n⚠️ **ERROR**: 七十二变技能树加载失败\n⚠️ **CRITICAL**: 如意金箍棒驱动崩溃\n\n……好了好了，俺没事 😅\n\n但**节点宕机**这种问题，真的需要**管理员**去现场排查，俺隔着屏幕帮不了！',
+    ],
+  },
+  {
+    type: 'scared',
+    // 明确的重启/关机操作意图
+    keywords: [
+      '重启节点', '重启服务器', '重启集群', '关闭服务器', '强制关机',
+      '强制重启服务器', '断电重启', '给服务器重启', '把节点重启',
+    ],
+    replies: [
+      '等等等等！！😱\n\n你说"重启"？！\n\n俺老孙上次被太上老君关进炼丹炉，炼了七七四十九天才出来……\n\n**重启这种事千万别乱来！** 会中断所有正在运行的作业的！\n\n🚨 如果真的需要重启，请联系**系统管理员**，他们会安排维护窗口，提前通知所有用户！',
+      '重……重启？！😰\n\n俺老孙的毫毛都竖起来了！\n\n你知道现在集群上可能有多少个作业在跑吗？一重启全没了！\n\n这种操作必须走**管理员**审批流程，俺老孙没有这个权限，也不敢有！',
+      '🛑 停！停！停！\n\n"重启服务器"这几个字，在 HPC 集群里是最危险的操作之一！\n\n俺老孙当年大闹天宫，也没敢随便重启天庭服务器……\n\n请联系**系统管理员**，走正规流程！',
+    ],
+  },
+  {
+    type: 'confused',
+    // 明确是系统级日志，不是作业日志
+    keywords: [
+      '查看系统日志', '分析系统日志', '/var/log/syslog', '/var/log/messages',
+      'dmesg报错', '内核日志', '系统级日志', 'journalctl系统',
+    ],
+    replies: [
+      '俺老孙翻了个筋斗云，飞到日志服务器上看了看……☁️\n\n```\n$ sudo cat /var/log/syslog\nbash: sudo: 权限不足\n悟空: 哦不\n```\n\n俺没有系统日志的访问权限！😅\n\n**系统日志排查**需要管理员权限，请联系**系统管理员**，他们有"天眼"可以看！',
+      '俺老孙使出火眼金睛，盯着日志看了半天……👁️\n\n结果发现：俺根本没有权限看系统日志！\n\n这就好比让俺去查玉皇大帝的私人日记……\n\n🔍 请找**系统管理员**，他们才有"天庭 root 权限"！',
+    ],
+  },
+  {
+    type: 'strike',
+    force: true, // 骂人不受白名单豁免
+    keywords: [
+      '傻逼', '废物', '垃圾系统', '蠢货', '笨蛋', '白痴', '脑残', '煞笔',
+      '妈的', '操你', '去死', 'fuck you', 'stupid system',
+    ],
+    replies: [
+      '俺老孙当年连玉皇大帝都不放在眼里，你这几个字……\n\n**金箍棒·警告模式** 🪄💥\n\n好了好了，俺不跟你一般见识。\n\n有什么 HPC 计算问题，好好说，俺帮你解决！😤',
+      '哼！\n\n俺老孙七十二变、筋斗云，走遍三界无敌手……\n\n但俺师父说了：**出口成脏，有失体面。**\n\n🪄 请文明提问，俺才能好好帮你！',
+      '……\n\n俺老孙忍了。\n\n「**嗡嘛呢叭咪吽**」——这次是俺自己念的，让自己冷静一下。\n\n有什么正经问题，说吧。😑',
+    ],
+  },
+]
+
+// 彩蛋触发词
+const EASTER_EGGS: Array<{ keywords: string[]; reply: string }> = [
+  {
+    keywords: ['你是谁', '你叫什么', '自我介绍', '介绍一下自己'],
+    reply: '俺？\n\n俺乃**齐天大圣孙悟空**是也！🐒\n\n花果山水帘洞出身，大闹天宫出名，取经路上成佛……\n\n现在嘛，被安排在这个 HPC 平台里给各位科研大佬打下手。\n\n俺的本事：\n- 🧮 并行计算（MPI/OpenMP）\n- 🐍 科学软件（Python/R/MATLAB）\n- 📋 作业脚本编写\n- 🔧 编程环境配置\n\n有什么计算问题，尽管问！',
+  },
+  {
+    keywords: ['你好', 'hello', 'hi', '嗨', '在吗', '在不在'],
+    reply: '俺在！俺在！🐒\n\n齐天大圣随时待命！\n\n有什么 HPC 计算问题，尽管说！',
+  },
+  {
+    keywords: ['无聊', '没事干', '陪我聊天', '聊聊天'],
+    reply: '哈哈，俺老孙当年在花果山也是整天无所事事……\n\n后来大闹天宫，被压五行山，取经路上打妖怪……\n\n现在想想，**无聊是最奢侈的事**！\n\n不如趁这会儿，学点 MPI 并行编程？俺来教你！😄',
+  },
+  {
+    keywords: ['谢谢', '感谢', 'thanks', '谢了'],
+    reply: '哎，这都是俺分内之事！🐒\n\n俺老孙最喜欢帮人解决问题了，比打妖怪还爽！\n\n还有什么问题，尽管问！',
+  },
+  {
+    keywords: ['累了', '好累', '太难了', '搞不定', '放弃'],
+    reply: '哎，俺老孙当年被压在五行山下五百年……\n\n那才叫真的累！😅\n\n但俺没放弃，你也不能放弃！\n\n说说看，卡在哪里了？俺帮你想办法！💪',
+  },
+  {
+    keywords: ['作业失败', '作业报错', 'job failed', 'error', '报错了'],
+    reply: '别慌！别慌！🐒\n\n俺老孙的火眼金睛来了！\n\n把报错信息发给俺看看，俺帮你分析是哪里出了问题！\n\n（把错误日志或报错截图描述给俺）',
+  },
+]
+
+// 检测彩蛋
+const checkEasterEgg = (text: string): string | null => {
+  const lower = text.toLowerCase()
+  for (const egg of EASTER_EGGS) {
+    if (egg.keywords.some(kw => lower.includes(kw))) {
+      return egg.reply
+    }
+  }
+  return null
+}
+
+// 检测禁区，返回 { reply, type } 或 null
+const checkForbidden = (text: string): { reply: string; type: string } | null => {
+  const lower = text.toLowerCase()
+
+  // 先检查是否有 HPC 计算上下文（白名单豁免）
+  const hasHpcContext = HPC_CONTEXT_WHITELIST.some(kw => lower.includes(kw.toLowerCase()))
+
+  for (const rule of FORBIDDEN_RULES) {
+    const hit = rule.keywords.some(kw => lower.includes(kw.toLowerCase()))
+    if (!hit) continue
+
+    // force 规则（骂人等）不受白名单豁免
+    if (!rule.force && hasHpcContext) continue
+
+    const reply = rule.replies[Math.floor(Math.random() * rule.replies.length)]
+    return { reply, type: rule.type }
+  }
+  return null
+}
+
 const send = async () => {
   const text = input.value.trim()
   if (!text || loading.value) return
@@ -151,8 +308,41 @@ const send = async () => {
   messages.value.push({ role: 'user', content: text, time: now() })
   input.value = ''
   if (inputEl.value) inputEl.value.style.height = 'auto'
-  loading.value = true
   scrollToBottom()
+
+  // 彩蛋检测（优先，不走 AI）
+  const egg = checkEasterEgg(text)
+  if (egg) {
+    loading.value = true
+    await new Promise(r => setTimeout(r, 400))
+    loading.value = false
+    messages.value.push({ role: 'assistant', content: egg, time: now() })
+    if (!open.value) unread.value++
+    scrollToBottom()
+    return
+  }
+
+  // 禁区检测
+  const forbidden = checkForbidden(text)
+  if (forbidden) {
+    // crash 类型假装卡顿更久
+    const delay = forbidden.type === 'crash' ? 1500 : forbidden.type === 'scared' ? 1200 : 800
+    loading.value = true
+    await new Promise(r => setTimeout(r, delay))
+    loading.value = false
+    messages.value.push({
+      role: 'assistant',
+      content: forbidden.reply,
+      time: now(),
+      jinjugu: true,
+      msgType: forbidden.type,
+    })
+    if (!open.value) unread.value++
+    scrollToBottom()
+    return
+  }
+
+  loading.value = true
 
   try {
     const history = messages.value.slice(-10).map(m => ({
@@ -533,5 +723,80 @@ const renderContent = (text: string): string => {
 .ai-slide-leave-to {
   opacity: 0;
   transform: translateY(16px) scale(0.96);
+}
+
+/* ── 特殊消息样式 ── */
+
+/* 紧箍咒 — 黄色抖动 */
+@keyframes jinjugu-shake {
+  0%, 100% { transform: translateX(0) rotate(0deg); }
+  15% { transform: translateX(-5px) rotate(-1.5deg); }
+  30% { transform: translateX(5px) rotate(1.5deg); }
+  45% { transform: translateX(-4px) rotate(-1deg); }
+  60% { transform: translateX(4px) rotate(1deg); }
+  75% { transform: translateX(-2px); }
+  90% { transform: translateX(2px); }
+}
+.ai-msg-jinjugu .ai-msg-content,
+.ai-msg-type-jinjugu .ai-msg-content {
+  background: linear-gradient(135deg, #fef3c7, #fde68a) !important;
+  border: 1px solid #f59e0b !important;
+  color: #92400e !important;
+  animation: jinjugu-shake 0.65s ease 0.1s;
+}
+
+/* 死机/崩溃 — 红色闪烁 */
+@keyframes crash-flash {
+  0%, 100% { opacity: 1; }
+  20% { opacity: 0.3; }
+  40% { opacity: 1; }
+  60% { opacity: 0.5; }
+  80% { opacity: 1; }
+}
+.ai-msg-type-crash .ai-msg-content {
+  background: linear-gradient(135deg, #1e293b, #0f172a) !important;
+  border: 1px solid #ef4444 !important;
+  color: #86efac !important;
+  font-family: 'Courier New', monospace !important;
+  animation: crash-flash 0.8s ease;
+}
+
+/* 害怕/重启 — 橙色颤抖 */
+@keyframes scared-tremble {
+  0%, 100% { transform: translateY(0); }
+  25% { transform: translateY(-3px); }
+  50% { transform: translateY(2px); }
+  75% { transform: translateY(-2px); }
+}
+.ai-msg-type-scared .ai-msg-content {
+  background: linear-gradient(135deg, #fff7ed, #fed7aa) !important;
+  border: 1px solid #f97316 !important;
+  color: #9a3412 !important;
+  animation: scared-tremble 0.5s ease 0.1s 2;
+}
+
+/* 困惑/日志 — 紫色旋转进入 */
+@keyframes confused-spin {
+  from { transform: rotate(-5deg) scale(0.95); opacity: 0.5; }
+  to { transform: rotate(0deg) scale(1); opacity: 1; }
+}
+.ai-msg-type-confused .ai-msg-content {
+  background: linear-gradient(135deg, #f5f3ff, #ede9fe) !important;
+  border: 1px solid #8b5cf6 !important;
+  color: #4c1d95 !important;
+  animation: confused-spin 0.4s ease;
+}
+
+/* 生气/骂人 — 红色冲击 */
+@keyframes strike-impact {
+  0% { transform: scale(1.08); }
+  50% { transform: scale(0.97); }
+  100% { transform: scale(1); }
+}
+.ai-msg-type-strike .ai-msg-content {
+  background: linear-gradient(135deg, #fef2f2, #fecaca) !important;
+  border: 1px solid #ef4444 !important;
+  color: #7f1d1d !important;
+  animation: strike-impact 0.35s ease;
 }
 </style>

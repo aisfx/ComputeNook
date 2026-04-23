@@ -104,6 +104,16 @@
             <span class="nav-item-label">AI 诊断</span>
           </a>
 
+          <!-- 主机资产 CMDB -->
+          <a
+            :class="['nav-item', { active: adminTab === 'cmdb' }]"
+            @click="adminTab = 'cmdb'"
+            :title="sidebarCollapsed ? '主机资产' : ''"
+          >
+            <span class="nav-item-icon">🖥️</span>
+            <span class="nav-item-label">主机资产</span>
+          </a>
+
           <!-- 数据审计（始终最后） -->
           <a
             :class="['nav-item', { active: adminTab === 'audit' }]"
@@ -160,6 +170,7 @@
         <AdminHours v-else-if="adminTab === 'hours'" />
         <AdminQuota v-else-if="adminTab === 'quota'" />
         <AdminAudit v-else-if="adminTab === 'audit'" />
+        <AdminCMDB v-else-if="adminTab === 'cmdb'" />
         <AdminSlurmAccounts v-else-if="adminTab === 'slurm-accounts'" />
         <AdminSlurmUsers v-else-if="adminTab === 'slurm-users'" />
         <CustomDashboard v-else-if="adminTab === 'custom-dashboard'" />
@@ -178,6 +189,7 @@ import AdminQoS from './AdminQoS.vue'
 import AdminHours from './AdminHours.vue'
 import AdminQuota from './AdminQuota.vue'
 import AdminAudit from './AdminAudit.vue'
+import AdminCMDB from './AdminCMDB.vue'
 import AdminSlurmAccounts from './AdminSlurmAccounts.vue'
 import AdminSlurmUsers from './AdminSlurmUsers.vue'
 import AdminAssociations from './AdminAssociations.vue'

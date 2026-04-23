@@ -68,6 +68,7 @@
         
         <select v-model="filters.action" class="filter-select" @change="loadLogs">
           <option value="">全部操作</option>
+          <option value="page_view">页面访问</option>
           <option value="create">创建</option>
           <option value="update">更新</option>
           <option value="delete">删除</option>
@@ -121,7 +122,8 @@
               <th>资源</th>
               <th>资源ID</th>
               <th>状态</th>
-              <th>IP地址</th>
+              <th>客户端IP</th>
+              <th>访问地址</th>
               <th>耗时</th>
               <th>操作</th>
             </tr>
@@ -150,6 +152,7 @@
                 </span>
               </td>
               <td class="ip-cell">{{ log.ip_address }}</td>
+              <td class="host-cell">{{ log.access_host || '-' }}</td>
               <td class="duration-cell">{{ log.duration }}ms</td>
               <td>
                 <button class="btn-link" @click="viewDetails(log)">
@@ -269,8 +272,12 @@
               <span class="error-text">{{ selectedLog.error_msg }}</span>
             </div>
             <div class="detail-row">
-              <label>IP地址</label>
+              <label>客户端IP</label>
               <span>{{ selectedLog.ip_address }}</span>
+            </div>
+            <div class="detail-row">
+              <label>访问地址</label>
+              <span class="host-text">{{ selectedLog.access_host || '-' }}</span>
             </div>
             <div class="detail-row">
               <label>用户代理</label>
@@ -522,7 +529,8 @@ const formatFullTime = (timestamp: string) => {
 // 获取操作标签
 const getActionLabel = (action: string) => {
   const labels: any = {
-    create: '创建',
+    page_view: '📄 页面访问',
+  create: '创建',
     update: '更新',
     delete: '删除',
     read: '读取',
@@ -799,6 +807,11 @@ onMounted(() => {
   white-space: nowrap;
 }
 
+.action-page_view {
+  background: #f0fdf4;
+  color: #166534;
+}
+
 .action-create {
   background: #d1fae5;
   color: #065f46;
@@ -850,6 +863,23 @@ onMounted(() => {
   color: #6b7280;
   font-family: monospace;
   font-size: 0.9rem;
+}
+
+.host-cell {
+  color: #4338ca;
+  font-family: monospace;
+  font-size: 0.85rem;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.host-text {
+  color: #4338ca;
+  font-family: monospace;
+  font-size: 0.9rem;
+  word-break: break-all;
 }
 
 .duration-cell {

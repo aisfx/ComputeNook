@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"hpc-backend/audit"
+	"hpc-backend/models"
 )
 
 // GetAuditLogs 获取审计日志列表
@@ -114,7 +115,7 @@ func ExportAuditLogs(c *gin.Context) {
 	c.Header("Content-Disposition", "attachment; filename=audit_logs.csv")
 
 	// 写入CSV头
-	c.Writer.WriteString("ID,时间,用户,角色,操作,资源,资源ID,详情,IP地址,状态,错误信息,耗时(ms)\n")
+	c.Writer.WriteString("ID,时间,用户,角色,操作,资源,资源ID,详情,客户端IP,访问地址,状态,错误信息,耗时(ms)\n")
 
 	// 写入数据
 	for _, log := range logs {
@@ -127,6 +128,7 @@ func ExportAuditLogs(c *gin.Context) {
 		c.Writer.WriteString(log.ResourceID + ",")
 		c.Writer.WriteString("\"" + log.Details + "\",")
 		c.Writer.WriteString(log.IPAddress + ",")
+		c.Writer.WriteString(log.AccessHost + ",")
 		c.Writer.WriteString(log.Status + ",")
 		c.Writer.WriteString("\"" + log.ErrorMsg + "\",")
 		c.Writer.WriteString(strconv.FormatInt(log.Duration, 10) + "\n")
@@ -278,4 +280,39 @@ func decodeUTF8(b []byte) (rune, int) {
 		}
 	}
 	return 0xFFFD, 1
+}
+
+// PageView 记录前端页面访问
+// POST /api/audit/page-view
+func PageView(c *gin.Context) {
+	username, _ := c.Get("username")
+	userRole := "user"
+	if isAdmin, ok := c.Get("isAdmin"); ok && isAdmin.(bool) {
+		userRole = "admin"
+	}
+
+	var body struct {
+		Page  string `json:"page"`  // 页面标识，如 "dashboard"、"jobs"
+		Title string `json:"title"` // 页面中文名，如 "仪表盘"
+	}
+	if err := c.ShouldBindJSON(&body); err != nil || body.Page == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "page required"})
+		return
+	}
+
+	logger := audit.GetLogger()
+	logger.Log(models.AuditLog{
+		Username:   username.(string),
+		UserRole:   userRole,
+		Action:     models.ActionPageView,
+		Resource:   "page",
+		ResourceID: body.Page,
+		Details:    body.Title,
+		IPAddress:  c.ClientIP(),
+		AccessHost: c.Request.Host,
+		UserAgent:  c.Request.UserAgent(),
+		Status:     models.StatusSuccess,
+	})
+
+	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
