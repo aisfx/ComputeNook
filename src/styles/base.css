@@ -6,14 +6,15 @@
 }
 
 html {
-  font-size: 16px;
+  /* 流式字体：320px屏=14px，1920px屏=17px，中间线性插值 */
+  font-size: clamp(14px, 0.875rem + 0.2vw, 17px);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 body {
   font-family: var(--font-family);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-base);
   line-height: var(--line-height-normal);
   color: hsl(var(--foreground));
   background-color: hsl(var(--background));

@@ -181,3 +181,69 @@
   --z-popover: 1060;
   --z-tooltip: 1070;
 }
+
+/* ===== 响应式字体与间距断点 ===== */
+
+/* 基础字体大小（body 用这个） */
+:root {
+  --font-size-base: 0.95rem;   /* 默认比原来稍大 */
+}
+
+/* 小屏（手机/平板竖屏，< 768px） */
+@media (max-width: 767px) {
+  :root {
+    --font-size-base: 0.9rem;
+    --font-size-xs: 0.7rem;
+    --font-size-sm: 0.82rem;
+    --font-size-md: 0.95rem;
+    --font-size-lg: 1.05rem;
+    --font-size-xl: 1.15rem;
+    --font-size-2xl: 1.3rem;
+    --spacing-md: 12px;
+    --spacing-lg: 16px;
+    --spacing-xl: 24px;
+  }
+}
+
+/* 中屏（平板横屏 / 小笔记本，768px ~ 1279px） */
+@media (min-width: 768px) and (max-width: 1279px) {
+  :root {
+    --font-size-base: 0.92rem;
+    --font-size-xs: 0.72rem;
+    --font-size-sm: 0.85rem;
+    --font-size-md: 0.97rem;
+    --font-size-lg: 1.08rem;
+    --font-size-xl: 1.2rem;
+    --font-size-2xl: 1.4rem;
+  }
+}
+
+/* 标准屏（1280px ~ 1919px） */
+@media (min-width: 1280px) and (max-width: 1919px) {
+  :root {
+    --font-size-base: 0.95rem;
+    --font-size-xs: 0.75rem;
+    --font-size-sm: 0.875rem;
+    --font-size-md: 1rem;
+    --font-size-lg: 1.125rem;
+    --font-size-xl: 1.25rem;
+    --font-size-2xl: 1.5rem;
+  }
+}
+
+/* 大屏（1920px+，2K/4K 显示器） */
+@media (min-width: 1920px) {
+  :root {
+    --font-size-base: 1.05rem;
+    --font-size-xs: 0.82rem;
+    --font-size-sm: 0.95rem;
+    --font-size-md: 1.1rem;
+    --font-size-lg: 1.25rem;
+    --font-size-xl: 1.4rem;
+    --font-size-2xl: 1.65rem;
+    --font-size-3xl: 2rem;
+    --spacing-md: 20px;
+    --spacing-lg: 28px;
+    --spacing-xl: 40px;
+  }
+}

@@ -48,7 +48,7 @@
 .data-table th, table th {
   background: hsl(var(--muted) / 0.5) !important;
   color: hsl(var(--muted-foreground)) !important;
-  font-size: 0.75rem !important;
+  font-size: var(--font-size-xs) !important;
   font-weight: 600 !important;
   padding: 10px 16px !important;
   border-bottom: 1px solid hsl(var(--border)) !important;
@@ -57,7 +57,7 @@
 
 .data-table td, table td {
   padding: 12px 16px !important;
-  font-size: 0.875rem !important;
+  font-size: var(--font-size-sm) !important;
   color: hsl(var(--foreground)) !important;
   border-bottom: 1px solid hsl(var(--border)) !important;
   background: transparent !important;
@@ -120,7 +120,7 @@ label {
 }
 
 .page-header h3 {
-  font-size: 1rem !important;
+  font-size: var(--font-size-md) !important;
   font-weight: 600 !important;
   color: hsl(var(--foreground)) !important;
   margin: 0 !important;
@@ -208,7 +208,7 @@ label {
 
 .stat-label {
   color: hsl(var(--muted-foreground)) !important;
-  font-size: 0.8rem !important;
+  font-size: var(--font-size-xs) !important;
 }
 
 .stat-value {
@@ -217,7 +217,7 @@ label {
 
 .stat-detail {
   color: hsl(var(--muted-foreground)) !important;
-  font-size: 0.75rem !important;
+  font-size: var(--font-size-xs) !important;
 }
 
 /* 统一 chart cards */
@@ -228,7 +228,7 @@ label {
 
 .chart-card h3 {
   color: hsl(var(--foreground)) !important;
-  font-size: 0.9rem !important;
+  font-size: var(--font-size-sm) !important;
   font-weight: 600 !important;
 }
 
@@ -246,7 +246,7 @@ label {
   gap: 8px;
   padding: 16px;
   color: hsl(var(--muted-foreground));
-  font-size: 0.875rem;
+  font-size: var(--font-size-sm);
 }
 
 /* 统一 filter/search bar */
@@ -259,7 +259,7 @@ label {
 /* 统一 section titles */
 .section-title, .card > h3, .card > h4 {
   color: hsl(var(--foreground)) !important;
-  font-size: 0.9rem !important;
+  font-size: var(--font-size-sm) !important;
   font-weight: 600 !important;
   margin-bottom: 16px !important;
 }

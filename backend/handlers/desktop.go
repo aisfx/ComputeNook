@@ -529,9 +529,10 @@ func buildDesktopScript(session *DesktopSession) string {
 	b.WriteString("sleep 1\n")
 	b.WriteString("rm -f /tmp/.X${DISPLAY_NUM}-lock /tmp/.X11-unix/X${DISPLAY_NUM} 2>/dev/null || true\n\n")
 
-	// 启动 TurboVNC，使用独立目录
-	startCmd := fmt.Sprintf("vncserver :${DISPLAY_NUM} -geometry %s -depth 24 -rfbauth %s/passwd -alwaysshared -rfbport ${VNC_PORT} -vncUserDir %s -log %s/vnc.log\n",
-		resolution, vncDir, vncDir, vncDir)
+	// 启动 TurboVNC，VNCUSERDIR 已通过环境变量指定独立目录
+	// TurboVNC 不支持 -vncUserDir 参数，用 export VNCUSERDIR 代替
+	startCmd := fmt.Sprintf("vncserver :${DISPLAY_NUM} -geometry %s -depth 24 -rfbauth %s/passwd -alwaysshared -rfbport ${VNC_PORT} -log %s/vnc.log\n",
+		resolution, vncDir, vncDir)
 	b.WriteString(startCmd)
 	b.WriteString("VNC_EXIT=$?\n")
 	b.WriteString("if [ $VNC_EXIT -ne 0 ]; then\n")
@@ -561,156 +562,6 @@ func buildDesktopScript(session *DesktopSession) string {
 
 	return b.String()
 }
-func buildDesktopScript(session *DesktopSession) string {
-	// display 从 :1 开始，vncPort 从 5901 开始
-	// 脚本里会动态检测端口是否被占用，自动往后找空闲的
-	baseDisplay := session.ID  // :1, :2, :3 ...
-	baseVncPort := 5900 + baseDisplay
-
-	resolution := session.Resolution
-	if resolution == "" || resolution == "auto" {
-		resolution = "1920x1080"
-	}
-	desktopType := session.Type
-	if desktopType == "" {
-		desktopType = "xfce"
-	}
-
-	homeBase := os.Getenv("HOME_BASE_PATH")
-	if homeBase == "" {
-		homeBase = "/home"
-	}
-	statusDir := fmt.Sprintf("%s/%s/.desktop", homeBase, session.Username)
-	statusFile := fmt.Sprintf("%s/%d.status", statusDir, session.ID)
-
-	var b strings.Builder
-	b.WriteString("#!/bin/bash\n")
-	b.WriteString(fmt.Sprintf("mkdir -p %s\n\n", statusDir))
-	// 补全环境变量，Slurm 有时不传 HOME
-	b.WriteString(fmt.Sprintf("export HOME=${HOME:-%s/%s}\n", homeBase, session.Username))
-	b.WriteString("export PATH=/opt/TurboVNC/bin:/usr/bin:/usr/local/bin:/bin:/usr/sbin:/sbin:$PATH\n\n")
-
-	// ── xstartup：自适应桌面环境 ──
-	b.WriteString("mkdir -p ~/.vnc\n")
-	b.WriteString("cat > ~/.vnc/xstartup << 'XSTARTUP'\n")
-	b.WriteString("#!/bin/bash\n")
-	b.WriteString("unset SESSION_MANAGER\n")
-	b.WriteString("unset DBUS_SESSION_BUS_ADDRESS\n")
-	b.WriteString("export XDG_SESSION_TYPE=x11\n")
-	b.WriteString("export XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/tmp/runtime-$(id -u)}\n")
-	b.WriteString("mkdir -p $XDG_RUNTIME_DIR && chmod 700 $XDG_RUNTIME_DIR\n")
-	if desktopType != "" && desktopType != "auto" {
-		switch desktopType {
-		case "xfce", "xfce4":
-			b.WriteString("exec startxfce4\n")
-		case "gnome":
-			b.WriteString("exec gnome-session\n")
-		case "kde":
-			b.WriteString("exec startkde\n")
-		default:
-			b.WriteString("exec startxfce4\n")
-		}
-	} else {
-		// 自适应：按优先级检测已安装的桌面环境
-		b.WriteString("if command -v startxfce4 &>/dev/null; then\n")
-		b.WriteString("  exec startxfce4\n")
-		b.WriteString("elif command -v gnome-session &>/dev/null; then\n")
-		b.WriteString("  exec gnome-session\n")
-		b.WriteString("elif command -v startkde &>/dev/null; then\n")
-		b.WriteString("  exec startkde\n")
-		b.WriteString("elif command -v startlxde &>/dev/null; then\n")
-		b.WriteString("  exec startlxde\n")
-		b.WriteString("elif command -v openbox-session &>/dev/null; then\n")
-		b.WriteString("  exec openbox-session\n")
-		b.WriteString("else\n")
-		b.WriteString("  exec xterm\n")
-		b.WriteString("fi\n")
-	}
-	b.WriteString("XSTARTUP\n")
-	b.WriteString("chmod +x ~/.vnc/xstartup\n\n")
-
-	// ── 生成 VNC 密码（随机8位）──
-	b.WriteString("VNC_PASS=$(openssl rand -base64 6 | tr -d '/+=' | head -c 8)\n")
-	b.WriteString("echo \"$VNC_PASS\" | vncpasswd -f > ~/.vnc/passwd\n")
-	b.WriteString("chmod 600 ~/.vnc/passwd\n\n")
-
-	// ── 动态查找空闲的 display 和 rfbport（从指定基准开始往后找）──
-	b.WriteString(fmt.Sprintf("BASE_DISPLAY=%d\n", baseDisplay))
-	b.WriteString(fmt.Sprintf("BASE_PORT=%d\n", baseVncPort))
-	b.WriteString("DISPLAY_NUM=$BASE_DISPLAY\n")
-	b.WriteString("VNC_PORT=$BASE_PORT\n")
-	b.WriteString("# 找一个没有锁文件且端口未被占用的 display\n")
-	b.WriteString("for try in $(seq 0 19); do\n")
-	b.WriteString("  DISPLAY_NUM=$((BASE_DISPLAY + try))\n")
-	b.WriteString("  VNC_PORT=$((BASE_PORT + try))\n")
-	b.WriteString("  # 检查 X lock 文件和端口是否空闲\n")
-	b.WriteString("  if [ ! -f /tmp/.X${DISPLAY_NUM}-lock ] && ! ss -tlnp 2>/dev/null | grep -q \":${VNC_PORT}\"; then\n")
-	b.WriteString("    break\n")
-	b.WriteString("  fi\n")
-	b.WriteString("done\n\n")
-
-	// ── 状态文件 ──
-	b.WriteString(fmt.Sprintf("echo 'status=starting' > %s\n", statusFile))
-	b.WriteString(fmt.Sprintf("echo \"node=$(hostname)\" >> %s\n", statusFile))
-	b.WriteString(fmt.Sprintf("echo \"vnc_port=$VNC_PORT\" >> %s\n", statusFile))
-	b.WriteString(fmt.Sprintf("echo \"display=$DISPLAY_NUM\" >> %s\n", statusFile))
-	b.WriteString(fmt.Sprintf("echo \"password=$VNC_PASS\" >> %s\n", statusFile))
-
-	// ── 清理该 display 可能残留的旧进程 ──
-	b.WriteString("vncserver -kill :${DISPLAY_NUM} 2>/dev/null || true\n")
-	b.WriteString("sleep 1\n")
-	b.WriteString("pkill -f \"Xvnc :${DISPLAY_NUM}\" 2>/dev/null || true\n")
-	b.WriteString("pkill -f \"Xtigervnc :${DISPLAY_NUM}\" 2>/dev/null || true\n")
-	b.WriteString("if [ -f ~/.vnc/$(hostname):${DISPLAY_NUM}.pid ]; then\n")
-	b.WriteString("  kill -9 $(cat ~/.vnc/$(hostname):${DISPLAY_NUM}.pid) 2>/dev/null || true\n")
-	b.WriteString("fi\n")
-	b.WriteString("sleep 1\n")
-	b.WriteString("rm -f /tmp/.X${DISPLAY_NUM}-lock /tmp/.X11-unix/X${DISPLAY_NUM} 2>/dev/null || true\n")
-	b.WriteString("rm -f ~/.vnc/*:${DISPLAY_NUM}.pid ~/.vnc/*:${DISPLAY_NUM}.log 2>/dev/null || true\n\n")
-
-	// ── 启动 TurboVNC server ──
-	b.WriteString(fmt.Sprintf("vncserver :${DISPLAY_NUM} -geometry %s -depth 24 -rfbauth ~/.vnc/passwd -alwaysshared -rfbport ${VNC_PORT}\n", resolution))
-	b.WriteString("VNC_EXIT=$?\n")
-	b.WriteString("if [ $VNC_EXIT -ne 0 ]; then\n")
-	b.WriteString("  echo '[desktop] first attempt failed, retrying after hard cleanup...' >&2\n")
-	b.WriteString("  pkill -9 -f \"Xvnc :${DISPLAY_NUM}\" 2>/dev/null || true\n")
-	b.WriteString("  pkill -9 -f \"Xtigervnc :${DISPLAY_NUM}\" 2>/dev/null || true\n")
-	b.WriteString("  rm -f /tmp/.X${DISPLAY_NUM}-lock /tmp/.X11-unix/X${DISPLAY_NUM} ~/.vnc/*:${DISPLAY_NUM}.pid 2>/dev/null || true\n")
-	b.WriteString("  sleep 3\n")
-	b.WriteString(fmt.Sprintf("  vncserver :${DISPLAY_NUM} -geometry %s -depth 24 -rfbauth ~/.vnc/passwd -alwaysshared -rfbport ${VNC_PORT}\n", resolution))
-	b.WriteString("  VNC_EXIT=$?\n")
-	b.WriteString("fi\n")
-	b.WriteString("if [ $VNC_EXIT -ne 0 ]; then\n")
-	b.WriteString(fmt.Sprintf("  echo 'status=failed' >> %s\n", statusFile))
-	b.WriteString("  echo '[desktop] vncserver failed, exit code: '$VNC_EXIT >&2\n")
-	b.WriteString("  exit 1\n")
-	b.WriteString("fi\n\n")
-
-	// 等待 VNC 端口就绪（最多20秒）
-	b.WriteString("for i in $(seq 1 20); do\n")
-	b.WriteString("  ss -tlnp 2>/dev/null | grep -q \":${VNC_PORT}\" && break\n")
-	b.WriteString("  sleep 1\n")
-	b.WriteString("done\n\n")
-
-	b.WriteString(fmt.Sprintf("echo 'status=running' >> %s\n\n", statusFile))
-
-	// 保持 job 运行到时间到期，每30秒检查 VNC 是否还在
-	durationSec := session.Duration * 3600
-	if durationSec <= 0 {
-		durationSec = 4 * 3600
-	}
-	b.WriteString(fmt.Sprintf("END_TIME=$(($(date +%%s) + %d))\n", durationSec))
-	b.WriteString("while [ $(date +%s) -lt $END_TIME ]; do\n")
-	b.WriteString("  ss -tlnp 2>/dev/null | grep -q \":${VNC_PORT}\" || break\n")
-	b.WriteString("  sleep 30\n")
-	b.WriteString("done\n\n")
-
-	b.WriteString("vncserver -kill :${DISPLAY_NUM} 2>/dev/null || true\n")
-	b.WriteString(fmt.Sprintf("echo 'status=stopped' >> %s\n", statusFile))
-
-	return b.String()
-}
-
 // pollDesktopJob 轮询 Slurm 作业状态：
 // 阶段1：等待作业进入 RUNNING，更新 session 地址和端口
 // 阶段2：持续监控，作业结束后自动将 session 标记为 stopped

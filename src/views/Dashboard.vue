@@ -756,8 +756,8 @@ const runningJobs = ref<any[]>([])
 const nodes = ref<any[]>([])
 const machineTime = ref({ totalQuota: 0, used: 0, remaining: 0, usageRate: 0, hasLimit: false })
 const storageQuota = ref({
-  capacity: { used: '3.8 TB', total: '5.0 TB', percentage: 76 },
-  files: { used: 856420, total: 1000000, percentage: 86 }
+  capacity: { used: '-', total: '-', percentage: 0 },
+  files: { used: 0, total: 0, percentage: 0 }
 })
 
 const jobStatsTotal = computed(() => jobStats.value.running + jobStats.value.pending + jobStats.value.completed + jobStats.value.failed)
@@ -861,6 +861,29 @@ const loadMyResources = async () => {
       machineTime.value = { totalQuota: 0, used: 0, remaining: 0, usageRate: 0, hasLimit: false }
     }
   } catch (e) { console.error(e) } finally { resourcesLoading.value = false }
+  // 同步加载存储配额（内联避免被格式化工具删除）
+  try {
+    const sqRes = await axios.get('/files/quota')
+    const quotas: any[] = sqRes.data.quotas || []
+    if (quotas.length) {
+      const q = quotas[0]
+      const usedKB: number = q.block_used_kb || 0
+      const hardKB: number = q.block_hard_kb || 0
+      const pct = hardKB > 0 ? Math.min(100, Math.round(usedKB / hardKB * 100)) : 0
+      const fmtKB = (kb: number) => {
+        if (kb >= 1024 * 1024 * 1024) return (kb / 1024 / 1024 / 1024).toFixed(1) + ' TB'
+        if (kb >= 1024 * 1024) return (kb / 1024 / 1024).toFixed(1) + ' GB'
+        if (kb >= 1024) return (kb / 1024).toFixed(1) + ' MB'
+        return kb + ' KB'
+      }
+      const inodeUsed: number = q.inode_used || 0
+      const inodeHard: number = q.inode_hard || 0
+      storageQuota.value = {
+        capacity: { used: fmtKB(usedKB), total: hardKB > 0 ? fmtKB(hardKB) : '无限制', percentage: pct },
+        files: { used: inodeUsed, total: inodeHard, percentage: inodeHard > 0 ? Math.min(100, Math.round(inodeUsed / inodeHard * 100)) : 0 }
+      }
+    }
+  } catch (_) { /* 配额接口失败不影响其他数据 */ }
 }
 
 onMounted(() => {
