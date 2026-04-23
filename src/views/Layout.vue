@@ -17,6 +17,7 @@
       <nav class="sidebar-nav">
         <div class="nav-section">
           <div class="nav-section-label" v-if="!sidebarCollapsed">通用</div>
+          <!-- 仪表盘 -->
           <a
             :class="['nav-item', { active: currentView === 'dashboard' }]"
             @click="currentView = 'dashboard'"
@@ -25,26 +26,6 @@
             <span class="nav-item-icon">🏠</span>
             <span class="nav-item-label">仪表盘</span>
           </a>
-
-          <a
-            :class="['nav-item', { active: currentView === 'shell' }]"
-            @click="currentView = 'shell'"
-            :title="sidebarCollapsed ? 'Web Shell' : ''"
-          >
-            <span class="nav-item-icon">🖥️</span>
-            <span class="nav-item-label">Web Shell</span>
-          </a>
-
-          <a
-            :class="['nav-item', { active: currentView === 'desktop' }]"
-            @click="currentView = 'desktop'"
-            :title="sidebarCollapsed ? '远程桌面' : ''"
-          >
-            <span class="nav-item-icon">🖱️</span>
-            <span class="nav-item-label">远程桌面</span>
-          </a>
-
-          <!-- 客户端下载入口已移至远程桌面和 WebShell 页面内 -->
 
           <!-- 作业管理 expandable -->
           <a
@@ -65,6 +46,24 @@
             >{{ tab.label }}</a>
           </div>
 
+          <a
+            :class="['nav-item', { active: currentView === 'shell' }]"
+            @click="currentView = 'shell'"
+            :title="sidebarCollapsed ? 'Web Shell' : ''"
+          >
+            <span class="nav-item-icon">🖥️</span>
+            <span class="nav-item-label">Web Shell</span>
+          </a>
+
+          <a
+            :class="['nav-item', { active: currentView === 'desktop' }]"
+            @click="currentView = 'desktop'"
+            :title="sidebarCollapsed ? '远程桌面' : ''"
+          >
+            <span class="nav-item-icon">🖱️</span>
+            <span class="nav-item-label">远程桌面</span>
+          </a>
+
           <!-- 文件管理 -->
           <a
             :class="['nav-item', { active: currentView === 'files' }]"
@@ -83,16 +82,6 @@
           >
             <span class="nav-item-icon">📈</span>
             <span class="nav-item-label">报表中心</span>
-          </a>
-
-          <!-- 主机资产 CMDB -->
-          <a
-            :class="['nav-item', { active: currentView === 'cmdb' }]"
-            @click="currentView = 'cmdb'"
-            :title="sidebarCollapsed ? '主机资产' : ''"
-          >
-            <span class="nav-item-icon">🖥️</span>
-            <span class="nav-item-label">主机资产</span>
           </a>
         </div>
 
@@ -151,7 +140,6 @@
         <Desktop v-else-if="currentView === 'desktop'" @open-download="currentView = 'download'" />
         <FileManager ref="fileManagerRef" v-else-if="currentView === 'files'" />
         <Reports v-else-if="currentView === 'reports'" />
-        <AdminCMDB v-else-if="currentView === 'cmdb'" />
         <Profile v-else-if="currentView === 'profile'" />
         <Download v-else-if="currentView === 'download'" />
         <AdminUsers v-else-if="currentView === 'admin' && adminTab === 'users' && isAdmin" />
@@ -194,7 +182,6 @@ import AdminQoS from './AdminQoS.vue'
 import AdminHours from './AdminHours.vue'
 import AdminQuota from './AdminQuota.vue'
 import AdminAudit from './AdminAudit.vue'
-import AdminCMDB from './AdminCMDB.vue'
 import AdminSlurmAccounts from './AdminSlurmAccounts.vue'
 import AdminSlurmUsers from './AdminSlurmUsers.vue'
 import AdminAssociations from './AdminAssociations.vue'
@@ -311,7 +298,6 @@ const goToAdmin = () => { router.push('/admin') }
 const PAGE_TITLES: Record<string, string> = {
   dashboard: '仪表盘', shell: 'Web Shell', desktop: '远程桌面',
   jobs: '作业管理', files: '文件管理', reports: '报表中心',
-  cmdb: '主机资产',
   monitoring: '集群监控', rack: '机柜管理', network: '网络拓扑',
   profile: '个人信息', download: '客户端下载', admin: '系统管理',
 }

@@ -69,6 +69,8 @@
         <select v-model="filters.action" class="filter-select" @change="loadLogs">
           <option value="">全部操作</option>
           <option value="page_view">页面访问</option>
+          <option value="shell_command">Shell 命令</option>
+          <option value="shell_blocked">⛔ 被拦截命令</option>
           <option value="create">创建</option>
           <option value="update">更新</option>
           <option value="delete">删除</option>
@@ -530,6 +532,8 @@ const formatFullTime = (timestamp: string) => {
 const getActionLabel = (action: string) => {
   const labels: any = {
     page_view: '📄 页面访问',
+  shell_command: '💻 Shell命令',
+  shell_blocked: '⛔ 被拦截',
   create: '创建',
     update: '更新',
     delete: '删除',
@@ -810,6 +814,17 @@ onMounted(() => {
 .action-page_view {
   background: #f0fdf4;
   color: #166534;
+}
+
+.action-shell_command {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.action-shell_blocked {
+  background: #fef2f2;
+  color: #991b1b;
+  font-weight: 700;
 }
 
 .action-create {

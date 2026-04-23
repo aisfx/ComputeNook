@@ -13,6 +13,7 @@ import (
 "time"
 
 "hpc-backend/audit"
+"hpc-backend/middleware"
 "hpc-backend/models"
 
 "github.com/gin-gonic/gin"
@@ -72,11 +73,19 @@ return
 }
 
 clientIP := c.ClientIP()
-sshTCPProxy(c, host, port, sshUser, username.(string), clientIP)
+// 取出 token，用于后续心跳检查
+tokenStr := ""
+if auth := c.GetHeader("Authorization"); len(auth) > 7 {
+	tokenStr = auth[7:]
+}
+if tokenStr == "" {
+	tokenStr = c.Query("token")
+}
+sshTCPProxy(c, host, port, sshUser, username.(string), clientIP, tokenStr)
 }
 
 // sshTCPProxy TCP 透传，给 ssh/PuTTY 客户端用
-func sshTCPProxy(c *gin.Context, host string, port int, sshUser, username, clientIP string) {
+func sshTCPProxy(c *gin.Context, host string, port int, sshUser, username, clientIP, token string) {
 target := fmt.Sprintf("%s:%d", host, port)
 sshConn, err := net.Dial("tcp", target)
 if err != nil {
@@ -98,6 +107,28 @@ recorder := newSSHTunnelRecorder(username, clientIP, host, port)
 defer recorder.close()
 
 done := make(chan struct{}, 2)
+quit := make(chan struct{})
+
+// token 心跳检查：每 30s 检查一次，token 被吊销则主动关闭连接
+if token != "" {
+go func() {
+ticker := time.NewTicker(30 * time.Second)
+defer ticker.Stop()
+for {
+select {
+case <-ticker.C:
+if middleware.IsTokenRevoked(token) {
+wsConn.WriteMessage(websocket.TextMessage, []byte(`{"error":"session expired"}`)) //nolint:errcheck
+sshConn.Close()
+wsConn.Close()
+return
+}
+case <-quit:
+return
+}
+}
+}()
+}
 
 go func() {
 defer func() { done <- struct{}{} }()
@@ -123,12 +154,26 @@ return
 recorder.mu.Lock()
 recorder.inputBytes += len(msg)
 recorder.mu.Unlock()
-recorder.writeInput(msg)
+
+// 命令检测（不加锁，feedInput 内部加锁）
+level, warnMsg := recorder.feedInput(msg)
+if level != "" {
+// 注入警告到终端
+wsConn.WriteMessage(websocket.BinaryMessage, buildWarningMsg(level, warnMsg)) //nolint:errcheck
+writeSSHAudit(recorder.username, recorder.clientIP, recorder.host, recorder.port,
+"cmd_"+level, warnMsg)
+if level == "block" {
+// 拦截：不转发这条消息，注入 Ctrl+C 取消命令
+wsConn.WriteMessage(websocket.BinaryMessage, []byte{0x03}) //nolint:errcheck
+continue
+}
+}
 sshConn.Write(msg) //nolint:errcheck
 }
 }()
 
 <-done
+close(quit)
 sshConn.Close()
 wsConn.Close()
 
@@ -282,6 +327,7 @@ startTime  time.Time
 inputBytes int
 logFile    *os.File
 mu         sync.Mutex
+cmdBuf     strings.Builder // 缓冲当前行输入，等回车后检测
 }
 
 func newSSHTunnelRecorder(username, clientIP, host string, port int) *sshTunnelRecorder {
@@ -325,6 +371,48 @@ return
 r.logFile.WriteString(time.Now().Format("2006-01-02T15:04:05") + " [INPUT] " + clean + "\n")
 }
 
+// feedInput 处理输入字节流：缓冲命令行，回车时检测，返回 (level, message)
+// 调用方根据 level 决定是否注入警告或断开连接
+func (r *sshTunnelRecorder) feedInput(data []byte) (level, message string) {
+r.mu.Lock()
+defer r.mu.Unlock()
+
+clean := stripANSIBytes(data)
+for _, ch := range clean {
+switch ch {
+case '\r', '\n':
+// 回车：检测当前缓冲的命令
+cmd := r.cmdBuf.String()
+r.cmdBuf.Reset()
+if cmd != "" {
+// 写入日志
+if r.logFile != nil {
+r.logFile.WriteString(time.Now().Format("2006-01-02T15:04:05") + " [CMD] " + cmd + "\n")
+}
+// 检测危险命令
+if l, m := checkCommand(cmd); l != "" {
+if r.logFile != nil {
+r.logFile.WriteString(time.Now().Format("2006-01-02T15:04:05") + " [ALERT:" + l + "] " + cmd + "\n")
+}
+return l, m
+}
+}
+case '\x7f', '\x08':
+// 退格
+s := r.cmdBuf.String()
+if len(s) > 0 {
+r.cmdBuf.Reset()
+r.cmdBuf.WriteString(s[:len(s)-1])
+}
+default:
+if ch >= 0x20 {
+r.cmdBuf.WriteRune(ch)
+}
+}
+}
+return "", ""
+}
+
 func (r *sshTunnelRecorder) close() {
 r.mu.Lock()
 defer r.mu.Unlock()
@@ -336,15 +424,79 @@ r.logFile = nil
 }
 }
 
-func isDangerousCommand(cmd string) bool {
-dangerous := []string{"rm -rf", "mkfs", "dd if=", "shutdown", "reboot", "halt", "poweroff"}
-lower := strings.ToLower(cmd)
-for _, d := range dangerous {
-if strings.Contains(lower, d) {
-return true
+// ─────────────────────────────────────────────
+// 危险命令规则
+// ─────────────────────────────────────────────
+
+type cmdRule struct {
+	keywords []string
+	level    string // "warn" | "block"
+	message  string
 }
+
+var cmdRules = []cmdRule{
+	{
+		keywords: []string{"rm -rf /", "rm -rf /*", "rm --no-preserve-root"},
+		level:    "block",
+		message:  "🚫 [安全拦截] 检测到高危删除命令，操作已被阻止并记录。如有需要请联系管理员。",
+	},
+	{
+		keywords: []string{"mkfs", "dd if=/dev/zero", "dd if=/dev/random"},
+		level:    "block",
+		message:  "🚫 [安全拦截] 检测到磁盘格式化/覆写命令，操作已被阻止并记录。",
+	},
+	{
+		keywords: []string{"shutdown", "reboot", "halt", "poweroff", "init 0", "init 6"},
+		level:    "block",
+		message:  "🚫 [安全拦截] 不允许通过平台隧道执行关机/重启命令，操作已被阻止。",
+	},
+	{
+		keywords: []string{"chmod -R 777 /", "chown -R"},
+		level:    "warn",
+		message:  "⚠️  [安全警告] 检测到批量权限修改命令，此操作已被记录并上报管理员。",
+	},
+	{
+		keywords: []string{"wget http", "curl http", "curl -o", "wget -O"},
+		level:    "warn",
+		message:  "⚠️  [安全警告] 检测到外网下载行为，此操作已被记录。请确保下载内容符合使用规范。",
+	},
+	{
+		keywords: []string{"python -c", "perl -e", "bash -i", "nc -e", "ncat -e", "/dev/tcp/"},
+		level:    "block",
+		message:  "🚫 [安全拦截] 检测到可疑反弹 Shell 命令，操作已被阻止并记录。",
+	},
+	{
+		keywords: []string{"crontab", "at now", "nohup"},
+		level:    "warn",
+		message:  "⚠️  [安全警告] 检测到后台任务调度命令，此操作已被记录。",
+	},
 }
-return false
+
+// checkCommand 检测命令，返回 (level, message)，level 为空表示无问题
+func checkCommand(cmd string) (string, string) {
+	lower := strings.ToLower(strings.TrimSpace(cmd))
+	if lower == "" {
+		return "", ""
+	}
+	for _, rule := range cmdRules {
+		for _, kw := range rule.keywords {
+			if strings.Contains(lower, kw) {
+				return rule.level, rule.message
+			}
+		}
+	}
+	return "", ""
+}
+
+// buildWarningMsg 构建注入到终端的警告消息（带 ANSI 颜色和换行）
+func buildWarningMsg(level, message string) []byte {
+	var color string
+	if level == "block" {
+		color = "\r\n\033[1;31m" // 红色加粗
+	} else {
+		color = "\r\n\033[1;33m" // 黄色加粗
+	}
+	return []byte(color + message + "\033[0m\r\n")
 }
 
 func isSignificantOutput(line string) bool {

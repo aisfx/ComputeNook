@@ -157,3 +157,122 @@ OBSIDIAN_VAULT_DIR=./knowledge/vault
 │   └── main.go
 └── scripts/              # 部署脚本、nginx 配置
 ```
+
+---
+
+## 存储配额配置
+
+平台支持 XFS 和 Lustre 两种文件系统的用户配额管理。
+
+### .env 配置
+
+```env
+QUOTA_FS_TYPE=xfs        # 文件系统类型：xfs 或 lustre
+QUOTA_PATH=/home         # 配额挂载点（实际路径）
+```
+
+---
+
+### XFS 配额
+
+**1. 挂载时开启配额支持**
+
+编辑 `/etc/fstab`，在挂载选项中加入 `uquota`：
+
+```
+/dev/sda1  /home  xfs  defaults,uquota,gquota  0 0
+```
+
+重新挂载生效：
+
+```bash
+mount -o remount /home
+```
+
+**2. 验证配额已启用**
+
+```bash
+xfs_quota -x -c "state" /home
+# 输出中看到 "User quota state on /home (ACTIVE)" 即为成功
+```
+
+**3. 安装依赖工具**
+
+```bash
+# CentOS/RHEL
+yum install xfsprogs
+
+# Ubuntu/Debian
+apt install xfsprogs
+```
+
+**4. 后端权限**
+
+`xfs_quota -x` 需要 root 权限。若后端非 root 运行，配置 sudo：
+
+```bash
+# /etc/sudoers.d/hpc-backend
+hpc-user ALL=(ALL) NOPASSWD: /usr/sbin/xfs_quota
+```
+
+**5. 手动验证**
+
+```bash
+# 查看所有用户配额
+xfs_quota -x -c "report -ubih" /home
+
+# 手动设置测试配额
+xfs_quota -x -c "limit -u bsoft=90g bhard=100g testuser" /home
+```
+
+---
+
+### Lustre 配额
+
+**1. 在 MGS 上开启配额**
+
+```bash
+# 开启用户配额（MDT + OST）
+lctl conf_param fsname.quota.mdt=ug
+lctl conf_param fsname.quota.ost=ug
+```
+
+**2. 验证配额已启用**
+
+```bash
+lfs quota -u root /lustre/home
+```
+
+**3. 安装依赖工具**
+
+```bash
+# 需要 lustre-client 包，通常随 Lustre 客户端一起安装
+which lfs   # 确认 lfs 命令可用
+```
+
+**4. 手动验证**
+
+```bash
+# 查看某用户配额
+lfs quota -u testuser /lustre/home
+
+# 设置配额（100GB 硬限制）
+lfs setquota -u testuser --block-hardlimit 100g /lustre/home
+```
+
+**5. .env 配置示例**
+
+```env
+QUOTA_FS_TYPE=lustre
+QUOTA_PATH=/lustre/home
+```
+
+---
+
+### 配额管理页面
+
+管理员登录后进入 **系统管理 → 存储配额**，可以：
+
+- 查看所有用户的已用空间、软/硬限制、使用率
+- 按状态筛选（正常 / 警告 ≥75% / 超限 ≥90% / 未设置）
+- 一键设置配额，支持快速预设（50G / 100G / 200G / 500G / 1TB）

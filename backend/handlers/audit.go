@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -308,6 +309,44 @@ func PageView(c *gin.Context) {
 		Resource:   "page",
 		ResourceID: body.Page,
 		Details:    body.Title,
+		IPAddress:  c.ClientIP(),
+		AccessHost: c.Request.Host,
+		UserAgent:  c.Request.UserAgent(),
+		Status:     models.StatusSuccess,
+	})
+
+	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+// ShellAudit 接收节点 shell wrapper 上报的命令记录
+// POST /api/audit/shell  （节点脚本调用，用 JWT token 认证）
+func ShellAudit(c *gin.Context) {
+	username, _ := c.Get("username")
+
+	var body struct {
+		Command  string `json:"command"`
+		ExitCode int    `json:"exit_code"`
+		WorkDir  string `json:"work_dir"`
+		Node     string `json:"node"`
+		Blocked  bool   `json:"blocked"` // 是否被拦截
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+
+	action := "shell_command"
+	if body.Blocked {
+		action = "shell_blocked"
+	}
+
+	logger := audit.GetLogger()
+	logger.Log(models.AuditLog{
+		Username:   username.(string),
+		Action:     action,
+		Resource:   "shell",
+		ResourceID: body.Node,
+		Details:    fmt.Sprintf("[%s] %s (exit=%d, dir=%s)", body.Node, body.Command, body.ExitCode, body.WorkDir),
 		IPAddress:  c.ClientIP(),
 		AccessHost: c.Request.Host,
 		UserAgent:  c.Request.UserAgent(),

@@ -89,7 +89,9 @@
                 {{ refreshing ? '刷新中...' : '刷新' }}
               </button>
             </div>
-            <div v-if="!promConnected" class="jd-prom-na">Prometheus 未连接，显示 Slurm 估算值</div>
+            <div v-if="!promConnected" class="jd-prom-na">Prometheus 未连接，无法显示历史曲线</div>
+
+            <!-- 当前快照进度条 -->
             <div class="jd-metrics">
               <div class="jd-metric">
                 <div class="jd-metric-label">CPU</div>
@@ -101,7 +103,7 @@
               <div class="jd-metric">
                 <div class="jd-metric-label">内存</div>
                 <div class="jd-metric-bar">
-                  <div class="jd-metric-fill mem" :style="{ width: currentUsage.memory + '%', background: currentUsage.memory > 90 ? '#ef4444' : currentUsage.memory > 70 ? '#f59e0b' : '#3b82f6' }"></div>
+                  <div class="jd-metric-fill" :style="{ width: currentUsage.memory + '%', background: currentUsage.memory > 90 ? '#ef4444' : currentUsage.memory > 70 ? '#f59e0b' : '#3b82f6' }"></div>
                 </div>
                 <div class="jd-metric-val">{{ currentUsage.memory }}%</div>
               </div>
@@ -112,15 +114,33 @@
                 </div>
                 <div class="jd-metric-val">{{ currentUsage.load }}</div>
               </div>
-              <div v-if="resourceUsage.gpu.available" class="jd-metric">
-                <div class="jd-metric-label">GPU</div>
+              <div class="jd-metric" v-if="currentUsage.disk > 0">
+                <div class="jd-metric-label">磁盘</div>
                 <div class="jd-metric-bar">
-                  <div class="jd-metric-fill gpu" :style="{ width: currentUsage.gpu + '%' }"></div>
+                  <div class="jd-metric-fill" :style="{ width: currentUsage.disk + '%', background: currentUsage.disk > 90 ? '#ef4444' : '#f59e0b' }"></div>
                 </div>
-                <div class="jd-metric-val">{{ currentUsage.gpu }}%</div>
+                <div class="jd-metric-val">{{ currentUsage.disk }}%</div>
+              </div>
+              <div class="jd-metric" v-if="promConnected">
+                <div class="jd-metric-label">网络↓</div>
+                <div class="jd-metric-bar">
+                  <div class="jd-metric-fill" :style="{ width: Math.min(currentUsage.netRx * 10, 100) + '%', background: '#06b6d4' }"></div>
+                </div>
+                <div class="jd-metric-val">{{ currentUsage.netRx }}MB/s</div>
               </div>
             </div>
-            <div class="jd-update-time">最后更新: {{ lastUpdateTime }} {{ promConnected ? '(Prometheus)' : '(估算)' }}</div>
+
+            <!-- 历史曲线图（Prometheus range query） -->
+            <div v-if="promConnected" class="jd-charts">
+              <div class="jd-chart-title">CPU 使用率历史（作业开始至今，每节点一条线）</div>
+              <div ref="chartCpuEl" class="jd-chart"></div>
+              <div class="jd-chart-title">内存使用率历史</div>
+              <div ref="chartMemEl" class="jd-chart"></div>
+              <div class="jd-chart-title">网络流量历史（MB/s）</div>
+              <div ref="chartNetEl" class="jd-chart"></div>
+            </div>
+
+            <div class="jd-update-time">30s 自动刷新 · 最后更新: {{ lastUpdateTime }} {{ promConnected ? '(Prometheus)' : '(估算)' }}</div>
           </div>
         </div>
 
@@ -146,9 +166,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick } from 'vue'
+import * as echarts from 'echarts/core'
+import { LineChart } from 'echarts/charts'
+import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'
+import { CanvasRenderer } from 'echarts/renderers'
 import { fileManagerApi } from '../config/api'
 import { getToken, getApiBase } from '../utils/auth'
+
+echarts.use([LineChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer])
 
 const props = defineProps<{ job: any }>()
 defineEmits(['close', 'pause', 'resume', 'cancel', 'open-directory'])
@@ -157,11 +183,151 @@ const refreshing = ref(false)
 const lastUpdateTime = ref(new Date().toLocaleTimeString())
 const autoRefreshInterval = ref<any>(null)
 const promConnected = ref(false)
+const currentUsage = ref({ cpu: 0, memory: 0, load: 0, netRx: 0, netTx: 0, disk: 0 })
 
-const currentUsage = ref({ cpu: 0, memory: 0, gpu: 0, load: 0 })
-const resourceUsage = ref({
-  gpu: { available: false, usage: 0, memoryUsed: 0, memoryTotal: 0, temperature: 0, power: 0 }
-})
+// echarts 图表实例
+const chartCpuEl = ref<HTMLElement>()
+const chartMemEl = ref<HTMLElement>()
+const chartNetEl = ref<HTMLElement>()
+let chartCpu: echarts.ECharts | null = null
+let chartMem: echarts.ECharts | null = null
+let chartNet: echarts.ECharts | null = null
+
+const COLORS = ['#3b82f6','#22c55e','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899','#14b8a6']
+
+// 获取作业开始时间戳（秒）
+const jobStartTs = () => {
+  if (props.job.start_time && typeof props.job.start_time === 'number') return props.job.start_time
+  // 尝试从 startTime 字符串解析
+  if (props.job.startTime && props.job.startTime !== '-') {
+    const t = new Date(props.job.startTime).getTime()
+    if (!isNaN(t)) return Math.floor(t / 1000)
+  }
+  // 默认：当前时间往前 1 小时
+  return Math.floor(Date.now() / 1000) - 3600
+}
+
+// 查询 Prometheus range 数据，返回 { instance: string, times: number[], values: number[] }[]
+const queryRange = async (promql: string) => {
+  const start = jobStartTs()
+  const end = Math.floor(Date.now() / 1000)
+  const duration = end - start
+  const step = Math.max(15, Math.floor(duration / 120)) // 最多 120 个点
+  const url = `${getApiBase()}/api/monitoring/promql/range?query=${encodeURIComponent(promql)}&start=${start}&end=${end}&step=${step}`
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } })
+  if (!res.ok) return []
+  const data = await res.json()
+  if (data.status !== 'success') return []
+  return (data.data?.result || []).map((r: any) => ({
+    instance: r.metric?.instance?.replace(/:\d+$/, '') || r.metric?.nodename || Object.values(r.metric || {}).join(','),
+    times: (r.values || []).map((v: any) => v[0] * 1000),
+    values: (r.values || []).map((v: any) => parseFloat(parseFloat(v[1]).toFixed(2))),
+  }))
+}
+
+// 过滤只保留作业节点的数据
+const filterJobNodes = (series: any[]) => {
+  const nodeNames: string[] = props.job.nodeNames || []
+  if (!nodeNames.length) return series
+  return series.filter(s => nodeNames.some(n =>
+    s.instance.includes(n) || n.includes(s.instance)
+  ))
+}
+
+const initChart = (el: HTMLElement | undefined, title: string) => {
+  if (!el) return null
+  const c = echarts.init(el, undefined, { renderer: 'canvas' })
+  c.setOption({
+    animation: false,
+    grid: { top: 28, right: 12, bottom: 28, left: 42 },
+    tooltip: {
+      trigger: 'axis',
+      formatter: (params: any) => {
+        const time = new Date(params[0]?.axisValue).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+        return time + '<br>' + params.map((p: any) => `${p.marker}${p.seriesName}: <b>${p.value}</b>`).join('<br>')
+      }
+    },
+    legend: { top: 2, right: 0, textStyle: { fontSize: 10 }, itemWidth: 12, itemHeight: 8 },
+    xAxis: { type: 'time', axisLabel: { fontSize: 10, formatter: (v: number) => new Date(v).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) } },
+    yAxis: { type: 'value', axisLabel: { fontSize: 10 }, min: 0 },
+    series: [],
+  })
+  return c
+}
+
+const updateChart = (chart: echarts.ECharts | null, seriesData: any[], unit = '%', maxY?: number) => {
+  if (!chart) return
+  const series = seriesData.map((s, i) => ({
+    name: s.instance,
+    type: 'line',
+    smooth: true,
+    symbol: 'none',
+    lineStyle: { width: 1.5, color: COLORS[i % COLORS.length] },
+    itemStyle: { color: COLORS[i % COLORS.length] },
+    data: s.times.map((t: number, j: number) => [t, s.values[j]]),
+    areaStyle: seriesData.length === 1 ? { opacity: 0.08, color: COLORS[0] } : undefined,
+  }))
+  chart.setOption({
+    yAxis: { max: maxY, axisLabel: { formatter: (v: number) => v + unit } },
+    series,
+  }, { replaceMerge: ['series'] })
+}
+
+const refreshResourceUsage = async () => {
+  refreshing.value = true
+  try {
+    const token = getToken()
+    // 当前快照（进度条用）
+    const snapRes = await fetch(`${getApiBase()}/api/monitoring/node-metrics`, { headers: { Authorization: `Bearer ${token}` } })
+    if (snapRes.ok) {
+      const data = await snapRes.json()
+      promConnected.value = data.connected === true
+      if (data.connected && data.nodes?.length) {
+        const nodeNames: string[] = props.job.nodeNames || []
+        const jobNodes = nodeNames.length > 0
+          ? data.nodes.filter((n: any) => nodeNames.some((name: string) =>
+              n.instance?.includes(name) || name.includes(n.instance?.replace(/:\d+$/, ''))))
+          : data.nodes
+        if (jobNodes.length > 0) {
+          const avg = (key: string) => Math.round(jobNodes.reduce((s: number, n: any) => s + (n[key] || 0), 0) / jobNodes.length)
+          currentUsage.value.cpu = avg('cpu_usage')
+          currentUsage.value.memory = avg('mem_usage')
+          currentUsage.value.load = +(jobNodes.reduce((s: number, n: any) => s + (n.load1 || 0), 0) / jobNodes.length).toFixed(2)
+          currentUsage.value.disk = avg('disk_usage')
+          const totalRx = jobNodes.reduce((s: number, n: any) => s + (n.net_rx_bps || 0), 0)
+          const totalTx = jobNodes.reduce((s: number, n: any) => s + (n.net_tx_bps || 0), 0)
+          currentUsage.value.netRx = Math.round(totalRx / 1024 / 1024 * 10) / 10
+          currentUsage.value.netTx = Math.round(totalTx / 1024 / 1024 * 10) / 10
+        }
+      }
+    }
+
+    // 历史曲线（range query）
+    if (promConnected.value) {
+      const [cpuSeries, memSeries, netSeries] = await Promise.all([
+        queryRange('100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[2m])) * 100)'),
+        queryRange('100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)'),
+        queryRange('sum by (instance) (rate(node_network_receive_bytes_total{device!~"lo|docker.*|veth.*"}[2m])) / 1048576'),
+      ])
+      const fCpu = filterJobNodes(cpuSeries)
+      const fMem = filterJobNodes(memSeries)
+      const fNet = filterJobNodes(netSeries)
+      // 初始化图表（首次）
+      await nextTick()
+      if (!chartCpu && chartCpuEl.value) chartCpu = initChart(chartCpuEl.value, 'CPU')
+      if (!chartMem && chartMemEl.value) chartMem = initChart(chartMemEl.value, '内存')
+      if (!chartNet && chartNetEl.value) chartNet = initChart(chartNetEl.value, '网络')
+      updateChart(chartCpu, fCpu.length ? fCpu : cpuSeries.slice(0, 8), '%', 100)
+      updateChart(chartMem, fMem.length ? fMem : memSeries.slice(0, 8), '%', 100)
+      updateChart(chartNet, fNet.length ? fNet : netSeries.slice(0, 8), 'MB/s')
+    }
+  } catch (e) {
+    console.error('监控数据加载失败', e)
+  } finally {
+    lastUpdateTime.value = new Date().toLocaleTimeString()
+    refreshing.value = false
+  }
+}
 
 // 日志
 const showLog = ref(false)
@@ -212,56 +378,18 @@ const loadLog = async (type: 'out' | 'err') => {
 
 const openLog = () => loadLog('out')
 
-const refreshResourceUsage = async () => {
-  refreshing.value = true
-  try {
-    const token = getToken()
-    const headers = { Authorization: `Bearer ${token}` }
-    const res = await fetch(`${getApiBase()}/api/monitoring/node-metrics`, { headers })
-    if (res.ok) {
-      const data = await res.json()
-      promConnected.value = data.connected === true
-      if (data.connected && data.nodes?.length) {
-        // 找到作业运行节点的指标
-        const nodeNames: string[] = props.job.nodeNames || []
-        const jobNodes = nodeNames.length > 0
-          ? data.nodes.filter((n: any) => nodeNames.some((name: string) => n.instance?.includes(name) || name.includes(n.instance?.replace(/:\d+$/, ''))))
-          : data.nodes
-
-        if (jobNodes.length > 0) {
-          // 取平均值
-          const avg = (key: string) => Math.round(jobNodes.reduce((s: number, n: any) => s + (n[key] || 0), 0) / jobNodes.length)
-          currentUsage.value.cpu = avg('cpu_usage')
-          currentUsage.value.memory = avg('mem_usage')
-          currentUsage.value.load = +(jobNodes.reduce((s: number, n: any) => s + (n.load1 || 0), 0) / jobNodes.length).toFixed(2)
-        }
-      } else {
-        // Prometheus 未连接，用 Slurm 分配比例估算
-        const allocCpus = props.job.cpus || 1
-        const totalCpus = 128
-        currentUsage.value.cpu = Math.min(95, Math.round((allocCpus / totalCpus) * 100 * (0.7 + Math.random() * 0.3)))
-        currentUsage.value.memory = Math.floor(Math.random() * 20) + 60
-      }
-    }
-  } catch {
-    // fallback to estimate
-    currentUsage.value.cpu = Math.floor(Math.random() * 30) + 50
-    currentUsage.value.memory = Math.floor(Math.random() * 20) + 60
-  } finally {
-    lastUpdateTime.value = new Date().toLocaleTimeString()
-    refreshing.value = false
-  }
-}
-
 onMounted(() => {
   if (props.job.status === 'RUNNING') {
     refreshResourceUsage()
-    autoRefreshInterval.value = setInterval(refreshResourceUsage, 5000)
+    autoRefreshInterval.value = setInterval(refreshResourceUsage, 30000)
   }
 })
 
 onUnmounted(() => {
   if (autoRefreshInterval.value) clearInterval(autoRefreshInterval.value)
+  chartCpu?.dispose()
+  chartMem?.dispose()
+  chartNet?.dispose()
 })
 </script>
 
@@ -285,8 +413,8 @@ onUnmounted(() => {
   border: 1px solid hsl(var(--border));
   border-radius: 12px;
   width: 100%;
-  max-width: 640px;
-  max-height: 85vh;
+  max-width: 860px;
+  max-height: 90vh;
   display: flex;
   flex-direction: column;
   box-shadow: 0 25px 50px rgba(0,0,0,0.25);
@@ -487,6 +615,10 @@ onUnmounted(() => {
   font-size: 0.72rem;
   color: hsl(var(--muted-foreground));
 }
+
+.jd-charts { display: flex; flex-direction: column; gap: 12px; margin-top: 8px; }
+.jd-chart-title { font-size: 0.72rem; color: hsl(var(--muted-foreground)); font-weight: 500; }
+.jd-chart { width: 100%; height: 160px; }
 
 .jd-node-list {
   font-size: 0.7rem;

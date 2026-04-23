@@ -79,9 +79,9 @@
             <a :class="['nav-sub-item', { active: adminTab === 'monitoring' && monitoringTab === 'alerts' }]" @click.stop="adminTab = 'monitoring'; monitoringTab = 'alerts'">告警规则</a>
           </div>
 
-          <!-- 机柜管理 -->
+          <!-- 基础设施 -->
           <a
-            :class="['nav-item', { active: adminTab === 'rack' || adminTab === 'network' }]"
+            :class="['nav-item', { active: adminTab === 'rack' || adminTab === 'network' || adminTab === 'cmdb' }]"
             @click="groupExpanded.infra = !groupExpanded.infra"
             :title="sidebarCollapsed ? '基础设施' : ''"
           >
@@ -92,6 +92,7 @@
           <div v-if="groupExpanded.infra && !sidebarCollapsed" class="nav-sub">
             <a :class="['nav-sub-item', { active: adminTab === 'rack' }]" @click.stop="adminTab = 'rack'">机柜管理</a>
             <a :class="['nav-sub-item', { active: adminTab === 'network' }]" @click.stop="adminTab = 'network'">网络拓扑</a>
+            <a :class="['nav-sub-item', { active: adminTab === 'cmdb' }]" @click.stop="adminTab = 'cmdb'">主机资产</a>
           </div>
 
           <!-- AI 诊断 -->
@@ -102,16 +103,6 @@
           >
             <span class="nav-item-icon">🤖</span>
             <span class="nav-item-label">AI 诊断</span>
-          </a>
-
-          <!-- 主机资产 CMDB -->
-          <a
-            :class="['nav-item', { active: adminTab === 'cmdb' }]"
-            @click="adminTab = 'cmdb'"
-            :title="sidebarCollapsed ? '主机资产' : ''"
-          >
-            <span class="nav-item-icon">🖥️</span>
-            <span class="nav-item-label">主机资产</span>
           </a>
 
           <!-- 数据审计（始终最后） -->

@@ -183,6 +183,8 @@ func main() {
 		}
 		// 页面访问审计（所有登录用户均可上报，不限管理员）
 		auth.POST("/audit/page-view", handlers.PageView)
+		// Shell 命令审计（节点 wrapper 脚本上报）
+		auth.POST("/audit/shell", handlers.ShellAudit)
 
 		// 机时管理 API
 		usage := auth.Group("/usage")

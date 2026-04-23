@@ -12,7 +12,6 @@
         </div>
       </div>
       <div class="rack-toolbar-right">
-        <button class="btn-ghost" @click="showCmdb=true"> CMDB</button>
         <button class="btn-pri" @click="openNewRack">＋ 新建机柜</button>
         <button class="btn-sec" @click="autoGenRacks" :disabled="rackLoading">{{ rackLoading ? '生成中...' : ' 自动生成' }}</button>
         <button class="btn-sec" @click="loadAll" :disabled="loading"> 刷新</button>
@@ -61,6 +60,31 @@
                 <span class="slot-label">{{ dev.name }}</span>
                 <span v-if="dev.ip" class="slot-ip">{{ dev.ip }}</span>
                 <span v-if="dev.node_name" class="slot-state">{{ nodeStateLabel(dev.node_name) }}</span>
+                <!-- Prometheus 负载进度条 -->
+                <template v-if="getDevMetrics(dev) as any">
+                  <div class="slot-metrics">
+                    <div class="slot-bar-row">
+                      <span class="slot-bar-label">C</span>
+                      <div class="slot-bar-bg">
+                        <div class="slot-bar-fill slot-bar-cpu"
+                          :style="{ width: Math.min(getDevMetrics(dev)?.cpu_usage||0, 100) + '%' }"
+                          :class="{ 'bar-warn': (getDevMetrics(dev)?.cpu_usage||0) > 70, 'bar-crit': (getDevMetrics(dev)?.cpu_usage||0) > 90 }">
+                        </div>
+                      </div>
+                      <span class="slot-bar-val">{{ Math.round(getDevMetrics(dev)?.cpu_usage||0) }}%</span>
+                    </div>
+                    <div class="slot-bar-row">
+                      <span class="slot-bar-label">M</span>
+                      <div class="slot-bar-bg">
+                        <div class="slot-bar-fill slot-bar-mem"
+                          :style="{ width: Math.min(getDevMetrics(dev)?.mem_usage||0, 100) + '%' }"
+                          :class="{ 'bar-warn': (getDevMetrics(dev)?.mem_usage||0) > 70, 'bar-crit': (getDevMetrics(dev)?.mem_usage||0) > 90 }">
+                        </div>
+                      </div>
+                      <span class="slot-bar-val">{{ Math.round(getDevMetrics(dev)?.mem_usage||0) }}%</span>
+                    </div>
+                  </div>
+                </template>
                 <template v-if="dev.type === 'switch' && dev.ports && dev.ports.length">
                   <span v-for="(port, pi) in dev.ports" :key="port.id"
                     class="port-pin" :class="{ 'port-used': isCablePort(dev.id, port.id) }"
@@ -117,11 +141,21 @@
         </div>
         <div class="dev-tabs">
           <button :class="['dev-tab', { active: devTab==='basic' }]" @click="devTab='basic'">基本信息</button>
-          <button :class="['dev-tab', { active: devTab==='cmdb' }]" @click="devTab='cmdb'">CMDB 信息</button>
           <button v-if="editingDevice.type==='switch'" :class="['dev-tab', { active: devTab==='ports' }]" @click="devTab='ports'">端口管理</button>
         </div>
         <div class="modal-bd">
           <template v-if="devTab==='basic'">
+            <!-- CMDB 快速导入 -->
+            <div class="cmdb-import-bar" v-if="cmdbHosts.length > 0">
+              <span class="cmdb-import-tip">📋 从 CMDB 导入</span>
+              <select v-model="cmdbImportHost" class="cmdb-import-sel">
+                <option value="">选择主机...</option>
+                <option v-for="h in cmdbHosts" :key="h.id" :value="h.id">
+                  {{ h.hostname }}{{ h.rack ? ' [' + h.rack + ']' : '' }}{{ h.role ? ' · ' + h.role : '' }}
+                </option>
+              </select>
+              <button class="btn-sec btn-sm" @click="importFromCmdb" :disabled="!cmdbImportHost">填充</button>
+            </div>
             <div class="fg"><label>显示名称 *</label><input v-model="editingDevice.name" placeholder="如 node01"/></div>
             <div class="fg">
               <label>设备类型</label>
@@ -137,33 +171,6 @@
             <div class="fg"><label>关联 Slurm 节点名</label><input v-model="editingDevice.node_name" placeholder="可选，如 node01"/></div>
             <div class="fg"><label>型号</label><input v-model="editingDevice.model" placeholder="可选"/></div>
             <div class="fg"><label>占用 U 数</label><input type="number" v-model.number="editingDevice.height" min="1" max="10"/></div>
-          </template>
-          <template v-if="devTab==='cmdb'">
-            <div class="cmdb-sync-bar">
-              <span class="cmdb-sync-tip">从监控节点自动填充</span>
-              <select v-model="cmdbSyncNode" class="cmdb-sel">
-                <option value="">选择节点...</option>
-                <option v-for="n in nodes" :key="n.name" :value="n.name">{{ n.name }}</option>
-              </select>
-              <button class="btn-sec btn-sm" @click="syncFromNode" :disabled="!cmdbSyncNode">填充</button>
-            </div>
-            <div class="fg-row">
-              <div class="fg"><label>管理 IP</label><input v-model="editingDevice.ip" placeholder="192.168.1.x"/></div>
-              <div class="fg"><label>带外 IP (IPMI)</label><input v-model="editingDevice.ipmi_ip" placeholder="可选"/></div>
-            </div>
-            <div class="fg-row">
-              <div class="fg"><label>MAC 地址</label><input v-model="editingDevice.mac" placeholder="xx:xx:xx:xx:xx:xx"/></div>
-              <div class="fg"><label>序列号 (SN)</label><input v-model="editingDevice.sn" placeholder="可选"/></div>
-            </div>
-            <div class="fg-row">
-              <div class="fg"><label>CPU 型号</label><input v-model="editingDevice.cpu_model" placeholder="可选"/></div>
-              <div class="fg"><label>内存容量</label><input v-model="editingDevice.mem_total" placeholder="如 256GB"/></div>
-            </div>
-            <div class="fg-row">
-              <div class="fg"><label>操作系统</label><input v-model="editingDevice.os" placeholder="如 CentOS 7.9"/></div>
-              <div class="fg"><label>购买日期</label><input type="date" v-model="editingDevice.purchase_date"/></div>
-            </div>
-            <div class="fg"><label>备注</label><textarea v-model="editingDevice.remark" rows="2" placeholder="其他信息..."></textarea></div>
           </template>
           <template v-if="devTab==='ports' && editingDevice.type==='switch'">
             <div class="port-mgr-bar">
@@ -198,50 +205,6 @@
       </div>
     </div>
 
-    <div v-if="showCmdb" class="overlay" @click.self="showCmdb=false">
-      <div class="modal modal-xl">
-        <div class="modal-hd">
-          <h4> CMDB 资产总览</h4>
-          <div style="display:flex;gap:0.5rem;align-items:center">
-            <button class="btn-sec btn-sm" @click="cmdbAutoScan" :disabled="cmdbScanning">{{ cmdbScanning ? '扫描中...' : ' 从监控自动扫描' }}</button>
-            <button @click="showCmdb=false" class="x-btn"></button>
-          </div>
-        </div>
-        <div class="modal-bd" style="padding:0">
-          <div class="cmdb-filter-bar">
-            <input v-model="cmdbSearch" placeholder="搜索名称/IP/型号..." class="cmdb-search"/>
-            <select v-model="cmdbTypeFilter" class="cmdb-sel">
-              <option value="">全部类型</option>
-              <option value="compute">计算节点</option>
-              <option value="gpu">GPU 节点</option>
-              <option value="storage">存储节点</option>
-              <option value="switch">交换机</option>
-            </select>
-          </div>
-          <div style="overflow-x:auto">
-            <table class="cmdb-table">
-              <thead><tr><th>名称</th><th>类型</th><th>机柜/U位</th><th>管理IP</th><th>MAC</th><th>型号</th><th>CPU</th><th>内存</th><th>OS</th><th>SN</th><th>备注</th></tr></thead>
-              <tbody>
-                <tr v-for="item in cmdbFiltered" :key="item.devId" @click="jumpToDevice(item)" class="cmdb-row">
-                  <td><span class="cmdb-name">{{ item.name }}</span></td>
-                  <td><span :class="['type-badge','type-'+item.type]">{{ typeLabel(item.type) }}</span></td>
-                  <td>{{ item.rackName }} / {{ item.unit }}U</td>
-                  <td>{{ item.ip || '-' }}</td>
-                  <td class="mono">{{ item.mac || '-' }}</td>
-                  <td>{{ item.model || '-' }}</td>
-                  <td>{{ item.cpu_model || '-' }}</td>
-                  <td>{{ item.mem_total || '-' }}</td>
-                  <td>{{ item.os || '-' }}</td>
-                  <td class="mono">{{ item.sn || '-' }}</td>
-                  <td>{{ item.remark || '-' }}</td>
-                </tr>
-                <tr v-if="cmdbFiltered.length===0"><td colspan="11" class="empty-sm">暂无数据</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 
@@ -252,6 +215,8 @@ import { getApiBase } from '../utils/auth'
 const containerH = ref(600)
 const racks = ref<any[]>([])
 const nodes = ref<any[]>([])
+const nodeMetrics = ref<any[]>([])  // Prometheus 实时指标
+const cmdbHosts = ref<any[]>([])    // CMDB 主机列表
 const loading = ref(false)
 const rackLoading = ref(false)
 const rackError = ref('')
@@ -266,6 +231,7 @@ const cmdbSyncNode = ref('')
 const cmdbSearch = ref('')
 const cmdbTypeFilter = ref('')
 const cmdbScanning = ref(false)
+const cmdbImportHost = ref('')  // 从 CMDB 导入时选中的主机
 
 interface Cable { id: string; fromRack: string; fromDev: string; fromPort: string; toRack: string; toDev: string; toPort: string }
 const cables = ref<Cable[]>(JSON.parse(localStorage.getItem('rack-cables') || '[]'))
@@ -376,12 +342,19 @@ const updateContainerH = () => {
 const loadAll = async () => {
   loading.value = true
   try {
-    const [rRes, nRes] = await Promise.allSettled([
+    const [rRes, nRes, mRes, cRes] = await Promise.allSettled([
       fetch(`${getApiBase()}/api/monitoring/rack`, { headers: { Authorization: `Bearer ${token()}` } }),
       fetch(`${getApiBase()}/api/dashboard/nodes`, { headers: { Authorization: `Bearer ${token()}` } }),
+      fetch(`${getApiBase()}/api/monitoring/node-metrics`, { headers: { Authorization: `Bearer ${token()}` } }),
+      fetch(`${getApiBase()}/api/cmdb/hosts`, { headers: { Authorization: `Bearer ${token()}` } }),
     ])
     if (rRes.status==='fulfilled' && rRes.value.ok) racks.value = (await rRes.value.json()).data || []
     if (nRes.status==='fulfilled' && nRes.value.ok) nodes.value = (await nRes.value.json()).data || []
+    if (mRes.status==='fulfilled' && mRes.value.ok) {
+      const d = await mRes.value.json()
+      nodeMetrics.value = d.nodes || []
+    }
+    if (cRes.status==='fulfilled' && cRes.value.ok) cmdbHosts.value = (await cRes.value.json()).data || []
   } finally { loading.value = false; updateContainerH(); updateSvgSize() }
 }
 
@@ -389,9 +362,27 @@ const nodeStateLabel = (nodeName: string) => {
   const n = nodes.value.find((x:any) => x.name === nodeName)
   if (!n) return ''
   const s = (n.state||'').toLowerCase()
-  if (s.includes('down')||s.includes('drain')) return ''
-  if (s.includes('alloc')||s.includes('mix')) return ''
-  return ''
+  if (s.includes('down')||s.includes('drain')) return '🔴'
+  if (s.includes('alloc')||s.includes('mix')) return '🟡'
+  return '🟢'
+}
+
+// 从 Prometheus nodeMetrics 里查找设备对应的指标（按 node_name 或 IP 匹配）
+const getDevMetrics = (dev: any) => {
+  if (!nodeMetrics.value.length) return null
+  // 优先按 node_name 匹配
+  if (dev.node_name) {
+    const m = nodeMetrics.value.find((n:any) =>
+      n.instance && (n.instance.includes(dev.node_name) || dev.node_name.includes(n.instance.split(':')[0]))
+    )
+    if (m) return m
+  }
+  // 按 IP 匹配
+  if (dev.ip) {
+    const m = nodeMetrics.value.find((n:any) => n.instance && n.instance.includes(dev.ip))
+    if (m) return m
+  }
+  return null
 }
 
 const sortedDevices = (rack: any) => [...(rack.devices||[])].sort((a:any,b:any) => b.unit - a.unit)
@@ -409,12 +400,43 @@ const slotClass = (rack: any, dev: any) => {
 
 const slotTitle = (rack: any, dev: any) => {
   const n = dev.node_name ? nodes.value.find((x:any) => x.name===dev.node_name) : null
+  const m = getDevMetrics(dev)
   const base = dev.name + (dev.ip ? ` | IP: ${dev.ip}` : '')
-  if (!n) return base
-  return `${base} | 状态: ${n.state||'-'} | CPU: ${Math.round(n.cpu_usage_percent||0)}% | 内存: ${Math.round(n.memory_usage_percent||0)}%`
+  const slurmInfo = n ? ` | Slurm: ${n.state||'-'}` : ''
+  const promInfo = m ? ` | CPU: ${Math.round(m.cpu_usage||0)}% | 内存: ${Math.round(m.mem_usage||0)}% | Load: ${m.load1||0}` : ''
+  return base + slurmInfo + promInfo
 }
 const openNewRack = () => { editingRack.value = { name:'', location:'', units:42, devices:[] }; showRackModal.value = true }
 const openEditRack = (rack: any) => { editingRack.value = { ...rack, devices:[...(rack.devices||[])] }; showRackModal.value = true }
+
+// 从 CMDB 主机填充设备信息
+const importFromCmdb = () => {
+  if (!cmdbImportHost.value) return
+  const h = cmdbHosts.value.find((x:any) => x.id === cmdbImportHost.value)
+  if (!h) return
+  const role = (h.role || '').toLowerCase()
+  let devType = 'compute'
+  if (role.includes('gpu')) devType = 'gpu'
+  else if (role.includes('存储') || role.includes('storage')) devType = 'storage'
+  else if (role.includes('交换') || role.includes('switch')) devType = 'switch'
+  // 解析 U 数
+  const unitMatch = (h.rack_unit || '').match(/[Uu](\d+)/)
+  const unitEnd = (h.rack_unit || '').match(/[Uu]\d+-[Uu](\d+)/)
+  const startU = unitMatch ? parseInt(unitMatch[1]) : editingDevice.value.unit
+  const endU = unitEnd ? parseInt(unitEnd[1]) : startU + 1
+  const height = Math.max(1, endU - startU + 1)
+  // 主 IP
+  const mainIP = h.ips?.find((ip:any) => ip.type === '业务口' || ip.type === '管理口')?.address || h.ips?.[0]?.address || ''
+  editingDevice.value = {
+    ...editingDevice.value,
+    name: h.hostname,
+    type: devType,
+    model: h.model || '',
+    height,
+    ip: mainIP,
+  }
+  cmdbImportHost.value = ''
+}
 
 const saveRack = async () => {
   rackError.value = ''
@@ -614,6 +636,19 @@ onUnmounted(() => { window.removeEventListener('resize', updateContainerH); wind
 .slot-pdu{background:#fef3c7;border:1px solid #fbbf24}.slot-pdu .slot-label{color:#92400e}
 .slot-empty{background:#f8fafc;border:1px dashed #e2e8f0}
 .slot-empty:hover{background:#f0f9ff;border-color:#bae6fd}
+/* 负载进度条 */
+.slot-metrics{width:100%;display:flex;flex-direction:column;gap:1px;margin-top:2px}
+.slot-bar-row{display:flex;align-items:center;gap:2px;height:5px}
+.slot-bar-label{font-size:0.5rem;color:#6b7280;width:8px;flex-shrink:0}
+.slot-bar-bg{flex:1;height:4px;background:rgba(0,0,0,0.1);border-radius:2px;overflow:hidden}
+.slot-bar-fill{height:100%;border-radius:2px;transition:width 0.3s;background:#22c55e}
+.slot-bar-fill.bar-warn{background:#f59e0b}
+.slot-bar-fill.bar-crit{background:#ef4444}
+.slot-bar-val{font-size:0.48rem;color:#6b7280;width:20px;text-align:right;flex-shrink:0}
+/* CMDB 导入栏 */
+.cmdb-import-bar{display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0.75rem;background:#eff6ff;border-radius:8px;border:1px solid #bfdbfe;margin-bottom:0.75rem}
+.cmdb-import-tip{font-size:0.8rem;color:#1d4ed8;flex-shrink:0}
+.cmdb-import-sel{flex:1;padding:0.3rem 0.5rem;border:1px solid #bfdbfe;border-radius:6px;font-size:0.82rem;background:#fff}
 .slot-down{background:#f3f4f6;border:1px solid #d1d5db;opacity:0.55}
 .port-dot{position:absolute;width:8px;height:8px;border-radius:50%;background:#f59e0b;border:1.5px solid #d97706;cursor:crosshair;z-index:20;transition:transform 0.1s}
 .port-dot:hover{transform:scale(1.5)}
