@@ -20,7 +20,7 @@
 
 | 模块 | 说明 |
 |---|---|
-| 仪表盘 | 集群概览、节点状态、CPU/GPU/内存实时统计、作业统计、账户配额、机时信息、存储配额 |
+| 仪表盘 | 集群概览、节点状态、CPU/GPU/内存实时统计、作业统计、账户配额、机时信息、存储配额（真实数据） |
 | 作业管理 | 作业列表、提交作业、作业模板库（CFD/化学/AI/ML 等预设模板）、作业暂停/恢复/取消 |
 | Web Shell | 浏览器内 SSH 终端，支持多节点连接，行为日志记录 |
 | 远程桌面 | VNC 远程访问计算节点图形界面，支持 hpc-client 隧道连接 |
@@ -36,23 +36,23 @@
 | 用户管理 | LDAP 用户/用户组增删改查、禁用、强制改密 |
 | 账户管理 | Slurm 账户/用户管理 |
 | 资源管理 | QoS 配置、资源绑定（Association）、机时管理、存储配额 |
-| 集群监控 | Prometheus 实时指标、告警规则、节点状态、机柜管理、网络拓扑 |
+| 集群监控 | Prometheus 实时指标、告警规则、节点状态、机柜管理（仅显示主机名）、网络拓扑 |
 | AI 诊断 | 基于 Prometheus 实时数据的集群运维诊断，前端自动注入监控数据，AI 直接分析 |
 | 数据审计 | API 操作审计、前端页面访问审计、SSH 行为日志，记录真实客户端 IP 和访问地址 |
 
 ---
 
-## 近期整改项
+## 技术栈
 
-### 安全与认证
-- [x] 登出时后端吊销 JWT token（内存黑名单），hpc-client 隧道同步失效
-- [x] 审计日志记录真实客户端公网 IP（支持 X-Real-IP / X-Forwarded-For / CF-Connecting-IP）
-- [x] 审计日志新增 `access_host` 字段，记录用户通过哪个域名/地址访问平台
-- [x] 前端页面访问行为纳入审计（页面切换自动上报，500ms 防抖）
-
-### AI 功能
-- [x] HPC 应用助手（AIAssistant）与 AI 诊断（AIDiagnostics）职责分离
-  - 应用助手：聚焦 MPI/OpenMP/Python/作业脚本等用户侧问题
+| 层 | 技术 |
+|---|---|
+| 前端 | Vue 3 + TypeScript + Vite |
+| 后端 | Go + Gin |
+| 认证 | LDAP + JWT |
+| 调度 | Slurm REST API |
+| 监控 | Prometheus + node_exporter |
+| AI | 兼容 OpenAI API 的任意模型（MiniMax/DeepSeek/GPT 等） |
+| 知识库 | 本地 Markdown 文件（Obsidian Vault 兼容）+ 内存 2-gram 索引 |
   - AI 诊断：聚焦 Prometheus 监控数据分析、告警根因、性能瓶颈
 - [x] AI 诊断前端主动查询 Prometheus 并注入实时数据，不依赖 AI 主动调用工具
 - [x] 问答知识库：每次问答异步写入 Obsidian Vault（Markdown 格式），启动时加载历史问答做 RAG 检索

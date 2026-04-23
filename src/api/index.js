@@ -31,6 +31,11 @@ axios.interceptors.response.use((response) => {
 }, (error) => {
     if (error.response) {
         const { status, data } = error.response;
+        // 演示只读模式
+        if (status === 403 && data.code === 'DEMO_READONLY') {
+            alert('演示模式：用户信息不允许修改');
+            return Promise.reject(error);
+        }
         // 账户被禁用
         if (status === 403 && data.code === 'ACCOUNT_DISABLED') {
             // 清除本地存储

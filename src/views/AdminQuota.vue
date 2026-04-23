@@ -105,7 +105,7 @@
 
   <!-- 设置配额弹窗 -->
   <Teleport to="body">
-    <div v-if="showModal" class="modal-overlay" @click.self="showModal = false">
+    <div v-if="showModal" class="modal-overlay">
       <div class="modal">
         <div class="modal-header">
           <h3>⚙️ 设置存储配额</h3>

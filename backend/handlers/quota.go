@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/gin-gonic/gin"
 	"hpc-backend/logger"
@@ -68,6 +69,31 @@ func GetQuota(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"username": user, "quotas": quotas})
+}
+
+// GetFSInfo GET /api/files/quota/fsinfo  返回挂载点的真实容量
+func GetFSInfo(c *gin.Context) {
+	path := getQuotaPath("")
+	if path == "" {
+		path = os.Getenv("FILEMANAGER_BASE_PATH")
+		if path == "" {
+			path = "/home"
+		}
+	}
+	var stat syscall.Statfs_t
+	if err := syscall.Statfs(path, &stat); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	totalKB := int64(stat.Blocks) * int64(stat.Bsize) / 1024
+	freeKB := int64(stat.Bfree) * int64(stat.Bsize) / 1024
+	usedKB := totalKB - freeKB
+	c.JSON(http.StatusOK, gin.H{
+		"path":     path,
+		"total_kb": totalKB,
+		"used_kb":  usedKB,
+		"free_kb":  freeKB,
+	})
 }
 
 // GetAllQuotas GET /api/files/quota/all  (admin)
@@ -187,6 +213,7 @@ func execSetQuota(req SetQuotaRequest, mountpoint string) error {
 	if fsType == "" {
 		fsType = detectFSType(mountpoint)
 	}
+	logger.Info("execSetQuota: fsType=%s mountpoint=%s user=%s blockHard=%dKB", fsType, mountpoint, req.Username, req.BlockHardKB)
 	var cmd *exec.Cmd
 	switch fsType {
 	case "lustre":
@@ -215,12 +242,15 @@ func execSetQuota(req SetQuotaRequest, mountpoint string) error {
 			fmt.Sprintf("%d", req.InodeSoft), fmt.Sprintf("%d", req.InodeHard),
 			mountpoint)
 	case "xfs":
-		limitArgs := fmt.Sprintf("limit -u bsoft=%dk bhard=%dk isoft=%d ihard=%d %s",
+		// xfs_quota -x -c 需要分多个 -c 参数，limit 命令格式：
+		// xfs_quota -x -c "limit -u bsoft=Xk bhard=Xk isoft=X ihard=X username" mountpoint
+		limitStr := fmt.Sprintf("limit -u bsoft=%dk bhard=%dk isoft=%d ihard=%d %s",
 			req.BlockSoftKB, req.BlockHardKB, req.InodeSoft, req.InodeHard, req.Username)
-		cmd = exec.Command("xfs_quota", "-x", "-c", limitArgs, mountpoint)
+		cmd = exec.Command("xfs_quota", "-x", "-c", limitStr, mountpoint)
 	default:
-		return fmt.Errorf("无法确定文件系统类型，请设置 QUOTA_FS_TYPE 环境变量 (lustre / nfs / xfs)")
+		return fmt.Errorf("无法确定文件系统类型 (detected=%s)，请设置 QUOTA_FS_TYPE 环境变量 (lustre / nfs / xfs)", fsType)
 	}
+	logger.Info("execSetQuota cmd: %v", cmd.Args)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
@@ -228,7 +258,7 @@ func execSetQuota(req SetQuotaRequest, mountpoint string) error {
 		if errMsg == "" {
 			errMsg = err.Error()
 		}
-		return fmt.Errorf("%s 执行失败: %s", fsType, errMsg)
+		return fmt.Errorf("%s 执行失败: %s (cmd: %v)", fsType, errMsg, cmd.Args)
 	}
 	return nil
 }

@@ -57,34 +57,7 @@
                 :data-dev-id="dev.id" :data-rack-id="rack.id"
                 :title="slotTitle(rack, dev)" @click="openEditDevice(rack, dev)">
                 <span class="slot-u">{{ dev.unit }}U</span>
-                <span class="slot-label">{{ dev.name }}</span>
-                <span v-if="dev.ip" class="slot-ip">{{ dev.ip }}</span>
-                <span v-if="dev.node_name" class="slot-state">{{ nodeStateLabel(dev.node_name) }}</span>
-                <!-- Prometheus 负载进度条 -->
-                <template v-if="getDevMetrics(dev) as any">
-                  <div class="slot-metrics">
-                    <div class="slot-bar-row">
-                      <span class="slot-bar-label">C</span>
-                      <div class="slot-bar-bg">
-                        <div class="slot-bar-fill slot-bar-cpu"
-                          :style="{ width: Math.min(getDevMetrics(dev)?.cpu_usage||0, 100) + '%' }"
-                          :class="{ 'bar-warn': (getDevMetrics(dev)?.cpu_usage||0) > 70, 'bar-crit': (getDevMetrics(dev)?.cpu_usage||0) > 90 }">
-                        </div>
-                      </div>
-                      <span class="slot-bar-val">{{ Math.round(getDevMetrics(dev)?.cpu_usage||0) }}%</span>
-                    </div>
-                    <div class="slot-bar-row">
-                      <span class="slot-bar-label">M</span>
-                      <div class="slot-bar-bg">
-                        <div class="slot-bar-fill slot-bar-mem"
-                          :style="{ width: Math.min(getDevMetrics(dev)?.mem_usage||0, 100) + '%' }"
-                          :class="{ 'bar-warn': (getDevMetrics(dev)?.mem_usage||0) > 70, 'bar-crit': (getDevMetrics(dev)?.mem_usage||0) > 90 }">
-                        </div>
-                      </div>
-                      <span class="slot-bar-val">{{ Math.round(getDevMetrics(dev)?.mem_usage||0) }}%</span>
-                    </div>
-                  </div>
-                </template>
+                <span class="slot-label slot-label-center">{{ dev.name }}</span>
                 <template v-if="dev.type === 'switch' && dev.ports && dev.ports.length">
                   <span v-for="(port, pi) in dev.ports" :key="port.id"
                     class="port-pin" :class="{ 'port-used': isCablePort(dev.id, port.id) }"
@@ -627,6 +600,7 @@ onUnmounted(() => { window.removeEventListener('resize', updateContainerH); wind
 .rack-slot:hover{filter:brightness(0.92)}
 .slot-u{color:rgba(0,0,0,0.3);min-width:18px;font-size:0.55rem}
 .slot-label{flex:1;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.slot-label-center{text-align:center;justify-content:center}
 .slot-ip{font-size:0.55rem;color:#6b7280;margin-left:2px}
 .slot-state{font-size:0.62rem;margin-left:auto}
 .slot-add{color:#cbd5e1;font-size:0.75rem;margin-left:auto}

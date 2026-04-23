@@ -63,6 +63,9 @@ func main() {
 	// CORS 中间件
 	r.Use(middleware.CORSMiddleware())
 
+	// 只读演示模式（DEMO_READONLY=true 时拦截所有写操作）
+	r.Use(middleware.ReadOnlyMiddleware())
+
 	// 审计日志中间件（在认证之后）
 	r.Use(middleware.AuditMiddleware())
 
@@ -291,6 +294,7 @@ func main() {
 			files.POST("/copy", handlers.CopyFile)
 			// 配额
 			files.GET("/quota", handlers.GetQuota)
+			files.GET("/quota/fsinfo", handlers.GetFSInfo)
 			files.GET("/quota/all", handlers.GetAllQuotas)
 			files.POST("/quota", handlers.SetQuota)
 			files.GET("/compress", handlers.CompressDownload)
