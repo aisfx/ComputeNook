@@ -25,12 +25,17 @@
               <div class="jd-field-value">{{ job.partition }}</div>
             </div>
             <div class="jd-field">
-              <div class="jd-field-label">节点数</div>
-              <div class="jd-field-value">{{ job.nodes || 0 }}</div>
+              <div class="jd-field-label">节点</div>
+              <div class="jd-field-value">
+                <span v-if="job.nodeNames && job.nodeNames.length">
+                  {{ job.nodeNames.join(', ') }}
+                </span>
+                <span v-else>{{ job.nodes || 0 }} 个节点</span>
+              </div>
             </div>
             <div class="jd-field">
               <div class="jd-field-label">CPU 核心</div>
-              <div class="jd-field-value">{{ job.cpus || 1 }}</div>
+              <div class="jd-field-value">{{ job.cpus || 1 }} 核</div>
             </div>
             <div class="jd-field">
               <div class="jd-field-label">内存</div>

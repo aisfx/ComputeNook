@@ -31,11 +31,14 @@ export default defineConfig({
     outDir: 'dist',
     emptyOutDir: true,
     target: 'esnext',
+    commonjsOptions: {
+      include: [/@novnc\/novnc/, /node_modules/],
+    },
     rollupOptions: {
       external: [],
     }
   },
   optimizeDeps: {
-    exclude: ['@novnc/novnc'],
+    include: ['@novnc/novnc/lib/rfb.js'],
   }
 })

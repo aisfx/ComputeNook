@@ -462,7 +462,7 @@ onMounted(loadHosts)
 
 .filter-bar { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
 .filter-input { padding: 6px 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.85rem; min-width: 220px; outline: none; }
-.filter-input:focus { border-color: #667eea; }
+.filter-input:focus { border-color: #94a3b8; }
 .filter-select { padding: 6px 10px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 0.85rem; background: #fff; cursor: pointer; }
 .total-badge { margin-left: auto; font-size: 0.82rem; color: #64748b; }
 
@@ -508,11 +508,11 @@ onMounted(loadHosts)
 .msg-err { background: #fef2f2; color: #991b1b; border: 1px solid #fca5a5; }
 
 /* 按钮 */
-.btn-primary { background: linear-gradient(135deg, #667eea, #764ba2); color: #fff; border: none; padding: 7px 16px; border-radius: 8px; cursor: pointer; font-size: 0.85rem; font-weight: 600; }
-.btn-primary:hover:not(:disabled) { opacity: 0.9; }
+.btn-primary { background: #fff; color: #1e293b; border: 1px solid #e2e8f0; padding: 7px 16px; border-radius: 10px; cursor: pointer; font-size: 0.85rem; font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,0.06); transition: all 0.15s; }
+.btn-primary:hover:not(:disabled) { background: #f1f5f9; }
 .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-secondary { background: #f1f5f9; color: #374151; border: 1px solid #e2e8f0; padding: 7px 14px; border-radius: 8px; cursor: pointer; font-size: 0.85rem; }
-.btn-secondary:hover { background: #e2e8f0; }
+.btn-secondary { background: #fff; color: #1e293b; border: 1px solid #e2e8f0; padding: 7px 14px; border-radius: 10px; cursor: pointer; font-size: 0.85rem; font-weight: 500; box-shadow: 0 1px 3px rgba(0,0,0,0.06); transition: all 0.15s; }
+.btn-secondary:hover { background: #f1f5f9; }
 .btn-import { background: #f0fdf4; color: #166534; border: 1px solid #86efac; padding: 7px 14px; border-radius: 8px; cursor: pointer; font-size: 0.85rem; font-weight: 600; }
 .btn-import:hover { background: #dcfce7; }
 .btn-sync { background: #eff6ff; color: #1d4ed8; border: 1px solid #93c5fd; padding: 7px 14px; border-radius: 8px; cursor: pointer; font-size: 0.85rem; font-weight: 600; }
@@ -539,7 +539,7 @@ onMounted(loadHosts)
   padding: 7px 10px; border: 1px solid #e2e8f0; border-radius: 7px;
   font-size: 0.83rem; outline: none; font-family: inherit;
 }
-.form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: #667eea; }
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: #94a3b8; box-shadow: 0 0 0 2px rgba(0,0,0,0.08); }
 .form-group input:disabled, .form-group select:disabled, .form-group textarea:disabled { background: #f8fafc; color: #64748b; }
 
 .ip-list { display: flex; flex-direction: column; gap: 6px; }

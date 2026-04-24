@@ -13,6 +13,22 @@ import (
 	"hpc-backend/logger"
 )
 
+// getUserHomeBase 返回用户的 home 根目录（已 Clean）
+func getUserHomeBase(username string) string {
+	base := os.Getenv("HOME_BASE_PATH")
+	if base == "" {
+		base = "/home"
+	}
+	return filepath.Join(filepath.Clean(base), username)
+}
+
+// isPathAllowed 检查 path 是否在 allowedBase 目录下（防止路径穿越）
+func isPathAllowed(path, allowedBase string) bool {
+	cleanPath := filepath.Clean(path)
+	cleanBase := filepath.Clean(allowedBase)
+	return cleanPath == cleanBase || strings.HasPrefix(cleanPath, cleanBase+"/")
+}
+
 // FileInfo 文件信息
 type FileInfo struct {
 	Name         string    `json:"name"`
@@ -36,13 +52,14 @@ func ListDirectory(c *gin.Context) {
 
 	// 获取路径参数
 	path := c.Query("path")
+	homeBase := getUserHomeBase(username.(string))
 	if path == "" {
-		path = "/home/" + username.(string)
+		path = homeBase
 	}
 
-	// 安全检查：确保路径不包含 ..
-	if strings.Contains(path, "..") {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "非法路径"})
+	// 安全检查：路径必须在用户 home 目录下
+	if !isPathAllowed(path, homeBase) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权访问该路径"})
 		return
 	}
 
@@ -102,9 +119,9 @@ func ReadFile(c *gin.Context) {
 		return
 	}
 
-	// 安全检查：确保路径不包含 ..
-	if strings.Contains(path, "..") {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "非法路径"})
+	// 安全检查：路径必须在用户 home 目录下
+	if !isPathAllowed(path, getUserHomeBase(username.(string))) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权访问该路径"})
 		return
 	}
 
@@ -165,9 +182,9 @@ func DownloadFile(c *gin.Context) {
 		return
 	}
 
-	// 安全检查：确保路径不包含 ..
-	if strings.Contains(path, "..") {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "非法路径"})
+	// 安全检查：路径必须在用户 home 目录下
+	if !isPathAllowed(path, getUserHomeBase(username.(string))) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权访问该路径"})
 		return
 	}
 
@@ -220,9 +237,9 @@ func WriteFile(c *gin.Context) {
 		return
 	}
 
-	// 安全检查：确保路径不包含 ..
-	if strings.Contains(req.Path, "..") {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "非法路径"})
+	// 安全检查：路径必须在用户 home 目录下
+	if !isPathAllowed(req.Path, getUserHomeBase(username.(string))) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权访问该路径"})
 		return
 	}
 
@@ -255,13 +272,14 @@ func UploadFile(c *gin.Context) {
 
 	// 获取目标路径
 	targetPath := c.PostForm("path")
+	homeBase := getUserHomeBase(username.(string))
 	if targetPath == "" {
-		targetPath = "/home/" + username.(string)
+		targetPath = homeBase
 	}
 
-	// 安全检查：确保路径不包含 ..
-	if strings.Contains(targetPath, "..") {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "非法路径"})
+	// 安全检查：路径必须在用户 home 目录下
+	if !isPathAllowed(targetPath, homeBase) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权访问该路径"})
 		return
 	}
 
@@ -275,8 +293,12 @@ func UploadFile(c *gin.Context) {
 	logger.Debug("UploadFile: user=%s, filename=%s, size=%d, target=%s", 
 		username, file.Filename, file.Size, targetPath)
 
-	// 构建完整路径
-	fullPath := filepath.Join(targetPath, file.Filename)
+	// 构建完整路径，并再次验证防止文件名包含路径穿越（如 ../../etc/passwd）
+	fullPath := filepath.Join(targetPath, filepath.Base(file.Filename))
+	if !isPathAllowed(fullPath, homeBase) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权访问该路径"})
+		return
+	}
 
 	// 保存文件
 	if err := c.SaveUploadedFile(file, fullPath); err != nil {
@@ -309,15 +331,9 @@ func DeleteFile(c *gin.Context) {
 		return
 	}
 
-	// 安全检查：确保路径不包含 ..
-	if strings.Contains(path, "..") {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "非法路径"})
-		return
-	}
-
-	// 安全检查：不允许删除根目录和重要系统目录
-	if path == "/" || path == "/home" || path == "/etc" || path == "/usr" || path == "/var" {
-		c.JSON(http.StatusForbidden, gin.H{"error": "不允许删除系统目录"})
+	// 安全检查：路径必须在用户 home 目录下
+	if !isPathAllowed(path, getUserHomeBase(username.(string))) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权访问该路径"})
 		return
 	}
 
@@ -372,9 +388,9 @@ func CreateDirectory(c *gin.Context) {
 		return
 	}
 
-	// 安全检查：确保路径不包含 ..
-	if strings.Contains(req.Path, "..") {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "非法路径"})
+	// 安全检查：路径必须在用户 home 目录下
+	if !isPathAllowed(req.Path, getUserHomeBase(username.(string))) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权访问该路径"})
 		return
 	}
 
@@ -414,9 +430,10 @@ func RenameFile(c *gin.Context) {
 		return
 	}
 
-	// 安全检查：确保路径不包含 ..
-	if strings.Contains(req.OldPath, "..") || strings.Contains(req.NewPath, "..") {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "非法路径"})
+	// 安全检查：路径必须在用户 home 目录下
+	homeBase := getUserHomeBase(username.(string))
+	if !isPathAllowed(req.OldPath, homeBase) || !isPathAllowed(req.NewPath, homeBase) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权访问该路径"})
 		return
 	}
 
@@ -457,9 +474,10 @@ func CopyFile(c *gin.Context) {
 		return
 	}
 
-	// 安全检查：确保路径不包含 ..
-	if strings.Contains(req.SourcePath, "..") || strings.Contains(req.TargetPath, "..") {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "非法路径"})
+	// 安全检查：路径必须在用户 home 目录下
+	homeBase := getUserHomeBase(username.(string))
+	if !isPathAllowed(req.SourcePath, homeBase) || !isPathAllowed(req.TargetPath, homeBase) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权访问该路径"})
 		return
 	}
 
@@ -516,9 +534,9 @@ func GetFileInfo(c *gin.Context) {
 		return
 	}
 
-	// 安全检查：确保路径不包含 ..
-	if strings.Contains(path, "..") {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "非法路径"})
+	// 安全检查：路径必须在用户 home 目录下
+	if !isPathAllowed(path, getUserHomeBase(username.(string))) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权访问该路径"})
 		return
 	}
 
@@ -563,6 +581,12 @@ func CompressDownload(c *gin.Context) {
 	}
 	if strings.Contains(path, "..") {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "非法路径"})
+		return
+	}
+
+	// 安全检查：路径必须在用户 home 目录下
+	if !isPathAllowed(path, getUserHomeBase(username.(string))) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权访问该路径"})
 		return
 	}
 

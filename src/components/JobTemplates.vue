@@ -559,222 +559,169 @@ const copyConfig = () => {
 </script>
 
 <style scoped>
-/* 按钮基础 */
 .btn-primary {
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
-  padding: 0.4rem 0.75rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border: none;
-  border-radius: 6px;
-  font-size: 0.8rem;
+  padding: 6px 14px;
+  background: #fff;
+  color: #1e293b;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  font-size: 0.82rem;
   font-weight: 600;
   cursor: pointer;
-  transition: opacity 0.2s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  transition: all 0.15s;
   white-space: nowrap;
 }
-.btn-primary:hover { opacity: 0.9; }
+.btn-primary:hover { background: #f1f5f9; }
 
 .btn-secondary {
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
-  padding: 0.4rem 0.75rem;
-  background: white;
-  color: #667eea;
-  border: 1.5px solid #667eea;
-  border-radius: 6px;
-  font-size: 0.8rem;
-  font-weight: 600;
+  padding: 6px 14px;
+  background: #fff;
+  color: #1e293b;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  font-size: 0.82rem;
+  font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  transition: all 0.15s;
   white-space: nowrap;
 }
-.btn-secondary:hover { background: #f0f0ff; }
+.btn-secondary:hover { background: #f1f5f9; }
 
 .btn-link {
   display: inline-flex;
   align-items: center;
   gap: 0.2rem;
-  padding: 0.4rem 0.625rem;
-  background: #f3f4f6;
-  color: #374151;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
+  padding: 4px 10px;
+  background: #fff;
+  color: #1e293b;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
   font-size: 0.78rem;
   cursor: pointer;
-  transition: all 0.2s;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  transition: all 0.15s;
   white-space: nowrap;
 }
-.btn-link:hover { background: #e5e7eb; }
-.btn-link.danger { color: #ef4444; }
-.btn-link.danger:hover { background: #fee2e2; border-color: #fecaca; }
+.btn-link:hover { background: #f1f5f9; }
+.btn-link.danger { color: #ef4444; border-color: rgba(239,68,68,0.25); }
+.btn-link.danger:hover { background: #fef2f2; }
 
 .templates-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.templates-header h3 { margin: 0; font-size: 0.95rem; font-weight: 600; }
+
+.app-categories {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.category-btn {
+  padding: 4px 12px;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--background));
+  color: hsl(var(--muted-foreground));
+  border-radius: 20px;
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.category-btn:hover { border-color: hsl(var(--foreground) / 0.3); color: hsl(var(--foreground)); }
+.category-btn.active {
+  background: hsl(var(--foreground));
+  color: hsl(var(--background));
+  border-color: hsl(var(--foreground));
 }
 
 .templates-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 10px;
 }
 
 .template-card {
-  background: #f9fafb;
-  border: 2px solid #e5e7eb;
-  border-radius: 8px;
-  padding: 1.5rem;
-  transition: all 0.3s;
-  overflow: hidden;
-  min-width: 0;
+  background: hsl(var(--background));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius-md);
+  padding: 14px;
+  transition: all 0.15s;
 }
-
 .template-card:hover {
-  border-color: #667eea;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.1);
+  border-color: hsl(var(--foreground) / 0.2);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
 }
 
 .template-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 0.75rem;
-}
-
-.template-header h4 {
-  font-size: 1.1rem;
-  color: #333;
-}
-
-.template-type {
-  padding: 0.25rem 0.75rem;
-  background: #667eea;
-  color: white;
-  border-radius: 12px;
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
-.template-desc {
-  color: #666;
-  font-size: 0.9rem;
-  margin-bottom: 1rem;
-}
-
-.template-specs {
-  display: flex;
-  gap: 1rem;
-  margin-bottom: 1rem;
-  font-size: 0.85rem;
-  color: #666;
-}
-
-.template-actions {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-  flex-wrap: wrap;
-  margin-top: 0.75rem;
-}
-</style>
-
-<style scoped>
-.app-categories {
-  display: flex;
-  gap: 0.75rem;
-  margin-bottom: 1.5rem;
-  flex-wrap: wrap;
-}
-
-.category-btn {
-  padding: 0.625rem 1.25rem;
-  border: 2px solid #e5e7eb;
-  background: white;
-  color: #666;
-  border-radius: 20px;
-  font-size: 0.9rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.3s;
-}
-
-.category-btn:hover {
-  border-color: #667eea;
-  color: #667eea;
-}
-
-.category-btn.active {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border-color: transparent;
+  margin-bottom: 6px;
 }
 
 .template-title {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 6px;
 }
-
-.app-icon {
-  font-size: 1.5rem;
-}
+.app-icon { font-size: 1.2rem; }
+.template-header h4 { margin: 0; font-size: 0.88rem; font-weight: 600; color: hsl(var(--foreground)); }
 
 .template-type {
+  padding: 2px 8px;
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+  border-radius: 10px;
+  font-size: 0.7rem;
+  font-weight: 500;
+}
+
+.template-desc {
+  color: hsl(var(--muted-foreground));
+  font-size: 0.78rem;
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+.template-specs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
   font-size: 0.75rem;
-}
-
-.type-cfd {
-  background: #3b82f6;
-}
-
-.type-chemistry {
-  background: #8b5cf6;
-}
-
-.type-md {
-  background: #10b981;
-}
-
-.type-ai {
-  background: #f59e0b;
-}
-
-.type-general {
-  background: #6b7280;
+  color: hsl(var(--muted-foreground));
 }
 
 .template-params {
-  background: #f9fafb;
-  padding: 0.75rem;
-  border-radius: 6px;
-  margin: 1rem 0;
-  font-size: 0.85rem;
+  background: hsl(var(--muted) / 0.5);
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 10px;
+  font-size: 0.75rem;
 }
+.param-item { display: flex; gap: 6px; margin-bottom: 2px; }
+.param-key { color: hsl(var(--muted-foreground)); font-weight: 500; }
+.param-value { color: hsl(var(--foreground)); }
 
-.param-item {
+.template-actions {
   display: flex;
-  gap: 0.5rem;
-  margin-bottom: 0.25rem;
-}
-
-.param-key {
-  color: #666;
-  font-weight: 600;
-}
-
-.param-value {
-  color: #333;
-}
-
-.config-modal {
-  max-width: 900px;
-  max-height: 85vh;
+  gap: 5px;
+  align-items: center;
+  flex-wrap: wrap;
 }
 </style>
 
@@ -865,8 +812,8 @@ const copyConfig = () => {
   transition: all 0.3s;
 }
 
-.job-templates-config-tab:hover { color: #667eea; }
-.job-templates-config-tab.active { color: #667eea; border-bottom-color: #667eea; }
+.job-templates-config-tab:hover { color: #374151; }
+.job-templates-config-tab.active { color: #1e293b; border-bottom-color: #1e293b; font-weight: 600; }
 
 .job-templates-config-content {
   background: #1e1e1e;
@@ -891,29 +838,35 @@ const copyConfig = () => {
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
-  padding: 0.5rem 1rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border: none;
-  border-radius: 8px;
-  font-size: 0.875rem;
+  padding: 7px 16px;
+  background: #fff;
+  color: #1e293b;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  transition: all 0.15s;
 }
+.job-templates-btn-primary:hover { background: #f1f5f9; }
 
 .job-templates-btn-secondary {
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
-  padding: 0.5rem 1rem;
-  background: white;
-  color: #667eea;
-  border: 1.5px solid #667eea;
-  border-radius: 8px;
-  font-size: 0.875rem;
-  font-weight: 600;
+  padding: 7px 16px;
+  background: #fff;
+  color: #1e293b;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  font-weight: 500;
   cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  transition: all 0.15s;
 }
+.job-templates-btn-secondary:hover { background: #f1f5f9; }
 
 .edit-form { display: flex; flex-direction: column; gap: 1rem; }
 

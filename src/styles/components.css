@@ -6,52 +6,60 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 8px 16px;
+  padding: 7px 16px;
   font-size: var(--font-size-sm);
   font-weight: 500;
-  border-radius: var(--radius-md);
-  border: 1px solid transparent;
+  border-radius: 10px;
+  border: 1px solid hsl(var(--border));
   cursor: pointer;
   transition: all 0.15s ease;
   white-space: nowrap;
   text-decoration: none;
   line-height: 1;
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
 }
-.btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn:hover:not(:disabled) { opacity: 0.9; }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn:hover:not(:disabled) { background: hsl(var(--accent)); box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
 
 .btn-primary {
-  background: hsl(var(--primary));
-  color: hsl(var(--primary-foreground));
-  border-color: hsl(var(--primary));
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+  border-color: hsl(var(--border));
+  font-weight: 600;
 }
-.btn-primary:hover:not(:disabled) { background: hsl(var(--primary) / 0.9); opacity: 1; }
+.btn-primary:hover:not(:disabled) { background: hsl(var(--accent)); }
 
 .btn-secondary {
-  background: hsl(var(--secondary));
-  color: hsl(var(--secondary-foreground));
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
   border-color: hsl(var(--border));
 }
-.btn-secondary:hover:not(:disabled) { background: hsl(var(--accent)); opacity: 1; }
+.btn-secondary:hover:not(:disabled) { background: hsl(var(--accent)); }
 
 .btn-outline {
   background: transparent;
   color: hsl(var(--foreground));
   border-color: hsl(var(--border));
 }
-.btn-outline:hover:not(:disabled) { background: hsl(var(--accent)); opacity: 1; }
+.btn-outline:hover:not(:disabled) { background: hsl(var(--accent)); }
 
 .btn-ghost {
   background: transparent;
   color: hsl(var(--foreground));
   border-color: transparent;
+  box-shadow: none;
 }
-.btn-ghost:hover:not(:disabled) { background: hsl(var(--accent)); opacity: 1; }
+.btn-ghost:hover:not(:disabled) { background: hsl(var(--accent)); }
 
 .btn-destructive, .btn-danger {
-  background: hsl(var(--destructive));
-  color: hsl(var(--destructive-foreground));
-  border-color: hsl(var(--destructive));
+  background: hsl(var(--card));
+  color: hsl(var(--destructive));
+  border-color: hsl(var(--destructive) / 0.3);
+}
+.btn-destructive:hover:not(:disabled), .btn-danger:hover:not(:disabled) {
+  background: hsl(var(--destructive) / 0.06);
 }
 
 .btn-link {

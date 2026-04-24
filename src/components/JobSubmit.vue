@@ -1,127 +1,112 @@
 <template>
-  <div class="card job-submit">
-    <div class="submit-header">
-      <h2>📝 提交新作业</h2>
-      <div class="template-selector">
-        <label>选择模板：</label>
-        <select v-model="selectedTemplate" @change="applyTemplate" class="template-select">
-          <option value="">-- 手动填写 --</option>
-          <option v-for="template in templates" :key="template.id" :value="template.id">
-            {{ template.name }}
+  <form @submit.prevent="submitJob" class="submit-form">
+    <!-- 作业名 + 分区 -->
+    <div class="form-row col2">
+      <div class="form-group">
+        <label>作业名称 *</label>
+        <input v-model="form.name" type="text" placeholder="my_job" required />
+      </div>
+      <div class="form-group">
+        <label>队列/分区 *</label>
+        <select v-model="form.partition" required :disabled="loadingPartitions">
+          <option value="" disabled>{{ loadingPartitions ? '加载中...' : '-- 选择分区 --' }}</option>
+          <option v-for="p in partitions" :key="p.name" :value="p.name">
+            {{ p.name }} ({{ p.state }})
           </option>
         </select>
       </div>
     </div>
 
-    <form @submit.prevent="submitJob" class="submit-form">
-      <div class="form-row">
-        <div class="form-group">
-          <label>作业名称 *</label>
-          <input v-model="form.name" type="text" placeholder="my_job" required />
-        </div>
-        <div class="form-group">
-          <label>队列/分区 *</label>
-          <select v-model="form.partition" required :disabled="loadingPartitions">
-            <option value="" disabled>{{ loadingPartitions ? '加载中...' : '-- 选择分区 --' }}</option>
-            <option v-for="partition in partitions" :key="partition.name" :value="partition.name">
-              {{ partition.name }} ({{ partition.state }})
-            </option>
-          </select>
-        </div>
-      </div>
-
-      <div class="form-row">
-        <div class="form-group">
-          <label>节点数 *</label>
-          <input v-model.number="form.nodes" type="number" min="1" max="32" required />
-        </div>
-        <div class="form-group">
-          <label>CPU 核心数 *</label>
-          <input v-model.number="form.cpus" type="number" min="1" max="128" required />
-        </div>
-        <div class="form-group">
-          <label>内存 (GB)</label>
-          <input v-model.number="form.memory" type="number" min="0" placeholder="不限制" />
-        </div>
-      </div>
-
-      <div class="form-row">
-        <div class="form-group">
-          <label>运行时间 (小时)</label>
-          <input v-model.number="form.time" type="number" min="0" placeholder="不限制" />
-        </div>
-        <div class="form-group">
-          <label>GPU 卡数</label>
-          <input v-model.number="form.gpus" type="number" min="0" max="8" placeholder="0" />
-        </div>
-        <div class="form-group">
-          <label>优先级</label>
-          <select v-model="form.priority">
-            <option value="normal">普通</option>
-            <option value="high">高</option>
-            <option value="low">低</option>
-          </select>
-        </div>
-      </div>
-
+    <!-- 节点 + CPU -->
+    <div class="form-row col2">
       <div class="form-group">
-        <label>工作目录 *</label>
-        <div class="input-with-button">
-          <input v-model="form.workdir" type="text" placeholder="/home/username/jobs" required />
-          <button type="button" class="btn-icon" @click="resetToHomeDir" title="重置为家目录">
-            🏠
-          </button>
-        </div>
+        <label>节点数 *</label>
+        <input v-model.number="form.nodes" type="number" min="1" max="32" required />
       </div>
-
       <div class="form-group">
-        <label>脚本文件 *</label>
-        <div class="script-selector">
-          <input 
-            v-model="form.script" 
-            type="text" 
-            class="script-input" 
-            placeholder="输入脚本路径或从列表选择"
-            list="script-files"
-            required 
-          />
-          <datalist id="script-files">
-            <option v-for="(file, index) in scriptFiles" :key="index" :value="file.path">
-              {{ file.name }}
-            </option>
-          </datalist>
-          <button type="button" class="btn-secondary btn-small" @click="loadScriptFiles">
-            🔄 刷新
-          </button>
-        </div>
-        <div class="help-text">可以手动输入脚本路径，或从列表中选择</div>
+        <label>CPU 核心数 *</label>
+        <input v-model.number="form.cpus" type="number" min="1" max="128" required />
       </div>
+    </div>
 
+    <!-- 内存 + 时间 -->
+    <div class="form-row col2">
+      <div class="form-group">
+        <label>内存 (GB)</label>
+        <input v-model.number="form.memory" type="number" min="0" placeholder="不限" />
+      </div>
+      <div class="form-group">
+        <label>时间 (小时)</label>
+        <input v-model.number="form.time" type="number" min="0" placeholder="不限" />
+      </div>
+    </div>
+
+    <!-- GPU + 优先级 -->
+    <div class="form-row col2">
+      <div class="form-group">
+        <label>GPU 卡数</label>
+        <input v-model.number="form.gpus" type="number" min="0" max="8" placeholder="0" />
+      </div>
+      <div class="form-group">
+        <label>优先级</label>
+        <select v-model="form.priority">
+          <option value="normal">普通</option>
+          <option value="high">高</option>
+          <option value="low">低</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- 工作目录 -->
+    <div class="form-group">
+      <label>工作目录 *</label>
+      <div class="input-with-button">
+        <input v-model="form.workdir" type="text" placeholder="/home/username/jobs" required />
+        <button type="button" class="btn-icon" @click="resetToHomeDir" title="重置为家目录">🏠</button>
+      </div>
+    </div>
+
+    <!-- 脚本文件 -->
+    <div class="form-group">
+      <label>脚本文件 *</label>
+      <div class="script-selector">
+        <input v-model="form.script" type="text" class="script-input"
+          placeholder="输入脚本路径或从列表选择" list="script-files" required />
+        <datalist id="script-files">
+          <option v-for="(file, index) in scriptFiles" :key="index" :value="file.path">{{ file.name }}</option>
+        </datalist>
+        <button type="button" class="btn-small" @click="loadScriptFiles" title="刷新脚本列表">↺</button>
+      </div>
+      <div class="help-text">可手动输入路径，或从列表中选择</div>
+    </div>
+
+    <!-- 输出 + 错误文件 -->
+    <div class="form-row col2">
       <div class="form-group">
         <label>输出文件</label>
         <input v-model="form.output" type="text" placeholder="output.log" />
       </div>
-
       <div class="form-group">
         <label>错误文件</label>
         <input v-model="form.error" type="text" placeholder="error.log" />
       </div>
+    </div>
 
-      <div class="form-group">
-        <label>附加参数</label>
-        <textarea v-model="form.extraParams" rows="3" placeholder="其他 Slurm 参数，如：--exclusive"></textarea>
+    <!-- 附加参数（折叠） -->
+    <details class="extra-params-wrap">
+      <summary class="extra-params-toggle">附加参数</summary>
+      <div class="form-group" style="margin-top:6px">
+        <textarea v-model="form.extraParams" rows="2" placeholder="其他 Slurm 参数，如：--exclusive"></textarea>
       </div>
+    </details>
 
-      <div class="form-actions">
-        <button type="submit" class="btn-primary" :disabled="submitting">
-          {{ submitting ? '提交中...' : '🚀 提交作业' }}
-        </button>
-        <button type="button" class="btn-secondary" @click="resetForm">
-          🔄 重置表单
-        </button>
-      </div>
-    </form>
-  </div>
+    <div class="form-actions">
+      <button type="submit" class="btn-primary" :disabled="submitting">
+        {{ submitting ? '提交中...' : '🚀 提交' }}
+      </button>
+      <button type="button" class="btn-ghost" @click="resetForm">重置</button>
+    </div>
+  </form>
 </template>
 
 <script setup lang="ts">
@@ -407,185 +392,101 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.job-submit {
-  width: 100%;
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  height: calc(100vh - 100px);
-  overflow: hidden;
-  background: hsl(var(--background));
-  border: none;
-  padding: 0;
-}
-
-/* Header */
-.submit-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 20px;
-  border-bottom: 1px solid hsl(var(--border));
-  flex-shrink: 0;
-  background: hsl(var(--card));
-  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-}
-
-.submit-header h2 {
-  margin: 0;
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: hsl(var(--foreground));
-}
-
-.template-selector {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.template-selector label {
-  font-size: 0.8rem;
-  font-weight: 500;
-  color: hsl(var(--muted-foreground));
-  white-space: nowrap;
-}
-
-.template-select {
-  padding: 6px 10px;
-  border: 1px solid hsl(var(--input));
-  border-radius: var(--radius-md);
-  font-size: 0.8rem;
-  min-width: 160px;
-  cursor: pointer;
-  background: hsl(var(--background));
-  color: hsl(var(--foreground));
-  outline: none;
-}
-.template-select:focus {
-  border-color: hsl(var(--ring));
-  box-shadow: 0 0 0 2px hsl(var(--ring) / 0.2);
-}
-
-/* Scrollable form */
 .submit-form {
   flex: 1;
   overflow-y: auto;
-  padding: 20px;
-  background: hsl(var(--card));
-  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
-
-.submit-form::-webkit-scrollbar { width: 4px; }
-.submit-form::-webkit-scrollbar-track { background: transparent; }
+.submit-form::-webkit-scrollbar { width: 3px; }
 .submit-form::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 2px; }
 
-/* Form rows */
-.form-row {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 12px;
-  margin-bottom: 12px;
-}
+.form-row.col2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 
 .form-group {
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  margin-bottom: 12px;
+  gap: 3px;
 }
-
 .form-group label {
-  font-size: 0.8rem;
+  font-size: 0.73rem;
   font-weight: 500;
-  color: hsl(var(--foreground));
+  color: hsl(var(--muted-foreground));
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
-
 .form-group input,
 .form-group select,
 .form-group textarea {
   width: 100%;
   box-sizing: border-box;
-  padding: 7px 10px;
+  padding: 6px 9px;
   border: 1px solid hsl(var(--input));
   border-radius: var(--radius-md);
-  font-size: 0.875rem;
+  font-size: 0.83rem;
   background: hsl(var(--background));
   color: hsl(var(--foreground));
   outline: none;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
-
 .form-group input:focus,
 .form-group select:focus,
 .form-group textarea:focus {
   border-color: hsl(var(--ring));
-  box-shadow: 0 0 0 2px hsl(var(--ring) / 0.2);
+  box-shadow: 0 0 0 2px hsl(var(--ring) / 0.15);
 }
-
 .form-group input:disabled,
 .form-group select:disabled {
   background: hsl(var(--muted));
   color: hsl(var(--muted-foreground));
   cursor: not-allowed;
 }
-
 .form-group textarea {
   resize: vertical;
   font-family: var(--font-family-mono);
-  min-height: 72px;
-  font-size: 0.8rem;
+  min-height: 48px;
+  font-size: 0.78rem;
 }
 
-/* Input with button */
-.input-with-button {
-  display: flex;
-  gap: 6px;
-  align-items: stretch;
-}
+.input-with-button { display: flex; gap: 5px; }
 .input-with-button input { flex: 1; min-width: 0; }
 
 .btn-icon {
-  padding: 0 10px;
+  padding: 0 9px;
   background: hsl(var(--secondary));
   border: 1px solid hsl(var(--border));
   border-radius: var(--radius-md);
-  font-size: 1rem;
+  font-size: 0.9rem;
   cursor: pointer;
-  transition: background 0.15s;
   flex-shrink: 0;
-  color: hsl(var(--foreground));
+  transition: background 0.15s;
 }
 .btn-icon:hover { background: hsl(var(--accent)); }
 
-/* Script selector */
-.script-selector {
-  display: flex;
-  gap: 6px;
-  align-items: stretch;
-}
-
+.script-selector { display: flex; gap: 5px; }
 .script-input {
   flex: 1;
   min-width: 0;
   box-sizing: border-box;
-  padding: 7px 10px;
+  padding: 6px 9px;
   border: 1px solid hsl(var(--input));
   border-radius: var(--radius-md);
-  font-size: 0.875rem;
+  font-size: 0.83rem;
   background: hsl(var(--background));
   color: hsl(var(--foreground));
   outline: none;
 }
 .script-input:focus {
   border-color: hsl(var(--ring));
-  box-shadow: 0 0 0 2px hsl(var(--ring) / 0.2);
+  box-shadow: 0 0 0 2px hsl(var(--ring) / 0.15);
 }
 
 .btn-small {
-  padding: 6px 12px;
-  font-size: 0.8rem;
+  padding: 0 10px;
+  font-size: 0.9rem;
+  font-weight: 600;
   white-space: nowrap;
   flex-shrink: 0;
   background: hsl(var(--secondary));
@@ -598,297 +499,72 @@ onMounted(() => {
 .btn-small:hover { background: hsl(var(--accent)); }
 
 .help-text {
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   color: hsl(var(--muted-foreground));
-  margin-top: 3px;
 }
 
-/* Actions */
+/* 附加参数折叠 */
+.extra-params-wrap {
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius-md);
+  padding: 0 10px;
+}
+.extra-params-toggle {
+  font-size: 0.73rem;
+  font-weight: 500;
+  color: hsl(var(--muted-foreground));
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  padding: 7px 0;
+  user-select: none;
+  list-style: none;
+}
+.extra-params-toggle::-webkit-details-marker { display: none; }
+.extra-params-toggle::after { content: ' ▸'; font-size: 0.65rem; }
+details[open] .extra-params-toggle::after { content: ' ▾'; }
+
 .form-actions {
   display: flex;
-  gap: 10px;
-  margin-top: 8px;
-  padding-top: 16px;
+  gap: 8px;
+  padding-top: 10px;
   border-top: 1px solid hsl(var(--border));
+  margin-top: 4px;
   position: sticky;
   bottom: 0;
   background: hsl(var(--card));
 }
-.form-actions button { flex: 1; }
 
 .btn-primary {
+  flex: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 9px 16px;
-  background: hsl(var(--primary));
-  color: hsl(var(--primary-foreground));
-  border: none;
-  border-radius: var(--radius-md);
-  font-size: 0.875rem;
+  gap: 5px;
+  padding: 8px 14px;
+  background: #fff;
+  color: #1e293b;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  font-size: 0.83rem;
   font-weight: 600;
   cursor: pointer;
-  transition: opacity 0.15s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  transition: all 0.15s;
 }
-.btn-primary:hover:not(:disabled) { opacity: 0.9; }
-.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-primary:hover:not(:disabled) { background: #f1f5f9; }
+.btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
 
-.btn-secondary {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 9px 16px;
-  background: hsl(var(--secondary));
-  color: hsl(var(--secondary-foreground));
+.btn-ghost {
+  padding: 8px 14px;
+  background: none;
+  color: hsl(var(--muted-foreground));
   border: 1px solid hsl(var(--border));
   border-radius: var(--radius-md);
-  font-size: 0.875rem;
-  font-weight: 500;
+  font-size: 0.83rem;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: all 0.15s;
+  white-space: nowrap;
 }
-.btn-secondary:hover { background: hsl(var(--accent)); }
+.btn-ghost:hover { background: hsl(var(--accent)); color: hsl(var(--foreground)); }
 </style>
-
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.375rem;
-  padding: 0.625rem 1.25rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border: none;
-  border-radius: 8px;
-  font-size: 0.9rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: opacity 0.2s, transform 0.1s;
-}
-.btn-primary:hover:not(:disabled) { opacity: 0.9; transform: translateY(-1px); }
-.btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
-
-.btn-secondary {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.375rem;
-  padding: 0.625rem 1.25rem;
-  background: white;
-  color: #667eea;
-  border: 1.5px solid #667eea;
-  border-radius: 8px;
-  font-size: 0.9rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-.btn-secondary:hover { background: #f0f0ff; }
-.job-submit {
-  width: 100%;
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  max-height: calc(100vh - 160px);
-  overflow: hidden;
-}
-
-/* header：标题左，模板选择右，同行对齐 */
-.submit-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1.25rem;
-  padding-bottom: 0.875rem;
-  border-bottom: 2px solid #e5e7eb;
-  flex-shrink: 0;
-}
-
-.submit-header h2 {
-  margin: 0;
-  font-size: 1.2rem;
-  color: #1a1a2e;
-}
-
-.template-selector {
-  display: flex;
-  align-items: center;
-  gap: 0.625rem;
-  flex-shrink: 0;
-}
-
-.template-selector label {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: #6b7280;
-  white-space: nowrap;
-}
-
-.template-select {
-  padding: 0.5rem 0.875rem;
-  border: 1.5px solid #667eea;
-  border-radius: 8px;
-  font-size: 0.9rem;
-  min-width: 180px;
-  cursor: pointer;
-  background: white;
-  color: #333;
-  outline: none;
-}
-
-.template-select:focus {
-  border-color: #764ba2;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.12);
-}
-
-/* 可滚动表单区域 */
-.submit-form {
-  flex: 1;
-  overflow-y: auto;
-  padding-right: 4px;
-}
-
-.submit-form::-webkit-scrollbar { width: 5px; }
-.submit-form::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 3px; }
-.submit-form::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; }
-
-/* 多列行 */
-.form-row {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 1rem;
-  margin-bottom: 1rem;
-}
-
-/* 单个字段 */
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.375rem;
-  margin-bottom: 1rem;
-}
-
-.form-group label {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: #374151;
-}
-
-/* 统一 input / select / textarea */
-.form-group input,
-.form-group select,
-.form-group textarea {
-  width: 100%;
-  box-sizing: border-box;
-  padding: 0.625rem 0.875rem;
-  border: 1.5px solid #e5e7eb;
-  border-radius: 8px;
-  font-size: 0.9rem;
-  background: white;
-  color: #1a1a2e;
-  outline: none;
-  transition: border-color 0.2s, box-shadow 0.2s;
-}
-
-.form-group input:focus,
-.form-group select:focus,
-.form-group textarea:focus {
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.12);
-}
-
-.form-group input:disabled,
-.form-group select:disabled {
-  background: #f3f4f6;
-  cursor: not-allowed;
-  color: #9ca3af;
-}
-
-.form-group textarea {
-  resize: vertical;
-  font-family: 'Courier New', monospace;
-  min-height: 80px;
-}
-
-/* 带按钮的输入框 */
-.input-with-button {
-  display: flex;
-  gap: 0.5rem;
-  align-items: stretch;
-}
-
-.input-with-button input {
-  flex: 1;
-  min-width: 0;
-}
-
-.btn-icon {
-  padding: 0 0.875rem;
-  background: #f3f4f6;
-  border: 1.5px solid #e5e7eb;
-  border-radius: 8px;
-  font-size: 1.1rem;
-  cursor: pointer;
-  transition: all 0.2s;
-  flex-shrink: 0;
-}
-
-.btn-icon:hover {
-  background: #667eea;
-  border-color: #667eea;
-}
-
-/* 脚本选择器 */
-.script-selector {
-  display: flex;
-  gap: 0.5rem;
-  align-items: stretch;
-}
-
-.script-input {
-  flex: 1;
-  min-width: 0;
-  box-sizing: border-box;
-  padding: 0.625rem 0.875rem;
-  border: 1.5px solid #e5e7eb;
-  border-radius: 8px;
-  font-size: 0.9rem;
-  background: white;
-  outline: none;
-}
-
-.script-input:focus {
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.12);
-}
-
-.btn-small {
-  padding: 0.5rem 0.875rem;
-  font-size: 0.875rem;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.help-text {
-  font-size: 0.8rem;
-  color: #9ca3af;
-  margin-top: 0.375rem;
-}
-
-/* 底部操作栏 */
-.form-actions {
-  display: flex;
-  gap: 1rem;
-  margin-top: 1rem;
-  padding-top: 1rem;
-  border-top: 1px solid #e5e7eb;
-  position: sticky;
-  bottom: 0;
-  background: white;
-  flex-shrink: 0;
-}
-
-.form-actions button {
-  flex: 1;
-}

@@ -12,9 +12,9 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// GET /api/desktop/sessions/:id/vnc-ws
-// 直接 TCP 连接计算节点的 VNC 端口，转为 WebSocket 供 noVNC 使用
-func VNCWebSocketProxy(c *gin.Context) {
+// GET /api/desktop/sessions/:id/xpra-ws
+// 将后端到计算节点 Xpra WebSocket 端口的 TCP 连接代理给前端
+func XpraWebSocketProxy(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
@@ -52,34 +52,35 @@ func VNCWebSocketProxy(c *gin.Context) {
 		return
 	}
 
-	// 直接 TCP 连接计算节点 VNC 端口
-	addr := fmt.Sprintf("%s:%d", session.Address, session.VNCPort)
-	log.Printf("[VNC-WS] session %d: connecting to %s", id, addr)
+	port := session.XpraPort
+	if port == 0 {
+		port = session.VNCPort // 兼容旧数据
+	}
+	addr := fmt.Sprintf("%s:%d", session.Address, port)
+	log.Printf("[XPRA-WS] session %d: connecting to %s", id, addr)
 
-	vncConn, err := net.DialTimeout("tcp", addr, 10*time.Second)
+	xpraConn, err := net.DialTimeout("tcp", addr, 10*time.Second)
 	if err != nil {
-		log.Printf("[VNC-WS] session %d: tcp connect failed: %v", id, err)
-		c.JSON(http.StatusBadGateway, gin.H{"error": "vnc connect failed: " + err.Error()})
+		log.Printf("[XPRA-WS] session %d: tcp connect failed: %v", id, err)
+		c.JSON(http.StatusBadGateway, gin.H{"error": "xpra connect failed: " + err.Error()})
 		return
 	}
 
 	wsConn, err := vncWsUpgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
-		vncConn.Close()
-		log.Printf("[VNC-WS] upgrade failed: %v", err)
+		xpraConn.Close()
+		log.Printf("[XPRA-WS] upgrade failed: %v", err)
 		return
 	}
 
-	log.Printf("[VNC-WS] session %d: connected, subprotocol=%s", id, wsConn.Subprotocol())
-
+	log.Printf("[XPRA-WS] session %d: connected", id)
 	done := make(chan struct{}, 2)
 
-	// VNC -> WS
 	go func() {
 		defer func() { done <- struct{}{} }()
 		buf := make([]byte, 32*1024)
 		for {
-			n, err := vncConn.Read(buf)
+			n, err := xpraConn.Read(buf)
 			if n > 0 {
 				if e := wsConn.WriteMessage(websocket.BinaryMessage, buf[:n]); e != nil {
 					return
@@ -91,7 +92,6 @@ func VNCWebSocketProxy(c *gin.Context) {
 		}
 	}()
 
-	// WS -> VNC
 	go func() {
 		defer func() { done <- struct{}{} }()
 		for {
@@ -99,13 +99,18 @@ func VNCWebSocketProxy(c *gin.Context) {
 			if err != nil {
 				return
 			}
-			if _, err := vncConn.Write(msg); err != nil {
+			if _, err := xpraConn.Write(msg); err != nil {
 				return
 			}
 		}
 	}()
 
 	<-done
-	vncConn.Close()
+	xpraConn.Close()
 	wsConn.Close()
+}
+
+// VNCWebSocketProxy 保留兼容旧路由
+func VNCWebSocketProxy(c *gin.Context) {
+	XpraWebSocketProxy(c)
 }

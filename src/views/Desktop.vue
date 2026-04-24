@@ -1,29 +1,35 @@
 ﻿<template>
   <div class="desktop-page">
     <div class="page-header">
-      <h3>远程桌面</h3>
-      <button class="btn-primary" @click="openCreateModal">+ 新建桌面</button>
+      <h3>🖥️ 远程会话</h3>
+      <button class="btn-primary" @click="openCreateModal">+ 新建会话</button>
     </div>
 
     <div class="card">
       <table class="desktop-table">
         <thead>
           <tr>
-            <th>序号</th><th>名称</th><th>类型</th><th>节点</th><th>状态</th><th>创建时间</th><th>操作</th>
+            <th>名称</th><th>模式</th><th>节点</th><th>状态</th><th>创建时间</th><th>操作</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="(session, index) in sessions" :key="session.id">
-            <td>{{ index + 1 }}</td>
-            <td>{{ session.name }}</td>
-            <td>{{ session.type }}</td>
+          <tr v-for="session in sessions" :key="session.id">
+            <td>
+              <div class="session-name">{{ session.name }}</div>
+              <div class="session-sub" v-if="session.mode === 'app'">{{ session.appCommand }}</div>
+            </td>
+            <td>
+              <span class="mode-badge" :class="session.mode">
+                {{ session.mode === 'app' ? '📦 应用' : '🖥️ 桌面' }}
+              </span>
+            </td>
             <td>{{ session.status === 'running' ? session.address : '-' }}</td>
             <td><span class="status-badge" :class="session.status">{{ statusLabel(session.status) }}</span></td>
-            <td>{{ session.createTime }}</td>
+            <td>{{ session.createTime?.slice(0,16).replace('T',' ') }}</td>
             <td>
               <div class="action-buttons">
                 <template v-if="session.status === 'running'">
-                  <button class="btn-action btn-detail" @click="openDetail(session)">连接</button>
+                  <button class="btn-action btn-connect" @click="openXpra(session)">连接</button>
                   <button class="btn-action btn-stop" @click="stopSessionById(session)">停止</button>
                 </template>
                 <template v-else>
@@ -40,24 +46,69 @@
       </table>
       <div v-if="sessions.length === 0" class="empty-state">
         <div class="empty-icon">🖥️</div>
-        <p>暂无桌面会话</p>
-        <p class="empty-hint">点击"新建桌面"创建远程桌面会话</p>
+        <p>暂无会话</p>
+        <p class="empty-hint">点击"新建会话"创建远程桌面或应用会话</p>
       </div>
     </div>
 
-    <!-- 新建桌面弹窗 -->
+    <!-- 新建会话弹窗 -->
     <div v-if="showCreateModal" class="modal-overlay" @click.self="showCreateModal = false">
       <div class="modal-content create-modal" @click.stop>
         <div class="modal-header">
-          <h2>新建远程桌面</h2>
+          <h2>新建远程会话</h2>
           <button @click="showCreateModal = false" class="btn-close">✕</button>
         </div>
         <div class="modal-body">
           <form @submit.prevent="createDesktop" class="create-form">
+            <!-- 模式选择 -->
             <div class="form-group">
-              <label>桌面名称 *</label>
-              <input v-model="createForm.name" type="text" placeholder="my-desktop" required />
+              <label>会话模式</label>
+              <div class="mode-selector">
+                <div :class="['mode-card', { active: createForm.mode === 'desktop' }]" @click="createForm.mode = 'desktop'">
+                  <div class="mode-icon">🖥️</div>
+                  <div class="mode-label">完整桌面</div>
+                  <div class="mode-desc">启动完整桌面环境（xfce4/gnome/kde）</div>
+                </div>
+                <div :class="['mode-card', { active: createForm.mode === 'app' }]" @click="createForm.mode = 'app'">
+                  <div class="mode-icon">📦</div>
+                  <div class="mode-label">发布应用</div>
+                  <div class="mode-desc">直接启动单个应用，更轻量</div>
+                </div>
+              </div>
             </div>
+
+            <!-- 桌面模式：选择桌面环境 -->
+            <div class="form-group" v-if="createForm.mode === 'desktop'">
+              <label>桌面环境</label>
+              <div class="desktop-env-selector">
+                <label v-for="env in desktopEnvs" :key="env.value" class="env-option">
+                  <input type="radio" v-model="createForm.desktopEnv" :value="env.value" />
+                  <span>{{ env.icon }} {{ env.label }}</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- 应用模式：选择或输入应用 -->
+            <div class="form-group" v-if="createForm.mode === 'app'">
+              <label>应用</label>
+              <div class="app-grid">
+                <div v-for="app in builtinApps" :key="app.cmd"
+                  :class="['app-card', { active: createForm.appCommand === app.cmd }]"
+                  @click="createForm.appCommand = app.cmd">
+                  <div class="app-icon">{{ app.icon }}</div>
+                  <div class="app-name">{{ app.name }}</div>
+                </div>
+              </div>
+              <div class="custom-app-row">
+                <input v-model="createForm.appCommand" placeholder="或输入自定义命令，如 gedit、matlab..." class="custom-app-input" />
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>会话名称 *</label>
+              <input v-model="createForm.name" type="text" placeholder="my-session" required />
+            </div>
+
             <div class="form-row">
               <div class="form-group">
                 <label>分区 *</label>
@@ -74,10 +125,12 @@
                 </select>
               </div>
             </div>
+
             <div class="form-group">
               <label>时长(小时)</label>
               <input v-model.number="createForm.duration" type="number" min="1" max="24" style="width:120px" />
             </div>
+
             <div class="form-actions">
               <button type="button" class="btn-secondary" @click="showCreateModal = false">取消</button>
               <button type="submit" class="btn-primary" :disabled="submitting">{{ submitting ? '创建中...' : '创建' }}</button>
@@ -87,15 +140,14 @@
       </div>
     </div>
 
-    <!-- 启动/详情弹窗 -->
+    <!-- 启动进度弹窗 -->
     <div v-if="showStartModal" class="modal-overlay" @click.self="showStartModal = false">
       <div class="modal-content start-modal" @click.stop>
         <div class="modal-header">
-          <h2>{{ startingStatus === 'ready' ? '桌面已就绪' : startingStatus === 'failed' ? '启动失败' : '启动中...' }}</h2>
+          <h2>{{ startingStatus === 'ready' ? '会话已就绪' : startingStatus === 'failed' ? '启动失败' : '启动中...' }}</h2>
           <button @click="showStartModal = false" class="btn-close">✕</button>
         </div>
         <div class="modal-body">
-          <!-- 启动中 -->
           <div v-if="startingStatus === 'starting'" class="status-starting">
             <div class="loading-icon"></div>
             <p>作业 ID: <code>{{ currentJobId }}</code></p>
@@ -117,10 +169,9 @@
             </div>
           </div>
 
-          <!-- 失败 -->
           <div v-else-if="startingStatus === 'failed'" class="status-failed">
             <div class="fail-icon">✕</div>
-            <h4>桌面启动失败</h4>
+            <h4>会话启动失败</h4>
             <div class="log-panel">
               <div class="log-body" ref="logBodyRef">
                 <div v-for="(line, i) in logLines" :key="i" class="log-line">{{ line }}</div>
@@ -131,40 +182,33 @@
             </div>
           </div>
 
-          <!-- 就绪 -->
           <div v-else-if="startingStatus === 'ready'" class="status-ready">
             <div class="success-icon">✅</div>
-            <h4>桌面已就绪</h4>
+            <h4>会话已就绪</h4>
             <div class="connection-info">
               <div class="info-item"><span class="info-label">节点:</span><code>{{ selectedSession?.address }}</code></div>
-              <div class="info-item"><span class="info-label">VNC 端口:</span><code>{{ selectedSession?.vncPort }}</code></div>
-              <div class="info-item">
-                <span class="info-label">VNC 密码:</span>
-                <code>{{ showVNCPass ? selectedSession?.vncPassword : '••••••••' }}</code>
-                <button class="btn-eye-small" @click="showVNCPass = !showVNCPass">{{ showVNCPass ? '隐藏' : '显示' }}</button>
-                <button class="btn-eye-small" @click="copyText(selectedSession?.vncPassword)">复制</button>
-              </div>
+              <div class="info-item"><span class="info-label">Xpra 端口:</span><code>{{ selectedSession?.xpraPort || selectedSession?.vncPort }}</code></div>
             </div>
             <div class="connection-methods">
               <div class="method-item">
                 <span class="method-icon">🌐</span>
                 <div class="method-content">
-                  <strong>浏览器内嵌（noVNC）</strong>
+                  <strong>浏览器内嵌（Xpra HTML5）</strong>
                   <p>直接在浏览器中访问，无需安装软件</p>
                 </div>
-                <button class="btn-primary" @click="openVNCInPage">打开桌面</button>
+                <button class="btn-primary" @click="openXpraInPage">打开</button>
               </div>
               <div class="method-item">
                 <span class="method-icon">💻</span>
                 <div class="method-content">
-                  <strong>HPC 客户端（TurboVNC）</strong>
-                  <p>通过 SSH 隧道连接，性能更好</p>
+                  <strong>Xpra 原生客户端</strong>
+                  <p>性能更好，支持音频、剪贴板、文件传输</p>
                 </div>
-                <button class="btn-secondary" @click="launchVNCClient">一键连接</button>
+                <button class="btn-secondary" @click="launchXpraClient">一键连接</button>
               </div>
             </div>
             <div class="modal-actions">
-              <button class="btn-danger" @click="stopSession">停止桌面</button>
+              <button class="btn-danger" @click="stopSession">停止会话</button>
               <button class="btn-secondary" @click="showStartModal = false">关闭</button>
             </div>
           </div>
@@ -172,20 +216,19 @@
       </div>
     </div>
 
-    <!-- noVNC 内嵌全屏弹窗 -->
-    <div v-if="showVNCModal" class="vnc-overlay">
+    <!-- Xpra 内嵌全屏 -->
+    <div v-if="showXpraModal" class="vnc-overlay">
       <div class="vnc-toolbar">
-        <span>🖥️ {{ selectedSession?.name }} — {{ selectedSession?.address }}</span>
+        <span>{{ selectedSession?.mode === 'app' ? '📦' : '🖥️' }} {{ selectedSession?.name }} — {{ selectedSession?.address }}</span>
         <div style="display:flex;gap:8px;align-items:center">
-          <span v-if="vncStatus" :style="{fontSize:'0.8rem', color: vncStatus==='已连接' ? '#10b981' : '#f59e0b'}">{{ vncStatus }}</span>
           <button class="btn-secondary" @click="toggleFullscreen">全屏</button>
-          <button class="btn-secondary" @click="closeVNC">断开</button>
+          <button class="btn-secondary" @click="showXpraModal = false">关闭</button>
         </div>
       </div>
-      <div ref="vncContainer" class="vnc-canvas-wrap"></div>
+      <iframe ref="xpraFrame" :src="xpraUrl" class="xpra-frame" allow="fullscreen"></iframe>
     </div>
 
-    <!-- 脚本预览弹窗 -->
+    <!-- 脚本预览 -->
     <div v-if="showScriptModal" class="modal-overlay" @click.self="showScriptModal = false">
       <div class="modal-content script-modal" @click.stop>
         <div class="modal-header">
@@ -204,10 +247,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
 import axios from 'axios'
 import { desktopAPI } from '../api/index'
-import { loadRFB } from '../utils/rfb-wrapper'
 
 const sessions = ref<any[]>([])
 const partitions = ref<any[]>([])
@@ -217,7 +259,7 @@ const resourcePresets = ref<any[]>([])
 const submitting = ref(false)
 const showCreateModal = ref(false)
 const showStartModal = ref(false)
-const showVNCModal = ref(false)
+const showXpraModal = ref(false)
 const showScriptModal = ref(false)
 const startingStatus = ref<'starting' | 'ready' | 'failed'>('starting')
 const startProgress = ref(0)
@@ -226,25 +268,34 @@ const selectedSession = ref<any>(null)
 const logLines = ref<string[]>([])
 const logType = ref<'out' | 'err'>('out')
 const logBodyRef = ref<HTMLElement | null>(null)
-const vncContainer = ref<HTMLElement | null>(null)
-const vncStatus = ref('')
-const showVNCPass = ref(false)
-let rfb: any = null
-
-const copyText = (text: string) => {
-  if (!text) return
-  navigator.clipboard.writeText(text)
-  alert('已复制')
-}
+const xpraFrame = ref<HTMLIFrameElement | null>(null)
+const xpraUrl = ref('')
 const scriptInfo = ref({ script: '', partition: '', workdir: '' })
-const pageOrigin = location.origin
 
 let logTimer: any = null
 let pollTimer: any = null
 let listTimer: any = null
 
+const desktopEnvs = [
+  { value: 'xfce4', label: 'Xfce4', icon: '🪟' },
+  { value: 'gnome', label: 'GNOME', icon: '🔵' },
+  { value: 'kde',   label: 'KDE',   icon: '🟦' },
+]
+
+const builtinApps = [
+  { name: 'Terminal', cmd: 'xterm',      icon: '💻' },
+  { name: 'Firefox',  cmd: 'firefox',    icon: '🦊' },
+  { name: 'VSCode',   cmd: 'code',       icon: '📝' },
+  { name: 'Gedit',    cmd: 'gedit',      icon: '📄' },
+  { name: 'Nautilus', cmd: 'nautilus',   icon: '📁' },
+  { name: 'MATLAB',   cmd: 'matlab -desktop', icon: '🔢' },
+  { name: 'ParaView', cmd: 'paraview',   icon: '📊' },
+  { name: 'VMD',      cmd: 'vmd',        icon: '🧬' },
+]
+
 const createForm = ref({
-  name: '', partition: '', duration: 4, presetIndex: 1
+  name: '', mode: 'desktop', desktopEnv: 'xfce4', appCommand: '',
+  partition: '', duration: 4, presetIndex: 1,
 })
 
 const statusLabel = (s: string) => ({ stopped: '未启动', pending: '排队中', running: '运行中', failed: '失败' }[s] || s)
@@ -255,41 +306,30 @@ const loadSessions = async () => {
 
 const loadPartitions = async () => {
   partitionsLoading.value = true
-  console.log('[Desktop] loadPartitions start, token:', !!(localStorage.getItem('token') || sessionStorage.getItem('token')))
   try {
     const res = await axios.get('/jobs/partitions/list')
-    console.log('[Desktop] partitions response:', res.data)
     partitions.value = res.data.data || []
     if (partitions.value.length > 0 && !createForm.value.partition) {
       createForm.value.partition = partitions.value[0].name
       await loadResourcePresets()
     }
-  } catch (e: any) {
-    partitions.value = []
-    console.error('[Desktop] 加载分区失败:', e.response?.status, e.response?.data?.error || e.message)
-  }
+  } catch { partitions.value = [] }
   finally { partitionsLoading.value = false }
 }
 
 const loadResourcePresets = async () => {
   presetsLoading.value = true
-  console.log('[Desktop] loadResourcePresets, partition:', createForm.value.partition)
   try {
-    const res = await axios.get('/desktop/resource-presets', {
-      params: { partition: createForm.value.partition }
-    })
-    console.log('[Desktop] presets response:', res.data)
+    const res = await axios.get('/desktop/resource-presets', { params: { partition: createForm.value.partition } })
     resourcePresets.value = res.data.data || []
     createForm.value.presetIndex = 1
-  } catch (e: any) {
-    console.warn('[Desktop] resource-presets failed, using fallback:', e.response?.status, e.message)
+  } catch {
     resourcePresets.value = [
       { label: '小型  1核/2GB', cpus: 1, memory: 2 },
       { label: '中型  2核/4GB', cpus: 2, memory: 4 },
       { label: '大型  4核/8GB', cpus: 4, memory: 8 },
       { label: '超大  8核/16GB', cpus: 8, memory: 16 },
     ]
-    createForm.value.presetIndex = 1
   }
   finally { presetsLoading.value = false }
 }
@@ -301,18 +341,16 @@ onMounted(() => {
   }, 8000)
 })
 
-const openCreateModal = async () => {
-  showCreateModal.value = true
-  // 每次打开弹窗都重新加载分区，确保数据最新
-  await loadPartitions()
-}
-
 onUnmounted(() => {
   if (listTimer) clearInterval(listTimer)
   if (logTimer) clearInterval(logTimer)
   if (pollTimer) clearInterval(pollTimer)
-  disconnectVNC()
 })
+
+const openCreateModal = async () => {
+  showCreateModal.value = true
+  await loadPartitions()
+}
 
 const createDesktop = async () => {
   submitting.value = true
@@ -320,7 +358,9 @@ const createDesktop = async () => {
     const preset = resourcePresets.value[createForm.value.presetIndex] || resourcePresets.value[0]
     const data = await desktopAPI.createSession({
       name: createForm.value.name,
-      type: 'auto',
+      mode: createForm.value.mode,
+      type: createForm.value.desktopEnv,
+      appCommand: createForm.value.mode === 'app' ? createForm.value.appCommand : '',
       resolution: 'auto',
       duration: createForm.value.duration,
       cpus: preset?.cpus,
@@ -329,7 +369,7 @@ const createDesktop = async () => {
     })
     sessions.value.unshift(data)
     showCreateModal.value = false
-    createForm.value = { name: '', partition: partitions.value[0]?.name || '', duration: 4, presetIndex: 1 }
+    createForm.value = { name: '', mode: 'desktop', desktopEnv: 'xfce4', appCommand: '', partition: partitions.value[0]?.name || '', duration: 4, presetIndex: 1 }
   } catch (e: any) { alert('创建失败: ' + (e.response?.data?.error || e.message)) }
   finally { submitting.value = false }
 }
@@ -392,21 +432,45 @@ const startPollStatus = (id: number) => {
       } else if (s.status === 'failed') {
         clearInterval(pollTimer); if (logTimer) clearInterval(logTimer)
         startingStatus.value = 'failed'
-        const idx = sessions.value.findIndex((x: any) => x.id === id)
-        if (idx >= 0) sessions.value[idx] = s
       }
     } catch { /* ignore */ }
   }, 3000)
 }
 
-const openDetail = async (session: any) => {
+// 打开 Xpra 连接（running 状态直接连）
+const openXpra = (session: any) => {
   selectedSession.value = session
   showStartModal.value = true
   startingStatus.value = 'ready'
 }
 
+// 浏览器内嵌 Xpra HTML5 客户端
+const openXpraInPage = () => {
+  if (!selectedSession.value) return
+  showStartModal.value = false
+  const port = selectedSession.value.xpraPort || selectedSession.value.vncPort
+  const token = localStorage.getItem('token') || sessionStorage.getItem('token') || ''
+  // 通过后端代理路径访问 Xpra HTML5
+  const wsPath = `/api/desktop/sessions/${selectedSession.value.id}/xpra-ws?token=${encodeURIComponent(token)}`
+  const wsProto = location.protocol === 'https:' ? 'wss' : 'ws'
+  const wsUrl = `${wsProto}://${location.host}${wsPath}`
+  // Xpra HTML5 内置客户端 URL（需要计算节点上 xpra 的 html 目录）
+  xpraUrl.value = `/api/desktop/sessions/${selectedSession.value.id}/xpra-html?token=${encodeURIComponent(token)}`
+  showXpraModal.value = true
+}
+
+// Xpra 原生客户端一键连接
+const launchXpraClient = () => {
+  if (!selectedSession.value) return
+  const port = selectedSession.value.xpraPort || selectedSession.value.vncPort
+  const token = localStorage.getItem('token') || sessionStorage.getItem('token') || ''
+  // xpra:// 协议由 xpra 客户端注册
+  const uri = `xpra://ws/${location.hostname}:${location.port || (location.protocol === 'https:' ? 443 : 80)}/api/desktop/sessions/${selectedSession.value.id}/xpra-ws?token=${encodeURIComponent(token)}`
+  window.location.href = uri
+}
+
 const stopSession = async () => {
-  if (!selectedSession.value || !confirm('确定停止此桌面？')) return
+  if (!selectedSession.value || !confirm('确定停止此会话？')) return
   try {
     await desktopAPI.stopSession(selectedSession.value.id)
     if (pollTimer) clearInterval(pollTimer)
@@ -421,73 +485,9 @@ const stopSessionById = async (session: any) => {
   catch (e: any) { alert('停止失败: ' + (e.response?.data?.error || e.message)) }
 }
 
-// noVNC 直连 - 用 RFB 库直接在页面内建立 WebSocket VNC 连接
-const openVNCInPage = async () => {
-  showStartModal.value = false
-  if (!selectedSession.value) return
-  showVNCModal.value = true
-  vncStatus.value = '连接中...'
-  await nextTick()
-  await connectVNC()
-}
-
-const connectVNC = async () => {
-  if (!selectedSession.value || !vncContainer.value) return
-  disconnectVNC()
-
-  const token = localStorage.getItem('token') || sessionStorage.getItem('token') || ''
-  const id = selectedSession.value.id
-  const pass = selectedSession.value.vncPassword || ''
-  const wsProto = location.protocol === 'https:' ? 'wss' : 'ws'
-  const wsUrl = `${wsProto}://${location.host}/api/desktop/sessions/${id}/vnc-ws?token=${encodeURIComponent(token)}`
-
-  try {
-    // 动态加载 RFB（从 public/novnc-lib，绕开 Rollup 顶层 await 问题）
-    const RFB = await loadRFB()
-    rfb = new RFB(vncContainer.value, wsUrl, {
-      credentials: { password: pass },
-    })
-    rfb.scaleViewport = true
-    rfb.resizeSession = true
-    rfb.addEventListener('connect', () => { vncStatus.value = '已连接' })
-    rfb.addEventListener('disconnect', (e: any) => {
-      vncStatus.value = e.detail?.clean ? '已断开' : '连接断开'
-      rfb = null
-    })
-    rfb.addEventListener('credentialsrequired', () => { rfb?.sendCredentials({ password: pass }) })
-  } catch (e: any) {
-    vncStatus.value = '连接失败: ' + e.message
-  }
-}
-
-const disconnectVNC = () => {
-  if (rfb) {
-    try { rfb.disconnect() } catch { /* ignore */ }
-    rfb = null
-  }
-  vncStatus.value = ''
-}
-
-const closeVNC = () => {
-  disconnectVNC()
-  showVNCModal.value = false
-}
-
 const toggleFullscreen = () => {
   const el = document.querySelector('.vnc-overlay') as HTMLElement
   if (el) el.requestFullscreen?.()
-}
-
-const getVNCWsUrl = (id: number) => {
-  const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-  return `${proto}://${location.host}/api/desktop/sessions/${id}/vnc-ws`
-}
-
-// 客户端一键连接（TurboVNC via SSH 隧道）
-const launchVNCClient = () => {
-  const token = localStorage.getItem('token') || sessionStorage.getItem('token') || ''
-  const uri = `hpcc://vnc?server=${encodeURIComponent(location.origin)}&token=${encodeURIComponent(token)}&session=${selectedSession.value?.id}&port=15900`
-  window.location.href = uri
 }
 
 const previewScript = async (session: any) => {
@@ -503,6 +503,7 @@ const copyScript = () => {
   alert('已复制')
 }
 </script>
+
 
 <style scoped>
 .desktop-page { display: flex; flex-direction: column; gap: 1.5rem; }
@@ -595,8 +596,49 @@ const copyScript = () => {
 .script-body { background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: 8px; font-size: .8rem; font-family: monospace; overflow-x: auto; max-height: 400px; overflow-y: auto; white-space: pre; margin: 0; }
 
 /* 通用按钮 */
-.btn-primary { background: linear-gradient(135deg, #667eea, #764ba2); color: #fff; border: none; padding: .7rem 1.4rem; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: .95rem; }
+.btn-primary { background: #fff; color: #1e293b; border: 1px solid #e2e8f0; padding: 7px 16px; border-radius: 10px; cursor: pointer; font-weight: 600; font-size: 0.85rem; box-shadow: 0 1px 3px rgba(0,0,0,0.06); transition: all 0.15s; }
+.btn-primary:hover { background: #f1f5f9; }
 .btn-primary:disabled { opacity: .6; cursor: not-allowed; }
-.btn-secondary { background: #e5e7eb; color: #374151; border: none; padding: .7rem 1.4rem; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: .95rem; }
-.btn-danger { background: #ef4444; color: #fff; border: none; padding: .7rem 1.4rem; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: .95rem; }
+.btn-secondary { background: #fff; color: #1e293b; border: 1px solid #e2e8f0; padding: 7px 16px; border-radius: 10px; cursor: pointer; font-weight: 500; font-size: 0.85rem; box-shadow: 0 1px 3px rgba(0,0,0,0.06); transition: all 0.15s; }
+.btn-secondary:hover { background: #f1f5f9; }
+.btn-danger { background: #fff; color: #ef4444; border: 1px solid rgba(239,68,68,0.3); padding: 7px 16px; border-radius: 10px; cursor: pointer; font-weight: 600; font-size: 0.85rem; box-shadow: 0 1px 3px rgba(0,0,0,0.06); transition: all 0.15s; }
+.btn-danger:hover { background: #fef2f2; }
+
+/* 新增：会话列表 */
+.session-name { font-weight: 600; font-size: .9rem; }
+.session-sub { font-size: .78rem; color: #6b7280; margin-top: 2px; font-family: monospace; }
+.mode-badge { display: inline-block; padding: .2rem .6rem; border-radius: 10px; font-size: .8rem; font-weight: 600; }
+.mode-badge.desktop { background: #ede9fe; color: #5b21b6; }
+.mode-badge.app     { background: #dbeafe; color: #1e40af; }
+.btn-connect { background: #10b981; color: #fff; }
+
+/* 模式选择卡片 */
+.mode-selector { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+.mode-card { border: 2px solid #e5e7eb; border-radius: 10px; padding: 1rem; cursor: pointer; text-align: center; transition: all .15s; }
+.mode-card:hover { border-color: #6366f1; background: #f5f3ff; }
+.mode-card.active { border-color: #6366f1; background: #ede9fe; }
+.mode-icon { font-size: 2rem; margin-bottom: .4rem; }
+.mode-label { font-weight: 700; font-size: .95rem; margin-bottom: .25rem; }
+.mode-desc { font-size: .78rem; color: #6b7280; }
+
+/* 桌面环境选择 */
+.desktop-env-selector { display: flex; gap: 1rem; flex-wrap: wrap; }
+.env-option { display: flex; align-items: center; gap: .4rem; cursor: pointer; padding: .5rem .9rem; border: 2px solid #e5e7eb; border-radius: 8px; font-size: .9rem; transition: all .15s; }
+.env-option:has(input:checked) { border-color: #6366f1; background: #ede9fe; }
+.env-option input { accent-color: #6366f1; }
+
+/* 应用网格 */
+.app-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: .6rem; margin-bottom: .75rem; }
+.app-card { border: 2px solid #e5e7eb; border-radius: 10px; padding: .6rem .4rem; cursor: pointer; text-align: center; transition: all .15s; }
+.app-card:hover { border-color: #6366f1; background: #f5f3ff; }
+.app-card.active { border-color: #6366f1; background: #ede9fe; }
+.app-icon { font-size: 1.6rem; margin-bottom: .25rem; }
+.app-name { font-size: .72rem; font-weight: 600; color: #374151; }
+.custom-app-row { margin-top: .25rem; }
+.custom-app-input { width: 100%; padding: .55rem .9rem; border: 2px solid #e5e7eb; border-radius: 8px; font-size: .9rem; box-sizing: border-box; }
+.custom-app-input:focus { outline: none; border-color: #6366f1; }
+
+/* Xpra iframe */
+.xpra-frame { flex: 1; width: 100%; height: 100%; border: none; background: #000; }
 </style>
+

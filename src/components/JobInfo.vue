@@ -1,44 +1,38 @@
 <template>
   <div class="card">
     <div class="jobs-header">
-      <h3>📊 作业管理</h3>
-      <div class="header-controls">
-        <div class="view-toggle" v-if="currentUserInfo?.isAdmin">
-          <button 
-            :class="['toggle-btn', { active: viewMode === 'my' }]"
-            @click="viewMode = 'my'"
-          >
-            👤 我的作业
-          </button>
-          <button 
-            :class="['toggle-btn', { active: viewMode === 'all' }]"
-            @click="viewMode = 'all'"
-          >
-            🌐 所有作业
-          </button>
+      <div class="header-left">
+        <h3>作业管理</h3>
+        <div class="view-tabs">
+          <button :class="['view-tab', { active: viewMode === 'my' }]" @click="viewMode = 'my'">我的作业</button>
+          <button v-if="currentUserInfo?.isAdmin" :class="['view-tab', { active: viewMode === 'all' }]" @click="viewMode = 'all'">所有作业</button>
         </div>
-        <div class="view-toggle" v-else>
-          <div class="current-view-label">
-            👤 我的作业
-          </div>
-        </div>
-        <div class="filters">
-          <select v-model="statusFilter" class="filter-select">
-            <option value="">全部状态</option>
-            <option value="RUNNING">运行中</option>
-            <option value="PENDING">等待中</option>
-            <option value="COMPLETED">已完成</option>
-            <option value="FAILED">失败</option>
-          </select>
-          <select v-model="partitionFilter" class="filter-select">
-            <option value="">全部分区</option>
-            <option value="compute">compute</option>
-            <option value="gpu">gpu</option>
-            <option value="memory">memory</option>
-            <option value="debug">debug</option>
-          </select>
-          <button class="btn-secondary" @click="loadJobs">🔄 刷新</button>
-        </div>
+      </div>
+      <div class="header-right">
+        <select v-model="statusFilter" class="filter-select" @change="pagination.page = 1">
+          <option value="">全部状态</option>
+          <option value="RUNNING">运行中</option>
+          <option value="PENDING">等待中</option>
+          <option value="COMPLETED">已完成</option>
+          <option value="FAILED">失败</option>
+        </select>
+        <select v-model="partitionFilter" class="filter-select" @change="pagination.page = 1">
+          <option value="">全部分区</option>
+          <option value="compute">compute</option>
+          <option value="gpu">gpu</option>
+          <option value="memory">memory</option>
+          <option value="debug">debug</option>
+        </select>
+        <button class="btn-query" @click="() => { pagination.page = 1; loadJobs() }" :disabled="loading">
+          {{ loading ? '查询中...' : '查询' }}
+        </button>
+        <button class="btn-icon-round" @click="() => { pagination.page = 1; loadJobs() }" title="刷新">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+        </button>
+        <button class="btn-submit-job" @click="emit('submit-job')">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          提交作业
+        </button>
       </div>
     </div>
 
@@ -72,9 +66,10 @@
             <th>作业名称</th>
             <th>状态</th>
             <th>分区</th>
-            <th>节点/CPU</th>
+            <th>核心数</th>
             <th>提交时间</th>
-            <th>运行时间</th>
+            <th>开始时间</th>
+            <th>运行时长</th>
             <th>操作</th>
           </tr>
         </thead>
@@ -85,8 +80,9 @@
             <td>{{ job.name }}</td>
             <td><span :class="['status', `status-${job.status.toLowerCase()}`]">{{ job.status }}</span></td>
             <td>{{ job.partition }}</td>
-            <td>{{ job.nodes }}N / {{ job.cpus }}C</td>
+            <td>{{ job.cpus }}核</td>
             <td>{{ job.submitTime }}</td>
+            <td>{{ job.startTime }}</td>
             <td>{{ job.runTime }}</td>
             <td>
               <div class="action-buttons">
@@ -114,7 +110,15 @@
         </tbody>
       </table>
 
-      <div v-if="filteredJobs.length === 0" class="empty-state">
+      <div v-if="loading" class="empty-state">
+        <div class="empty-icon">⏳</div>
+        <p>查询中...</p>
+      </div>
+      <div v-else-if="!queried" class="empty-state">
+        <div class="empty-icon">🔍</div>
+        <p>选择条件后点击查询</p>
+      </div>
+      <div v-else-if="filteredJobs.length === 0" class="empty-state">
         <div class="empty-icon">📭</div>
         <p>暂无作业数据</p>
       </div>
@@ -123,24 +127,33 @@
     <!-- 分页 -->
     <div class="pagination" v-if="pagination.total > 0">
       <button 
-        class="btn-secondary" 
+        class="page-btn" 
         :disabled="pagination.page <= 1"
         @click="changePage(pagination.page - 1)"
       >
-        « 上一页
+        ‹ 上一页
       </button>
-      
-      <span class="pagination-info">
-        第{{ pagination.page }} / {{ pagination.totalPages }} 页，共{{ pagination.total }} 个作业
-      </span>
-      
+
+      <div class="page-numbers">
+        <button
+          v-for="p in pageRange"
+          :key="p"
+          class="page-num"
+          :class="{ active: p === pagination.page, ellipsis: p === '...' }"
+          :disabled="p === '...'"
+          @click="p !== '...' && changePage(p as number)"
+        >{{ p }}</button>
+      </div>
+
       <button 
-        class="btn-secondary" 
+        class="page-btn" 
         :disabled="pagination.page >= pagination.totalPages"
         @click="changePage(pagination.page + 1)"
       >
-        下一页 »
+        下一页 ›
       </button>
+
+      <span class="pagination-info">共 {{ pagination.total }} 个作业</span>
     </div>
   </div>
 </template>
@@ -151,7 +164,7 @@ import { getUser, getApiBase, isAdmin } from '../utils/auth'
 import notification from '../utils/notification'
 // import { jobAPI } from '../api' // TODO: 取消注释以启用真实API调用
 
-const emit = defineEmits(['view-detail', 'open-directory'])
+const emit = defineEmits(['view-detail', 'open-directory', 'submit-job'])
 
 const viewMode = ref<'my' | 'all'>('my')
 const statusFilter = ref('')
@@ -169,11 +182,24 @@ const summary = ref({
 })
 
 const allJobs = ref<any[]>([])
+const queried = ref(false)
 const pagination = ref({
   page: 1,
   pageSize: 15,
   total: 0,
   totalPages: 0
+})
+
+const pageRange = computed(() => {
+  const cur = pagination.value.page
+  const total = pagination.value.totalPages
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1)
+  const pages: (number | string)[] = [1]
+  if (cur > 3) pages.push('...')
+  for (let i = Math.max(2, cur - 1); i <= Math.min(total - 1, cur + 1); i++) pages.push(i)
+  if (cur < total - 2) pages.push('...')
+  pages.push(total)
+  return pages
 })
 
 const filteredJobs = computed(() => {
@@ -339,6 +365,8 @@ const loadJobs = async () => {
           nodeNames,
           cpus: job.cpus || 0,
           submitTime: formatTime(job.submit_time),
+          startTime: formatTime(job.start_time),
+          start_time: job.start_time || 0,
           runTime: formatDuration(runTime),
           directory: job.work_dir || job.directory || '-',
           account: job.account || '-',
@@ -367,6 +395,7 @@ const loadJobs = async () => {
     updateSummary()
   } finally {
     loading.value = false
+    queried.value = true
   }
 }
 
@@ -423,21 +452,12 @@ const formatDuration = (seconds: any): string => {
 
 // 初始化
 onMounted(() => {
-  // 获取当前用户信息
   currentUserInfo.value = getUser()
-  
-  // 如果不是管理员，强制显示"我的作业"
   if (!isAdmin()) {
     viewMode.value = 'my'
   }
-  
-  // 更新统计数据
   updateSummary()
-  
-  // 自动加载作业列表
-  loadJobs()
-  
-  console.log('当前用户:', currentUser.value, '是否管理员:', currentUserInfo.value?.isAdmin)
+  // 不自动加载，等用户点查询
 })
 </script>
 
@@ -445,81 +465,128 @@ onMounted(() => {
 .jobs-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 1.5rem;
+  align-items: center;
+  margin-bottom: 1rem;
   gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .jobs-header h3 {
   margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #1e293b;
 }
 
-.header-controls {
+.view-tabs {
   display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  align-items: flex-end;
-}
-
-.view-toggle {
-  display: flex;
-  gap: 0.5rem;
-  background: #f9fafb;
-  padding: 0.25rem;
+  background: #f1f5f9;
   border-radius: 8px;
+  padding: 3px;
+  gap: 2px;
 }
 
-.toggle-btn {
-  padding: 0.625rem 1.5rem;
+.view-tab {
+  padding: 5px 14px;
   border: none;
   background: transparent;
-  color: #666;
-  font-size: 0.95rem;
-  font-weight: 600;
+  color: #64748b;
+  font-size: 0.82rem;
+  font-weight: 500;
   cursor: pointer;
   border-radius: 6px;
-  transition: all 0.3s;
+  transition: all 0.15s;
   white-space: nowrap;
 }
-
-.toggle-btn:hover {
-  background: #e5e7eb;
-}
-
-.toggle-btn.active {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-}
-
-.current-view-label {
-  padding: 0.625rem 1.5rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  font-size: 0.95rem;
+.view-tab:hover { color: #374151; }
+.view-tab.active {
+  background: #fff;
+  color: #1e293b;
   font-weight: 600;
-  border-radius: 6px;
-  white-space: nowrap;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
 }
 
-.filters {
+.header-right {
   display: flex;
-  gap: 0.75rem;
   align-items: center;
+  gap: 6px;
 }
 
 .filter-select {
-  padding: 0.5rem 1rem;
-  border: 2px solid #e5e7eb;
+  padding: 6px 10px;
+  border: 1px solid #e2e8f0;
   border-radius: 8px;
-  font-size: 0.9rem;
+  font-size: 0.82rem;
   cursor: pointer;
-  background: white;
-}
-
-.filter-select:focus {
+  background: #fff;
+  color: #374151;
   outline: none;
-  border-color: #667eea;
+  transition: border-color 0.15s;
+  height: 32px;
 }
+.filter-select:focus { border-color: #667eea; }
+
+.btn-icon-round {
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  cursor: pointer;
+  color: #64748b;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+.btn-icon-round:hover { background: #e2e8f0; color: #374151; }
+.btn-icon-round:hover svg { transform: rotate(180deg); }
+.btn-icon-round svg { transition: transform 0.3s; }
+
+.btn-query {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 14px;
+  height: 32px;
+  background: #fff;
+  color: #1e293b;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  transition: all 0.15s;
+}
+.btn-query:hover:not(:disabled) { background: #f1f5f9; }
+.btn-query:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn-submit-job {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 14px;
+  height: 32px;
+  background: #fff;
+  color: #1e293b;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  transition: all 0.15s;
+}
+.btn-submit-job:hover { background: #f1f5f9; }
 
 .job-summary {
   display: grid;
@@ -572,6 +639,7 @@ onMounted(() => {
   color: #ef4444;
 }
 
+
 .empty-state {
   text-align: center;
   padding: 4rem 2rem;
@@ -587,20 +655,73 @@ onMounted(() => {
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 1rem;
+  gap: 0.5rem;
   margin-top: 1.5rem;
-  padding-top: 1.5rem;
+  padding-top: 1.25rem;
   border-top: 1px solid #e5e7eb;
 }
 
-.pagination-info {
-  font-size: 0.9rem;
-  color: #666;
+.page-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #fff;
+  color: #374151;
+  font-size: 0.83rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.page-btn:hover:not(:disabled) {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+.page-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
-.pagination .btn-secondary:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.page-numbers {
+  display: flex;
+  gap: 4px;
+}
+
+.page-num {
+  min-width: 32px;
+  height: 32px;
+  padding: 0 6px;
+  border: 1px solid #e2e8f0;
+  border-radius: 7px;
+  background: #fff;
+  color: #374151;
+  font-size: 0.83rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.page-num:hover:not(:disabled):not(.active) {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+.page-num.active {
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: #fff;
+  border-color: transparent;
+  font-weight: 600;
+}
+.page-num.ellipsis {
+  border: none;
+  background: none;
+  cursor: default;
+  color: #94a3b8;
+}
+
+.pagination-info {
+  font-size: 0.8rem;
+  color: #94a3b8;
+  margin-left: 0.5rem;
 }
 
 @media (max-width: 1024px) {

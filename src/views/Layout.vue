@@ -27,24 +27,15 @@
             <span class="nav-item-label">仪表盘</span>
           </a>
 
-          <!-- 作业管理 expandable -->
+          <!-- 作业管理 -->
           <a
             :class="['nav-item', { active: currentView === 'jobs' }]"
-            @click="currentView = 'jobs'; jobsExpanded = !jobsExpanded"
+            @click="currentView = 'jobs'"
             :title="sidebarCollapsed ? '作业管理' : ''"
           >
             <span class="nav-item-icon">⚙️</span>
             <span class="nav-item-label">作业管理</span>
-            <span class="nav-item-chevron" v-if="!sidebarCollapsed">{{ jobsExpanded ? '▾' : '▸' }}</span>
           </a>
-          <div v-if="jobsExpanded && !sidebarCollapsed" class="nav-sub">
-            <a
-              v-for="tab in jobTabs"
-              :key="tab.id"
-              :class="['nav-sub-item', { active: currentView === 'jobs' && jobManagementTab === tab.id }]"
-              @click="currentView = 'jobs'; jobManagementTab = tab.id"
-            >{{ tab.label }}</a>
-          </div>
 
           <a
             :class="['nav-item', { active: currentView === 'shell' }]"
@@ -240,9 +231,7 @@ const otherMenuItems = [
 ]
 
 const jobTabs = [
-  { id: 'info', label: '作业列表' },
-  { id: 'submit', label: '提交作业' },
-  { id: 'templates', label: '作业模板' }
+  { id: 'info', label: '作业列表' }
 ]
 
 const adminTabs = [

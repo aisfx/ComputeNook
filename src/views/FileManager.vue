@@ -530,14 +530,14 @@ onUnmounted(() => { document.removeEventListener('click', handleGlobalClick) })
 .fm-btn-icon:hover:not(:disabled) { background: #e8eaf4; color: #333; }
 .fm-btn-icon:disabled { opacity: 0.35; cursor: not-allowed; }
 
-.fm-btn-primary { background: #5b6ef5; color: #fff; }
-.fm-btn-primary:hover { background: #4a5de4; }
+.fm-btn-primary { background: #fff; color: #1e293b; border: 1px solid #e2e8f0; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+.fm-btn-primary:hover { background: #f1f5f9; }
 
-.fm-btn-secondary { background: #fff; color: #5b6ef5; border: 1.5px solid #5b6ef5; }
-.fm-btn-secondary:hover { background: #f0f1ff; }
+.fm-btn-secondary { background: #fff; color: #1e293b; border: 1px solid #e2e8f0; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+.fm-btn-secondary:hover { background: #f1f5f9; }
 
-.fm-btn-mount { background: #fff; color: #059669; border: 1.5px solid #059669; }
-.fm-btn-mount:hover { background: #ecfdf5; }
+.fm-btn-mount { background: #fff; color: #1e293b; border: 1px solid #e2e8f0; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+.fm-btn-mount:hover { background: #f1f5f9; }
 
 .fm-path-wrap {
   display: flex; align-items: center; gap: 0.5rem;

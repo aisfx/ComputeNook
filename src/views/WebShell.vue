@@ -1887,52 +1887,48 @@ const copyPubKey = () => {
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border: none;
-  padding: 0.75rem 1.5rem;
-  border-radius: 8px;
+  background: #fff;
+  color: #1e293b;
+  border: 1px solid #e2e8f0;
+  padding: 7px 16px;
+  border-radius: 10px;
   cursor: pointer;
   font-weight: 600;
+  font-size: 0.875rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  transition: all 0.15s;
 }
-
-.btn-primary:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
-}
-
-.btn-primary.btn-large {
-  padding: 1rem 2rem;
-  font-size: 1.1rem;
-}
+.btn-primary:hover { background: #f1f5f9; }
+.btn-primary.btn-large { padding: 9px 20px; font-size: 0.95rem; }
 
 .btn-secondary {
-  background: #e5e7eb;
-  color: #374151;
-  border: none;
-  padding: 0.75rem 1.5rem;
-  border-radius: 8px;
+  background: #fff;
+  color: #1e293b;
+  border: 1px solid #e2e8f0;
+  padding: 7px 16px;
+  border-radius: 10px;
   cursor: pointer;
-  font-weight: 600;
+  font-weight: 500;
+  font-size: 0.875rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  transition: all 0.15s;
 }
+.btn-secondary:hover { background: #f1f5f9; }
 
-.btn-secondary:hover {
-  background: #d1d5db;
-}
-
-.btn-small {
-  padding: 0.5rem 1rem;
-  font-size: 0.9rem;
-}
+.btn-small { padding: 5px 12px; font-size: 0.82rem; }
 
 .btn-danger {
-  background: #ef4444;
-  color: white;
+  background: #fff;
+  color: #ef4444;
+  border: 1px solid rgba(239,68,68,0.3);
+  border-radius: 10px;
+  padding: 7px 16px;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 0.875rem;
+  transition: all 0.15s;
 }
-
-.btn-danger:hover {
-  background: #dc2626;
-}
+.btn-danger:hover { background: #fef2f2; }
 
 .loading {
   text-align: center;

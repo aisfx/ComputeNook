@@ -1,4 +1,4 @@
-﻿package handlers
+package handlers
 
 import (
 "encoding/json"
@@ -18,21 +18,26 @@ import (
 type DesktopSession struct {
 	ID          int    `json:"id"`
 	Name        string `json:"name"`
-	Type        string `json:"type"`
+	Mode        string `json:"mode"`        // "desktop" | "app"
+	AppCommand  string `json:"appCommand,omitempty"` // 应用模式下的启动命令
 	Address     string `json:"address"`
 	Username    string `json:"username"`
-	VNCPassword string `json:"vncPassword,omitempty"`
+	XpraPort    int    `json:"xpraPort,omitempty"`
+	XpraDisplay int    `json:"xpraDisplay,omitempty"`
 	Resolution  string `json:"resolution,omitempty"`
 	Duration    int    `json:"duration,omitempty"`
-	NodeType    string `json:"nodeType,omitempty"`
 	CPUs        int    `json:"cpus,omitempty"`
 	Memory      int    `json:"memory,omitempty"` // GB
 	Partition   string `json:"partition,omitempty"`
 	CreateTime  string `json:"createTime"`
 	Status      string `json:"status"`
 	SlurmJobID  int64  `json:"slurmJobId,omitempty"`
-	VNCPort     int    `json:"vncPort,omitempty"`
 	WebURL      string `json:"webUrl,omitempty"`
+	// 兼容旧字段
+	Type        string `json:"type,omitempty"`
+	VNCPort     int    `json:"vncPort,omitempty"`
+	VNCPassword string `json:"vncPassword,omitempty"`
+	NodeType    string `json:"nodeType,omitempty"`
 }
 
 const desktopDataFile = "desktop_sessions.json"
@@ -180,12 +185,14 @@ c.JSON(http.StatusOK, gin.H{"data": sessions})
 func CreateDesktopSession(c *gin.Context) {
 var req struct {
 Name       string `json:"name" binding:"required"`
-Type       string `json:"type" binding:"required"`
+Mode       string `json:"mode"`       // "desktop" | "app"
+AppCommand  string `json:"appCommand"` // 应用模式启动命令
+Type       string `json:"type"`
 Resolution string `json:"resolution"`
 Duration   int    `json:"duration"`
 NodeType   string `json:"nodeType"`
 CPUs       int    `json:"cpus"`
-Memory     int    `json:"memory"` // GB
+Memory     int    `json:"memory"`
 Partition  string `json:"partition"`
 }
 if err := c.ShouldBindJSON(&req); err != nil {
@@ -208,6 +215,10 @@ maxID = s.ID
 
 username, _ := c.Get("username")
 
+mode := req.Mode
+if mode == "" {
+	mode = "desktop"
+}
 resolution := req.Resolution
 if resolution == "" {
 resolution = "1920x1080"
@@ -220,6 +231,8 @@ duration = 4
 session := DesktopSession{
 ID:         maxID + 1,
 Name:       req.Name,
+Mode:       mode,
+AppCommand:  req.AppCommand,
 Type:       req.Type,
 Username:   username.(string),
 Resolution: resolution,
@@ -418,6 +431,7 @@ _ = client.CancelJob(sessions[i].SlurmJobID)
 sessions[i].Status = "stopped"
 sessions[i].SlurmJobID = 0
 sessions[i].VNCPort = 0
+sessions[i].XpraPort = 0
 _ = saveDesktopSessions(sessions)
 c.JSON(http.StatusOK, gin.H{"data": sessions[i]})
 return
@@ -447,124 +461,146 @@ return
 c.JSON(http.StatusOK, gin.H{"message": "deleted"})
 }
 
-// buildDesktopScript 生成 sbatch 脚本：TurboVNC + xfce4
-// 每个 session 使用独立的 VNC 配置目录 ~/.vnc-job-{id}，密码和日志完全隔离
+// buildXpraScript 生成 sbatch 脚本：通过 Xpra 启动桌面或应用
+// mode="desktop" 启动完整桌面（xfce4/gnome/kde）
+// mode="app"     启动单个应用（appCommand 指定）
 func buildDesktopScript(session *DesktopSession) string {
-	baseDisplay := session.ID
-	baseVncPort := 5900 + baseDisplay
-
-	resolution := session.Resolution
-	if resolution == "" || resolution == "auto" {
-		resolution = "1920x1080"
-	}
-	desktopType := session.Type
-	if desktopType == "" {
-		desktopType = "xfce"
-	}
-
 	homeBase := os.Getenv("HOME_BASE_PATH")
 	if homeBase == "" {
 		homeBase = "/home"
 	}
 	statusDir := fmt.Sprintf("%s/%s/.desktop", homeBase, session.Username)
 	statusFile := fmt.Sprintf("%s/%d.status", statusDir, session.ID)
-	// 每个 job 独立 VNC 目录，密码/passwd/pid/log 完全隔离
-	vncDir := fmt.Sprintf("%s/%s/.vnc-job-%d", homeBase, session.Username, session.ID)
 
-	var b strings.Builder
-	b.WriteString("#!/bin/bash\n")
-	b.WriteString(fmt.Sprintf("mkdir -p %s %s\n\n", statusDir, vncDir))
-	b.WriteString(fmt.Sprintf("export HOME=${HOME:-%s/%s}\n", homeBase, session.Username))
-	b.WriteString("export PATH=/opt/TurboVNC/bin:/usr/bin:/usr/local/bin:/bin:/usr/sbin:/sbin:$PATH\n")
-	b.WriteString(fmt.Sprintf("export VNCUSERDIR=%s\n\n", vncDir))
+	// Xpra 使用 14500+id 作为 WebSocket 端口，避免与其他服务冲突
+	baseWsPort := 14500 + session.ID
+	baseDisplay := 100 + session.ID
 
-	// xstartup
-	b.WriteString(fmt.Sprintf("cat > %s/xstartup << 'XSTARTUP'\n", vncDir))
-	b.WriteString("#!/bin/bash\n")
-	b.WriteString("unset SESSION_MANAGER\nunset DBUS_SESSION_BUS_ADDRESS\n")
-	b.WriteString("export XDG_SESSION_TYPE=x11\n")
-	b.WriteString("export XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/tmp/runtime-$(id -u)}\n")
-	b.WriteString("mkdir -p $XDG_RUNTIME_DIR && chmod 700 $XDG_RUNTIME_DIR\n")
-	switch desktopType {
-	case "xfce", "xfce4":
-		b.WriteString("exec startxfce4\n")
-	case "gnome":
-		b.WriteString("exec gnome-session\n")
-	case "kde":
-		b.WriteString("exec startkde\n")
-	default:
-		b.WriteString("if command -v startxfce4 &>/dev/null; then exec startxfce4\n")
-		b.WriteString("elif command -v gnome-session &>/dev/null; then exec gnome-session\n")
-		b.WriteString("elif command -v startkde &>/dev/null; then exec startkde\n")
-		b.WriteString("else exec xterm; fi\n")
+	resolution := session.Resolution
+	if resolution == "" || resolution == "auto" {
+		resolution = "1920x1080"
 	}
-	b.WriteString("XSTARTUP\n")
-	b.WriteString(fmt.Sprintf("chmod +x %s/xstartup\n\n", vncDir))
 
-	// 独立 VNC 密码
-	b.WriteString("VNC_PASS=$(openssl rand -base64 6 | tr -d '/+=' | head -c 8)\n")
-	b.WriteString(fmt.Sprintf("echo \"$VNC_PASS\" | vncpasswd -f > %s/passwd\n", vncDir))
-	b.WriteString(fmt.Sprintf("chmod 600 %s/passwd\n\n", vncDir))
+	mode := session.Mode
+	if mode == "" {
+		mode = "desktop"
+	}
 
-	// 动态查找空闲 display/port
-	b.WriteString(fmt.Sprintf("BASE_DISPLAY=%d\nBASE_PORT=%d\n", baseDisplay, baseVncPort))
-	b.WriteString("DISPLAY_NUM=$BASE_DISPLAY\nVNC_PORT=$BASE_PORT\n")
-	b.WriteString("for try in $(seq 0 19); do\n")
-	b.WriteString("  DISPLAY_NUM=$((BASE_DISPLAY + try))\n  VNC_PORT=$((BASE_PORT + try))\n")
-	b.WriteString("  if [ ! -f /tmp/.X${DISPLAY_NUM}-lock ] && ! ss -tlnp 2>/dev/null | grep -q \":${VNC_PORT}\"; then\n    break\n  fi\ndone\n\n")
+	// 桌面类型
+	desktopEnv := "xfce4"
+	if session.Type != "" {
+		switch session.Type {
+		case "gnome":
+			desktopEnv = "gnome"
+		case "kde":
+			desktopEnv = "kde"
+		default:
+			desktopEnv = "xfce4"
+		}
+	}
 
-	// 状态文件
-	b.WriteString(fmt.Sprintf("echo 'status=starting' > %s\n", statusFile))
-	b.WriteString(fmt.Sprintf("echo \"node=$(hostname)\" >> %s\n", statusFile))
-	b.WriteString(fmt.Sprintf("echo \"vnc_port=$VNC_PORT\" >> %s\n", statusFile))
-	b.WriteString(fmt.Sprintf("echo \"display=$DISPLAY_NUM\" >> %s\n", statusFile))
-	b.WriteString(fmt.Sprintf("echo \"password=$VNC_PASS\" >> %s\n", statusFile))
-	b.WriteString(fmt.Sprintf("echo \"vnc_dir=%s\" >> %s\n", vncDir, statusFile))
+	appCmd := session.AppCommand
+	if mode == "app" && appCmd == "" {
+		appCmd = "xterm"
+	}
 
-	// 清理残留
-	b.WriteString("vncserver -kill :${DISPLAY_NUM} 2>/dev/null || true\nsleep 1\n")
-	b.WriteString("pkill -f \"Xvnc :${DISPLAY_NUM}\" 2>/dev/null || true\n")
-	b.WriteString("pkill -f \"Xtigervnc :${DISPLAY_NUM}\" 2>/dev/null || true\n")
-	b.WriteString(fmt.Sprintf("kill -9 $(cat %s/$(hostname):${DISPLAY_NUM}.pid 2>/dev/null) 2>/dev/null || true\n", vncDir))
-	b.WriteString("sleep 1\n")
-	b.WriteString("rm -f /tmp/.X${DISPLAY_NUM}-lock /tmp/.X11-unix/X${DISPLAY_NUM} 2>/dev/null || true\n\n")
-
-	// 启动 TurboVNC，VNCUSERDIR 已通过环境变量指定独立目录
-	// TurboVNC 不支持 -vncUserDir 参数，用 export VNCUSERDIR 代替
-	startCmd := fmt.Sprintf("vncserver :${DISPLAY_NUM} -geometry %s -depth 24 -rfbauth %s/passwd -alwaysshared -rfbport ${VNC_PORT} -log %s/vnc.log\n",
-		resolution, vncDir, vncDir)
-	b.WriteString(startCmd)
-	b.WriteString("VNC_EXIT=$?\n")
-	b.WriteString("if [ $VNC_EXIT -ne 0 ]; then\n")
-	b.WriteString("  pkill -9 -f \"Xvnc :${DISPLAY_NUM}\" 2>/dev/null || true\n")
-	b.WriteString("  rm -f /tmp/.X${DISPLAY_NUM}-lock /tmp/.X11-unix/X${DISPLAY_NUM} 2>/dev/null || true\n")
-	b.WriteString("  sleep 3\n")
-	b.WriteString("  " + startCmd)
-	b.WriteString("  VNC_EXIT=$?\nfi\n")
-	b.WriteString("if [ $VNC_EXIT -ne 0 ]; then\n")
-	b.WriteString(fmt.Sprintf("  echo 'status=failed' >> %s\n  exit 1\nfi\n\n", statusFile))
-
-	// 等待端口就绪
-	b.WriteString("for i in $(seq 1 20); do\n")
-	b.WriteString("  ss -tlnp 2>/dev/null | grep -q \":${VNC_PORT}\" && break\n  sleep 1\ndone\n\n")
-	b.WriteString(fmt.Sprintf("echo 'status=running' >> %s\n\n", statusFile))
-
-	// 保持运行
 	durationSec := session.Duration * 3600
 	if durationSec <= 0 {
 		durationSec = 4 * 3600
 	}
+
+	var b strings.Builder
+	b.WriteString("#!/bin/bash\n")
+	b.WriteString(fmt.Sprintf("mkdir -p %s\n\n", statusDir))
+	b.WriteString(fmt.Sprintf("export HOME=${HOME:-%s/%s}\n", homeBase, session.Username))
+	b.WriteString("export PATH=/opt/xpra/bin:/usr/bin:/usr/local/bin:/bin:/usr/sbin:/sbin:$PATH\n\n")
+
+	// 动态查找空闲端口和 display
+	b.WriteString(fmt.Sprintf("BASE_WS_PORT=%d\nBASE_DISPLAY=%d\n", baseWsPort, baseDisplay))
+	b.WriteString("WS_PORT=$BASE_WS_PORT\nDISPLAY_NUM=$BASE_DISPLAY\n")
+	b.WriteString("for try in $(seq 0 19); do\n")
+	b.WriteString("  WS_PORT=$((BASE_WS_PORT + try))\n  DISPLAY_NUM=$((BASE_DISPLAY + try))\n")
+	b.WriteString("  if ! ss -tlnp 2>/dev/null | grep -q \":${WS_PORT}\" && [ ! -f /tmp/.X${DISPLAY_NUM}-lock ]; then\n    break\n  fi\ndone\n\n")
+
+	// 写状态文件
+	b.WriteString(fmt.Sprintf("echo 'status=starting' > %s\n", statusFile))
+	b.WriteString(fmt.Sprintf("echo \"node=$(hostname)\" >> %s\n", statusFile))
+	b.WriteString(fmt.Sprintf("echo \"ws_port=$WS_PORT\" >> %s\n", statusFile))
+	b.WriteString(fmt.Sprintf("echo \"display=$DISPLAY_NUM\" >> %s\n", statusFile))
+
+	// 清理残留 xpra
+	b.WriteString("xpra stop :${DISPLAY_NUM} 2>/dev/null || true\n")
+	b.WriteString("sleep 1\n")
+	b.WriteString("rm -f /tmp/.X${DISPLAY_NUM}-lock /tmp/.X11-unix/X${DISPLAY_NUM} 2>/dev/null || true\n\n")
+
+	// XDG_RUNTIME_DIR 必须先 export 再 mkdir
+	b.WriteString("export XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/tmp/xpra-runtime-$(id -u)}\n")
+	b.WriteString("mkdir -p \"$XDG_RUNTIME_DIR\" && chmod 700 \"$XDG_RUNTIME_DIR\"\n\n")
+
+	// 启动 dbus（桌面环境必须）
+	b.WriteString("if [ -z \"$DBUS_SESSION_BUS_ADDRESS\" ]; then\n")
+	b.WriteString("  eval $(dbus-launch --sh-syntax)\n")
+	b.WriteString("  export DBUS_SESSION_BUS_ADDRESS\n")
+	b.WriteString("fi\n\n")
+
+	if mode == "app" {
+		// 应用模式：--start-child 配合 exit-with-children（4.x 要求）
+		b.WriteString(fmt.Sprintf(
+			"xpra start :${DISPLAY_NUM} \\\n"+
+				"  --bind-ws=0.0.0.0:${WS_PORT} \\\n"+
+				"  --html=on \\\n"+
+				"  --start-child=\"%s\" \\\n"+
+				"  --exit-with-children=yes \\\n"+
+				"  --daemon=no \\\n"+
+				"  --resize-display=%s \\\n"+
+				"  --log-file=%s/%d-xpra.log \\\n"+
+				"  &\n\n",
+			appCmd, resolution, statusDir, session.ID,
+		))
+	} else {
+		// 桌面模式：start-desktop + --start-child
+		var startDesktopCmd string
+		switch desktopEnv {
+		case "gnome-session":
+			startDesktopCmd = "gnome-session"
+		case "startplasma-x11":
+			startDesktopCmd = "startplasma-x11"
+		default:
+			startDesktopCmd = "startxfce4"
+		}
+		b.WriteString(fmt.Sprintf(
+			"xpra start-desktop :${DISPLAY_NUM} \\\n"+
+				"  --bind-ws=0.0.0.0:${WS_PORT} \\\n"+
+				"  --html=on \\\n"+
+				"  --start-child=%s \\\n"+
+				"  --exit-with-children=no \\\n"+
+				"  --daemon=no \\\n"+
+				"  --resize-display=%s \\\n"+
+				"  --log-file=%s/%d-xpra.log \\\n"+
+				"  &\n\n",
+			startDesktopCmd, resolution, statusDir, session.ID,
+		))
+	}
+
+	b.WriteString("XPRA_PID=$!\n\n")
+
+	// 等待 WebSocket 端口就绪（最多 60 秒）
+	b.WriteString("for i in $(seq 1 60); do\n")
+	b.WriteString("  ss -tlnp 2>/dev/null | grep -q \":${WS_PORT} \" && break\n  sleep 1\ndone\n\n")
+	b.WriteString("if ! ss -tlnp 2>/dev/null | grep -q \":${WS_PORT} \"; then\n")
+	b.WriteString(fmt.Sprintf("  echo 'status=failed' >> %s\n  exit 1\nfi\n\n", statusFile))
+	b.WriteString(fmt.Sprintf("echo 'status=running' >> %s\n\n", statusFile))
+
+	// 保持运行
 	b.WriteString(fmt.Sprintf("END_TIME=$(($(date +%%s) + %d))\n", durationSec))
 	b.WriteString("while [ $(date +%s) -lt $END_TIME ]; do\n")
-	b.WriteString("  ss -tlnp 2>/dev/null | grep -q \":${VNC_PORT}\" || break\n  sleep 30\ndone\n\n")
-	b.WriteString("vncserver -kill :${DISPLAY_NUM} 2>/dev/null || true\n")
+	b.WriteString("  kill -0 $XPRA_PID 2>/dev/null || break\n  sleep 30\ndone\n\n")
+	b.WriteString("xpra stop :${DISPLAY_NUM} 2>/dev/null || true\n")
 	b.WriteString(fmt.Sprintf("echo 'status=stopped' >> %s\n", statusFile))
 
 	return b.String()
 }
-// pollDesktopJob 轮询 Slurm 作业状态：
-// 阶段1：等待作业进入 RUNNING，更新 session 地址和端口
-// 阶段2：持续监控，作业结束后自动将 session 标记为 stopped
+// pollDesktopJob 轮询 Slurm 作业状态
 func pollDesktopJob(sessionID int, jobID int64, username string) {
 	client, err := GetSlurmClientForUser(username)
 	if err != nil {
@@ -584,6 +620,7 @@ func pollDesktopJob(sessionID int, jobID int64, username string) {
 				sessions[i].Status = status
 				if status == "stopped" || status == "failed" {
 					sessions[i].SlurmJobID = 0
+					sessions[i].XpraPort = 0
 					sessions[i].VNCPort = 0
 				}
 				_ = saveDesktopSessions(sessions)
@@ -616,8 +653,7 @@ func pollDesktopJob(sessionID int, jobID int64, username string) {
 
 		if strings.HasPrefix(state, "RUNNING") {
 			node := job.Nodes
-			rdpPort := 5901 // 默认从5901开始
-			vncPassword := ""
+			rdpPort := 5901
 			vncReady := false
 
 			// 等待状态文件里出现 status=running（最多等2分钟）
@@ -640,7 +676,7 @@ func pollDesktopJob(sessionID int, jobID int64, username string) {
 							continue
 						}
 						switch strings.TrimSpace(parts[0]) {
-						case "vnc_port":
+						case "ws_port":
 							if p, err := strconv.Atoi(strings.TrimSpace(parts[1])); err == nil {
 								rdpPort = p
 							}
@@ -648,8 +684,6 @@ func pollDesktopJob(sessionID int, jobID int64, username string) {
 							if v := strings.TrimSpace(parts[1]); v != "" {
 								node = v
 							}
-						case "password":
-							vncPassword = strings.TrimSpace(parts[1])
 						}
 					}
 					vncReady = true
@@ -667,10 +701,8 @@ func pollDesktopJob(sessionID int, jobID int64, username string) {
 				if sessions[i].ID == sessionID {
 					sessions[i].Status = "running"
 					sessions[i].Address = node
-					sessions[i].VNCPort = rdpPort
-					if vncPassword != "" {
-						sessions[i].VNCPassword = vncPassword
-					}
+					sessions[i].XpraPort = rdpPort
+					sessions[i].VNCPort = rdpPort // 兼容旧字段
 					_ = saveDesktopSessions(sessions)
 					break
 				}

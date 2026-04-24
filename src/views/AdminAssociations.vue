@@ -354,28 +354,34 @@ onUnmounted(() => {
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border: none;
-  padding: 0.75rem 1.5rem;
-  border-radius: 8px;
+  background: #fff;
+  color: #1e293b;
+  border: 1px solid #e2e8f0;
+  padding: 7px 16px;
+  border-radius: 10px;
   cursor: pointer;
   font-weight: 600;
+  font-size: 0.85rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  transition: all 0.15s;
   display: flex;
   align-items: center;
   gap: 0.4rem;
 }
-.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(102,126,234,0.3); }
+.btn-primary:hover { background: #f1f5f9; }
 .btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
 
 .btn-secondary {
-  background: #e5e7eb;
-  color: #374151;
-  border: none;
-  padding: 0.75rem 1.5rem;
-  border-radius: 8px;
+  background: #fff;
+  color: #1e293b;
+  border: 1px solid #e2e8f0;
+  padding: 7px 16px;
+  border-radius: 10px;
   cursor: pointer;
-  font-weight: 600;
+  font-weight: 500;
+  font-size: 0.85rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  transition: all 0.15s;
 }
 
 .card {
@@ -436,17 +442,19 @@ onUnmounted(() => {
 .action-dropdown { position: relative; display: inline-block; }
 
 .btn-action-toggle {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border: none;
+  background: #fff;
+  color: #1e293b;
+  border: 1px solid #e2e8f0;
   padding: 0.4rem 0.9rem;
   border-radius: 6px;
   cursor: pointer;
   font-size: 0.85rem;
   font-weight: 600;
   white-space: nowrap;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  transition: all 0.15s;
 }
-.btn-action-toggle:hover { opacity: 0.9; }
+.btn-action-toggle:hover { background: #f1f5f9; }
 
 .dropdown-menu {
   position: absolute;
@@ -532,8 +540,8 @@ onUnmounted(() => {
 .form-group input:focus,
 .form-group select:focus {
   outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102,126,234,0.1);
+  border-color: #94a3b8;
+  box-shadow: 0 0 0 2px rgba(0,0,0,0.08);
 }
 .form-group small { display: block; margin-top: 0.25rem; color: #6b7280; font-size: 0.85rem; }
 

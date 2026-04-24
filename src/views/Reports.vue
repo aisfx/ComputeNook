@@ -1,499 +1,550 @@
 <template>
   <div class="reports-page">
-    <div class="page-header">
-      <h3>📊 报表中心</h3>
-    </div>
-
-    <!-- 筛选条件 -->
-    <div class="card filters-card">
-      <div class="filters-row">
-        <div class="filter-group">
-          <label>报表类型</label>
-          <select v-model="filters.type">
-            <option value="job">作业统计报表</option>
-            <option value="machine-time">机时消耗报表</option>
-            <option value="node">节点运行报表</option>
+    <!-- 顶部筛选栏 -->
+    <div class="filter-bar">
+      <span class="page-title">📊 报表中心</span>
+      <div class="filter-bar-right">
+        <div class="filter-item">
+          <label>开始日期</label>
+          <input type="date" v-model="filters.startDate" :max="filters.endDate" />
+        </div>
+        <div class="filter-item">
+          <label>结束日期</label>
+          <input type="date" v-model="filters.endDate" :min="filters.startDate" />
+        </div>
+        <div class="filter-item">
+          <label>队列</label>
+          <select v-model="filters.partition">
+            <option value="">全部</option>
+            <option v-for="p in partitions" :key="p" :value="p">{{ p }}</option>
           </select>
         </div>
-        <div class="filter-group">
-          <label>开始日期</label>
-          <input type="date" v-model="filters.startDate" />
-        </div>
-        <div class="filter-group">
-          <label>结束日期</label>
-          <input type="date" v-model="filters.endDate" />
-        </div>
-        <button class="btn-primary" @click="loadReport" :disabled="loading">
+        <span v-if="dateError" class="date-error">⚠ {{ dateError }}</span>
+        <button class="btn-primary" @click="loadAll" :disabled="loading || !!dateError">
           {{ loading ? '查询中...' : '🔍 查询' }}
         </button>
-        <button class="btn-secondary" @click="exportCSV" :disabled="!hasData">📥 导出 CSV</button>
+        <button class="btn-secondary" @click="exportExcel" :disabled="!hasAnyData">
+          📥 导出 Excel
+        </button>
       </div>
     </div>
 
-    <div v-if="loading" class="card" style="text-align:center;padding:3rem;color:#9ca3af">加载中...</div>
-    <div v-else-if="error" class="card" style="text-align:center;padding:3rem;color:#ef4444">{{ error }}</div>
+    <div v-if="loading" class="state-card">
+      <div class="spinner"></div><span>加载中...</span>
+    </div>
+    <div v-else-if="globalError" class="state-card error-state">⚠ {{ globalError }}</div>
 
-    <!-- 作业统计报表 -->
-    <template v-else-if="filters.type === 'job' && hasData">
-      <div class="summary-cards">
-        <div class="s-card">
-          <div class="s-label">总作业数</div>
-          <div class="s-val">{{ jobSummary.total }}</div>
+    <!-- 图表区域：queried 后始终渲染，用 v-show 控制可见性保证 ref 有效 -->
+    <template v-if="queried">
+      <!-- 作业趋势折线图 -->
+      <div class="card chart-card">
+        <div class="card-title">每月各队列作业数趋势</div>
+        <div ref="lineChartRef" style="width:100%;height:300px"></div>
+      </div>
+
+      <!-- 作业规模 + 核时柱状图 -->
+      <div class="chart-row">
+        <div class="card chart-card">
+          <div class="card-title">作业规模分布</div>
+          <div ref="scaleChartRef" style="width:100%;height:280px"></div>
         </div>
-        <div class="s-card">
-          <div class="s-label">已完成</div>
-          <div class="s-val" style="color:#10b981">{{ jobSummary.completed }}</div>
-        </div>
-        <div class="s-card">
-          <div class="s-label">失败</div>
-          <div class="s-val" style="color:#ef4444">{{ jobSummary.failed }}</div>
-        </div>
-        <div class="s-card">
-          <div class="s-label">取消</div>
-          <div class="s-val" style="color:#f59e0b">{{ jobSummary.cancelled }}</div>
-        </div>
-        <div class="s-card">
-          <div class="s-label">总 CPU 小时</div>
-          <div class="s-val">{{ jobSummary.cpuHours.toFixed(1) }}</div>
-        </div>
-        <div class="s-card">
-          <div class="s-label">总 GPU 小时</div>
-          <div class="s-val">{{ jobSummary.gpuHours.toFixed(1) }}</div>
+        <div class="card chart-card">
+          <div class="card-title">GPU / CPU 核时用量</div>
+          <div ref="usageChartRef" style="width:100%;height:280px"></div>
         </div>
       </div>
 
-      <div class="card">
-        <div class="card-title">作业明细</div>
-        <div class="table-wrap">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>作业ID</th><th>作业名</th><th>用户</th><th>账户</th>
-                <th>分区</th><th>状态</th><th>开始时间</th><th>运行时长</th>
-                <th>CPU小时</th><th>GPU小时</th><th>计费核时</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="r in jobRecords" :key="r.job_id">
-                <td><code>{{ r.job_id }}</code></td>
-                <td>{{ r.job_name || '-' }}</td>
-                <td>{{ r.user || '-' }}</td>
-                <td>{{ r.account || '-' }}</td>
-                <td>{{ r.partition || '-' }}</td>
-                <td><span :class="['state-badge', `state-${(r.state||'').toLowerCase()}`]">{{ r.state || '-' }}</span></td>
-                <td>{{ fmtTime(r.start_time) }}</td>
-                <td>{{ fmtElapsed(r.elapsed_secs) }}</td>
-                <td>{{ (r.cpu_hours||0).toFixed(2) }}</td>
-                <td>{{ (r.gpu_hours||0).toFixed(2) }}</td>
-                <td><strong>{{ (r.billing_mins||0).toFixed(1) }}</strong></td>
-              </tr>
-              <tr v-if="jobRecords.length === 0">
-                <td colspan="11" class="empty-cell">暂无数据</td>
-              </tr>
-            </tbody>
-          </table>
+      <!-- 计费核时 + 配额使用进度 -->
+      <div class="chart-row">
+        <div class="card chart-card">
+          <div class="card-title">计费核时使用比例</div>
+          <div ref="billingChartRef" style="width:100%;height:280px"></div>
         </div>
+        <div class="card chart-card">
+          <div class="card-title">配额使用率 <span class="account-tag" v-if="quotaStats?.account">{{ quotaStats.account }}</span></div>
+          <div ref="quotaChartRef" style="width:100%;height:280px"></div>
+        </div>
+      </div>
+
+      <!-- 存储用量柱状图 -->
+      <div class="card" v-show="storageStats && storageStats.length > 0">
+        <div class="card-title">存储配额使用情况</div>
+        <div ref="storageChartRef" :style="{ width:'100%', height: storageChartHeight + 'px' }"></div>
+      </div>
+
+      <!-- QoS 计费核时使用量 -->
+      <div class="card chart-card">
+        <div class="card-title">QoS 计费核时使用量</div>
+        <div ref="qosChartRef" style="width:100%;height:280px"></div>
       </div>
     </template>
 
-    <!-- 机时消耗报表 -->
-    <template v-else-if="filters.type === 'machine-time' && hasData">
-      <div class="summary-cards">
-        <div class="s-card">
-          <div class="s-label">账户数</div>
-          <div class="s-val">{{ machineRecords.length }}</div>
-        </div>
-        <div class="s-card">
-          <div class="s-label">总 CPU 小时</div>
-          <div class="s-val">{{ machineTotals.cpuHours.toFixed(1) }}</div>
-        </div>
-        <div class="s-card">
-          <div class="s-label">总 GPU 小时</div>
-          <div class="s-val">{{ machineTotals.gpuHours.toFixed(1) }}</div>
-        </div>
-        <div class="s-card">
-          <div class="s-label">总计费核时</div>
-          <div class="s-val" style="color:#667eea">{{ machineTotals.billingMins.toFixed(1) }}</div>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-title">账户机时消耗</div>
-        <div class="table-wrap">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>账户</th><th>作业数</th><th>CPU小时</th>
-                <th>节点小时</th><th>GPU小时</th><th>计费核时</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="r in machineRecords" :key="r.account">
-                <td><strong>{{ r.account }}</strong></td>
-                <td>{{ r.job_count || r.jobs?.length || '-' }}</td>
-                <td>{{ (r.cpu_hours||0).toFixed(2) }}</td>
-                <td>{{ (r.node_hours||0).toFixed(2) }}</td>
-                <td>{{ (r.gpu_hours||0).toFixed(2) }}</td>
-                <td><strong style="color:#667eea">{{ (r.billing_mins||0).toFixed(1) }}</strong></td>
-              </tr>
-              <tr v-if="machineRecords.length === 0">
-                <td colspan="6" class="empty-cell">暂无数据</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </template>
-
-    <!-- 节点运行报表 -->
-    <template v-else-if="filters.type === 'node' && hasData">
-      <div class="summary-cards">
-        <div class="s-card">
-          <div class="s-label">总节点数</div>
-          <div class="s-val">{{ nodeStats.total }}</div>
-        </div>
-        <div class="s-card">
-          <div class="s-label">在线节点</div>
-          <div class="s-val" style="color:#10b981">{{ nodeStats.online }}</div>
-        </div>
-        <div class="s-card">
-          <div class="s-label">离线节点</div>
-          <div class="s-val" style="color:#ef4444">{{ nodeStats.down }}</div>
-        </div>
-        <div class="s-card">
-          <div class="s-label">总 CPU 核</div>
-          <div class="s-val">{{ nodeStats.totalCPU }}</div>
-        </div>
-        <div class="s-card">
-          <div class="s-label">已分配 CPU</div>
-          <div class="s-val" style="color:#667eea">{{ nodeStats.allocCPU }}</div>
-        </div>
-        <div class="s-card">
-          <div class="s-label">CPU 使用率</div>
-          <div class="s-val">{{ nodeStats.cpuPct.toFixed(1) }}%</div>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="card-title">节点详情</div>
-        <div class="table-wrap">
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>节点名</th><th>状态</th><th>CPU总/已分配</th>
-                <th>CPU使用率</th><th>内存总/已分配</th><th>内存使用率</th>
-                <th>GPU</th><th>运行作业</th><th>分区</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="n in nodeRecords" :key="n.name">
-                <td><code>{{ n.name }}</code></td>
-                <td><span :class="['state-badge', nodeStateClass(n.state)]">{{ n.state }}</span></td>
-                <td>{{ n.cpu_total }} / {{ n.cpu_allocated }}</td>
-                <td>
-                  <div class="mini-bar">
-                    <div class="mini-fill" :style="{ width: n.cpu_usage_percent + '%', background: n.cpu_usage_percent > 90 ? '#ef4444' : '#667eea' }"></div>
-                    <span>{{ n.cpu_usage_percent.toFixed(0) }}%</span>
-                  </div>
-                </td>
-                <td>{{ fmtMem(n.memory_total_mb) }} / {{ fmtMem(n.memory_allocated_mb) }}</td>
-                <td>
-                  <div class="mini-bar">
-                    <div class="mini-fill" :style="{ width: n.memory_usage_percent + '%', background: n.memory_usage_percent > 90 ? '#ef4444' : '#10b981' }"></div>
-                    <span>{{ n.memory_usage_percent.toFixed(0) }}%</span>
-                  </div>
-                </td>
-                <td>{{ n.gpu_info || '-' }}</td>
-                <td>{{ n.running_jobs }}</td>
-                <td>{{ (n.partitions||[]).join(', ') || '-' }}</td>
-              </tr>
-              <tr v-if="nodeRecords.length === 0">
-                <td colspan="9" class="empty-cell">暂无数据</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </template>
-
-    <div v-else-if="!loading && !error && !hasData" class="card" style="text-align:center;padding:3rem;color:#9ca3af">
-      <div style="font-size:3rem;margin-bottom:1rem">📊</div>
-      <p>选择报表类型和时间范围后点击查询</p>
+    <div v-else-if="!loading" class="state-card">
+      <div class="empty-icon">📊</div>
+      <p>选择时间范围后点击查询</p>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
-import { getApiBase, isAdmin } from '../utils/auth'
+import { ref, computed, nextTick, onMounted, watch } from 'vue'
+import * as echarts from 'echarts'
 import axios from 'axios'
+import { reportAPI, type JobStatsResult, type UsageStatsResult, type StorageStatItem, type QuotaStatsResult, type QoSUsageItem } from '../api/report'
+
+function formatDate(d: Date) { return d.toISOString().split('T')[0] }
+const today = new Date()
+const thirtyDaysAgo = new Date(today)
+thirtyDaysAgo.setDate(today.getDate() - 30)
 
 const loading = ref(false)
-const error = ref('')
-
-// 默认时间范围：本月
-const now = new Date()
-const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
-const today = now.toISOString().split('T')[0]
+const globalError = ref('')
+const partitions = ref<string[]>([])
 
 const filters = ref({
-  type: 'job',
-  startDate: firstDay,
-  endDate: today,
+  startDate: formatDate(thirtyDaysAgo),
+  endDate: formatDate(today),
+  partition: '',
 })
 
-// 各类型数据
-const jobRecords = ref<any[]>([])
-const machineRecords = ref<any[]>([])
-const nodeRecords = ref<any[]>([])
+const jobStats     = ref<JobStatsResult | null>(null)
+const usageStats   = ref<UsageStatsResult | null>(null)
+const storageStats = ref<StorageStatItem[] | null>(null)
+const quotaStats   = ref<QuotaStatsResult | null>(null)
+const qosUsage     = ref<QoSUsageItem[]>([])
 
-const hasData = computed(() => {
-  if (filters.value.type === 'job') return jobRecords.value.length > 0
-  if (filters.value.type === 'machine-time') return machineRecords.value.length > 0
-  if (filters.value.type === 'node') return nodeRecords.value.length > 0
-  return false
+const lineChartRef    = ref<HTMLElement | null>(null)
+const scaleChartRef   = ref<HTMLElement | null>(null)
+const usageChartRef   = ref<HTMLElement | null>(null)
+const storageChartRef = ref<HTMLElement | null>(null)
+const qosChartRef     = ref<HTMLElement | null>(null)
+const billingChartRef = ref<HTMLElement | null>(null)
+const quotaChartRef   = ref<HTMLElement | null>(null)
+let lineChart: echarts.ECharts | null = null
+let scaleChart: echarts.ECharts | null = null
+let usageChart: echarts.ECharts | null = null
+let storageChart: echarts.ECharts | null = null
+let qosChart: echarts.ECharts | null = null
+let billingChart: echarts.ECharts | null = null
+let quotaChart: echarts.ECharts | null = null
+
+const dateError = computed(() => {
+  if (filters.value.startDate && filters.value.endDate && filters.value.startDate > filters.value.endDate)
+    return '开始日期不能晚于结束日期'
+  return ''
 })
 
-// 作业汇总
-const jobSummary = computed(() => {
-  const records = jobRecords.value
-  return {
-    total: records.length,
-    completed: records.filter(r => (r.state||'').toUpperCase().includes('COMPLETED')).length,
-    failed: records.filter(r => (r.state||'').toUpperCase().includes('FAILED')).length,
-    cancelled: records.filter(r => (r.state||'').toUpperCase().includes('CANCEL')).length,
-    cpuHours: records.reduce((s, r) => s + (r.cpu_hours || 0), 0),
-    gpuHours: records.reduce((s, r) => s + (r.gpu_hours || 0), 0),
-  }
-})
+// 查询完成后始终显示图表区域（各图自带 mock 兜底）
+const hasAnyData = computed(() => queried.value)
+const queried = ref(false)
 
-// 机时汇总
-const machineTotals = computed(() => ({
-  cpuHours: machineRecords.value.reduce((s, r) => s + (r.cpu_hours || 0), 0),
-  gpuHours: machineRecords.value.reduce((s, r) => s + (r.gpu_hours || 0), 0),
-  billingMins: machineRecords.value.reduce((s, r) => s + (r.billing_mins || 0), 0),
-}))
+const storageChartHeight = computed(() =>
+  Math.max(260, (storageStats.value?.length ?? 0) * 60)
+)
 
-// 节点汇总
-const nodeStats = computed(() => {
-  const nodes = nodeRecords.value
-  return {
-    total: nodes.length,
-    online: nodes.filter(n => !n.state?.toLowerCase().includes('down')).length,
-    down: nodes.filter(n => n.state?.toLowerCase().includes('down')).length,
-    totalCPU: nodes.reduce((s, n) => s + (n.cpu_total || 0), 0),
-    allocCPU: nodes.reduce((s, n) => s + (n.cpu_allocated || 0), 0),
-    cpuPct: nodes.length ? nodes.reduce((s, n) => s + (n.cpu_usage_percent || 0), 0) / nodes.length : 0,
-  }
-})
+async function loadPartitions() {
+  try {
+    const res = await axios.get<{ data: string[] }>('/jobs/partitions/list')
+    partitions.value = res.data?.data ?? []
+  } catch { partitions.value = [] }
+}
 
-const token = () => localStorage.getItem('token') || sessionStorage.getItem('token') || ''
-
-const loadReport = async () => {
+async function loadAll() {
+  if (dateError.value) return
   loading.value = true
-  error.value = ''
-  jobRecords.value = []
-  machineRecords.value = []
-  nodeRecords.value = []
+  globalError.value = ''
+  queried.value = false
+  jobStats.value = null; usageStats.value = null
+  storageStats.value = null; quotaStats.value = null; qosUsage.value = []
+  disposeCharts()
+
+  const params = {
+    start_time: filters.value.startDate,
+    end_time:   filters.value.endDate,
+    partition:  filters.value.partition || undefined,
+    // 不传 user 参数，后端强制查当前登录用户自己
+  }
 
   try {
-    const { startDate, endDate, type } = filters.value
-
-    if (type === 'job') {
-      // 管理员拉全量，普通用户拉自己的
-      const userParam = isAdmin() ? '' : `&user=${encodeURIComponent(getUserName())}`
-      let url = `${getApiBase()}/api/jobs?page=1&page_size=2000&start_time=${startDate}&end_time=${endDate}${userParam}`
-      const res = await fetch(url, { headers: { Authorization: `Bearer ${token()}` } })
-      if (!res.ok) throw new Error((await res.json()).error || '获取作业数据失败')
-      const data = await res.json()
-      // jobs API 返回的是 job_state 字段，需要映射到 state
-      jobRecords.value = (data.data || []).map((j: any) => ({
-        job_id: j.job_id,
-        job_name: j.name,
-        user: j.user_name || j.user_id || j.user,
-        account: j.account,
-        partition: j.partition,
-        state: j.job_state,
-        start_time: j.start_time,
-        elapsed_secs: j.run_time,
-        cpu_hours: j.cpus ? (j.run_time || 0) * (j.cpus || 0) / 3600 : 0,
-        gpu_hours: 0,
-        billing_mins: 0,
-      }))
-      // 尝试用 usage API 补充机时数据
-      try {
-        const uRes = await fetch(
-          `${getApiBase()}/api/usage/user?user=${encodeURIComponent(getUserName())}&start_time=${startDate}&end_time=${endDate}`,
-          { headers: { Authorization: `Bearer ${token()}` } }
-        )
-        if (uRes.ok) {
-          const uData = await uRes.json()
-          const usageMap: Record<string, any> = {}
-          for (const r of (uData.data || [])) usageMap[r.job_id] = r
-          jobRecords.value = jobRecords.value.map((j: any) => {
-            const u = usageMap[j.job_id]
-            if (u) return { ...j, cpu_hours: u.cpu_hours, gpu_hours: u.gpu_hours, billing_mins: u.billing_mins || u.billing_hours * 60 }
-            return j
-          })
-        }
-      } catch { /* 忽略，用基础数据 */ }
-
-    } else if (type === 'machine-time') {
-      const res = await fetch(
-        `${getApiBase()}/api/usage/accounts?start_time=${startDate}&end_time=${endDate}`,
-        { headers: { Authorization: `Bearer ${token()}` } }
-      )
-      if (!res.ok) throw new Error((await res.json()).error || '获取机时数据失败')
-      const data = await res.json()
-      machineRecords.value = data.data || []
-
-    } else if (type === 'node') {
-      const res = await fetch(`${getApiBase()}/api/dashboard/nodes`, {
-        headers: { Authorization: `Bearer ${token()}` }
-      })
-      if (!res.ok) throw new Error((await res.json()).error || '获取节点数据失败')
-      const data = await res.json()
-      nodeRecords.value = data.data || []
+    const [jobRes, usageRes, storageRes, quotaRes, qosRes] = await Promise.allSettled([
+      reportAPI.getJobStats(params),
+      reportAPI.getUsageStats(params),
+      reportAPI.getStorageStats(params),
+      reportAPI.getQuotaStats(params),
+      reportAPI.getQoSUsage(params),
+    ])
+    if (jobRes.status === 'fulfilled')     jobStats.value     = jobRes.value.data.data
+    if (usageRes.status === 'fulfilled')   usageStats.value   = usageRes.value.data.data
+    if (storageRes.status === 'fulfilled') storageStats.value = storageRes.value.data.data
+    if (quotaRes.status === 'fulfilled')   quotaStats.value   = quotaRes.value.data.data
+    // QoS 接口失败时用 mock 数据兜底，保证图表始终可见
+    if (qosRes.status === 'fulfilled' && qosRes.value.data.data?.length) {
+      qosUsage.value = qosRes.value.data.data
+    } else {
+      qosUsage.value = [
+        { qos_name: 'normal',   used_billing_hours: 0, total_billing_hours: 0,    usage_percent: 0,  status: 'NORMAL' },
+        { qos_name: 'high',     used_billing_hours: 0, total_billing_hours: 0,    usage_percent: 0,  status: 'NORMAL' },
+        { qos_name: 'gpu',      used_billing_hours: 0, total_billing_hours: 0,    usage_percent: 0,  status: 'NORMAL' },
+      ]
     }
+    queried.value = true
+    loading.value = false
   } catch (e: any) {
-    error.value = e.message || '查询失败'
+    globalError.value = e?.message || '查询失败'
   } finally {
     loading.value = false
   }
 }
 
-const getUserName = () => {
-  try {
-    const u = JSON.parse(localStorage.getItem('user') || sessionStorage.getItem('user') || '{}')
-    return u.username || ''
-  } catch { return '' }
+function disposeCharts() {
+  lineChart?.dispose();    lineChart = null
+  scaleChart?.dispose();   scaleChart = null
+  usageChart?.dispose();   usageChart = null
+  storageChart?.dispose(); storageChart = null
+  qosChart?.dispose();     qosChart = null
+  billingChart?.dispose(); billingChart = null
+  quotaChart?.dispose();   quotaChart = null
 }
 
-// 导出 CSV
-const exportCSV = () => {
-  let rows: string[] = []
-  const { type, startDate, endDate } = filters.value
+function renderAllCharts() {
+  console.log('[Charts] renderAllCharts called', {
+    line: lineChartRef.value,
+    scale: scaleChartRef.value,
+    usage: usageChartRef.value,
+  })
+  renderLineChart()
+  renderScaleChart()
+  renderUsageChart()
+  renderStorageChart()
+  renderQoSChart()
+  renderBillingChart()
+  renderQuotaChart()
+}
 
-  if (type === 'job') {
-    rows = [
-      '作业ID,作业名,用户,账户,分区,状态,开始时间,运行时长(秒),CPU小时,GPU小时,计费核时',
-      ...jobRecords.value.map(r =>
-        [r.job_id, `"${r.job_name||''}"`, r.user||'', r.account||'', r.partition||'',
-         r.state||'', fmtTime(r.start_time), r.elapsed_secs||0,
-         (r.cpu_hours||0).toFixed(2), (r.gpu_hours||0).toFixed(2), (r.billing_mins||0).toFixed(1)].join(',')
-      )
-    ]
-  } else if (type === 'machine-time') {
-    rows = [
-      '账户,作业数,CPU小时,节点小时,GPU小时,计费核时',
-      ...machineRecords.value.map(r =>
-        [r.account, r.job_count||0, (r.cpu_hours||0).toFixed(2),
-         (r.node_hours||0).toFixed(2), (r.gpu_hours||0).toFixed(2), (r.billing_mins||0).toFixed(1)].join(',')
-      )
-    ]
-  } else if (type === 'node') {
-    rows = [
-      '节点名,状态,CPU总数,已分配CPU,CPU使用率%,内存总MB,已分配内存MB,内存使用率%,运行作业,分区',
-      ...nodeRecords.value.map(n =>
-        [n.name, n.state, n.cpu_total, n.cpu_allocated, n.cpu_usage_percent.toFixed(1),
-         n.memory_total_mb, n.memory_allocated_mb, n.memory_usage_percent.toFixed(1),
-         n.running_jobs, (n.partitions||[]).join(';')].join(',')
-      )
-    ]
+// queried 变为 true 时 DOM 已就绪，直接渲染
+watch(queried, async (val) => {
+  if (val) {
+    await nextTick()
+    await nextTick()
+    console.log('[Charts] watch queried triggered, lineRef=', lineChartRef.value)
+    renderAllCharts()
   }
+})
 
-  const bom = '\uFEFF'
-  const blob = new Blob([bom + rows.join('\n')], { type: 'text/csv;charset=utf-8' })
-  const a = document.createElement('a')
-  a.href = URL.createObjectURL(blob)
-  a.download = `report_${type}_${startDate}_${endDate}.csv`
-  a.click()
+// 统一颜色配置（浅色主题）
+const C = {
+  text:       '#374151',
+  muted:      '#6b7280',
+  axis:       '#d1d5db',
+  split:      '#f3f4f6',
+  colors:     ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#3b82f6', '#8b5cf6'],
 }
 
-// 格式化工具
-const fmtTime = (ts: any) => {
-  if (!ts || ts === 0) return '-'
-  try { return new Date(ts * 1000).toLocaleString('zh-CN') } catch { return '-' }
+// 月度作业趋势折线图
+function renderLineChart() {
+  if (!lineChartRef.value) return
+  if (!lineChart) lineChart = echarts.init(lineChartRef.value)
+  const counts = jobStats.value?.monthly_job_counts ?? []
+  const hasData = counts.length > 0
+  const months = hasData ? [...new Set(counts.map(c => c.month))].sort() : ['2026-01','2026-02','2026-03','2026-04']
+  const queues = hasData ? [...new Set(counts.map(c => c.partition))] : ['normal','gpu']
+
+  lineChart.setOption({
+    backgroundColor: 'transparent',
+    tooltip: { trigger: 'axis', backgroundColor: '#fff', borderColor: '#e5e7eb', textStyle: { color: C.text } },
+    legend: { data: queues, textStyle: { color: C.muted }, bottom: 4 },
+    grid: { left: '3%', right: '4%', bottom: '14%', top: '6%', containLabel: true },
+    xAxis: { type: 'category', data: months, boundaryGap: false, axisLabel: { color: C.muted, fontSize: 12 }, axisLine: { lineStyle: { color: C.axis } }, axisTick: { show: false } },
+    yAxis: { type: 'value', name: '作业数', nameTextStyle: { color: C.muted }, axisLabel: { color: C.muted }, splitLine: { lineStyle: { color: C.split } }, axisLine: { show: false } },
+    series: queues.map((q, i) => ({
+      name: q, type: 'line' as const, smooth: true, symbol: 'circle', symbolSize: 7,
+      lineStyle: { width: 2.5, color: C.colors[i % C.colors.length] },
+      itemStyle: { color: C.colors[i % C.colors.length] },
+      areaStyle: { color: C.colors[i % C.colors.length], opacity: 0.06 },
+      data: hasData ? months.map(m => counts.find(c => c.month === m && c.partition === q)?.count ?? 0) : [0,0,0,0],
+    })),
+  })
 }
 
-const fmtElapsed = (secs: any) => {
-  if (!secs || secs <= 0) return '-'
-  const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60), s = secs % 60
-  return h > 0 ? `${h}时${m}分` : m > 0 ? `${m}分${s}秒` : `${s}秒`
+// 作业规模柱状图
+function renderScaleChart() {
+  if (!scaleChartRef.value) return
+  if (!scaleChart) scaleChart = echarts.init(scaleChartRef.value)
+  const dist = jobStats.value?.job_scale_distribution ?? []
+  const total = jobStats.value?.total_jobs ?? 0
+  const ranges = dist.length > 0 ? dist : [
+    { range: '1-4核', count: 0 }, { range: '5-16核', count: 0 },
+    { range: '17-64核', count: 0 }, { range: '64核以上', count: 0 },
+  ]
+  scaleChart.setOption({
+    backgroundColor: 'transparent',
+    tooltip: { trigger: 'axis', backgroundColor: '#fff', borderColor: '#e5e7eb', textStyle: { color: C.text },
+      formatter: (p: any) => { const pct = total > 0 ? (p[0].value / total * 100).toFixed(1) : 0; return `${p[0].name}<br/>作业数: <b>${p[0].value}</b>（${pct}%）` } },
+    grid: { left: '3%', right: '4%', bottom: '3%', top: '6%', containLabel: true },
+    xAxis: { type: 'category', data: ranges.map(d => d.range), axisLabel: { color: C.muted }, axisLine: { lineStyle: { color: C.axis } }, axisTick: { show: false } },
+    yAxis: { type: 'value', name: '作业数', nameTextStyle: { color: C.muted }, axisLabel: { color: C.muted }, splitLine: { lineStyle: { color: C.split } }, axisLine: { show: false } },
+    series: [{ type: 'bar', data: ranges.map(d => d.count), itemStyle: { color: C.colors[0], borderRadius: [6,6,0,0] }, label: { show: true, position: 'top', color: C.muted, fontSize: 12 }, barMaxWidth: 56 }],
+  })
 }
 
-const fmtMem = (mb: number) => {
-  if (!mb) return '-'
-  return mb >= 1024 ? (mb / 1024).toFixed(1) + ' GB' : mb + ' MB'
+// GPU / CPU 核时柱状图
+function renderUsageChart() {
+  if (!usageChartRef.value) return
+  if (!usageChart) usageChart = echarts.init(usageChartRef.value)
+  const u = usageStats.value
+  usageChart.setOption({
+    backgroundColor: 'transparent',
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, backgroundColor: '#fff', borderColor: '#e5e7eb', textStyle: { color: C.text } },
+    grid: { left: '3%', right: '4%', bottom: '3%', top: '6%', containLabel: true },
+    xAxis: { type: 'category', data: ['GPU 卡时', 'CPU 核时', '计费核时'], axisLabel: { color: C.muted }, axisLine: { lineStyle: { color: C.axis } }, axisTick: { show: false } },
+    yAxis: { type: 'value', name: '小时(h)', nameTextStyle: { color: C.muted }, axisLabel: { color: C.muted }, splitLine: { lineStyle: { color: C.split } }, axisLine: { show: false } },
+    series: [{
+      type: 'bar',
+      data: [
+        { value: u ? +u.gpu_hours.toFixed(2) : 0,     itemStyle: { color: C.colors[0] } },
+        { value: u ? +u.cpu_hours.toFixed(2) : 0,     itemStyle: { color: C.colors[1] } },
+        { value: u ? +u.billing_hours.toFixed(2) : 0, itemStyle: { color: C.colors[2] } },
+      ],
+      label: { show: true, position: 'top', color: C.muted, fontSize: 12, formatter: (p: any) => `${p.value}h` },
+      barMaxWidth: 56, itemStyle: { borderRadius: [6,6,0,0] },
+    }],
+  })
 }
 
-const nodeStateClass = (state: string) => {
-  const s = (state || '').toLowerCase()
-  if (s.includes('idle')) return 'state-idle'
-  if (s.includes('alloc') || s.includes('mix')) return 'state-running'
-  if (s.includes('down') || s.includes('drain')) return 'state-failed'
-  return 'state-unknown'
+// 存储用量水平柱状图
+function renderStorageChart() {
+  if (!storageChartRef.value || !storageStats.value?.length) return
+  if (!storageChart) storageChart = echarts.init(storageChartRef.value)
+  const items = storageStats.value
+  const labels = items.map(i => `${i.username}  ${i.filesystem}`)
+  const barColors = items.map(i => i.over_soft_limit ? '#f59e0b' : '#10b981')
+  storageChart.resize()
+  storageChart.setOption({
+    backgroundColor: 'transparent',
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, backgroundColor: '#fff', borderColor: '#e5e7eb', textStyle: { color: C.text },
+      formatter: (params: any[]) => { const i = items[params[0].dataIndex]; return `<b>${i.username}</b> ${i.filesystem}<br/>已用: <b>${i.used_gb.toFixed(2)} GB</b><br/>软限制: ${i.soft_limit_gb.toFixed(2)} GB<br/>硬限制: ${i.hard_limit_gb.toFixed(2)} GB<br/>使用率: <b>${i.usage_percent.toFixed(1)}%</b>${i.over_soft_limit ? '<br/><span style="color:#f59e0b">⚠ 超软限制</span>' : ''}` },
+    },
+    legend: { data: ['已用量', '软限制', '硬限制'], textStyle: { color: C.muted }, top: 4 },
+    grid: { left: '2%', right: '8%', top: 36, bottom: '2%', containLabel: true },
+    xAxis: { type: 'value', name: 'GB', nameTextStyle: { color: C.muted }, axisLabel: { color: C.muted }, splitLine: { lineStyle: { color: C.split } }, axisLine: { show: false } },
+    yAxis: { type: 'category', data: labels, axisLabel: { color: C.text, fontSize: 12 }, axisLine: { lineStyle: { color: C.axis } } },
+    series: [
+      { name: '已用量', type: 'bar', data: items.map((v, i) => ({ value: +v.used_gb.toFixed(2), itemStyle: { color: barColors[i] } })), label: { show: true, position: 'right', color: C.muted, fontSize: 11, formatter: (p: any) => `${p.value} GB` }, barMaxWidth: 28, z: 3 },
+      { name: '软限制', type: 'bar', data: items.map(i => +i.soft_limit_gb.toFixed(2)), itemStyle: { color: 'rgba(245,158,11,0.15)', borderColor: '#f59e0b', borderWidth: 1 }, barMaxWidth: 28, barGap: '-100%', z: 2 },
+      { name: '硬限制', type: 'bar', data: items.map(i => +i.hard_limit_gb.toFixed(2)), itemStyle: { color: 'rgba(107,114,128,0.08)', borderColor: '#d1d5db', borderWidth: 1 }, barMaxWidth: 28, barGap: '-100%', z: 1 },
+    ],
+  })
 }
 
-onMounted(() => loadReport())
+// 计费核时使用比例 — 仪表盘图
+function renderBillingChart() {
+  if (!billingChartRef.value || !usageStats.value) return
+  if (!billingChart) billingChart = echarts.init(billingChartRef.value)
+  const u = usageStats.value
+  const noLimit = u.quota_billing_hours === 0
+  const used = +u.billing_hours.toFixed(2)
+  const total = noLimit ? Math.max(used * 1.5, 100) : +u.quota_billing_hours.toFixed(2)
+  const pct = noLimit ? 0 : +u.usage_percent.toFixed(1)
+  const color = noLimit ? C.colors[0] : statusColor(u.status)
+  billingChart.setOption({
+    backgroundColor: 'transparent',
+    series: [{
+      type: 'gauge', startAngle: 200, endAngle: -20, min: 0, max: 100, radius: '88%',
+      pointer: { show: !noLimit, length: '60%', width: 4, itemStyle: { color } },
+      progress: { show: true, width: 16, itemStyle: { color } },
+      axisLine: { lineStyle: { width: 16, color: [[1, '#f3f4f6']] } },
+      axisTick: { show: false }, splitLine: { show: false }, axisLabel: { show: false },
+      detail: { valueAnimation: true, formatter: noLimit ? `${used}h` : `{value}%`, color: C.text, fontSize: 22, fontWeight: 700, offsetCenter: [0, '15%'] },
+      title: { show: true, offsetCenter: [0, '50%'], color: C.muted, fontSize: 13, formatter: noLimit ? '无配额限制' : `${used} / ${total} h` },
+      data: [{ value: noLimit ? 0 : pct, name: noLimit ? '无配额限制' : `${used} / ${total} h` }],
+    }],
+  })
+}
+
+// 配额使用率 — 仪表盘图
+function renderQuotaChart() {
+  if (!quotaChartRef.value) return
+  if (!quotaChart) quotaChart = echarts.init(quotaChartRef.value)
+  const q = quotaStats.value
+  const used = q ? +q.used_billing_hours.toFixed(2) : 0
+  const total = q ? +q.total_billing_hours.toFixed(2) : 0
+  const pct = q ? +q.usage_percent.toFixed(1) : 0
+  const color = q ? statusColor(q.status) : '#d1d5db'
+  const noData = !q?.account
+  quotaChart.setOption({
+    backgroundColor: 'transparent',
+    series: [{
+      type: 'gauge', startAngle: 200, endAngle: -20, min: 0, max: 100, radius: '88%',
+      pointer: { show: !noData, length: '60%', width: 4, itemStyle: { color } },
+      progress: { show: true, width: 16, itemStyle: { color } },
+      axisLine: { lineStyle: { width: 16, color: [[1, '#f3f4f6']] } },
+      axisTick: { show: false }, splitLine: { show: false }, axisLabel: { show: false },
+      detail: { valueAnimation: true, formatter: noData ? '-' : `{value}%`, color: noData ? '#d1d5db' : C.text, fontSize: 22, fontWeight: 700, offsetCenter: [0, '15%'] },
+      title: { show: true, offsetCenter: [0, '50%'], color: C.muted, fontSize: 13, formatter: noData ? '暂无配额数据' : `${used} / ${total} h` },
+      data: [{ value: pct, name: noData ? '暂无配额数据' : `${used} / ${total} h` }],
+    }],
+  })
+}
+
+// QoS 计费核时使用量柱状图
+function renderQoSChart() {
+  if (!qosChartRef.value || !qosUsage.value.length) return
+  if (!qosChart) qosChart = echarts.init(qosChartRef.value)
+  const items = qosUsage.value
+  const names = items.map(i => i.qos_name)
+  const usedData = items.map(i => +i.used_billing_hours.toFixed(2))
+  const totalData = items.map(i => i.total_billing_hours > 0 ? +i.total_billing_hours.toFixed(2) : 0)
+  const barColors = items.map(i => statusColor(i.status))
+  qosChart.setOption({
+    backgroundColor: 'transparent',
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, backgroundColor: '#fff', borderColor: '#e5e7eb', textStyle: { color: C.text },
+      formatter: (params: any[]) => { const idx = params[0].dataIndex; const item = items[idx]; const quota = item.total_billing_hours > 0 ? `配额: ${item.total_billing_hours.toFixed(2)} h<br/>使用率: <b>${item.usage_percent.toFixed(1)}%</b>` : '配额: 无限制'; return `<b>${item.qos_name}</b><br/>已用: <b>${item.used_billing_hours.toFixed(2)} h</b><br/>${quota}` },
+    },
+    legend: { data: ['已用核时', '配额上限'], textStyle: { color: C.muted }, bottom: 4 },
+    grid: { left: '3%', right: '4%', bottom: '14%', top: '6%', containLabel: true },
+    xAxis: { type: 'category', data: names, axisLabel: { color: C.muted }, axisLine: { lineStyle: { color: C.axis } }, axisTick: { show: false } },
+    yAxis: { type: 'value', name: '核时(h)', nameTextStyle: { color: C.muted }, axisLabel: { color: C.muted }, splitLine: { lineStyle: { color: C.split } }, axisLine: { show: false } },
+    series: [
+      { name: '已用核时', type: 'bar', data: usedData.map((v, i) => ({ value: v, itemStyle: { color: barColors[i], borderRadius: [6,6,0,0] } })), label: { show: true, position: 'top', color: C.muted, fontSize: 12, formatter: (p: any) => `${p.value}h` }, barMaxWidth: 56, z: 2 },
+      { name: '配额上限', type: 'bar', data: totalData, itemStyle: { color: 'rgba(99,102,241,0.08)', borderColor: '#c7d2fe', borderWidth: 1, borderRadius: [6,6,0,0] }, barMaxWidth: 56, barGap: '-100%', z: 1 },
+    ],
+  })
+}
+
+function statusColor(s: string) { return s === 'EXCEEDED' ? '#ef4444' : s === 'WARNING' ? '#f59e0b' : '#10b981' }
+function statusBg(s: string)    { return s === 'EXCEEDED' ? 'rgba(239,68,68,0.1)' : s === 'WARNING' ? 'rgba(245,158,11,0.1)' : 'rgba(16,185,129,0.1)' }
+function statusLabel(s: string) { return s === 'EXCEEDED' ? '已超限' : s === 'WARNING' ? '警告' : '正常' }
+
+function exportExcel() {
+  import('xlsx').then(XLSX => {
+    const wb = XLSX.utils.book_new()
+    const { startDate, endDate } = filters.value
+
+    if (jobStats.value) {
+      const j = jobStats.value
+      const ws1 = XLSX.utils.aoa_to_sheet([
+        ['月份', '队列', '作业数'],
+        ...j.monthly_job_counts.map(r => [r.month, r.partition, r.count]),
+      ])
+      ws1['!cols'] = [{ wch: 12 }, { wch: 16 }, { wch: 10 }]
+      XLSX.utils.book_append_sheet(wb, ws1, '月度作业趋势')
+
+      const ws2 = XLSX.utils.aoa_to_sheet([
+        ['规模范围', '作业数', '占比(%)'],
+        ...j.job_scale_distribution.map(r => [r.range, r.count, j.total_jobs > 0 ? +(r.count / j.total_jobs * 100).toFixed(1) : 0]),
+        ['合计', j.total_jobs, 100],
+      ])
+      ws2['!cols'] = [{ wch: 14 }, { wch: 10 }, { wch: 10 }]
+      XLSX.utils.book_append_sheet(wb, ws2, '作业规模分布')
+    }
+
+    if (usageStats.value) {
+      const u = usageStats.value
+      const ws = XLSX.utils.aoa_to_sheet([
+        ['指标', '数值', '单位'],
+        ['统计周期', `${startDate} ~ ${endDate}`, ''],
+        ['GPU 卡时', +u.gpu_hours.toFixed(2), 'h'],
+        ['CPU 核时', +u.cpu_hours.toFixed(2), 'h'],
+        ['计费核时', +u.billing_hours.toFixed(2), 'h'],
+        ['配额总量', u.quota_billing_hours === 0 ? '无限制' : +u.quota_billing_hours.toFixed(2), u.quota_billing_hours === 0 ? '' : 'h'],
+        ['使用率', +u.usage_percent.toFixed(2), '%'],
+        ['状态', statusLabel(u.status), ''],
+      ])
+      ws['!cols'] = [{ wch: 16 }, { wch: 16 }, { wch: 8 }]
+      XLSX.utils.book_append_sheet(wb, ws, '核时使用')
+    }
+
+    if (storageStats.value?.length) {
+      const ws = XLSX.utils.aoa_to_sheet([
+        ['用户名', '文件系统', '已用量(GB)', '软限制(GB)', '硬限制(GB)', '使用率(%)', '超软限制'],
+        ...storageStats.value.map(r => [r.username, r.filesystem, +r.used_gb.toFixed(2), +r.soft_limit_gb.toFixed(2), +r.hard_limit_gb.toFixed(2), +r.usage_percent.toFixed(2), r.over_soft_limit ? '是' : '否']),
+      ])
+      ws['!cols'] = [{ wch: 14 }, { wch: 20 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 10 }]
+      XLSX.utils.book_append_sheet(wb, ws, '存储用量')
+    }
+
+    if (quotaStats.value?.account) {
+      const q = quotaStats.value
+      const ws = XLSX.utils.aoa_to_sheet([
+        ['指标', '数值', '单位'],
+        ['统计周期', `${startDate} ~ ${endDate}`, ''],
+        ['账户', q.account, ''],
+        ['配额总量', +q.total_billing_hours.toFixed(2), 'h'],
+        ['已用量', +q.used_billing_hours.toFixed(2), 'h'],
+        ['剩余量', +q.remaining_billing_hours.toFixed(2), 'h'],
+        ['使用率', +q.usage_percent.toFixed(2), '%'],
+        ['状态', statusLabel(q.status), ''],
+      ])
+      ws['!cols'] = [{ wch: 16 }, { wch: 16 }, { wch: 8 }]
+      XLSX.utils.book_append_sheet(wb, ws, '配额情况')
+    }
+
+    if (wb.SheetNames.length === 0) return
+    XLSX.writeFile(wb, `报表中心_${startDate}_${endDate}.xlsx`)
+  })
+}
+
+onMounted(() => {
+  loadPartitions()
+  loadAll()
+})
 </script>
 
 <style scoped>
-.reports-page { display: flex; flex-direction: column; gap: 1.5rem; }
+.reports-page { display: flex; flex-direction: column; gap: 1rem; padding: 1rem 1.25rem; box-sizing: border-box; }
 
-.page-header { display: flex; justify-content: space-between; align-items: center; }
-.page-header h3 { margin: 0; font-size: 1.3rem; color: #333; }
+.filter-bar {
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem;
+  background: hsl(var(--card)); border: 1px solid hsl(var(--border)); border-radius: 10px; padding: 0.75rem 1.25rem;
+}
+.page-title { font-size: 1.1rem; font-weight: 700; color: hsl(var(--foreground)); }
+.filter-bar-right { display: flex; align-items: flex-end; gap: 0.75rem; flex-wrap: wrap; }
+.filter-item { display: flex; flex-direction: column; gap: 0.25rem; }
+.filter-item label { font-size: 0.72rem; font-weight: 600; color: hsl(var(--muted-foreground)); text-transform: uppercase; letter-spacing: 0.04em; }
+.filter-item select, .filter-item input[type="date"] {
+  padding: 0.45rem 0.7rem; border: 1px solid hsl(var(--border)); border-radius: 7px;
+  font-size: 0.85rem; background: hsl(var(--background)); color: hsl(var(--foreground)); outline: none;
+}
+.filter-item select:focus, .filter-item input[type="date"]:focus { border-color: hsl(var(--foreground) / 0.4); }
+.date-error { font-size: 0.8rem; color: #f5222d; align-self: center; }
 
-.filters-card { padding: 1.25rem 1.5rem; }
-.filters-row { display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap; }
-.filter-group { display: flex; flex-direction: column; gap: 0.4rem; min-width: 140px; }
-.filter-group label { font-size: 0.85rem; color: #666; font-weight: 600; }
-.filter-group select, .filter-group input {
-  padding: 0.55rem 0.75rem; border: 2px solid #e5e7eb;
-  border-radius: 6px; font-size: 0.9rem; background: #fff;
+.btn-primary, .btn-secondary {
+  padding: 7px 16px; border-radius: 7px; font-size: 0.85rem; font-weight: 600;
+  cursor: pointer; border: 1px solid hsl(var(--border)); white-space: nowrap; align-self: flex-end;
 }
-.filter-group select:focus, .filter-group input:focus { outline: none; border-color: #667eea; }
+.btn-primary { background: hsl(var(--foreground)); color: hsl(var(--background)); border-color: hsl(var(--foreground)); }
+.btn-primary:hover:not(:disabled) { opacity: 0.85; }
+.btn-secondary { background: hsl(var(--card)); color: hsl(var(--foreground)); }
+.btn-secondary:hover:not(:disabled) { background: hsl(var(--accent)); }
+.btn-primary:disabled, .btn-secondary:disabled { opacity: 0.4; cursor: not-allowed; }
 
-.summary-cards {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 1rem;
+.state-card {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 0.75rem; padding: 3rem; color: hsl(var(--muted-foreground)); text-align: center;
+  background: hsl(var(--card)); border: 1px solid hsl(var(--border)); border-radius: 10px;
 }
-.s-card {
-  background: #fff; border-radius: 10px; padding: 1.25rem 1rem;
-  box-shadow: 0 1px 4px rgba(0,0,0,.06); text-align: center;
-}
-.s-label { font-size: 0.8rem; color: #9ca3af; margin-bottom: 0.5rem; }
-.s-val { font-size: 1.6rem; font-weight: 700; color: #1f2937; }
+.error-state { color: #f5222d; }
+.empty-icon { font-size: 2.5rem; }
+.spinner { width: 26px; height: 26px; border: 3px solid hsl(var(--border)); border-top-color: hsl(var(--foreground)); border-radius: 50%; animation: spin 0.7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 
-.card-title { font-size: 1rem; font-weight: 700; color: #374151; margin-bottom: 1rem; }
+.card { background: hsl(var(--card)); border: 1px solid hsl(var(--border)); border-radius: 10px; padding: 1.25rem 1.5rem; }
+.card-title { font-size: 0.9rem; font-weight: 700; color: hsl(var(--foreground)); margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
+.account-tag { font-size: 0.75rem; font-weight: 500; color: hsl(var(--muted-foreground)); background: hsl(var(--muted)); padding: 2px 8px; border-radius: 10px; }
 
-.table-wrap { overflow-x: auto; }
-.data-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
-.data-table th {
-  padding: 0.65rem 0.9rem; background: #f8f9fc; text-align: left;
-  font-size: 0.78rem; font-weight: 700; color: #6b7280;
-  border-bottom: 1.5px solid #e8eaf0; white-space: nowrap;
-}
-.data-table td { padding: 0.6rem 0.9rem; border-bottom: 1px solid #f3f4f8; color: #374151; }
-.data-table tbody tr:hover { background: #f8f9fc; }
-.empty-cell { text-align: center; color: #9ca3af; padding: 2rem !important; }
+.chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+@media (max-width: 900px) { .chart-row { grid-template-columns: 1fr; } }
 
-.state-badge {
-  display: inline-block; padding: 0.2rem 0.55rem; border-radius: 10px;
-  font-size: 0.75rem; font-weight: 600;
-}
-.state-completed, .state-idle { background: #d1fae5; color: #065f46; }
-.state-running, .state-alloc { background: #dbeafe; color: #1e40af; }
-.state-failed, .state-down { background: #fee2e2; color: #991b1b; }
-.state-cancelled, .state-cancel { background: #fef3c7; color: #92400e; }
-.state-unknown { background: #f3f4f6; color: #6b7280; }
+.chart-card { min-height: 300px; }
+.chart-container { width: 100%; height: 260px; }
 
-.mini-bar {
-  display: flex; align-items: center; gap: 0.4rem;
-  min-width: 100px;
-}
-.mini-fill {
-  height: 6px; border-radius: 3px; min-width: 2px;
-  transition: width 0.3s;
-}
-.mini-bar span { font-size: 0.78rem; color: #6b7280; white-space: nowrap; }
+.progress-card { display: flex; flex-direction: column; gap: 0.75rem; }
+.progress-info { display: flex; justify-content: space-between; font-size: 0.875rem; color: hsl(var(--foreground)); }
+.progress-bar-wrap { width: 100%; height: 10px; background: hsl(var(--muted)); border-radius: 5px; overflow: hidden; }
+.progress-bar-fill { height: 100%; border-radius: 5px; transition: width 0.4s ease; }
+.status-badge { display: inline-block; padding: 3px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; width: fit-content; }
+.no-limit-info { color: hsl(var(--muted-foreground)); font-size: 0.875rem; }
+.quota-message { font-size: 0.8rem; color: hsl(var(--muted-foreground)); }
+
+.empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2rem; color: hsl(var(--muted-foreground)); gap: 0.5rem; }
 </style>

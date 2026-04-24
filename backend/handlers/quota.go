@@ -12,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"hpc-backend/logger"
+	"hpc-backend/slurm"
 )
 
 // QuotaInfo 配额信息
@@ -93,6 +94,7 @@ func GetFSInfo(c *gin.Context) {
 }
 
 // GetAllQuotas GET /api/files/quota/all  (admin)
+// GetAllQuotas GET /api/files/quota/all  (admin)
 func GetAllQuotas(c *gin.Context) {
 	isAdmin, _ := c.Get("isAdmin")
 	if isAdmin != true {
@@ -100,15 +102,19 @@ func GetAllQuotas(c *gin.Context) {
 		return
 	}
 
+	username, _ := c.Get("username")
+	currentUser := username.(string)
+
 	basePath := os.Getenv("FILEMANAGER_BASE_PATH")
 	if basePath == "" {
 		basePath = "/home"
 	}
 
-	entries, err := os.ReadDir(basePath)
+	// 获取当前用户所属 account 下的用户列表
+	accountUsers, err := getUsersInSameAccount(currentUser)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取用户目录失败: " + err.Error()})
-		return
+		logger.Warn("GetAllQuotas: failed to get slurm account users for %s: %v, falling back to home dir", currentUser, err)
+		accountUsers = nil
 	}
 
 	type UserQuota struct {
@@ -119,23 +125,100 @@ func GetAllQuotas(c *gin.Context) {
 	}
 
 	results := make([]UserQuota, 0)
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
+
+	if len(accountUsers) > 0 {
+		// 只查 account 下的用户，排除 root
+		for _, uname := range accountUsers {
+			if uname == "root" {
+				continue
+			}
+			userHome := basePath + "/" + uname
+			quotas, err := queryQuota(uname, userHome)
+			uq := UserQuota{Username: uname, Path: userHome, Quotas: quotas}
+			if err != nil {
+				uq.Error = err.Error()
+				if uq.Quotas == nil {
+					uq.Quotas = []QuotaInfo{}
+				}
+			}
+			results = append(results, uq)
 		}
-		uname := entry.Name()
-		userHome := basePath + "/" + uname
-		quotas, err := queryQuota(uname, userHome)
-		uq := UserQuota{Username: uname, Path: userHome, Quotas: quotas}
+	} else {
+		// fallback：枚举 home 目录，排除 root
+		entries, err := os.ReadDir(basePath)
 		if err != nil {
-			uq.Error = err.Error()
-			if uq.Quotas == nil {
-				uq.Quotas = []QuotaInfo{}
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "读取用户目录失败: " + err.Error()})
+			return
+		}
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				continue
+			}
+			uname := entry.Name()
+			if uname == "root" {
+				continue
+			}
+			userHome := basePath + "/" + uname
+			quotas, err := queryQuota(uname, userHome)
+			uq := UserQuota{Username: uname, Path: userHome, Quotas: quotas}
+			if err != nil {
+				uq.Error = err.Error()
+				if uq.Quotas == nil {
+					uq.Quotas = []QuotaInfo{}
+				}
+			}
+			results = append(results, uq)
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": results})
+}
+
+// getUsersInSameAccount 获取与当前用户同属一个 slurm account 的所有用户（去重）
+func getUsersInSameAccount(currentUser string) ([]string, error) {
+	if os.Getenv("DEV_MODE") == "true" {
+		return nil, nil
+	}
+
+	client, err := slurm.NewClientForUser(currentUser)
+	if err != nil {
+		return nil, err
+	}
+
+	// 先找当前用户所属的 account
+	slurmUser, err := client.GetSlurmUser(currentUser)
+	if err != nil {
+		return nil, err
+	}
+
+	userAccount := ""
+	if slurmUser.Default != nil && slurmUser.Default.Account != "" {
+		userAccount = slurmUser.Default.Account
+	}
+	if userAccount == "" && slurmUser.DefaultAccount != "" {
+		userAccount = slurmUser.DefaultAccount
+	}
+	if userAccount == "" {
+		return nil, fmt.Errorf("user %s has no default account", currentUser)
+	}
+
+	// 获取该 account 下的所有 associations
+	associations, err := client.GetAssociations()
+	if err != nil {
+		return nil, err
+	}
+
+	seen := make(map[string]bool)
+	users := make([]string, 0)
+	for _, assoc := range associations {
+		if assoc.Account == userAccount && assoc.User != "" {
+			if !seen[assoc.User] {
+				seen[assoc.User] = true
+				users = append(users, assoc.User)
 			}
 		}
-		results = append(results, uq)
 	}
-	c.JSON(http.StatusOK, gin.H{"data": results})
+	return users, nil
 }
 
 // SetQuota POST /api/files/quota  (admin)

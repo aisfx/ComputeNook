@@ -522,6 +522,10 @@ func GetMyResources(c *gin.Context) {
 	qosNames := make(map[string]bool)
 	assocList := make([]map[string]interface{}, 0)
 	for _, a := range associations {
+		// 过滤掉 root account
+		if a.Account == "root" {
+			continue
+		}
 		item := map[string]interface{}{
 			"account":   a.Account,
 			"partition": a.Partition,

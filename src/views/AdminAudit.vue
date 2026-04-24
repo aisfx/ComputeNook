@@ -16,6 +16,7 @@
     <div class="tab-bar">
       <button :class="['tab-btn', { active: activeTab === 'audit' }]" @click="activeTab = 'audit'">📋 操作审计</button>
       <button :class="['tab-btn', { active: activeTab === 'ssh' }]" @click="activeTab = 'ssh'; loadSSHLogs()">🔐 SSH 行为日志</button>
+      <button :class="['tab-btn', { active: activeTab === 'report' }]" @click="activeTab = 'report'">📊 用量报表</button>
     </div>
 
     <!-- 统计卡片 -->
@@ -214,6 +215,91 @@
       </div>
     </div>
 
+    <!-- 用量报表面板（管理员查所有用户） -->
+    <div v-if="activeTab === 'report'" class="report-panel">
+      <div class="report-filter-bar">
+        <div class="filter-item">
+          <label>用户名</label>
+          <input v-model="reportFilters.username" placeholder="留空查全部" class="filter-input-sm" />
+        </div>
+        <div class="filter-item">
+          <label>开始日期</label>
+          <input type="date" v-model="reportFilters.startDate" :max="reportFilters.endDate" class="filter-input-sm" />
+        </div>
+        <div class="filter-item">
+          <label>结束日期</label>
+          <input type="date" v-model="reportFilters.endDate" :min="reportFilters.startDate" class="filter-input-sm" />
+        </div>
+        <div class="filter-item">
+          <label>队列</label>
+          <select v-model="reportFilters.partition" class="filter-input-sm">
+            <option value="">全部</option>
+            <option v-for="p in reportPartitions" :key="p" :value="p">{{ p }}</option>
+          </select>
+        </div>
+        <button class="btn-primary" @click="loadAdminReport" :disabled="reportLoading">
+          {{ reportLoading ? '查询中...' : '🔍 查询' }}
+        </button>
+        <button class="btn-secondary" @click="exportAdminExcel" :disabled="!reportHasData">
+          📥 导出 Excel
+        </button>
+      </div>
+
+      <div v-if="reportLoading" class="report-state">
+        <div class="spinner"></div><span>加载中...</span>
+      </div>
+      <div v-else-if="reportError" class="report-state" style="color:#f5222d">⚠ {{ reportError }}</div>
+
+      <template v-else-if="reportHasData">
+        <!-- 月度作业折线图 -->
+        <div class="rcard" v-if="rJobStats?.monthly_job_counts.length">
+          <div class="rcard-title">每月各队列作业数趋势</div>
+          <div ref="rLineRef" style="width:100%;height:260px"></div>
+        </div>
+
+        <!-- 作业规模 + 核时 -->
+        <div class="rchart-row">
+          <div class="rcard" v-if="rJobStats?.job_scale_distribution.length">
+            <div class="rcard-title">作业规模分布</div>
+            <div ref="rScaleRef" style="width:100%;height:240px"></div>
+          </div>
+          <div class="rcard" v-if="rUsageStats">
+            <div class="rcard-title">GPU / CPU 核时用量</div>
+            <div ref="rUsageRef" style="width:100%;height:240px"></div>
+          </div>
+        </div>
+
+        <!-- 存储用量 -->
+        <div class="rcard" v-if="rStorageStats?.length">
+          <div class="rcard-title">存储配额使用情况</div>
+          <div ref="rStorageRef" :style="{ width: '100%', height: Math.max(260, rStorageStats.length * 60) + 'px' }"></div>
+        </div>
+
+        <!-- 配额进度 -->
+        <div class="rchart-row">
+          <div class="rcard" v-if="rUsageStats">
+            <div class="rcard-title">计费核时使用比例</div>
+            <div v-if="rUsageStats.quota_billing_hours === 0" class="no-limit-info">ℹ 无配额限制，实际使用：{{ rUsageStats.billing_hours.toFixed(2) }} h</div>
+            <template v-else>
+              <div class="progress-info"><span>{{ rUsageStats.billing_hours.toFixed(2) }} / {{ rUsageStats.quota_billing_hours.toFixed(2) }} h</span><span :style="{ color: rStatusColor(rUsageStats.status) }">{{ rUsageStats.usage_percent.toFixed(1) }}%</span></div>
+              <div class="progress-bar-wrap"><div class="progress-bar-fill" :style="{ width: Math.min(rUsageStats.usage_percent,100)+'%', background: rStatusColor(rUsageStats.status) }"></div></div>
+              <span class="rstatus-badge" :style="{ background: rStatusBg(rUsageStats.status), color: rStatusColor(rUsageStats.status) }">{{ rStatusLabel(rUsageStats.status) }}</span>
+            </template>
+          </div>
+          <div class="rcard" v-if="rQuotaStats?.account">
+            <div class="rcard-title">配额使用率 <span class="account-tag">{{ rQuotaStats.account }}</span></div>
+            <div class="progress-info"><span>{{ rQuotaStats.used_billing_hours.toFixed(2) }} / {{ rQuotaStats.total_billing_hours.toFixed(2) }} h</span><span :style="{ color: rStatusColor(rQuotaStats.status) }">{{ rQuotaStats.usage_percent.toFixed(1) }}%</span></div>
+            <div class="progress-bar-wrap"><div class="progress-bar-fill" :style="{ width: Math.min(rQuotaStats.usage_percent,100)+'%', background: rStatusColor(rQuotaStats.status) }"></div></div>
+            <span class="rstatus-badge" :style="{ background: rStatusBg(rQuotaStats.status), color: rStatusColor(rQuotaStats.status) }">{{ rStatusLabel(rQuotaStats.status) }}</span>
+          </div>
+        </div>
+      </template>
+
+      <div v-else-if="!reportLoading" class="report-state">
+        <span style="font-size:2rem">📊</span><p>选择条件后点击查询</p>
+      </div>
+    </div>
+
   </div>
   <Teleport to="body">
     <!-- SSH 日志内容查看弹窗 -->
@@ -306,7 +392,9 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import axios from 'axios'
+import * as echarts from 'echarts'
 import notification from '../utils/notification'
+import { reportAPI, type JobStatsResult, type UsageStatsResult, type StorageStatItem, type QuotaStatsResult } from '../api/report'
 
 const loading = ref(false)
 const error = ref('')
@@ -315,7 +403,7 @@ const stats = ref<any>({})
 const showStats = ref(false)
 const showDetailsDialog = ref(false)
 const selectedLog = ref<any>(null)
-const activeTab = ref<'audit' | 'ssh'>('audit')
+const activeTab = ref<'audit' | 'ssh' | 'report'>('audit')
 
 // SSH 日志
 const sshLogs = ref<any[]>([])
@@ -563,8 +651,190 @@ const getResourceLabel = (resource: string) => {
   return labels[resource] || resource
 }
 
+// ── 用量报表（管理员） ──────────────────────────────────────
+function fmtDate(d: Date) { return d.toISOString().split('T')[0] }
+const rToday = new Date()
+const r30ago = new Date(rToday); r30ago.setDate(rToday.getDate() - 30)
+
+const reportLoading = ref(false)
+const reportError   = ref('')
+const reportPartitions = ref<string[]>([])
+const reportFilters = ref({ username: '', startDate: fmtDate(r30ago), endDate: fmtDate(rToday), partition: '' })
+
+const rJobStats    = ref<JobStatsResult | null>(null)
+const rUsageStats  = ref<UsageStatsResult | null>(null)
+const rStorageStats = ref<StorageStatItem[] | null>(null)
+const rQuotaStats  = ref<QuotaStatsResult | null>(null)
+
+const rLineRef    = ref<HTMLElement | null>(null)
+const rScaleRef   = ref<HTMLElement | null>(null)
+const rUsageRef   = ref<HTMLElement | null>(null)
+const rStorageRef = ref<HTMLElement | null>(null)
+let rLineChart: echarts.ECharts | null = null
+let rScaleChart: echarts.ECharts | null = null
+let rUsageChart: echarts.ECharts | null = null
+let rStorageChart: echarts.ECharts | null = null
+
+import { computed, nextTick } from 'vue'
+
+const reportHasData = computed(() =>
+  !!(rJobStats.value || rUsageStats.value || rStorageStats.value || rQuotaStats.value)
+)
+
+async function loadReportPartitions() {
+  try {
+    const res = await axios.get<{ data: string[] }>('/jobs/partitions/list')
+    reportPartitions.value = res.data?.data ?? []
+  } catch { reportPartitions.value = [] }
+}
+
+async function loadAdminReport() {
+  reportLoading.value = true
+  reportError.value = ''
+  rJobStats.value = null; rUsageStats.value = null
+  rStorageStats.value = null; rQuotaStats.value = null
+  rLineChart?.dispose(); rLineChart = null
+  rScaleChart?.dispose(); rScaleChart = null
+  rUsageChart?.dispose(); rUsageChart = null
+  rStorageChart?.dispose(); rStorageChart = null
+
+  const params: any = {
+    start_time: reportFilters.value.startDate,
+    end_time:   reportFilters.value.endDate,
+    partition:  reportFilters.value.partition || undefined,
+  }
+  if (reportFilters.value.username) params.user = reportFilters.value.username
+
+  try {
+    const [jobRes, usageRes, storageRes, quotaRes] = await Promise.allSettled([
+      reportAPI.getJobStats(params),
+      reportAPI.getUsageStats(params),
+      reportAPI.getStorageStats(params),
+      reportAPI.getQuotaStats(params),
+    ])
+    if (jobRes.status === 'fulfilled')     rJobStats.value     = jobRes.value.data.data
+    if (usageRes.status === 'fulfilled')   rUsageStats.value   = usageRes.value.data.data
+    if (storageRes.status === 'fulfilled') rStorageStats.value = storageRes.value.data.data
+    if (quotaRes.status === 'fulfilled')   rQuotaStats.value   = quotaRes.value.data.data
+    await nextTick()
+    renderAdminCharts()
+  } catch (e: any) {
+    reportError.value = e?.message || '查询失败'
+  } finally {
+    reportLoading.value = false
+  }
+}
+
+function renderAdminCharts() {
+  // 折线图
+  if (rLineRef.value && rJobStats.value?.monthly_job_counts.length) {
+    if (!rLineChart) rLineChart = echarts.init(rLineRef.value, 'dark')
+    const counts = rJobStats.value.monthly_job_counts
+    const months = [...new Set(counts.map(c => c.month))].sort()
+    const queues = [...new Set(counts.map(c => c.partition))]
+    rLineChart.setOption({
+      backgroundColor: 'transparent',
+      tooltip: { trigger: 'axis' },
+      legend: { data: queues, textStyle: { color: '#ccc' }, bottom: 0 },
+      grid: { left: '3%', right: '4%', bottom: '12%', top: '8%', containLabel: true },
+      xAxis: { type: 'category', data: months, boundaryGap: false, axisLabel: { color: '#aaa' }, axisLine: { lineStyle: { color: '#444' } } },
+      yAxis: { type: 'value', name: '作业数', nameTextStyle: { color: '#aaa' }, axisLabel: { color: '#aaa' }, splitLine: { lineStyle: { color: '#333' } } },
+      series: queues.map(q => ({ name: q, type: 'line' as const, smooth: true, symbol: 'circle', symbolSize: 6, areaStyle: { opacity: 0.08 }, data: months.map(m => counts.find(c => c.month === m && c.partition === q)?.count ?? 0) })),
+    })
+  }
+  // 规模柱状图
+  if (rScaleRef.value && rJobStats.value?.job_scale_distribution.length) {
+    if (!rScaleChart) rScaleChart = echarts.init(rScaleRef.value, 'dark')
+    const dist = rJobStats.value.job_scale_distribution
+    const total = rJobStats.value.total_jobs
+    rScaleChart.setOption({
+      backgroundColor: 'transparent',
+      tooltip: { trigger: 'axis', formatter: (p: any) => `${p[0].name}<br/>作业数: <b>${p[0].value}</b>（${total > 0 ? (p[0].value/total*100).toFixed(1) : 0}%）` },
+      grid: { left: '3%', right: '4%', bottom: '3%', top: '8%', containLabel: true },
+      xAxis: { type: 'category', data: dist.map(d => d.range), axisLabel: { color: '#aaa' }, axisLine: { lineStyle: { color: '#444' } } },
+      yAxis: { type: 'value', name: '作业数', nameTextStyle: { color: '#aaa' }, axisLabel: { color: '#aaa' }, splitLine: { lineStyle: { color: '#333' } } },
+      series: [{ type: 'bar', data: dist.map(d => d.count), itemStyle: { borderRadius: [4,4,0,0] }, label: { show: true, position: 'top', color: '#ccc', fontSize: 11 }, barMaxWidth: 60 }],
+    })
+  }
+  // 核时柱状图
+  if (rUsageRef.value && rUsageStats.value) {
+    if (!rUsageChart) rUsageChart = echarts.init(rUsageRef.value, 'dark')
+    const u = rUsageStats.value
+    rUsageChart.setOption({
+      backgroundColor: 'transparent',
+      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+      grid: { left: '3%', right: '4%', bottom: '3%', top: '8%', containLabel: true },
+      xAxis: { type: 'category', data: ['GPU 卡时', 'CPU 核时', '计费核时'], axisLabel: { color: '#aaa' }, axisLine: { lineStyle: { color: '#444' } } },
+      yAxis: { type: 'value', name: '小时(h)', nameTextStyle: { color: '#aaa' }, axisLabel: { color: '#aaa' }, splitLine: { lineStyle: { color: '#333' } } },
+      series: [{ type: 'bar', data: [{ value: +u.gpu_hours.toFixed(2), itemStyle: { color: '#5470c6' } }, { value: +u.cpu_hours.toFixed(2), itemStyle: { color: '#91cc75' } }, { value: +u.billing_hours.toFixed(2), itemStyle: { color: '#fac858' } }], label: { show: true, position: 'top', color: '#ccc', fontSize: 11, formatter: (p: any) => `${p.value}h` }, barMaxWidth: 60, itemStyle: { borderRadius: [4,4,0,0] } }],
+    })
+  }
+  // 存储柱状图
+  if (rStorageRef.value && rStorageStats.value?.length) {
+    if (!rStorageChart) rStorageChart = echarts.init(rStorageRef.value, 'dark')
+    const items = rStorageStats.value
+    const labels = items.map(i => `${i.username}  ${i.filesystem}`)
+    const barColors = items.map(i => i.over_soft_limit ? '#fa8c16' : '#52c41a')
+    rStorageChart.resize()
+    rStorageChart.setOption({
+      backgroundColor: 'transparent',
+      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: (params: any[]) => { const i = items[params[0].dataIndex]; return `<b>${i.username}</b> ${i.filesystem}<br/>已用: <b>${i.used_gb.toFixed(2)} GB</b><br/>软限制: ${i.soft_limit_gb.toFixed(2)} GB<br/>硬限制: ${i.hard_limit_gb.toFixed(2)} GB<br/>使用率: <b>${i.usage_percent.toFixed(1)}%</b>${i.over_soft_limit ? '<br/><span style="color:#fa8c16">⚠ 超软限制</span>' : ''}` } },
+      legend: { data: ['已用量', '软限制', '硬限制'], textStyle: { color: '#ccc' }, top: 4 },
+      grid: { left: '2%', right: '8%', top: 36, bottom: '2%', containLabel: true },
+      xAxis: { type: 'value', name: 'GB', nameTextStyle: { color: '#aaa' }, axisLabel: { color: '#aaa' }, splitLine: { lineStyle: { color: '#2a2a2a' } } },
+      yAxis: { type: 'category', data: labels, axisLabel: { color: '#ccc', fontSize: 12 }, axisLine: { lineStyle: { color: '#444' } } },
+      series: [
+        { name: '已用量', type: 'bar', data: items.map((v, i) => ({ value: +v.used_gb.toFixed(2), itemStyle: { color: barColors[i] } })), label: { show: true, position: 'right', color: '#ccc', fontSize: 11, formatter: (p: any) => `${p.value} GB` }, barMaxWidth: 28, z: 3 },
+        { name: '软限制', type: 'bar', data: items.map(i => +i.soft_limit_gb.toFixed(2)), itemStyle: { color: 'rgba(250,140,22,0.25)', borderColor: '#fa8c16', borderWidth: 1 }, barMaxWidth: 28, barGap: '-100%', z: 2 },
+        { name: '硬限制', type: 'bar', data: items.map(i => +i.hard_limit_gb.toFixed(2)), itemStyle: { color: 'rgba(100,100,100,0.18)', borderColor: '#555', borderWidth: 1 }, barMaxWidth: 28, barGap: '-100%', z: 1 },
+      ],
+    })
+  }
+}
+
+function rStatusColor(s: string) { return s === 'EXCEEDED' ? '#f5222d' : s === 'WARNING' ? '#fa8c16' : '#52c41a' }
+function rStatusBg(s: string)    { return s === 'EXCEEDED' ? 'rgba(245,34,45,0.12)' : s === 'WARNING' ? 'rgba(250,140,22,0.12)' : 'rgba(82,196,26,0.12)' }
+function rStatusLabel(s: string) { return s === 'EXCEEDED' ? '已超限' : s === 'WARNING' ? '警告' : '正常' }
+
+function exportAdminExcel() {
+  import('xlsx').then(XLSX => {
+    const wb = XLSX.utils.book_new()
+    const { startDate, endDate, username } = reportFilters.value
+    if (rJobStats.value) {
+      const j = rJobStats.value
+      const ws1 = XLSX.utils.aoa_to_sheet([['月份','队列','作业数'], ...j.monthly_job_counts.map(r => [r.month, r.partition, r.count])])
+      ws1['!cols'] = [{ wch: 12 }, { wch: 16 }, { wch: 10 }]
+      XLSX.utils.book_append_sheet(wb, ws1, '月度作业趋势')
+      const ws2 = XLSX.utils.aoa_to_sheet([['规模范围','作业数','占比(%)'], ...j.job_scale_distribution.map(r => [r.range, r.count, j.total_jobs > 0 ? +(r.count/j.total_jobs*100).toFixed(1) : 0]), ['合计', j.total_jobs, 100]])
+      ws2['!cols'] = [{ wch: 14 }, { wch: 10 }, { wch: 10 }]
+      XLSX.utils.book_append_sheet(wb, ws2, '作业规模分布')
+    }
+    if (rUsageStats.value) {
+      const u = rUsageStats.value
+      const ws = XLSX.utils.aoa_to_sheet([['指标','数值','单位'],['统计周期',`${startDate} ~ ${endDate}`,''],[`GPU 卡时`,+u.gpu_hours.toFixed(2),'h'],['CPU 核时',+u.cpu_hours.toFixed(2),'h'],['计费核时',+u.billing_hours.toFixed(2),'h'],['配额总量',u.quota_billing_hours===0?'无限制':+u.quota_billing_hours.toFixed(2),u.quota_billing_hours===0?'':'h'],['使用率',+u.usage_percent.toFixed(2),'%'],['状态',rStatusLabel(u.status),'']])
+      ws['!cols'] = [{ wch: 16 }, { wch: 16 }, { wch: 8 }]
+      XLSX.utils.book_append_sheet(wb, ws, '核时使用')
+    }
+    if (rStorageStats.value?.length) {
+      const ws = XLSX.utils.aoa_to_sheet([['用户名','文件系统','已用量(GB)','软限制(GB)','硬限制(GB)','使用率(%)','超软限制'], ...rStorageStats.value.map(r => [r.username, r.filesystem, +r.used_gb.toFixed(2), +r.soft_limit_gb.toFixed(2), +r.hard_limit_gb.toFixed(2), +r.usage_percent.toFixed(2), r.over_soft_limit?'是':'否'])])
+      ws['!cols'] = [{ wch: 14 }, { wch: 20 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 10 }]
+      XLSX.utils.book_append_sheet(wb, ws, '存储用量')
+    }
+    if (rQuotaStats.value?.account) {
+      const q = rQuotaStats.value
+      const ws = XLSX.utils.aoa_to_sheet([['指标','数值','单位'],['统计周期',`${startDate} ~ ${endDate}`,''],[`账户`,q.account,''],['配额总量',+q.total_billing_hours.toFixed(2),'h'],['已用量',+q.used_billing_hours.toFixed(2),'h'],['剩余量',+q.remaining_billing_hours.toFixed(2),'h'],['使用率',+q.usage_percent.toFixed(2),'%'],['状态',rStatusLabel(q.status),'']])
+      ws['!cols'] = [{ wch: 16 }, { wch: 16 }, { wch: 8 }]
+      XLSX.utils.book_append_sheet(wb, ws, '配额情况')
+    }
+    if (wb.SheetNames.length === 0) return
+    const uLabel = username ? `_${username}` : '_全部用户'
+    XLSX.writeFile(wb, `用量报表${uLabel}_${startDate}_${endDate}.xlsx`)
+  })
+}
+
 onMounted(() => {
   handleTimeRangeChange()
+  loadReportPartitions()
 })
 </script>
 
@@ -917,33 +1187,32 @@ onMounted(() => {
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border: none;
-  padding: 0.75rem 1.5rem;
-  border-radius: 8px;
+  background: #fff;
+  color: #1e293b;
+  border: 1px solid #e2e8f0;
+  padding: 7px 16px;
+  border-radius: 10px;
   cursor: pointer;
   font-weight: 600;
+  font-size: 0.875rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  transition: all 0.15s;
 }
-
-.btn-primary:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
-}
+.btn-primary:hover { background: #f1f5f9; }
 
 .btn-secondary {
-  background: #e5e7eb;
-  color: #374151;
-  border: none;
-  padding: 0.75rem 1.5rem;
-  border-radius: 8px;
+  background: #fff;
+  color: #1e293b;
+  border: 1px solid #e2e8f0;
+  padding: 7px 16px;
+  border-radius: 10px;
   cursor: pointer;
-  font-weight: 600;
+  font-weight: 500;
+  font-size: 0.875rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  transition: all 0.15s;
 }
-
-.btn-secondary:hover {
-  background: #d1d5db;
-}
+.btn-secondary:hover { background: #f1f5f9; }
 
 .empty-state {
   text-align: center;
@@ -1071,16 +1340,29 @@ onMounted(() => {
 }
 
 @media (max-width: 768px) {
-  .filters-bar {
-    flex-direction: column;
-  }
-  
-  .filter-input {
-    min-width: auto;
-  }
-  
-  .detail-row {
-    grid-template-columns: 1fr;
-  }
+  .filters-bar { flex-direction: column; }
+  .filter-input { min-width: auto; }
+  .detail-row { grid-template-columns: 1fr; }
 }
+
+/* ── 用量报表面板 ── */
+.report-panel { display: flex; flex-direction: column; gap: 1rem; }
+.report-filter-bar { display: flex; align-items: flex-end; gap: 0.75rem; flex-wrap: wrap; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; padding: 0.75rem 1rem; }
+.filter-item { display: flex; flex-direction: column; gap: 0.2rem; }
+.filter-item label { font-size: 0.72rem; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.04em; }
+.filter-input-sm { padding: 0.4rem 0.65rem; border: 1px solid #e5e7eb; border-radius: 7px; font-size: 0.85rem; background: #fff; color: #1e293b; outline: none; }
+.filter-input-sm:focus { border-color: #667eea; }
+.report-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.75rem; padding: 3rem; color: #6b7280; text-align: center; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; }
+.rcard { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 1.25rem 1.5rem; }
+.rcard-title { font-size: 0.9rem; font-weight: 700; color: #1e293b; margin-bottom: 1rem; }
+.rchart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+@media (max-width: 900px) { .rchart-row { grid-template-columns: 1fr; } }
+.account-tag { font-size: 0.75rem; font-weight: 500; color: #6b7280; background: #f1f5f9; padding: 2px 8px; border-radius: 10px; }
+.progress-info { display: flex; justify-content: space-between; font-size: 0.875rem; color: #1e293b; margin-bottom: 0.5rem; }
+.progress-bar-wrap { width: 100%; height: 10px; background: #e5e7eb; border-radius: 5px; overflow: hidden; margin-bottom: 0.75rem; }
+.progress-bar-fill { height: 100%; border-radius: 5px; transition: width 0.4s ease; }
+.rstatus-badge { display: inline-block; padding: 3px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; }
+.no-limit-info { color: #6b7280; font-size: 0.875rem; }
+.spinner { width: 26px; height: 26px; border: 3px solid #e5e7eb; border-top-color: #667eea; border-radius: 50%; animation: spin2 0.7s linear infinite; }
+@keyframes spin2 { to { transform: rotate(360deg); } }
 </style>

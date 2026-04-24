@@ -648,7 +648,7 @@ onUnmounted(() => { window.removeEventListener('resize', updateContainerH); wind
 .fg{display:flex;flex-direction:column;gap:0.3rem}
 .fg label{font-size:0.82rem;font-weight:600;color:#374151}
 .fg input,.fg select,.fg textarea{padding:0.5rem 0.7rem;border:2px solid #e5e7eb;border-radius:8px;font-size:0.88rem}
-.fg input:focus,.fg select:focus,.fg textarea:focus{outline:none;border-color:#667eea}
+.fg input:focus,.fg select:focus,.fg textarea:focus{outline:none;border-color:#94a3b8;box-shadow:0 0 0 2px rgba(0,0,0,0.08)}
 .fg-row{display:flex;gap:0.75rem}
 .fg-row .fg{flex:1}
 .cmdb-sync-bar{display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0.75rem;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0}
@@ -677,8 +677,10 @@ onUnmounted(() => { window.removeEventListener('resize', updateContainerH); wind
 .type-compute{background:#dbeafe;color:#1d4ed8}.type-gpu{background:#ede9fe;color:#6d28d9}
 .type-storage{background:#d1fae5;color:#065f46}.type-switch{background:#e2e8f0;color:#334155}
 .empty-sm{text-align:center;color:#9ca3af;padding:1.5rem}
-.btn-pri{background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border:none;padding:0.5rem 1.1rem;border-radius:8px;cursor:pointer;font-weight:600;font-size:0.85rem}
-.btn-sec{background:#f3f4f6;color:#374151;border:none;padding:0.5rem 1.1rem;border-radius:8px;cursor:pointer;font-weight:600;font-size:0.85rem}
+.btn-pri{background:#fff;color:#1e293b;border:1px solid #e2e8f0;padding:0.5rem 1.1rem;border-radius:10px;cursor:pointer;font-weight:600;font-size:0.85rem;box-shadow:0 1px 3px rgba(0,0,0,0.06);transition:all 0.15s}
+.btn-pri:hover:not(:disabled){background:#f1f5f9}
+.btn-sec{background:#fff;color:#1e293b;border:1px solid #e2e8f0;padding:0.5rem 1.1rem;border-radius:10px;cursor:pointer;font-weight:500;font-size:0.85rem;box-shadow:0 1px 3px rgba(0,0,0,0.06);transition:all 0.15s}
+.btn-sec:hover:not(:disabled){background:#f1f5f9}
 .btn-ghost{background:none;border:1.5px solid #e2e8f0;color:#374151;padding:0.5rem 1rem;border-radius:8px;cursor:pointer;font-size:0.85rem}
 .btn-ghost:hover{background:#f3f4f6}
 .btn-sm{padding:0.3rem 0.7rem;font-size:0.78rem}

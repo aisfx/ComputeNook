@@ -317,13 +317,13 @@ onMounted(loadAll)
 .text-warn { color: #d97706; }
 .text-crit { color: #dc2626; }
 
-.btn-link { background: none; border: none; cursor: pointer; color: #667eea; font-size: 0.82rem; padding: 2px 6px; border-radius: 4px; }
-.btn-link:hover { background: #eff6ff; }
-.btn-primary { background: linear-gradient(135deg, #667eea, #764ba2); color: #fff; border: none; padding: 7px 16px; border-radius: 8px; cursor: pointer; font-size: 0.85rem; font-weight: 600; }
-.btn-primary:hover:not(:disabled) { opacity: 0.9; }
-.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-secondary { background: #f1f5f9; color: #374151; border: 1px solid #e2e8f0; padding: 7px 14px; border-radius: 8px; cursor: pointer; font-size: 0.85rem; }
-.btn-secondary:hover:not(:disabled) { background: #e2e8f0; }
+.btn-link { background: none; border: none; cursor: pointer; color: #64748b; font-size: 0.82rem; padding: 2px 6px; border-radius: 4px; }
+.btn-link:hover { background: #f1f5f9; }
+.btn-primary { background: #fff; color: #1e293b; border: 1px solid #e2e8f0; padding: 7px 16px; border-radius: 10px; cursor: pointer; font-size: 0.85rem; font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,0.06); transition: all 0.15s; }
+.btn-primary:hover:not(:disabled) { background: #f1f5f9; }
+.btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn-secondary { background: #fff; color: #1e293b; border: 1px solid #e2e8f0; padding: 7px 14px; border-radius: 10px; cursor: pointer; font-size: 0.85rem; font-weight: 500; box-shadow: 0 1px 3px rgba(0,0,0,0.06); transition: all 0.15s; }
+.btn-secondary:hover:not(:disabled) { background: #f1f5f9; }
 
 /* 弹窗 */
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; z-index: 1000; }

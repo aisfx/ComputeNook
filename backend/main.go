@@ -270,6 +270,7 @@ func main() {
 			desktop.GET("/resource-presets", handlers.GetDesktopResourcePresets)
 			// VNC WebSocket 代理：通过 SSH 隧道连接计算节点 VNC
 			desktop.GET("/sessions/:id/vnc-ws", handlers.VNCWebSocketProxy)
+			desktop.GET("/sessions/:id/xpra-ws", handlers.XpraWebSocketProxy)
 		}
 
 		// SSH WebSocket 隧道：转发到计算节点 SSH 端口
@@ -323,6 +324,16 @@ func main() {
 			monitoring.GET("/prom-rules", handlers.GetPromRules)
 		monitoring.GET("/promql", handlers.PromQueryInstant)
 		monitoring.GET("/promql/range", handlers.PromQueryRange)
+		}
+
+		// 报表中心 API
+		reports := auth.Group("/reports")
+		{
+			reports.GET("/jobs",      handlers.GetJobStats)
+			reports.GET("/usage",     handlers.GetUsageStats)
+			reports.GET("/storage",   handlers.GetStorageStats)
+			reports.GET("/quota",     handlers.GetQuotaStats)
+			reports.GET("/qos-usage", handlers.GetQoSUsage)
 		}
 
 		// CMDB 主机资产管理
