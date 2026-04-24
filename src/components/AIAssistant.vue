@@ -198,7 +198,11 @@ const detectIntent = (text: string): Intent => {
     let cmd = ''
     for (const kw of knownCmds) {
       const m = text.match(new RegExp('(' + kw + '\\s+[^，。\\n"\']{0,60})', 'i'))
-      if (m) { cmd = m[1].trim(); break }
+      if (m) {
+        // 截断到第一个中文字符之前，避免把"1核"等中文描述混入命令
+        cmd = m[1].replace(/\s*[\u4e00-\u9fff].*/g, '').trim()
+        break
+      }
     }
     // 提取分区
     const partMatch = text.match(/(?:分区|partition|队列|queue)\s*[：:=]?\s*([\w-]+)|([\w-]+)\s*(?:分区|partition|队列)/)
