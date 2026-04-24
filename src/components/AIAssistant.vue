@@ -257,15 +257,6 @@ const sendSuggestion = (text: string) => {
   send()
 }
 
-// 快捷操作：弹出作业ID输入框
-const promptAnalyzeJob = () => {
-  const jobId = window.prompt('请输入要分析的作业 ID：')
-  if (jobId?.trim()) {
-    input.value = `分析作业 ${jobId.trim()} 的运行情况，找出问题并给出建议`
-    send()
-  }
-}
-
 // ─────────────────────────────────────────────
 // 🐒 孙大圣的"禁区"系统
 // ─────────────────────────────────────────────
