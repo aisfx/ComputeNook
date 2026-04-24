@@ -186,10 +186,54 @@ const detectIntent = (text: string): Intent => {
   if (cancelMatch) return { type: 'cancel_job', jobId: cancelMatch[1] }
   if (/机时|报表|使用情况|用了多少|核时|billing|usage/.test(t)) return { type: 'usage_report' }
   if (/分区|partition|队列|queue/.test(t) && /有哪些|列表|查看|show/.test(t)) return { type: 'partitions' }
-  // 提交作业：用户提供了脚本内容
+  // 提交作业：用户提供了完整脚本
   if (/帮我提交|提交作业|帮我跑|submit.*job/.test(t) && /```[\s\S]*```/.test(text)) {
     const scriptMatch = text.match(/```(?:bash|sh)?\n?([\s\S]*?)```/)
     if (scriptMatch) return { type: 'submit_job', jobScript: scriptMatch[1].trim() }
+  }
+  // 自然语言描述提交作业：如 "提交个sleep 20 1节点1核 debug分区"
+  if (/提交|跑一个|跑个|run|sbatch/.test(t)) {
+    // 提取命令：匹配常见 HPC 命令关键词后面的内容
+    const knownCmds = ['sleep', 'python', 'python3', 'bash', 'mpirun', 'srun', 'echo', 'hostname', 'pwd', 'ls']
+    let cmd = ''
+    for (const kw of knownCmds) {
+      const m = text.match(new RegExp('(' + kw + '\\s+[^，。\\n"\']{0,60})', 'i'))
+      if (m) { cmd = m[1].trim(); break }
+    }
+    // 提取分区
+    const partMatch = text.match(/(?:分区|partition|队列|queue)\s*[：:=]?\s*([\w-]+)|([\w-]+)\s*(?:分区|partition|队列)/)
+    // 提取节点数
+    const nodeMatch = text.match(/(\d+)\s*(?:个)?节点|nodes?\s*[=:]\s*(\d+)|-N\s*(\d+)/)
+    // 提取CPU核数
+    const cpuMatch = text.match(/(\d+)\s*(?:个)?核|cpus?\s*[=:]\s*(\d+)|-c\s*(\d+)|(\d+)\s*core/)
+    // 提取内存
+    const memMatch = text.match(/(\d+)\s*([GT])b?内存|mem(?:ory)?\s*[=:]\s*(\d+)([GT])/i)
+    // 提取时间
+    const timeMatch = text.match(/(\d+)\s*(?:小时|hour|h\b)|time\s*[=:]\s*(\d+)/)
+
+    const partition = partMatch ? (partMatch[1] || partMatch[2] || '').trim() : ''
+    const nodes = nodeMatch ? parseInt(nodeMatch[1] || nodeMatch[2] || nodeMatch[3]) : 1
+    const cpus = cpuMatch ? parseInt(cpuMatch[1] || cpuMatch[2] || cpuMatch[3] || cpuMatch[4]) : 1
+    const memRaw = memMatch ? parseInt(memMatch[1] || memMatch[3]) : 0
+    const memUnit = memMatch ? ((memMatch[2] || memMatch[4]) || 'G').toUpperCase() : 'G'
+    const memGB = memRaw > 0 ? (memUnit === 'T' ? memRaw * 1024 : memRaw) : 4
+    const timeH = timeMatch ? parseInt(timeMatch[1] || timeMatch[2]) : 1
+
+    if (cmd || partition) {
+      const hh = String(timeH).padStart(2, '0')
+      const lines = [
+        '#!/bin/bash',
+        '#SBATCH -J ai-job',
+        partition ? '#SBATCH -p ' + partition : '',
+        '#SBATCH -N ' + nodes,
+        '#SBATCH -c ' + cpus,
+        '#SBATCH --mem=' + memGB + 'G',
+        '#SBATCH -t ' + hh + ':00:00',
+        '',
+        cmd || 'hostname',
+      ].filter(Boolean)
+      return { type: 'submit_job', jobScript: lines.join('\n') }
+    }
   }
   // 查看文件列表
   const listFileMatch = t.match(/(?:查看|列出|ls|list).{0,10}(?:文件|目录|文件夹)[^\n]*?([~/][^\s，。,\n]*)/)
@@ -262,9 +306,49 @@ ${jobs.slice(0,10).map((j:any)=>`  · ${j.job_id} ${j.name} ${j.state} CPU:${(j.
       return `【可用分区列表】\n` + parts.map((p:any) => `- ${p.name}: 节点${p.total_nodes||'-'}个 状态${p.state||'-'}`).join('\n')
     }
     if (intent.type === 'submit_job' && intent.jobScript) {
-      if (!window.confirm('AI 助手将帮你提交以下作业脚本，确认提交？')) return '【用户取消了提交】'
+      const script = intent.jobScript
+      if (!window.confirm(`AI 助手将帮你提交以下作业脚本，确认提交？\n\n${script.split('\n').slice(0, 10).join('\n')}`)) return '【用户取消了提交】'
+      // 从脚本中解析 #SBATCH 参数
+      const getSbatch = (flags: string[]) => {
+        for (const flag of flags) {
+          const m = script.match(new RegExp(`#SBATCH\\s+${flag}\\s*(\\S+)`))
+          if (m) return m[1]
+        }
+        return ''
+      }
+      const partition = getSbatch(['-p', '--partition']) || ''
+      const nodesStr = getSbatch(['-N', '--nodes']) || '1'
+      const cpusStr = getSbatch(['-c', '--cpus-per-task', '-n', '--ntasks']) || '1'
+      const memStr = getSbatch(['--mem']) || ''
+      const timeStr = getSbatch(['-t', '--time']) || ''
+      const jobName = getSbatch(['-J', '--job-name']) || 'ai-job'
+      const qos = getSbatch(['--qos']) || ''
+      // 内存转 GB
+      let memGB = 0
+      if (memStr) {
+        const mm = memStr.match(/^(\d+)(G|M|T)?$/i)
+        if (mm) {
+          const v = parseInt(mm[1])
+          const u = (mm[2] || 'M').toUpperCase()
+          memGB = u === 'G' ? v : u === 'T' ? v * 1024 : Math.ceil(v / 1024)
+        }
+      }
+      // 时间转小时
+      let timeH = 1
+      if (timeStr) {
+        const td = timeStr.match(/^(\d+):(\d+):(\d+)$/)
+        if (td) timeH = Math.max(1, Math.ceil((parseInt(td[1]) * 3600 + parseInt(td[2]) * 60 + parseInt(td[3])) / 3600))
+        else if (/^\d+$/.test(timeStr)) timeH = parseInt(timeStr)
+      }
       const res = await axios.post('/jobs', {
-        script: intent.jobScript
+        script,
+        name: jobName,
+        partition,
+        nodes: parseInt(nodesStr) || 1,
+        cpus: parseInt(cpusStr) || 1,
+        memory: memGB || 4,
+        time: timeH,
+        qos,
       }, { headers })
       const jobId = res.data?.data?.job_id || res.data?.job_id
       return `【作业提交成功！Job ID: ${jobId}】\n你可以用 "查看作业 ${jobId}" 来跟踪状态。`
