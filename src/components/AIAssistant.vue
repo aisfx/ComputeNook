@@ -147,7 +147,7 @@ const promptAnalyzeJob = () => {
 
 const promptSubmitJob = () => {
   input.value = '帮我提交这个作业脚本：\n```bash\n#!/bin/bash\n#SBATCH -J my_job\n#SBATCH -p compute\n#SBATCH -N 1\n#SBATCH -c 4\n#SBATCH --mem=8G\n#SBATCH -t 01:00:00\n\necho "Hello HPC"\n```'
-  nextTick(() => { inputEl.value?.focus(); sendMessage() })
+  nextTick(() => { inputEl.value?.focus(); send() })
 }
 
 const promptListFiles = () => {
@@ -263,7 +263,7 @@ ${jobs.slice(0,10).map((j:any)=>`  · ${j.job_id} ${j.name} ${j.state} CPU:${(j.
     }
     if (intent.type === 'submit_job' && intent.jobScript) {
       if (!window.confirm('AI 助手将帮你提交以下作业脚本，确认提交？')) return '【用户取消了提交】'
-      const res = await axios.post((axios.defaults.baseURL || '/api') + '/jobs', {
+      const res = await axios.post('/jobs', {
         script: intent.jobScript
       }, { headers })
       const jobId = res.data?.data?.job_id || res.data?.job_id
