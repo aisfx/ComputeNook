@@ -494,15 +494,17 @@ func (c *Client) GetUserUsageByAccount(user, account string, startTime, endTime 
 
 // GetUserUsage 获取用户机时使用情况
 func (c *Client) GetUserUsage(user string, startTime, endTime time.Time) ([]UsageRecord, error) {
-	// 构建查询参数
-	// Slurm REST API state 参数需要多个独立参数
 	params := fmt.Sprintf("?users=%s&start_time=%d&end_time=%d",
 		user, startTime.Unix(), endTime.Unix())
-	// 不过滤 state，获取所有已结束作业（包括 COMPLETED/FAILED/CANCELLED/TIMEOUT/NODE_FAIL）
 
 	path := c.buildAPIPath("/jobs") + params
 	respBody, err := c.doRequest("GET", path, nil)
 	if err != nil {
+		// 404 / not found 视为无记录，返回空列表
+		errStr := err.Error()
+		if contains(errStr, "not found") || contains(errStr, "404") || contains(errStr, "No jobs") {
+			return []UsageRecord{}, nil
+		}
 		return nil, err
 	}
 
@@ -511,19 +513,25 @@ func (c *Client) GetUserUsage(user string, startTime, endTime time.Time) ([]Usag
 		return nil, fmt.Errorf("failed to parse usage response: %w", err)
 	}
 
+	// Slurm 有时把 "not found" 放在 errors 里，视为无记录
 	if len(response.Errors) > 0 {
-		return nil, fmt.Errorf("slurm API error: %s", response.Errors[0].Error)
+		errMsg := response.Errors[0].Error
+		if contains(errMsg, "not found") || contains(errMsg, "No jobs") || contains(errMsg, "Invalid user") {
+			return []UsageRecord{}, nil
+		}
+		return nil, fmt.Errorf("slurm API error: %s", errMsg)
 	}
 
 	fmt.Printf("[USAGE-API] GetUserUsage returned %d jobs for user=%s start=%d end=%d\n",
 		len(response.Jobs), user, startTime.Unix(), endTime.Unix())
 
-	// 转换为 UsageRecord
 	var records []UsageRecord
 	for _, job := range response.Jobs {
 		records = append(records, jobToRecord(job))
 	}
-
+	if records == nil {
+		records = []UsageRecord{}
+	}
 	return records, nil
 }
 
@@ -545,7 +553,11 @@ func (c *Client) GetAccountUsage(account string, startTime, endTime time.Time) (
 	}
 
 	if len(response.Errors) > 0 {
-		return nil, fmt.Errorf("slurm API error: %s", response.Errors[0].Error)
+		errMsg := response.Errors[0].Error
+		if contains(errMsg, "not found") || contains(errMsg, "No jobs") {
+			return []UsageRecord{}, nil
+		}
+		return nil, fmt.Errorf("slurm API error: %s", errMsg)
 	}
 
 	// 转换为 UsageRecord
@@ -553,7 +565,9 @@ func (c *Client) GetAccountUsage(account string, startTime, endTime time.Time) (
 	for _, job := range response.Jobs {
 		records = append(records, jobToRecord(job))
 	}
-
+	if records == nil {
+		records = []UsageRecord{}
+	}
 	return records, nil
 }
 

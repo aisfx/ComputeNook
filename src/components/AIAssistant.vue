@@ -251,11 +251,8 @@ const detectIntent = (text: string): Intent => {
 
 // ── API 调用，返回注入 AI 的上下文 ──
 const fetchContext = async (intent: Intent): Promise<string> => {
-  const token = getToken()
-  const headers = token ? { Authorization: `Bearer ${token}` } : {}
-  const baseURL = axios.defaults.baseURL || '/api'
-  const get = (path: string, params?: any) => axios.get(baseURL + path, { headers, params })
-  const del = (path: string) => axios.delete(baseURL + path, { headers })
+  const get = (path: string, params?: any) => authAxios.get(path, { params })
+  const del = (path: string) => authAxios.delete(path)
   try {
     if (intent.type === 'list_jobs') {
       const user = getUser()?.username || ''
@@ -295,7 +292,7 @@ const fetchContext = async (intent: Intent): Promise<string> => {
       const end = now2.toISOString().split('T')[0]
       const res = await get('/usage/user', { user, start_time: start, end_time: end })
       const d = res.data
-      const jobs: any[] = d.jobs || []
+      const jobs: any[] = d.data || d.jobs || []
       const totalCPUH = jobs.reduce((s: number, j: any) => s + (j.cpu_hours||0), 0)
       const totalGPUH = jobs.reduce((s: number, j: any) => s + (j.gpu_hours||0), 0)
       return `【近30天机时报表（${start} ~ ${end}）用户: ${user}】
@@ -344,7 +341,7 @@ ${jobs.slice(0,10).map((j:any)=>`  · ${j.job_id} ${j.name} ${j.state} CPU:${(j.
         if (td) timeH = Math.max(1, Math.ceil((parseInt(td[1]) * 3600 + parseInt(td[2]) * 60 + parseInt(td[3])) / 3600))
         else if (/^\d+$/.test(timeStr)) timeH = parseInt(timeStr)
       }
-      const res = await axios.post('/jobs', {
+      const res = await authAxios.post('/jobs', {
         script,
         name: jobName,
         partition,
@@ -353,7 +350,7 @@ ${jobs.slice(0,10).map((j:any)=>`  · ${j.job_id} ${j.name} ${j.state} CPU:${(j.
         memory: memGB || 4,
         time: timeH,
         qos,
-      }, { headers })
+      })
       const jobId = res.data?.data?.job_id || res.data?.job_id
       return `【作业提交成功！Job ID: ${jobId}】\n你可以用 "查看作业 ${jobId}" 来跟踪状态。`
     }
