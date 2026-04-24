@@ -61,6 +61,14 @@
           </div>
         </div>
 
+        <!-- 快捷操作栏 -->
+        <div class="ai-quick-bar">
+          <button class="ai-quick-btn" @click="sendSuggestion('查看我的作业列表')">📋 我的作业</button>
+          <button class="ai-quick-btn" @click="sendSuggestion('生成我的机时使用报表')">📊 机时报表</button>
+          <button class="ai-quick-btn" @click="sendSuggestion('帮我生成一个MPI作业脚本')">📝 生成脚本</button>
+          <button class="ai-quick-btn" @click="promptAnalyzeJob()">🔍 分析作业</button>
+        </div>
+
         <!-- Input -->
         <div class="ai-input-area">
           <textarea
@@ -87,6 +95,16 @@
 <script setup lang="ts">
 import { ref, nextTick } from 'vue'
 import axios from 'axios'
+import { getUser, getToken } from '../utils/auth'
+
+// 带 token 的 axios 实例，确保 fetchContext 里的请求都携带认证
+const authAxios = axios.create()
+authAxios.interceptors.request.use(config => {
+  const token = getToken()
+  if (token) config.headers.Authorization = `Bearer ${token}`
+  if (!config.baseURL) config.baseURL = axios.defaults.baseURL || '/api'
+  return config
+})
 
 interface Message {
   role: 'user' | 'assistant'
@@ -106,13 +124,106 @@ const messagesEl = ref<HTMLElement>()
 const inputEl = ref<HTMLTextAreaElement>()
 
 const suggestions = [
+  '查看我的作业列表',
+  '生成我的机时使用报表',
   '如何用 MPI 并行运行程序？',
-  'OpenMP 多线程怎么设置？',
-  '如何安装 Python 科学计算环境？',
   '作业一直排队怎么办？',
-  '如何使用 GPU 加速计算？',
-  '模块化软件 module 怎么用？',
+  '帮我生成一个 GPU 作业脚本',
+  '如何使用 module 加载软件？',
 ]
+
+// ── 快捷操作 ──
+const promptAnalyzeJob = () => {
+  const jobId = window.prompt('请输入要分析的作业 ID：')
+  if (jobId?.trim()) {
+    input.value = `分析作业 ${jobId.trim()} 的运行情况，找出问题并给出建议`
+    send()
+  }
+}
+
+// ── 意图识别 ──
+interface Intent {
+  type: 'list_jobs' | 'get_job' | 'cancel_job' | 'usage_report' | 'partitions' | null
+  jobId?: string
+}
+
+const detectIntent = (text: string): Intent => {
+  const t = text.toLowerCase()
+  if (/查看.*(作业|job)|我的作业|作业列表|正在运行|排队中/.test(t)) return { type: 'list_jobs' }
+  const jobMatch = t.match(/(?:分析|查看|查询|看看|检查).{0,10}(?:作业|job)[^\d]*(\d+)|(?:作业|job)\s*[id号]?\s*[:#：]?\s*(\d+)/)
+  if (jobMatch) return { type: 'get_job', jobId: jobMatch[1] || jobMatch[2] }
+  const cancelMatch = t.match(/(?:取消|cancel|停止|kill).{0,10}(?:作业|job)[^\d]*(\d+)/)
+  if (cancelMatch) return { type: 'cancel_job', jobId: cancelMatch[1] }
+  if (/机时|报表|使用情况|用了多少|核时|billing|usage/.test(t)) return { type: 'usage_report' }
+  if (/分区|partition|队列|queue/.test(t) && /有哪些|列表|查看|show/.test(t)) return { type: 'partitions' }
+  return { type: null }
+}
+
+// ── API 调用，返回注入 AI 的上下文 ──
+const fetchContext = async (intent: Intent): Promise<string> => {
+  const token = getToken()
+  const headers = token ? { Authorization: `Bearer ${token}` } : {}
+  const baseURL = axios.defaults.baseURL || '/api'
+  const get = (path: string, params?: any) => axios.get(baseURL + path, { headers, params })
+  const del = (path: string) => axios.delete(baseURL + path, { headers })
+  try {
+    if (intent.type === 'list_jobs') {
+      const user = getUser()?.username || ''
+      const res = await get('/jobs', { page: 1, page_size: 20, user })
+      const jobs: any[] = res.data.data || []
+      if (!jobs.length) return '【当前无作业数据】'
+      return `【用户作业列表（最近${jobs.length}条）】\n` + jobs.slice(0, 15).map((j: any) =>
+        `- ID:${j.job_id} 名称:${j.name} 状态:${j.job_state} 分区:${j.partition} 节点:${j.nodes||'-'}`
+      ).join('\n')
+    }
+    if (intent.type === 'get_job' && intent.jobId) {
+      const res = await get(`/jobs/${intent.jobId}`)
+      const j = res.data.data
+      if (!j) return `【作业 ${intent.jobId} 未找到】`
+      return `【作业 ${intent.jobId} 详情】
+- 名称: ${j.name}  状态: ${j.job_state}
+- 分区: ${j.partition}  节点: ${j.nodes||'-'}
+- CPU: ${j.cpus||'-'}  内存: ${j.memory_per_node||'-'}
+- 提交: ${j.submit_time ? new Date(j.submit_time*1000).toLocaleString('zh-CN') : '-'}
+- 开始: ${j.start_time ? new Date(j.start_time*1000).toLocaleString('zh-CN') : '-'}
+- 结束: ${j.end_time ? new Date(j.end_time*1000).toLocaleString('zh-CN') : '-'}
+- 退出码: ${j.exit_code??'-'}
+- 工作目录: ${j.work_dir||'-'}
+- 输出文件: ${j.standard_output||'-'}
+- 错误文件: ${j.standard_error||'-'}`
+    }
+    if (intent.type === 'cancel_job' && intent.jobId) {
+      if (!window.confirm(`确认取消作业 ${intent.jobId}？`)) return `【用户取消了操作】`
+      await del(`/jobs/${intent.jobId}`)
+      return `【作业 ${intent.jobId} 已成功取消】`
+    }
+    if (intent.type === 'usage_report') {
+      const user = getUser()?.username || ''
+      if (!user) return '【无法获取当前用户信息，请重新登录】'
+      const now2 = new Date()
+      const start = new Date(now2.getTime() - 30*86400000).toISOString().split('T')[0]
+      const end = now2.toISOString().split('T')[0]
+      const res = await get('/usage/user', { user, start_time: start, end_time: end })
+      const d = res.data
+      const jobs: any[] = d.jobs || []
+      const totalCPUH = jobs.reduce((s: number, j: any) => s + (j.cpu_hours||0), 0)
+      const totalGPUH = jobs.reduce((s: number, j: any) => s + (j.gpu_hours||0), 0)
+      return `【近30天机时报表（${start} ~ ${end}）用户: ${user}】
+- 总作业: ${jobs.length}  完成: ${jobs.filter((j:any)=>j.state==='COMPLETED').length}  失败: ${jobs.filter((j:any)=>j.state==='FAILED').length}
+- CPU核时: ${totalCPUH.toFixed(2)}  GPU卡时: ${totalGPUH.toFixed(2)}
+- 明细（最近10条）:
+${jobs.slice(0,10).map((j:any)=>`  · ${j.job_id} ${j.name} ${j.state} CPU:${(j.cpu_hours||0).toFixed(2)}h`).join('\n')}`
+    }
+    if (intent.type === 'partitions') {
+      const res = await get('/jobs/partitions/list')
+      const parts: any[] = res.data.data || []
+      return `【可用分区列表】\n` + parts.map((p:any) => `- ${p.name}: 节点${p.total_nodes||'-'}个 状态${p.state||'-'}`).join('\n')
+    }
+  } catch (e: any) {
+    return `【API调用失败: ${e.response?.data?.error || e.message}】`
+  }
+  return ''
+}
 
 const toggleChat = () => {
   open.value = !open.value
@@ -144,6 +255,15 @@ const autoResize = () => {
 const sendSuggestion = (text: string) => {
   input.value = text
   send()
+}
+
+// 快捷操作：弹出作业ID输入框
+const promptAnalyzeJob = () => {
+  const jobId = window.prompt('请输入要分析的作业 ID：')
+  if (jobId?.trim()) {
+    input.value = `分析作业 ${jobId.trim()} 的运行情况，找出问题并给出建议`
+    send()
+  }
 }
 
 // ─────────────────────────────────────────────
@@ -345,10 +465,23 @@ const send = async () => {
   loading.value = true
 
   try {
+    // 意图识别，拉取实时数据注入上下文
+    const intent = detectIntent(text)
+    let contextData = ''
+    if (intent.type) contextData = await fetchContext(intent)
+
     const history = messages.value.slice(-10).map(m => ({
       role: m.role,
       content: m.content
     }))
+
+    // 把实时数据注入到最后一条用户消息
+    if (contextData) {
+      history[history.length - 1] = {
+        role: 'user',
+        content: `${text}\n\n以下是从系统实时获取的数据，请基于这些数据回答：\n${contextData}`
+      }
+    }
 
     const res = await axios.post('/ai/chat', { messages: history })
     const reply = res.data.content || '抱歉，俺老孙没有理解您的问题，请重新描述。'
@@ -658,6 +791,28 @@ const renderContent = (text: string): string => {
   0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
   30% { transform: translateY(-6px); opacity: 1; }
 }
+
+/* 快捷操作栏 */
+.ai-quick-bar {
+  display: flex;
+  gap: 5px;
+  padding: 6px 12px;
+  border-top: 1px solid hsl(var(--border));
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+.ai-quick-btn {
+  padding: 3px 9px;
+  font-size: 0.72rem;
+  background: hsl(var(--secondary));
+  border: 1px solid hsl(var(--border));
+  border-radius: 12px;
+  cursor: pointer;
+  color: hsl(var(--foreground));
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+.ai-quick-btn:hover { background: hsl(var(--accent)); }
 
 /* Input */
 .ai-input-area {
