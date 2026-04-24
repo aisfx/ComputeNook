@@ -9,7 +9,6 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
-	"syscall"
 
 	"github.com/gin-gonic/gin"
 	"hpc-backend/logger"
@@ -80,14 +79,11 @@ func GetFSInfo(c *gin.Context) {
 			path = "/home"
 		}
 	}
-	var stat syscall.Statfs_t
-	if err := syscall.Statfs(path, &stat); err != nil {
+	totalKB, usedKB, freeKB, err := getFSStats(path)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	totalKB := int64(stat.Blocks) * int64(stat.Bsize) / 1024
-	freeKB := int64(stat.Bfree) * int64(stat.Bsize) / 1024
-	usedKB := totalKB - freeKB
 	c.JSON(http.StatusOK, gin.H{
 		"path":     path,
 		"total_kb": totalKB,

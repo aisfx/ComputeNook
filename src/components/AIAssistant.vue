@@ -147,7 +147,7 @@ const promptAnalyzeJob = () => {
 
 const promptSubmitJob = () => {
   input.value = '帮我提交这个作业脚本：\n```bash\n#!/bin/bash\n#SBATCH -J my_job\n#SBATCH -p compute\n#SBATCH -N 1\n#SBATCH -c 4\n#SBATCH --mem=8G\n#SBATCH -t 01:00:00\n\necho "Hello HPC"\n```'
-  nextTick(() => inputEl.value?.focus())
+  nextTick(() => { inputEl.value?.focus(); sendMessage() })
 }
 
 const promptListFiles = () => {
