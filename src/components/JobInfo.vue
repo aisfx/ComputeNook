@@ -67,7 +67,7 @@
       <table class="jobs-table">
         <thead>
           <tr>
-            <th>序号</th>
+            <th>作业ID</th>
             <th v-if="viewMode === 'all'">用户</th>
             <th>作业名称</th>
             <th>状态</th>
@@ -80,7 +80,7 @@
         </thead>
         <tbody>
           <tr v-for="(job, index) in filteredJobs" :key="job.id">
-            <td>{{ index + 1 }}</td>
+            <td><strong>{{ job.id }}</strong></td>
             <td v-if="viewMode === 'all'">{{ job.user }}</td>
             <td>{{ job.name }}</td>
             <td><span :class="['status', `status-${job.status.toLowerCase()}`]">{{ job.status }}</span></td>

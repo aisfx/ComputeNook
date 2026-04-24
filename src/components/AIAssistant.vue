@@ -65,6 +65,8 @@
         <div class="ai-quick-bar">
           <button class="ai-quick-btn" @click="sendSuggestion('查看我的作业列表')">📋 我的作业</button>
           <button class="ai-quick-btn" @click="sendSuggestion('生成我的机时使用报表')">📊 机时报表</button>
+          <button class="ai-quick-btn" @click="promptSubmitJob()">🚀 提交作业</button>
+          <button class="ai-quick-btn" @click="promptListFiles()">📁 我的文件</button>
           <button class="ai-quick-btn" @click="sendSuggestion('帮我生成一个MPI作业脚本')">📝 生成脚本</button>
           <button class="ai-quick-btn" @click="promptAnalyzeJob()">🔍 分析作业</button>
         </div>
@@ -134,17 +136,45 @@ const suggestions = [
 
 // ── 快捷操作 ──
 const promptAnalyzeJob = () => {
-  const jobId = window.prompt('请输入要分析的作业 ID：')
-  if (jobId?.trim()) {
-    input.value = `分析作业 ${jobId.trim()} 的运行情况，找出问题并给出建议`
-    send()
-  }
+  input.value = '分析作业 '
+  nextTick(() => {
+    if (inputEl.value) {
+      inputEl.value.focus()
+      inputEl.value.setSelectionRange(inputEl.value.value.length, inputEl.value.value.length)
+    }
+  })
+}
+
+const promptSubmitJob = () => {
+  input.value = '帮我提交这个作业脚本：\n```bash\n#!/bin/bash\n#SBATCH -J my_job\n#SBATCH -p compute\n#SBATCH -N 1\n#SBATCH -c 4\n#SBATCH --mem=8G\n#SBATCH -t 01:00:00\n\necho "Hello HPC"\n```'
+  nextTick(() => inputEl.value?.focus())
+}
+
+const promptListFiles = () => {
+  const user = getUser()?.username || ''
+  input.value = `查看我的文件 ~/`
+  nextTick(() => {
+    if (inputEl.value) {
+      inputEl.value.focus()
+      inputEl.value.setSelectionRange(inputEl.value.value.length, inputEl.value.value.length)
+    }
+  })
+}
+
+const fmtSize = (bytes: number) => {
+  if (!bytes) return '0B'
+  if (bytes >= 1073741824) return (bytes / 1073741824).toFixed(1) + 'GB'
+  if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + 'MB'
+  if (bytes >= 1024) return (bytes / 1024).toFixed(1) + 'KB'
+  return bytes + 'B'
 }
 
 // ── 意图识别 ──
 interface Intent {
-  type: 'list_jobs' | 'get_job' | 'cancel_job' | 'usage_report' | 'partitions' | null
+  type: 'list_jobs' | 'get_job' | 'cancel_job' | 'usage_report' | 'partitions' | 'submit_job' | 'list_files' | 'read_file' | null
   jobId?: string
+  filePath?: string
+  jobScript?: string
 }
 
 const detectIntent = (text: string): Intent => {
@@ -156,6 +186,18 @@ const detectIntent = (text: string): Intent => {
   if (cancelMatch) return { type: 'cancel_job', jobId: cancelMatch[1] }
   if (/机时|报表|使用情况|用了多少|核时|billing|usage/.test(t)) return { type: 'usage_report' }
   if (/分区|partition|队列|queue/.test(t) && /有哪些|列表|查看|show/.test(t)) return { type: 'partitions' }
+  // 提交作业：用户提供了脚本内容
+  if (/帮我提交|提交作业|帮我跑|submit.*job/.test(t) && /```[\s\S]*```/.test(text)) {
+    const scriptMatch = text.match(/```(?:bash|sh)?\n?([\s\S]*?)```/)
+    if (scriptMatch) return { type: 'submit_job', jobScript: scriptMatch[1].trim() }
+  }
+  // 查看文件列表
+  const listFileMatch = t.match(/(?:查看|列出|ls|list).{0,10}(?:文件|目录|文件夹)[^\n]*?([~/][^\s，。,\n]*)/)
+  if (listFileMatch) return { type: 'list_files', filePath: listFileMatch[1] }
+  if (/查看.*文件|我的文件|文件列表|ls\s+/.test(t) && !/日志文件/.test(t)) return { type: 'list_files', filePath: '' }
+  // 读取文件内容
+  const readFileMatch = t.match(/(?:读取|查看|cat|打开|看看).{0,5}(?:文件|日志|脚本|输出)[^\n]*?([~/][^\s，。,\n]+\.[a-zA-Z0-9]+)/)
+  if (readFileMatch) return { type: 'read_file', filePath: readFileMatch[1] }
   return { type: null }
 }
 
@@ -218,6 +260,34 @@ ${jobs.slice(0,10).map((j:any)=>`  · ${j.job_id} ${j.name} ${j.state} CPU:${(j.
       const res = await get('/jobs/partitions/list')
       const parts: any[] = res.data.data || []
       return `【可用分区列表】\n` + parts.map((p:any) => `- ${p.name}: 节点${p.total_nodes||'-'}个 状态${p.state||'-'}`).join('\n')
+    }
+    if (intent.type === 'submit_job' && intent.jobScript) {
+      if (!window.confirm('AI 助手将帮你提交以下作业脚本，确认提交？')) return '【用户取消了提交】'
+      const res = await axios.post((axios.defaults.baseURL || '/api') + '/jobs', {
+        script: intent.jobScript
+      }, { headers })
+      const jobId = res.data?.data?.job_id || res.data?.job_id
+      return `【作业提交成功！Job ID: ${jobId}】\n你可以用 "查看作业 ${jobId}" 来跟踪状态。`
+    }
+    if (intent.type === 'list_files') {
+      const user = getUser()?.username || ''
+      const path = intent.filePath || `/home/${user}`
+      const res = await get('/files/list', { path })
+      const files: any[] = res.data.data || []
+      if (!files.length) return `【目录 ${path} 为空或无权限访问】`
+      const dirs = files.filter((f:any) => f.is_dir)
+      const regular = files.filter((f:any) => !f.is_dir)
+      return `【目录 ${path} 内容（共${files.length}项）】\n` +
+        dirs.map((f:any) => `📁 ${f.name}/`).join('\n') +
+        (dirs.length && regular.length ? '\n' : '') +
+        regular.map((f:any) => `📄 ${f.name}  (${fmtSize(f.size)})`).join('\n')
+    }
+    if (intent.type === 'read_file' && intent.filePath) {
+      const res = await get('/files/read', { path: intent.filePath })
+      const content: string = res.data.content || ''
+      const lines = content.split('\n')
+      const preview = lines.slice(0, 50).join('\n')
+      return `【文件 ${intent.filePath} 内容（前${Math.min(50, lines.length)}行）】\n\`\`\`\n${preview}\n\`\`\`${lines.length > 50 ? `\n…（共${lines.length}行，仅显示前50行）` : ''}`
     }
   } catch (e: any) {
     return `【API调用失败: ${e.response?.data?.error || e.message}】`
