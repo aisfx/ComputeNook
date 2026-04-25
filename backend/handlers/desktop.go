@@ -1,4 +1,4 @@
-package handlers
+﻿package handlers
 
 import (
 "encoding/json"
@@ -33,7 +33,7 @@ type DesktopSession struct {
 	Status      string `json:"status"`
 	SlurmJobID  int64  `json:"slurmJobId,omitempty"`
 	WebURL      string `json:"webUrl,omitempty"`
-	// 兼容旧字段
+	// 兼容旧字�?
 	Type        string `json:"type,omitempty"`
 	VNCPort     int    `json:"vncPort,omitempty"`
 	VNCPassword string `json:"vncPassword,omitempty"`
@@ -79,10 +79,10 @@ type ResourcePreset struct {
 }
 
 // GetDesktopResourcePresets GET /api/desktop/resource-presets?partition=xxx
-// 根据分区节点最大资源动态生成4档规格（最大/2 分4份）
+// 根据分区节点最大资源动态生�?档规格（最�?2 �?份）
 func GetDesktopResourcePresets(c *gin.Context) {
 	if _, exists := c.Get("username"); !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "未授权"})
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未授�?})
 		return
 	}
 
@@ -101,7 +101,7 @@ func GetDesktopResourcePresets(c *gin.Context) {
 		return
 	}
 
-	// 找出指定分区（或全部）节点中的最大 CPU 和内存
+	// 找出指定分区（或全部）节点中的最�?CPU 和内�?
 	maxCPU := 0
 	maxMemMB := int64(0)
 	for _, node := range nodes {
@@ -133,7 +133,7 @@ func GetDesktopResourcePresets(c *gin.Context) {
 		maxMemMB = 32 * 1024
 	}
 
-	// 以最大资源/2 为基准，分4档：1/8, 2/8, 4/8, 8/8（即 /8, /4, /2, 全量）
+	// 以最大资�?2 为基准，�?档：1/8, 2/8, 4/8, 8/8（即 /8, /4, /2, 全量�?
 	base := maxCPU / 2
 	if base < 1 {
 		base = 1
@@ -144,10 +144,10 @@ func GetDesktopResourcePresets(c *gin.Context) {
 	}
 
 	presets := []ResourcePreset{
-		{Label: fmt.Sprintf("微型  %d核/%dGB", max1(base/4, 1), max1(baseMemGB/4, 1)), CPUs: max1(base/4, 1), Memory: max1(baseMemGB/4, 1)},
-		{Label: fmt.Sprintf("小型  %d核/%dGB", max1(base/2, 1), max1(baseMemGB/2, 1)), CPUs: max1(base/2, 1), Memory: max1(baseMemGB/2, 1)},
-		{Label: fmt.Sprintf("中型  %d核/%dGB", base, baseMemGB), CPUs: base, Memory: baseMemGB},
-		{Label: fmt.Sprintf("大型  %d核/%dGB", base*2, baseMemGB*2), CPUs: base * 2, Memory: baseMemGB * 2},
+		{Label: fmt.Sprintf("微型  %d�?%dGB", max1(base/4, 1), max1(baseMemGB/4, 1)), CPUs: max1(base/4, 1), Memory: max1(baseMemGB/4, 1)},
+		{Label: fmt.Sprintf("小型  %d�?%dGB", max1(base/2, 1), max1(baseMemGB/2, 1)), CPUs: max1(base/2, 1), Memory: max1(baseMemGB/2, 1)},
+		{Label: fmt.Sprintf("中型  %d�?%dGB", base, baseMemGB), CPUs: base, Memory: baseMemGB},
+		{Label: fmt.Sprintf("大型  %d�?%dGB", base*2, baseMemGB*2), CPUs: base * 2, Memory: baseMemGB * 2},
 	}
 
 	c.JSON(http.StatusOK, gin.H{"data": presets, "maxCPU": maxCPU, "maxMemGB": int(maxMemMB / 1024)})
@@ -461,154 +461,142 @@ return
 c.JSON(http.StatusOK, gin.H{"message": "deleted"})
 }
 
-// buildDesktopScript 生成 sbatch 脚本：通过 Xpra 启动桌面或应用
-// 所有运行时文件放到 $HOME/.xpra/job-${SLURM_JOB_ID}/ 目录，完全隔离
-// 端口通过动态扫描获取，写入状态文件供后端读取
+// buildDesktopScript generates sbatch script for Xpra desktop/app session.
+// All runtime files go to $HOME/.xpra/job-${SLURM_JOB_ID}/ for full isolation.
+// trap EXIT cleans up X locks and Xpra on job exit.
 func buildDesktopScript(session *DesktopSession) string {
-	homeBase := os.Getenv("HOME_BASE_PATH")
-	if homeBase == "" {
-		homeBase = "/home"
-	}
-	// 状态文件仍按 session ID 存放，供后端轮询
-	statusDir := fmt.Sprintf("%s/%s/.desktop", homeBase, session.Username)
-	statusFile := fmt.Sprintf("%s/%d.status", statusDir, session.ID)
-
-	resolution := session.Resolution
-	if resolution == "" || resolution == "auto" {
-		resolution = "1920x1080"
-	}
-	mode := session.Mode
-	if mode == "" {
-		mode = "desktop"
-	}
-	desktopEnv := "xfce4"
-	if session.Type != "" {
-		switch session.Type {
-		case "gnome":
-			desktopEnv = "gnome"
-		case "kde":
-			desktopEnv = "kde"
-		}
-	}
-	appCmd := session.AppCommand
-	if mode == "app" && appCmd == "" {
-		appCmd = "xterm"
-	}
-	durationSec := session.Duration * 3600
-	if durationSec <= 0 {
-		durationSec = 4 * 3600
-	}
-
-	var b strings.Builder
-	b.WriteString("#!/bin/bash\n")
-	b.WriteString(fmt.Sprintf("export HOME=${HOME:-%s/%s}\n", homeBase, session.Username))
-	b.WriteString("export PATH=/opt/xpra/bin:/usr/bin:/usr/local/bin:/bin:/usr/sbin:/sbin:$PATH\n\n")
-
-	// ── 以 SLURM_JOB_ID 命名的独立工作目录 ──
-	b.WriteString("JOB_ID=${SLURM_JOB_ID:-$$}\n")
-	b.WriteString(fmt.Sprintf("XPRA_JOB_DIR=\"$HOME/.xpra/job-${JOB_ID}\"\n"))
-	b.WriteString(fmt.Sprintf("mkdir -p \"$XPRA_JOB_DIR\" %s\n\n", statusDir))
-
-	// ── 动态查找空闲 display ──
-	b.WriteString("# 找空闲 display（跳过有锁文件或 socket 的）\n")
-	b.WriteString("DISPLAY_NUM=\n")
-	b.WriteString("for d in $(seq 10 200); do\n")
-	b.WriteString("  if [ ! -f /tmp/.X${d}-lock ] && [ ! -S /tmp/.X11-unix/X${d} ]; then\n")
-	b.WriteString("    DISPLAY_NUM=$d; break\n")
-	b.WriteString("  fi\ndone\n")
-	b.WriteString("[ -z \"$DISPLAY_NUM\" ] && DISPLAY_NUM=99\n\n")
-
-	// ── 动态查找空闲 WebSocket 端口（14500-14999）──
-	b.WriteString("# 找空闲 WebSocket 端口\n")
-	b.WriteString("WS_PORT=\n")
-	b.WriteString("for port in $(seq 14500 14999); do\n")
-	b.WriteString("  if ! ss -tlnp 2>/dev/null | grep -q \":${port}[^0-9]\"; then\n")
-	b.WriteString("    WS_PORT=$port; break\n")
-	b.WriteString("  fi\ndone\n")
-	b.WriteString("[ -z \"$WS_PORT\" ] && WS_PORT=14500\n\n")
-
-	// ── 写状态文件 ──
-	b.WriteString(fmt.Sprintf("echo 'status=starting' > %s\n", statusFile))
-	b.WriteString(fmt.Sprintf("echo \"node=$(hostname)\" >> %s\n", statusFile))
-	b.WriteString(fmt.Sprintf("echo \"ws_port=$WS_PORT\" >> %s\n", statusFile))
-	b.WriteString(fmt.Sprintf("echo \"display=$DISPLAY_NUM\" >> %s\n", statusFile))
-	b.WriteString(fmt.Sprintf("echo \"job_dir=$XPRA_JOB_DIR\" >> %s\n\n", statusFile))
-
-	// ── 清理残留 ──
-	b.WriteString("xpra stop :${DISPLAY_NUM} 2>/dev/null || true\n")
-	b.WriteString("sleep 1\n")
-	b.WriteString("rm -f /tmp/.X${DISPLAY_NUM}-lock /tmp/.X11-unix/X${DISPLAY_NUM} 2>/dev/null || true\n\n")
-
-	// ── XDG / dbus ──
-	b.WriteString("export XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/tmp/xpra-runtime-$(id -u)}\n")
-	b.WriteString("mkdir -p \"$XDG_RUNTIME_DIR\" && chmod 700 \"$XDG_RUNTIME_DIR\"\n")
-	b.WriteString("if [ -z \"$DBUS_SESSION_BUS_ADDRESS\" ]; then\n")
-	b.WriteString("  eval $(dbus-launch --sh-syntax) || true\n")
-	b.WriteString("fi\n\n")
-
-	// ── 启动 Xpra，所有文件放到 job 目录 ──
-	logFile := "\"$XPRA_JOB_DIR/xpra.log\""
-	socketDir := "\"$XPRA_JOB_DIR\""
-
-	if mode == "app" {
-		b.WriteString(fmt.Sprintf(
-			"xpra start :${DISPLAY_NUM} \\\n"+
-				"  --bind-ws=0.0.0.0:${WS_PORT} \\\n"+
-				"  --html=on \\\n"+
-				"  --socket-dir=%s \\\n"+
-				"  --log-file=%s \\\n"+
-				"  --start-child=\"%s\" \\\n"+
-				"  --exit-with-children=yes \\\n"+
-				"  --daemon=no \\\n"+
-				"  --resize-display=%s \\\n"+
-				"  &\n\n",
-			socketDir, logFile, appCmd, resolution,
-		))
-	} else {
-		var startCmd string
-		switch desktopEnv {
-		case "gnome":
-			startCmd = "gnome-session"
-		case "kde":
-			startCmd = "startplasma-x11"
-		default:
-			startCmd = "startxfce4"
-		}
-		b.WriteString(fmt.Sprintf(
-			"xpra start-desktop :${DISPLAY_NUM} \\\n"+
-				"  --bind-ws=0.0.0.0:${WS_PORT} \\\n"+
-				"  --html=on \\\n"+
-				"  --socket-dir=%s \\\n"+
-				"  --log-file=%s \\\n"+
-				"  --start-child=%s \\\n"+
-				"  --exit-with-children=no \\\n"+
-				"  --daemon=no \\\n"+
-				"  --resize-display=%s \\\n"+
-				"  &\n\n",
-			socketDir, logFile, startCmd, resolution,
-		))
-	}
-
-	b.WriteString("XPRA_PID=$!\n\n")
-
-	// ── 等待端口就绪（最多 90 秒）──
-	b.WriteString("for i in $(seq 1 90); do\n")
-	b.WriteString("  ss -tlnp 2>/dev/null | grep -q \":${WS_PORT}[^0-9]\" && break\n")
-	b.WriteString("  sleep 1\ndone\n\n")
-	b.WriteString(fmt.Sprintf("if ! ss -tlnp 2>/dev/null | grep -q \":${WS_PORT}[^0-9]\"; then\n"))
-	b.WriteString(fmt.Sprintf("  echo 'status=failed' >> %s\n  exit 1\nfi\n\n", statusFile))
-	b.WriteString(fmt.Sprintf("echo 'status=running' >> %s\n\n", statusFile))
-
-	// ── 保持运行 ──
-	b.WriteString(fmt.Sprintf("END_TIME=$(($(date +%%s) + %d))\n", durationSec))
-	b.WriteString("while [ $(date +%s) -lt $END_TIME ]; do\n")
-	b.WriteString("  kill -0 $XPRA_PID 2>/dev/null || break\n  sleep 30\ndone\n\n")
-	b.WriteString("xpra stop :${DISPLAY_NUM} 2>/dev/null || true\n")
-	b.WriteString(fmt.Sprintf("echo 'status=stopped' >> %s\n", statusFile))
-
-	return b.String()
+homeBase := os.Getenv("HOME_BASE_PATH")
+if homeBase == "" {
+homeBase = "/home"
 }
-// pollDesktopJob 轮询 Slurm 作业状态
+statusDir := fmt.Sprintf("%s/%s/.desktop", homeBase, session.Username)
+statusFile := fmt.Sprintf("%s/%d.status", statusDir, session.ID)
+
+resolution := session.Resolution
+if resolution == "" || resolution == "auto" {
+resolution = "1920x1080"
+}
+mode := session.Mode
+if mode == "" {
+mode = "desktop"
+}
+desktopEnv := "xfce4"
+if session.Type != "" {
+switch session.Type {
+case "gnome":
+desktopEnv = "gnome"
+case "kde":
+desktopEnv = "kde"
+}
+}
+appCmd := session.AppCommand
+if mode == "app" && appCmd == "" {
+appCmd = "xterm"
+}
+durationSec := session.Duration * 3600
+if durationSec <= 0 {
+durationSec = 4 * 3600
+}
+
+var b strings.Builder
+b.WriteString("#!/bin/bash\n")
+b.WriteString(fmt.Sprintf("export HOME=${HOME:-%s/%s}\n", homeBase, session.Username))
+b.WriteString("export PATH=/opt/xpra/bin:/usr/bin:/usr/local/bin:/bin:/usr/sbin:/sbin:$PATH\n\n")
+
+b.WriteString("JOB_ID=${SLURM_JOB_ID:-$$}\n")
+b.WriteString("JOB_DIR=\"$HOME/.xpra/job-${JOB_ID}\"\n")
+b.WriteString(fmt.Sprintf("mkdir -p \"$JOB_DIR\" %s\n\n", statusDir))
+
+// trap: cleanup on job exit (SIGTERM from scancel, EXIT, etc.)
+b.WriteString("DISPLAY_NUM=\nXPRA_PID=\n")
+b.WriteString("cleanup() {\n")
+b.WriteString("  [ -n \"$XPRA_PID\" ] && kill $XPRA_PID 2>/dev/null || true\n")
+b.WriteString("  [ -n \"$DISPLAY_NUM\" ] && xpra stop :${DISPLAY_NUM} 2>/dev/null || true\n")
+b.WriteString("  [ -n \"$DISPLAY_NUM\" ] && rm -f /tmp/.X${DISPLAY_NUM}-lock /tmp/.X11-unix/X${DISPLAY_NUM} 2>/dev/null || true\n")
+b.WriteString("  echo 'status=stopped' >> \"$JOB_DIR/status\" 2>/dev/null || true\n")
+b.WriteString("}\n")
+b.WriteString("trap cleanup EXIT INT TERM\n\n")
+
+// clean up zombie X locks (lock file exists but process is dead)
+b.WriteString("for lf in /tmp/.X[0-9]*-lock; do\n")
+b.WriteString("  [ -f \"$lf\" ] || continue\n")
+b.WriteString("  pid=$(cat \"$lf\" 2>/dev/null | tr -d ' \\n')\n")
+b.WriteString("  [ -z \"$pid\" ] && { rm -f \"$lf\"; continue; }\n")
+b.WriteString("  kill -0 \"$pid\" 2>/dev/null || {\n")
+b.WriteString("    dnum=$(basename \"$lf\" | grep -oE '[0-9]+')\n")
+b.WriteString("    rm -f \"$lf\" /tmp/.X11-unix/X${dnum} 2>/dev/null\n")
+b.WriteString("  }\n")
+b.WriteString("done\n\n")
+
+// find free display
+b.WriteString("for d in $(seq 10 250); do\n")
+b.WriteString("  [ -f /tmp/.X${d}-lock ] && continue\n")
+b.WriteString("  [ -S /tmp/.X11-unix/X${d} ] && continue\n")
+b.WriteString("  DISPLAY_NUM=$d; break\n")
+b.WriteString("done\n")
+b.WriteString("[ -z \"$DISPLAY_NUM\" ] && { echo 'status=failed' > \"$JOB_DIR/status\"; exit 1; }\n\n")
+
+// find free WebSocket port
+b.WriteString("WS_PORT=\n")
+b.WriteString("for port in $(seq 14500 14999); do\n")
+b.WriteString("  ss -tlnp 2>/dev/null | grep -q \":${port}[^0-9]\" && continue\n")
+b.WriteString("  WS_PORT=$port; break\n")
+b.WriteString("done\n")
+b.WriteString("[ -z \"$WS_PORT\" ] && WS_PORT=14500\n\n")
+
+// write status file + symlink for backend polling
+b.WriteString("echo 'status=starting' > \"$JOB_DIR/status\"\n")
+b.WriteString("echo \"node=$(hostname)\" >> \"$JOB_DIR/status\"\n")
+b.WriteString("echo \"ws_port=$WS_PORT\" >> \"$JOB_DIR/status\"\n")
+b.WriteString("echo \"display=$DISPLAY_NUM\" >> \"$JOB_DIR/status\"\n")
+b.WriteString(fmt.Sprintf("ln -sf \"$JOB_DIR/status\" %s\n\n", statusFile))
+
+// XDG / dbus
+b.WriteString("export XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/tmp/xpra-runtime-$(id -u)}\n")
+b.WriteString("mkdir -p \"$XDG_RUNTIME_DIR\" && chmod 700 \"$XDG_RUNTIME_DIR\"\n")
+b.WriteString("if [ -z \"$DBUS_SESSION_BUS_ADDRESS\" ]; then\n")
+b.WriteString("  eval $(dbus-launch --sh-syntax) || true\nfi\n\n")
+
+xpraCommon := fmt.Sprintf(
+"  --bind-ws=0.0.0.0:${WS_PORT} \\\n"+
+"  --html=on \\\n"+
+"  --socket-dir=\"$JOB_DIR\" \\\n"+
+"  --log-file=\"$JOB_DIR/xpra.log\" \\\n"+
+"  --daemon=no \\\n"+
+"  --resize-display=%s \\\n", resolution)
+
+if mode == "app" {
+b.WriteString(fmt.Sprintf("xpra start :${DISPLAY_NUM} \\\n%s  --start-child=\"%s\" \\\n  --exit-with-children=yes \\\n  &\n\n", xpraCommon, appCmd))
+} else {
+startCmd := "startxfce4"
+switch desktopEnv {
+case "gnome":
+startCmd = "gnome-session"
+case "kde":
+startCmd = "startplasma-x11"
+}
+b.WriteString(fmt.Sprintf("xpra start-desktop :${DISPLAY_NUM} \\\n%s  --start-child=%s \\\n  --exit-with-children=no \\\n  &\n\n", xpraCommon, startCmd))
+}
+
+b.WriteString("XPRA_PID=$!\n\n")
+
+// wait for port ready (max 90s)
+b.WriteString("for i in $(seq 1 90); do\n")
+b.WriteString("  ss -tlnp 2>/dev/null | grep -q \":${WS_PORT}[^0-9]\" && break\n")
+b.WriteString("  sleep 1\ndone\n\n")
+b.WriteString("if ! ss -tlnp 2>/dev/null | grep -q \":${WS_PORT}[^0-9]\"; then\n")
+b.WriteString("  echo 'status=failed' >> \"$JOB_DIR/status\"\n  exit 1\nfi\n\n")
+b.WriteString("echo 'status=running' >> \"$JOB_DIR/status\"\n\n")
+
+// keep running
+b.WriteString(fmt.Sprintf("END_TIME=$(($(date +%%s) + %d))\n", durationSec))
+b.WriteString("while [ $(date +%s) -lt $END_TIME ]; do\n")
+b.WriteString("  kill -0 $XPRA_PID 2>/dev/null || break\n  sleep 30\ndone\n\n")
+b.WriteString("# trap EXIT will handle cleanup\n")
+
+return b.String()
+}
+// pollDesktopJob 轮询 Slurm 作业状�?
 func pollDesktopJob(sessionID int, jobID int64, username string) {
 	client, err := GetSlurmClientForUser(username)
 	if err != nil {
@@ -637,7 +625,7 @@ func pollDesktopJob(sessionID int, jobID int64, username string) {
 		}
 	}
 
-	// 阶段1：等待 RUNNING，最多等 5 分钟
+	// 阶段1：等�?RUNNING，最多等 5 分钟
 	running := false
 	for i := 0; i < 60; i++ {
 		time.Sleep(5 * time.Second)
@@ -649,12 +637,12 @@ func pollDesktopJob(sessionID int, jobID int64, username string) {
 
 		state := strings.ToUpper(strings.TrimSpace(job.GetJobState()))
 		if state == "FAILED" || state == "CANCELLED" || state == "TIMEOUT" || state == "COMPLETED" {
-			// 检查状态文件，判断是 failed 还是 stopped
+			// 检查状态文件，判断�?failed 还是 stopped
 			data, _ := os.ReadFile(statusFile)
 			if strings.Contains(string(data), "status=failed") {
 				setStatus("failed")
 			} else {
-				setStatus("failed") // 还没到 running 就结束了，算失败
+				setStatus("failed") // 还没�?running 就结束了，算失败
 			}
 			return
 		}
@@ -664,7 +652,7 @@ func pollDesktopJob(sessionID int, jobID int64, username string) {
 			rdpPort := 5901
 			vncReady := false
 
-			// 等待状态文件里出现 status=running（最多等2分钟）
+			// 等待状态文件里出现 status=running（最多等2分钟�?
 			for w := 0; w < 24; w++ {
 				time.Sleep(5 * time.Second)
 				data, err := os.ReadFile(statusFile)
@@ -672,7 +660,7 @@ func pollDesktopJob(sessionID int, jobID int64, username string) {
 					continue
 				}
 				content := string(data)
-				// 检查是否失败
+				// 检查是否失�?
 				if strings.Contains(content, "status=failed") {
 					setStatus("failed")
 					return
@@ -710,7 +698,7 @@ func pollDesktopJob(sessionID int, jobID int64, username string) {
 					sessions[i].Status = "running"
 					sessions[i].Address = node
 					sessions[i].XpraPort = rdpPort
-					sessions[i].VNCPort = rdpPort // 兼容旧字段
+					sessions[i].VNCPort = rdpPort // 兼容旧字�?
 					_ = saveDesktopSessions(sessions)
 					break
 				}
@@ -726,7 +714,7 @@ func pollDesktopJob(sessionID int, jobID int64, username string) {
 	}
 
 	// 阶段2：持续监控，直到作业结束
-	// 连续查询失败超过 3 次才认为作业结束，避免网络抖动误判
+	// 连续查询失败超过 3 次才认为作业结束，避免网络抖动误�?
 	failCount := 0
 	for {
 		time.Sleep(10 * time.Second)
@@ -735,12 +723,12 @@ func pollDesktopJob(sessionID int, jobID int64, username string) {
 		if err != nil {
 			failCount++
 			if failCount >= 3 {
-				// 查不到作业，尝试从状态文件判断
+				// 查不到作业，尝试从状态文件判�?
 				data, ferr := os.ReadFile(statusFile)
 				if ferr == nil && strings.Contains(string(data), "status=stopped") {
 					setStatus("stopped")
 				} else {
-					setStatus("stopped") // 默认标记 stopped，不标 failed
+					setStatus("stopped") // 默认标记 stopped，不�?failed
 				}
 				return
 			}
@@ -760,7 +748,7 @@ func pollDesktopJob(sessionID int, jobID int64, username string) {
 			// 继续监控，同时检查状态文件是否有 stopped 标记
 			data, ferr := os.ReadFile(statusFile)
 			if ferr == nil && strings.Contains(string(data), "status=stopped") {
-				// job 脚本自己写了 stopped，取消 job
+				// job 脚本自己写了 stopped，取�?job
 				_ = client.CancelJob(jobID)
 				setStatus("stopped")
 				return

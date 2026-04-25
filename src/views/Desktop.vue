@@ -142,35 +142,35 @@
 
     <!-- 悬浮启动进度条（启动中可最小化，不阻塞页面操作） -->
     <Teleport to="body">
-      <div v-if="startingStatus === 'starting' && launchingSession" class="launch-float" :class="{ minimized: launchMinimized }">
+      <div v-if="launchState?.status === 'starting'" class="launch-float" :class="{ minimized: launchMinimized }">
         <div class="launch-float-header" @click="launchMinimized = !launchMinimized">
           <div class="launch-float-title">
             <div class="launch-spinner"></div>
-            <span>启动中 · {{ launchingSession.name }}</span>
-            <span class="launch-jobid" v-if="currentJobId">作业 #{{ currentJobId }}</span>
+            <span>启动中 · {{ launchState.sessionName }}</span>
+            <span class="launch-jobid" v-if="launchState.jobId">作业 #{{ launchState.jobId }}</span>
           </div>
           <div class="launch-float-actions">
             <button class="launch-icon-btn" :title="launchMinimized ? '展开' : '最小化'">
               {{ launchMinimized ? '▲' : '▼' }}
             </button>
-            <button class="launch-icon-btn" title="关闭（后台继续启动）" @click.stop="showStartModal = false; startingStatus = 'bg'">✕</button>
+            <button class="launch-icon-btn" title="关闭（后台继续启动）" @click.stop="launchMinimized = true">✕</button>
           </div>
         </div>
         <div v-if="!launchMinimized" class="launch-float-body">
           <div class="launch-progress">
-            <div class="launch-progress-fill" :style="{ width: startProgress + '%' }"></div>
+            <div class="launch-progress-fill" :style="{ width: launchState.progress + '%' }"></div>
           </div>
           <div class="log-panel">
             <div class="log-header">
               <span>日志</span>
               <div class="log-tabs">
-                <button :class="['log-tab', { active: logType === 'out' }]" @click="logType = 'out'">stdout</button>
-                <button :class="['log-tab', { active: logType === 'err' }]" @click="logType = 'err'">stderr</button>
+                <button :class="['log-tab', { active: launchState.logType === 'out' }]" @click="launchState.logType = 'out'">stdout</button>
+                <button :class="['log-tab', { active: launchState.logType === 'err' }]" @click="launchState.logType = 'err'">stderr</button>
               </div>
             </div>
-            <div class="log-body" ref="logBodyRef">
-              <div v-if="logLines.length === 0" class="log-empty">等待日志...</div>
-              <div v-for="(line, i) in logLines" :key="i" class="log-line">{{ line }}</div>
+            <div class="log-body">
+              <div v-if="launchState.logLines.length === 0" class="log-empty">等待日志...</div>
+              <div v-for="(line, i) in launchState.logLines" :key="i" class="log-line">{{ line }}</div>
             </div>
           </div>
         </div>
@@ -178,25 +178,27 @@
     </Teleport>
 
     <!-- 启动结果弹窗（就绪/失败时显示） -->
-    <div v-if="showStartModal && startingStatus !== 'starting' && startingStatus !== 'bg'" class="modal-overlay">
+    <div v-if="showStartModal && launchState?.status !== 'starting'" class="modal-overlay">
       <div class="modal-content start-modal" @click.stop>
         <div class="modal-header">
-          <h2>{{ startingStatus === 'ready' ? '会话已就绪' : '启动失败' }}</h2>
+          <h2>{{ launchState?.status === 'ready' ? '会话已就绪' : '启动失败' }}</h2>
           <button @click="showStartModal = false" class="btn-close">✕</button>
         </div>
         <div class="modal-body">
-          <div v-if="startingStatus === 'failed'" class="status-failed">
+          <div v-if="launchState?.status === 'failed'" class="status-failed">
             <div class="fail-icon">✕</div>
             <h4>会话启动失败</h4>
             <div class="log-panel">
               <div class="log-body">
-                <div v-for="(line, i) in logLines" :key="i" class="log-line">{{ line }}</div>
+                <div v-for="(line, i) in launchState?.logLines || []" :key="i" class="log-line">{{ line }}</div>
               </div>
             </div>
             <div class="modal-actions" style="margin-top:1rem">
-              <button class="btn-secondary" @click="showStartModal = false">关闭</button>
+              <button class="btn-secondary" @click="showStartModal = false; clearLaunch()">关闭</button>
             </div>
           </div>
+
+          <div v-else-if="launchState?.status === 'ready'" class="status-ready">
             <div class="success-icon">✅</div>
             <h4>会话已就绪</h4>
             <div class="connection-info">
@@ -223,16 +225,17 @@
                 <div class="method-top">
                   <span class="method-icon">🔌</span>
                   <div class="method-content">
-                    <strong>hpc-client 一键连接（推荐）</strong>
-                    <p>自动建立 SSH 隧道并启动 Xpra 客户端，需先安装 hpc-client</p>
+                    <strong>本地 Xpra 客户端（需安装 hpc-client + Xpra）</strong>
+                    <p>建立 SSH 端口转发，将计算节点 Xpra 端口映射到本地，再用本地 Xpra 客户端连接</p>
                   </div>
                   <div style="display:flex;gap:6px;flex-shrink:0">
-                    <button class="btn-secondary" @click="launchTunnel">🔌 建立隧道</button>
+                    <button class="btn-secondary" @click="launchTunnel">🔌 端口转发</button>
                     <button class="btn-primary" @click="launchXpraClient">🖥️ 启动 Xpra</button>
                   </div>
                 </div>
                 <p class="tunnel-hint" style="margin-top:8px">
-                  先点「建立隧道」，等待本地端口 <code>{{ localVncPort }}</code> 就绪后，再点「启动 Xpra」
+                  ① 点「端口转发」→ hpc-client 将节点端口 <code>{{ selectedSession?.xpraPort || selectedSession?.vncPort }}</code> 映射到本地 <code>{{ localVncPort }}</code>
+                  ② 转发就绪后点「启动 Xpra」→ 本地 Xpra 客户端连接 <code>localhost:{{ localVncPort }}</code>
                 </p>
               </div>
             </div>
@@ -280,6 +283,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import axios from 'axios'
 import { desktopAPI } from '../api/index'
 import XpraViewer from '../components/XpraViewer.vue'
+import { launchState, launchMinimized, startDesktopLaunch, clearLaunch } from '../utils/desktopLaunch'
 
 const sessions = ref<any[]>([])
 const partitions = ref<any[]>([])
@@ -291,21 +295,10 @@ const showCreateModal = ref(false)
 const showStartModal = ref(false)
 const showXpraModal = ref(false)
 const showScriptModal = ref(false)
-const startingStatus = ref<'starting' | 'ready' | 'failed' | 'bg'>('starting')
-const startProgress = ref(0)
-const currentJobId = ref('')
 const selectedSession = ref<any>(null)
-const launchingSession = ref<any>(null)
-const launchMinimized = ref(false)
-const logLines = ref<string[]>([])
-const logType = ref<'out' | 'err'>('out')
-const logBodyRef = ref<HTMLElement | null>(null)
-const xpraFrame = ref<HTMLIFrameElement | null>(null)
 const xpraWsUrl = ref('')
 const scriptInfo = ref({ script: '', partition: '', workdir: '' })
 
-let logTimer: any = null
-let pollTimer: any = null
 let listTimer: any = null
 
 const desktopEnvs = [
@@ -368,6 +361,11 @@ const loadResourcePresets = async () => {
 
 onMounted(() => {
   loadSessions()
+  // 如果有进行中的启动，恢复显示
+  if (launchState.value?.status === 'ready') {
+    selectedSession.value = launchState.value.session
+    showStartModal.value = true
+  }
   listTimer = setInterval(() => {
     if (sessions.value.some((s: any) => s.status === 'pending' || s.status === 'running')) loadSessions()
   }, 8000)
@@ -375,8 +373,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (listTimer) clearInterval(listTimer)
-  if (logTimer) clearInterval(logTimer)
-  if (pollTimer) clearInterval(pollTimer)
+  // 注意：不清理 launchState，让轮询继续在后台运行
 })
 
 const openCreateModal = async () => {
@@ -416,77 +413,31 @@ const deleteSession = async (session: any) => {
 
 const startSession = async (session: any) => {
   selectedSession.value = session
-  launchingSession.value = session
-  launchMinimized.value = false
-  showStartModal.value = true
-  startingStatus.value = 'starting'
-  startProgress.value = 0
-  currentJobId.value = ''
-  logLines.value = []
-  try {
-    const res = await desktopAPI.startSession(session.id, session.partition)
-    currentJobId.value = String(res.jobId || '')
-    startLogPolling(session.id)
-    startPollStatus(session.id)
-  } catch (e: any) {
-    startingStatus.value = 'failed'
+  showStartModal.value = false
+  await startDesktopLaunch(session, session.partition)
+}
+
+// 监听全局启动状态变化，就绪/失败时自动弹窗
+watch(() => launchState.value?.status, (status) => {
+  if (status === 'ready') {
+    selectedSession.value = launchState.value?.session
     showStartModal.value = true
-    alert('启动失败: ' + (e.response?.data?.error || e.message))
+    loadSessions()
+  } else if (status === 'failed') {
+    showStartModal.value = true
   }
-}
-
-const startLogPolling = (id: number) => {
-  if (logTimer) clearInterval(logTimer)
-  const fetch = async () => {
-    try {
-      const res = await axios.get(`/desktop/sessions/${id}/logs`, { params: { type: logType.value, lines: 200 } })
-      if (res.data.exists) {
-        logLines.value = res.data.lines.filter((l: string) => l !== '')
-        setTimeout(() => { if (logBodyRef.value) logBodyRef.value.scrollTop = logBodyRef.value.scrollHeight }, 50)
-      }
-    } catch { /* ignore */ }
-  }
-  fetch()
-  logTimer = setInterval(fetch, 3000)
-}
-
-watch(logType, () => { if (selectedSession.value && startingStatus.value === 'starting') startLogPolling(selectedSession.value.id) })
-
-const startPollStatus = (id: number) => {
-  if (pollTimer) clearInterval(pollTimer)
-  pollTimer = setInterval(async () => {
-    try {
-      const s = await desktopAPI.getStatus(id)
-      startProgress.value = s.status === 'running' ? 100 : s.status === 'pending' ? 50 : startProgress.value
-      if (s.status === 'running') {
-        clearInterval(pollTimer); if (logTimer) clearInterval(logTimer)
-        startingStatus.value = 'ready'
-        selectedSession.value = s
-        launchingSession.value = null
-        showStartModal.value = true  // 自动弹出就绪弹窗
-        const idx = sessions.value.findIndex((x: any) => x.id === id)
-        if (idx >= 0) sessions.value[idx] = s
-      } else if (s.status === 'failed') {
-        clearInterval(pollTimer); if (logTimer) clearInterval(logTimer)
-        startingStatus.value = 'failed'
-        launchingSession.value = null
-        showStartModal.value = true  // 自动弹出失败弹窗
-      }
-    } catch { /* ignore */ }
-  }, 3000)
-}
+})
 
 // 打开 Xpra 连接（running 状态直接连）
 const openXpra = (session: any) => {
   selectedSession.value = session
   showStartModal.value = true
-  startingStatus.value = 'ready'
 }
 
 const showVncPwd = ref(false)
 
 // 本地转发端口 = VNC端口（用户可自定义，默认用远端端口）
-const localVncPort = computed(() => selectedSession.value?.vncPort || selectedSession.value?.xpraPort || 5901)
+const localVncPort = computed(() => selectedSession.value?.xpraPort || selectedSession.value?.vncPort || 14501)
 
 const tunnelCmd = computed(() => {
   if (!selectedSession.value) return ''
@@ -512,15 +463,15 @@ const openNoVNC = () => {
   showXpraModal.value = true
 }
 
-// 一键建立 SSH 隧道：通过 hpcc:// 协议拉起 hpc-client 建立端口转发
+// 端口转发：通过 hpcc://ssh 让 hpc-client 把计算节点 Xpra 端口映射到本地
 const launchTunnel = () => {
   if (!selectedSession.value) return
   const token = localStorage.getItem('token') || sessionStorage.getItem('token') || ''
   const node = selectedSession.value.address || ''
-  const remotePort = selectedSession.value.xpraPort || selectedSession.value.vncPort || 5901
+  const remotePort = selectedSession.value.xpraPort || selectedSession.value.vncPort || 14501
   const localPort = localVncPort.value
-  // hpcc://ssh 协议：hpc-client 建立 SSH 隧道并做端口转发
-  const uri = `hpcc://ssh?server=${encodeURIComponent(location.origin)}&token=${encodeURIComponent(token)}&host=${encodeURIComponent(node)}&remote_port=${remotePort}&local_port=${localPort}&mode=tunnel`
+  // mode=forward 告诉 hpc-client 做端口转发而不是交互式 SSH
+  const uri = `hpcc://ssh?server=${encodeURIComponent(location.origin)}&token=${encodeURIComponent(token)}&host=${encodeURIComponent(node)}&remote_port=${remotePort}&local_port=${localPort}&mode=forward`
   window.location.href = uri
 }
 
@@ -538,8 +489,8 @@ const stopSession = async () => {
   if (!selectedSession.value || !confirm('确定停止此会话？')) return
   try {
     await desktopAPI.stopSession(selectedSession.value.id)
-    if (pollTimer) clearInterval(pollTimer)
     showStartModal.value = false
+    clearLaunch()
     await loadSessions()
   } catch (e: any) { alert('停止失败: ' + (e.response?.data?.error || e.message)) }
 }
