@@ -360,42 +360,52 @@ autoreconnection enabled:i:1
 	}
 }
 
-// launchSSH 隧道就绪后拉起 SSH 客户端
+// launchSSH 隧道就绪后弹出 cmd 窗口显示连接样例
 func launchSSH(port int, sshUser string) {
 	switch runtime.GOOS {
 	case "windows":
-		// 优先用 PuTTY，找不到就用系统 ssh
-		if p, err := exec.LookPath("putty"); err == nil {
-			exec.Command(p, "-P", fmt.Sprintf("%d", port), fmt.Sprintf("%s@localhost", sshUser)).Start() //nolint:errcheck
-		} else if p, err := exec.LookPath("ssh"); err == nil {
-			// Windows Terminal / PowerShell 里的 ssh
-			exec.Command("cmd", "/c", "start", p,
-				"-p", fmt.Sprintf("%d", port),
-				fmt.Sprintf("%s@localhost", sshUser),
-			).Start() //nolint:errcheck
-		} else {
-			fmt.Printf("\n请手动连接: ssh -p %d %s@localhost\n", port, sshUser)
-			fmt.Println("或安装 PuTTY: https://www.putty.org/")
-		}
+		// 弹出 cmd 窗口，显示连接信息和可直接执行的 SSH 命令
+		sshCmd := fmt.Sprintf("ssh -p %d %s@localhost", port, sshUser)
+		content := fmt.Sprintf(
+			"echo.\r\n"+
+				"echo  ============================================\r\n"+
+				"echo   HPC SSH 隧道已就绪\r\n"+
+				"echo  ============================================\r\n"+
+				"echo.\r\n"+
+				"echo   节点已通过隧道映射到本地端口 %d\r\n"+
+				"echo.\r\n"+
+				"echo   SSH 连接命令：\r\n"+
+				"echo     %s\r\n"+
+				"echo.\r\n"+
+				"echo   或使用 PuTTY / Xshell 连接：\r\n"+
+				"echo     主机: localhost   端口: %d\r\n"+
+				"echo.\r\n"+
+				"echo  --------------------------------------------\r\n"+
+				"echo   按回车直接连接，关闭此窗口将断开隧道\r\n"+
+				"echo  --------------------------------------------\r\n"+
+				"echo.\r\n"+
+				"set /p _=按回车键直接连接 SSH... \r\n"+
+				"%s\r\n",
+			port, sshCmd, port, sshCmd,
+		)
+		ui.CmdWindow("HPC SSH 隧道已就绪", content)
 	case "darwin":
-		// macOS Terminal
-		script := fmt.Sprintf(`tell application "Terminal" to do script "ssh -p %d %s@localhost"`, port, sshUser)
+		script := fmt.Sprintf(`tell application "Terminal" to do script "echo '=== HPC SSH 隧道已就绪 ===' && echo '连接命令: ssh -p %d %s@localhost' && ssh -p %d %s@localhost"`, port, sshUser, port, sshUser)
 		exec.Command("osascript", "-e", script).Start() //nolint:errcheck
 	default:
-		// Linux：尝试常见终端
 		addr := fmt.Sprintf("%s@localhost", sshUser)
 		portStr := fmt.Sprintf("%d", port)
 		for _, term := range [][]string{
-			{"gnome-terminal", "--", "ssh", "-p", portStr, addr},
-			{"xterm", "-e", "ssh", "-p", portStr, addr},
-			{"konsole", "-e", "ssh", "-p", portStr, addr},
+			{"gnome-terminal", "--", "bash", "-c", fmt.Sprintf("echo '=== HPC SSH 隧道已就绪 ===' && ssh -p %s %s; read", portStr, addr)},
+			{"xterm", "-e", "bash", "-c", fmt.Sprintf("echo '=== HPC SSH 隧道已就绪 ===' && ssh -p %s %s; read", portStr, addr)},
+			{"konsole", "-e", "bash", "-c", fmt.Sprintf("echo '=== HPC SSH 隧道已就绪 ===' && ssh -p %s %s; read", portStr, addr)},
 		} {
 			if _, err := exec.LookPath(term[0]); err == nil {
 				exec.Command(term[0], term[1:]...).Start() //nolint:errcheck
 				return
 			}
 		}
-		fmt.Printf("\n请手动连接: ssh -p %d %s@localhost\n", port, sshUser)
+		fmt.Printf("\n✅ SSH 隧道已就绪\n连接命令: ssh -p %d %s@localhost\n", port, sshUser)
 	}
 }
 

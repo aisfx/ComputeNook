@@ -121,8 +121,12 @@ function zipDir(sourceDir, zipPath, innerFolder) {
   for (const ct of clientTargets) {
     const outPath = path.join(clientsDir, ct.out)
     console.log(`   → ${ct.GOOS}/${ct.GOARCH}: ${ct.out}`)
+    // Windows 加 -H windowsgui 避免弹出 cmd 窗口
+    const ldflags = ct.GOOS === 'windows'
+      ? '"-s -w -H windowsgui"'
+      : '"-s -w"'
     run(
-      `go build -ldflags="-s -w" -o "${outPath}" .`,
+      `go build -ldflags=${ldflags} -o "${outPath}" .`,
       clientSrc,
       { GOOS: ct.GOOS, GOARCH: ct.GOARCH, CGO_ENABLED: '0' }
     )

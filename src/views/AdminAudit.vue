@@ -16,7 +16,7 @@
     <div class="tab-bar">
       <button :class="['tab-btn', { active: activeTab === 'audit' }]" @click="activeTab = 'audit'">📋 操作审计</button>
       <button :class="['tab-btn', { active: activeTab === 'ssh' }]" @click="activeTab = 'ssh'; loadSSHLogs()">🔐 SSH 行为日志</button>
-      <button :class="['tab-btn', { active: activeTab === 'report' }]" @click="activeTab = 'report'">📊 用量报表</button>
+      <button :class="['tab-btn', { active: activeTab === 'report' }]" @click="activeTab = 'report'; $nextTick(() => { rLineChart?.resize(); rScaleChart?.resize(); rUsageChart?.resize(); rStorageChart?.resize() })">📊 用量报表</button>
     </div>
 
     <!-- 统计卡片 -->
@@ -434,10 +434,10 @@ const viewSSHLog = async (item: any) => {
   showSSHLogModal.value = true
   try {
     const res = await axios.get(`/audit/ssh-logs/download`, {
-      params: { username: item.username, file: item.file },
+      params: { username: item.username, file: item.file, view: '1' },
       responseType: 'text',
     })
-    sshLogContent.value = res.data
+    sshLogContent.value = res.data || '（日志为空）'
   } catch (e: any) {
     sshLogContent.value = '加载失败: ' + (e.response?.data?.error || e.message)
   }
@@ -790,6 +790,14 @@ function renderAdminCharts() {
       ],
     })
   }
+
+  // 延迟 resize，确保容器完全布局后图表尺寸正确
+  setTimeout(() => {
+    rLineChart?.resize()
+    rScaleChart?.resize()
+    rUsageChart?.resize()
+    rStorageChart?.resize()
+  }, 100)
 }
 
 function rStatusColor(s: string) { return s === 'EXCEEDED' ? '#f5222d' : s === 'WARNING' ? '#fa8c16' : '#52c41a' }
@@ -1353,9 +1361,10 @@ onMounted(() => {
 .filter-input-sm { padding: 0.4rem 0.65rem; border: 1px solid #e5e7eb; border-radius: 7px; font-size: 0.85rem; background: #fff; color: #1e293b; outline: none; }
 .filter-input-sm:focus { border-color: #667eea; }
 .report-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.75rem; padding: 3rem; color: #6b7280; text-align: center; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; }
-.rcard { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 1.25rem 1.5rem; }
+.rcard { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 1.25rem 1.5rem; overflow: visible; min-width: 0; }
 .rcard-title { font-size: 0.9rem; font-weight: 700; color: #1e293b; margin-bottom: 1rem; }
 .rchart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.rchart-row > .rcard { min-width: 0; }
 @media (max-width: 900px) { .rchart-row { grid-template-columns: 1fr; } }
 .account-tag { font-size: 0.75rem; font-weight: 500; color: #6b7280; background: #f1f5f9; padding: 2px 8px; border-radius: 10px; }
 .progress-info { display: flex; justify-content: space-between; font-size: 0.875rem; color: #1e293b; margin-bottom: 0.5rem; }

@@ -118,6 +118,39 @@
       </div>
     </div>
 
+    <!-- SSH 隧道信息弹窗 -->
+    <div v-if="showTunnelInfo" class="modal-overlay" @click.self="showTunnelInfo = false">
+      <div class="modal-content" @click.stop style="max-width:520px">
+        <div class="modal-header">
+          <h4>🔗 SSH 隧道连接</h4>
+          <button class="close-btn" @click="showTunnelInfo = false">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="tunnel-step">
+            <div class="tunnel-step-num">1</div>
+            <div class="tunnel-step-body">
+              <strong>启动 hpc-client 建立隧道</strong>
+              <p style="font-size:0.82rem;color:#6b7280;margin:4px 0 8px">点击下方按钮，hpc-client 将自动把节点 SSH 端口映射到本地 <code>{{ tunnelLocalPort }}</code></p>
+              <button class="btn-primary" style="width:auto;padding:6px 16px" @click="doLaunchTunnel">🔌 启动隧道</button>
+              <p style="font-size:0.75rem;color:#9ca3af;margin-top:6px">未安装 hpc-client？<a href="/download" target="_blank" style="color:#6366f1">点此下载</a></p>
+            </div>
+          </div>
+          <div class="tunnel-step">
+            <div class="tunnel-step-num">2</div>
+            <div class="tunnel-step-body">
+              <strong>等待隧道就绪后，使用 SSH 连接</strong>
+              <p style="font-size:0.82rem;color:#6b7280;margin:4px 0 8px">隧道建立后，在终端执行以下命令：</p>
+              <div class="ssh-cmd-box">
+                <code>ssh -p {{ tunnelLocalPort }} {{ tunnelUser }}@localhost</code>
+                <button class="btn-copy-small" @click="copySshCmd">复制</button>
+              </div>
+              <p style="font-size:0.75rem;color:#9ca3af;margin-top:6px">或使用 PuTTY / Xshell 等工具连接 <code>localhost:{{ tunnelLocalPort }}</code></p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- 密钥上传 -->
     <div v-if="showKeyUpload" class="modal-overlay" @click="showKeyUpload = false">
       <div class="modal-content" @click.stop>
@@ -756,12 +789,32 @@ const loadNodes = async () => {
   }
 }
 
-// 通过 hpcc:// 拉起客户端建立 SSH 隧道
+// SSH 隧道信息弹窗
+const showTunnelInfo = ref(false)
+const tunnelNode = ref<any>(null)
+const tunnelLocalPort = ref(12222)
+const tunnelUser = ref('')
+
+// 点击隧道按钮：显示信息弹窗，不直接拉起 hpcc://
 const launchSSHTunnel = (node: any) => {
+  tunnelNode.value = node
+  tunnelUser.value = currentUsername.value || ''
+  tunnelLocalPort.value = 12222
+  showTunnelInfo.value = true
+}
+
+// 弹窗里点"启动隧道"才真正拉起 hpcc://
+const doLaunchTunnel = () => {
   const token = localStorage.getItem('token') || sessionStorage.getItem('token') || ''
-  const user = currentUsername.value || ''
-  const uri = `hpcc://ssh?server=${encodeURIComponent(location.origin)}&token=${encodeURIComponent(token)}&host=${encodeURIComponent(node.host || node.name)}&port=12222&user=${encodeURIComponent(user)}`
+  const node = tunnelNode.value
+  if (!node) return
+  const uri = `hpcc://ssh?server=${encodeURIComponent(location.origin)}&token=${encodeURIComponent(token)}&host=${encodeURIComponent(node.host || node.name)}&port=${tunnelLocalPort.value}&user=${encodeURIComponent(tunnelUser.value)}`
   window.location.href = uri
+}
+
+const copySshCmd = () => {
+  const cmd = `ssh -p ${tunnelLocalPort.value} ${tunnelUser.value}@localhost`
+  navigator.clipboard?.writeText(cmd).then(() => alert('命令已复制')).catch(() => alert(cmd))
 }
 
 // 选择节点
@@ -1329,6 +1382,15 @@ const copyPubKey = () => {
 }
 .host-item:hover .btn-tunnel { opacity: 1; }
 .btn-tunnel:hover { background: #f3f4f6; border-color: #6366f1; }
+
+/* SSH 隧道信息弹窗 */
+.tunnel-step { display: flex; gap: 12px; margin-bottom: 1.25rem; }
+.tunnel-step-num { width: 24px; height: 24px; border-radius: 50%; background: #6366f1; color: #fff; font-size: 0.8rem; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 2px; }
+.tunnel-step-body { flex: 1; }
+.tunnel-step-body strong { font-size: 0.9rem; color: #111827; }
+.ssh-cmd-box { display: flex; align-items: center; gap: 8px; background: #1e293b; border-radius: 6px; padding: 8px 12px; }
+.ssh-cmd-box code { flex: 1; color: #e2e8f0; font-size: 0.85rem; font-family: monospace; word-break: break-all; }
+.btn-copy-small { padding: 3px 10px; font-size: 0.75rem; background: #6366f1; color: #fff; border: none; border-radius: 4px; cursor: pointer; flex-shrink: 0; }
 
 .host-info {
   flex: 1;

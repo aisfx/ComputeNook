@@ -36,6 +36,42 @@
         </div>
       </div>
 
+      <!-- 双因子认证卡片（仅 MFA 未关闭时显示） -->
+      <div class="card" v-if="mfaMode !== 'false'">
+        <div class="card-header">
+          <h4>🔐 双因子认证 (MFA)</h4>
+          <span class="badge" :class="mfaStatus?.confirmed ? 'badge-admin' : 'badge-user'">
+            {{ mfaStatus?.confirmed ? '已启用' : '未绑定' }}
+          </span>
+        </div>
+        <div class="card-body">
+          <div v-if="mfaMode === 'global'" class="alert alert-info" style="margin-bottom:1rem">
+            系统已开启强制双因子认证，所有用户必须绑定 MFA。
+          </div>
+          <div v-if="mfaStatus?.confirmed">
+            <!-- 已绑定：提供解绑入口 -->
+            <p style="color:#6b7280;font-size:0.875rem;margin-bottom:1rem">
+              双因子认证已启用，登录时需要输入 Authenticator App 中的验证码。
+            </p>
+            <div v-if="mfaDisableError" class="alert alert-error">{{ mfaDisableError }}</div>
+            <div class="form-group">
+              <label>输入当前验证码以解绑</label>
+              <input v-model="mfaDisableCode" type="text" inputmode="numeric" maxlength="6" placeholder="000000" />
+            </div>
+            <button class="btn-danger" :disabled="mfaDisableCode.length !== 6 || mfaDisabling" @click="handleDisableMFA">
+              {{ mfaDisabling ? '解绑中...' : '解绑 MFA' }}
+            </button>
+          </div>
+          <div v-else>
+            <!-- 未绑定：引导绑定 -->
+            <p style="color:#6b7280;font-size:0.875rem;margin-bottom:1rem">
+              绑定后，登录时需要额外输入 Authenticator App 中的 6 位验证码，提升账户安全性。
+            </p>
+            <button class="btn-primary" @click="goBindMFA">绑定 MFA →</button>
+          </div>
+        </div>
+      </div>
+
       <!-- 修改密码卡片 -->
       <div class="card">
         <div class="card-header">
@@ -70,6 +106,69 @@
 
   </div>
   <Teleport to="body">
+    <!-- MFA 绑定弹窗 -->
+    <div v-if="showMFABindModal" class="modal-overlay" @click.self="closeMFABindModal">
+      <div class="modal">
+        <div class="modal-header">
+          <h3>🔐 绑定双因子认证</h3>
+          <button class="btn-close" @click="closeMFABindModal">×</button>
+        </div>
+        <div class="modal-body">
+          <!-- Step 1: 扫码 -->
+          <div v-if="mfaBindStep === 'scan'">
+            <p style="font-size:0.875rem;color:#6b7280;margin-bottom:1rem">
+              使用 Google Authenticator、Authy 等 TOTP 应用扫描二维码
+            </p>
+            <div v-if="!mfaBindQrUrl && !mfaBindError" style="text-align:center;padding:2rem;color:#9ca3af">生成二维码中...</div>
+            <div v-else-if="mfaBindQrUrl" style="text-align:center;margin-bottom:1rem">
+              <img :src="mfaBindQrUrl" alt="MFA QR" style="width:220px;height:220px;border:1px solid #e5e7eb;border-radius:8px;display:block;margin:0 auto" />
+              <div style="margin-top:0.5rem;font-size:0.8rem;color:#6366f1;cursor:pointer" @click="mfaBindShowManual=!mfaBindShowManual">
+                {{ mfaBindShowManual ? '▲ 收起' : '▼ 无法扫码？手动输入' }}
+              </div>
+              <div v-if="mfaBindShowManual" style="margin-top:0.5rem;background:#f9fafb;border-radius:8px;padding:0.75rem;text-align:left;font-size:0.8rem">
+                <div style="margin-bottom:0.3rem"><span style="color:#9ca3af">账户：</span><code>{{ mfaBindAccount }}</code></div>
+                <div><span style="color:#9ca3af">密钥：</span><code style="word-break:break-all">{{ mfaBindSecret }}</code></div>
+              </div>
+            </div>
+            <div v-if="mfaBindError" class="alert alert-error">{{ mfaBindError }}</div>
+          </div>
+          <!-- Step 2: 确认验证码 -->
+          <div v-else-if="mfaBindStep === 'confirm'">
+            <p style="font-size:0.875rem;color:#6b7280;margin-bottom:1rem;text-align:center">
+              请输入 App 中显示的 6 位验证码以完成绑定
+            </p>
+            <div class="form-group">
+              <input v-model="mfaBindCode" type="text" inputmode="numeric" maxlength="6" placeholder="000000"
+                style="text-align:center;font-size:1.5rem;letter-spacing:0.4em;font-weight:700"
+                @keyup.enter="handleMFABindConfirm" autofocus />
+            </div>
+            <div v-if="mfaBindError" class="alert alert-error">{{ mfaBindError }}</div>
+          </div>
+          <!-- Step 3: 完成 -->
+          <div v-else-if="mfaBindStep === 'done'" style="text-align:center;padding:1rem 0">
+            <div style="font-size:3rem;margin-bottom:0.75rem">✅</div>
+            <h4 style="margin:0 0 0.5rem">绑定成功</h4>
+            <p style="font-size:0.875rem;color:#6b7280">双因子认证已启用，下次登录时需要输入验证码</p>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <template v-if="mfaBindStep === 'scan'">
+            <button class="btn-secondary" @click="closeMFABindModal">取消</button>
+            <button class="btn-primary" :disabled="!mfaBindQrUrl" @click="mfaBindStep = 'confirm'">已扫码，下一步 →</button>
+          </template>
+          <template v-else-if="mfaBindStep === 'confirm'">
+            <button class="btn-secondary" @click="mfaBindStep = 'scan'">← 返回</button>
+            <button class="btn-primary" :disabled="mfaBindCode.length !== 6 || mfaBindLoading" @click="handleMFABindConfirm">
+              {{ mfaBindLoading ? '验证中...' : '确认绑定' }}
+            </button>
+          </template>
+          <template v-else>
+            <button class="btn-primary" @click="closeMFABindModal">关闭</button>
+          </template>
+        </div>
+      </div>
+    </div>
+
     <!-- 编辑个人信息模态框 -->
     <div v-if="showEditModal" class="modal-overlay" @click.self="closeEditModal">
       <div class="modal">
@@ -108,9 +207,12 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { authAPI } from '../api'
+import { useRouter } from 'vue-router'
+import QRCode from 'qrcode'
+import { authAPI, mfaAPI } from '../api'
 import { getUser } from '../utils/auth'
 
+const router = useRouter()
 const user = ref<any>(null)
 const showEditModal = ref(false)
 const editError = ref('')
@@ -120,6 +222,13 @@ const updating = ref(false)
 const changingPassword = ref(false)
 const showSuccessToast = ref(false)
 const successMessage = ref('')
+
+// MFA
+const mfaStatus = ref<any>(null)
+const mfaMode = ref<string>('false')
+const mfaDisableCode = ref('')
+const mfaDisableError = ref('')
+const mfaDisabling = ref(false)
 
 const editForm = ref({
   cnName: '',
@@ -142,6 +251,81 @@ const loadUser = () => {
       email: user.value.email || '',
       phone: user.value.phone || ''
     }
+  }
+}
+
+// 加载 MFA 状态
+const loadMFAStatus = async () => {
+  try {
+    const status = await mfaAPI.getStatus()
+    mfaStatus.value = status
+    mfaMode.value = String(status.mode)
+  } catch (_) {}
+}
+
+// MFA 绑定弹窗状态
+const showMFABindModal = ref(false)
+const mfaBindStep = ref<'scan' | 'confirm' | 'done'>('scan')
+const mfaBindQrUrl = ref('')   // data URL，直接给 img src
+const mfaBindSecret = ref('')
+const mfaBindAccount = ref('')
+const mfaBindCode = ref('')
+const mfaBindError = ref('')
+const mfaBindLoading = ref(false)
+const mfaBindShowManual = ref(false)
+
+const goBindMFA = async () => {
+  showMFABindModal.value = true
+  mfaBindStep.value = 'scan'
+  mfaBindQrUrl.value = ''
+  mfaBindCode.value = ''
+  mfaBindError.value = ''
+  mfaBindShowManual.value = false
+  try {
+    const data = await mfaAPI.setupAuth()
+    mfaBindSecret.value = data.secret
+    mfaBindAccount.value = data.account || ''
+    // toDataURL 纯 JS，不依赖 DOM
+    mfaBindQrUrl.value = await QRCode.toDataURL(data.otpauthUri, {
+      width: 220, margin: 2, errorCorrectionLevel: 'M',
+      color: { dark: '#000000', light: '#ffffff' }
+    })
+  } catch (e: any) {
+    mfaBindError.value = e.response?.data?.error || '获取二维码失败'
+  }
+}
+
+const handleMFABindConfirm = async () => {
+  mfaBindError.value = ''
+  mfaBindLoading.value = true
+  try {
+    await mfaAPI.confirmAuth(mfaBindCode.value)
+    mfaBindStep.value = 'done'
+    await loadMFAStatus()
+  } catch (e: any) {
+    mfaBindError.value = e.response?.data?.error || '验证码错误，请重试'
+  } finally {
+    mfaBindLoading.value = false
+  }
+}
+
+const closeMFABindModal = () => {
+  showMFABindModal.value = false
+}
+
+// 解绑 MFA
+const handleDisableMFA = async () => {
+  mfaDisableError.value = ''
+  mfaDisabling.value = true
+  try {
+    await mfaAPI.disable(mfaDisableCode.value)
+    mfaDisableCode.value = ''
+    showSuccess('✅ MFA 已成功解绑')
+    await loadMFAStatus()
+  } catch (err: any) {
+    mfaDisableError.value = err.response?.data?.error || '解绑失败，请检查验证码'
+  } finally {
+    mfaDisabling.value = false
   }
 }
 
@@ -259,6 +443,7 @@ const closeEditModal = () => {
 
 onMounted(() => {
   loadUser()
+  loadMFAStatus()
 })
 </script>
 
@@ -460,6 +645,29 @@ onMounted(() => {
 
 .btn-secondary:hover {
   background: #f1f5f9;
+}
+
+.btn-danger {
+  background: #fff;
+  color: #dc2626;
+  border: 1px solid #fca5a5;
+  padding: 7px 16px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.85rem;
+  transition: all 0.15s;
+}
+.btn-danger:hover { background: #fef2f2; }
+.btn-danger:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.alert-info {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 0.875rem;
 }
 
 .modal-overlay {

@@ -218,8 +218,13 @@ func DownloadSSHTunnelLog(c *gin.Context) {
 	}
 	clean := sanitizeLogBytes(raw)
 
-	c.Header("Content-Disposition", "attachment; filename="+file)
-	c.Data(http.StatusOK, "text/plain; charset=utf-8", []byte(clean))
+	// view=1 时直接返回文本内容（供前端弹窗展示），否则触发下载
+	if c.Query("view") == "1" {
+		c.Data(http.StatusOK, "text/plain; charset=utf-8", []byte(clean))
+	} else {
+		c.Header("Content-Disposition", "attachment; filename="+file)
+		c.Data(http.StatusOK, "text/plain; charset=utf-8", []byte(clean))
+	}
 }
 
 // sanitizeLogBytes 清洗日志字节：保留可打印 ASCII、UTF-8 多字节字符、换行/制表符，

@@ -38,6 +38,7 @@
                   </button>
                 </template>
                 <button class="btn-action btn-script" @click="previewScript(session)">脚本</button>
+                <button class="btn-action btn-log" @click="viewSessionLog(session)">日志</button>
                 <button class="btn-action btn-delete" @click="deleteSession(session)">删除</button>
               </div>
             </td>
@@ -203,42 +204,43 @@
             <h4>会话已就绪</h4>
             <div class="connection-info">
               <div class="info-item"><span class="info-label">节点:</span><code>{{ selectedSession?.address }}</code></div>
-              <div class="info-item"><span class="info-label">VNC 端口:</span><code>{{ selectedSession?.vncPort || selectedSession?.xpraPort }}</code></div>
-              <div class="info-item" v-if="selectedSession?.vncPassword">
-                <span class="info-label">VNC 密码:</span>
-                <code>{{ showVncPwd ? selectedSession.vncPassword : '••••••••' }}</code>
-                <button class="btn-eye-small" @click="showVncPwd = !showVncPwd">{{ showVncPwd ? '隐藏' : '显示' }}</button>
-              </div>
+              <div class="info-item"><span class="info-label">Xpra 端口:</span><code>{{ selectedSession?.xpraPort || selectedSession?.vncPort }}</code></div>
             </div>
+
             <div class="connection-methods">
-              <!-- 浏览器 Xpra HTML5 -->
-              <div class="method-item">
-                <span class="method-icon">🌐</span>
-                <div class="method-content">
-                  <strong>浏览器连接（Xpra HTML5）</strong>
-                  <p>无需安装软件，通过后端代理直接在浏览器中打开图形界面</p>
-                </div>
-                <button class="btn-primary" @click="openNoVNC">打开</button>
-              </div>
-              <!-- hpc-client 一键隧道 + Xpra 客户端 -->
-              <div class="method-item method-item-block">
+              <!-- 方式1：浏览器直连（推荐） -->
+              <div class="method-item method-recommend">
                 <div class="method-top">
-                  <span class="method-icon">🔌</span>
+                  <span class="method-icon">🌐</span>
                   <div class="method-content">
-                    <strong>本地 Xpra 客户端（需安装 hpc-client + Xpra）</strong>
-                    <p>建立 SSH 端口转发，将计算节点 Xpra 端口映射到本地，再用本地 Xpra 客户端连接</p>
+                    <strong>浏览器连接 <span class="recommend-tag">推荐</span></strong>
+                    <p>无需安装任何软件，直接在浏览器中打开图形界面</p>
+                  </div>
+                  <button class="btn-primary" @click="openNoVNC">立即打开</button>
+                </div>
+              </div>
+
+              <!-- 方式2：本地客户端 -->
+              <div class="method-item">
+                <div class="method-top">
+                  <span class="method-icon">🖥️</span>
+                  <div class="method-content">
+                    <strong>本地 Xpra 客户端</strong>
+                    <p>需安装 hpc-client 和 Xpra，性能更好，适合图形密集型应用</p>
                   </div>
                   <div style="display:flex;gap:6px;flex-shrink:0">
-                    <button class="btn-secondary" @click="launchTunnel">🔌 端口转发</button>
-                    <button class="btn-primary" @click="launchXpraClient">🖥️ 启动 Xpra</button>
+                    <button class="btn-secondary" @click="launchTunnel">① 建立隧道</button>
+                    <button class="btn-primary" @click="launchXpraClient">② 启动 Xpra</button>
                   </div>
                 </div>
-                <p class="tunnel-hint" style="margin-top:8px">
-                  ① 点「端口转发」→ hpc-client 将节点端口 <code>{{ selectedSession?.xpraPort || selectedSession?.vncPort }}</code> 映射到本地 <code>{{ localVncPort }}</code>
-                  ② 转发就绪后点「启动 Xpra」→ 本地 Xpra 客户端连接 <code>localhost:{{ localVncPort }}</code>
-                </p>
+                <div class="method-hint">
+                  <span>① 点「建立隧道」→ hpc-client 将节点端口 <code>{{ selectedSession?.xpraPort || selectedSession?.vncPort }}</code> 映射到本地 <code>{{ localVncPort }}</code></span>
+                  <span>② 隧道就绪后点「启动 Xpra」→ 本地 Xpra 客户端自动连接</span>
+                  <span style="color:#9ca3af">未安装 hpc-client？<a href="/download" target="_blank" style="color:#6366f1">点此下载</a></span>
+                </div>
               </div>
             </div>
+
             <div class="modal-actions">
               <button class="btn-danger" @click="stopSession">停止会话</button>
               <button class="btn-secondary" @click="showStartModal = false">关闭</button>
@@ -275,6 +277,24 @@
         </div>
       </div>
     </div>
+
+    <!-- 作业日志弹窗 -->
+    <div v-if="showLogModal" class="modal-overlay" @click.self="showLogModal = false">
+      <div class="modal-content script-modal" @click.stop>
+        <div class="modal-header">
+          <h2>📄 作业日志 — {{ logSession?.name }}</h2>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button :class="['btn-tab', logType === 'out' ? 'active' : '']" @click="switchLog('out')">标准输出</button>
+            <button :class="['btn-tab', logType === 'err' ? 'active' : '']" @click="switchLog('err')">错误输出</button>
+            <button @click="showLogModal = false" class="btn-close">✕</button>
+          </div>
+        </div>
+        <div class="modal-body">
+          <div v-if="logLoading" style="text-align:center;padding:2rem;color:#9ca3af">加载中...</div>
+          <pre v-else class="script-body log-body">{{ logContent || '（暂无日志内容）' }}</pre>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -297,6 +317,42 @@ const showXpraModal = ref(false)
 const showScriptModal = ref(false)
 const selectedSession = ref<any>(null)
 const xpraWsUrl = ref('')
+
+// 日志弹窗
+const showLogModal = ref(false)
+const logSession = ref<any>(null)
+const logType = ref<'out' | 'err'>('out')
+const logContent = ref('')
+const logLoading = ref(false)
+
+const viewSessionLog = async (session: any) => {
+  logSession.value = session
+  logType.value = 'out'
+  showLogModal.value = true
+  await fetchLog(session, 'out')
+}
+
+const switchLog = async (type: 'out' | 'err') => {
+  logType.value = type
+  await fetchLog(logSession.value, type)
+}
+
+const fetchLog = async (session: any, type: 'out' | 'err') => {
+  logLoading.value = true
+  logContent.value = ''
+  try {
+    const res = await axios.get(`/desktop/sessions/${session.id}/logs`, {
+      params: { type, lines: 200 }
+    })
+    const lines: string[] = res.data.lines || []
+    logContent.value = lines.join('\n')
+    if (!res.data.exists) logContent.value = '（日志文件尚未生成，请等待作业启动）'
+  } catch (e: any) {
+    logContent.value = '加载失败: ' + (e.response?.data?.error || e.message)
+  } finally {
+    logLoading.value = false
+  }
+}
 const scriptInfo = ref({ script: '', partition: '', workdir: '' })
 
 let listTimer: any = null
@@ -550,8 +606,13 @@ const copyScript = () => {
 .btn-stop    { background: #f59e0b; color: #fff; border-color: #f59e0b; }
 .btn-connect { background: #10b981; color: #fff; border-color: #10b981; }
 .btn-script  { background: hsl(var(--secondary, 210 40% 96.1%)); color: hsl(var(--secondary-foreground, 222.2 47.4% 11.2%)); border-color: hsl(var(--border, 214.3 31.8% 91.4%)); }
+.btn-log     { background: #eff6ff; color: #2563eb; border-color: #bfdbfe; }
+.btn-log:hover:not(:disabled) { background: #dbeafe; opacity: 1; }
 .btn-delete  { background: transparent; color: hsl(var(--destructive, 0 84.2% 60.2%)); border-color: hsl(var(--destructive, 0 84.2% 60.2%) / 0.4); }
 .btn-delete:hover:not(:disabled) { background: hsl(var(--destructive, 0 84.2% 60.2%) / 0.1); opacity: 1; }
+.btn-tab { padding: 4px 12px; border: 1px solid #e5e7eb; border-radius: 6px; background: #f9fafb; font-size: 0.8rem; cursor: pointer; }
+.btn-tab.active { background: #2563eb; color: #fff; border-color: #2563eb; }
+.log-body { max-height: 500px; overflow-y: auto; background: #0f172a; color: #e2e8f0; }
 
 .empty-state { text-align: center; padding: 4rem 2rem; color: #999; }
 .empty-icon { font-size: 4rem; margin-bottom: 1rem; }
@@ -592,9 +653,11 @@ const copyScript = () => {
 .btn-eye-small { padding: .15rem .5rem; background: #e5e7eb; border: none; border-radius: 4px; font-size: .8rem; cursor: pointer; }
 .btn-eye-small:hover { background: #667eea; color: #fff; }
 .connection-methods { display: flex; flex-direction: column; gap: .75rem; margin-bottom: 1.5rem; }
-.method-item { display: flex; align-items: center; gap: 1rem; padding: 1rem; background: #f9fafb; border-radius: 8px; border: 1px solid #e5e7eb; }
-.method-item-block { flex-direction: column; align-items: stretch; }
+.method-item { display: flex; flex-direction: column; gap: 0; padding: 1rem; background: #f9fafb; border-radius: 8px; border: 1px solid #e5e7eb; }
+.method-recommend { border-color: #6366f1; background: #f5f3ff; }
 .method-top { display: flex; align-items: center; gap: 1rem; width: 100%; }
+.method-hint { margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid #e5e7eb; display: flex; flex-direction: column; gap: 4px; font-size: 0.78rem; color: #6b7280; }
+.recommend-tag { background: #6366f1; color: #fff; font-size: 0.7rem; padding: 1px 6px; border-radius: 4px; font-weight: 600; margin-left: 6px; vertical-align: middle; }
 .tunnel-cmd { background: #1e293b; color: #e2e8f0; padding: .75rem 1rem; border-radius: 6px; font-size: .82rem; font-family: monospace; margin: .75rem 0 .25rem; white-space: pre-wrap; word-break: break-all; }
 .tunnel-hint { font-size: .78rem; color: #6b7280; margin: 0; }
 .method-icon { font-size: 1.8rem; }

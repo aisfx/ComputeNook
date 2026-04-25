@@ -107,6 +107,8 @@ func main() {
 		// MFA 管理（登录用户自助）
 		auth.GET("/mfa/status", handlers.GetMFAStatus)
 		auth.DELETE("/mfa", handlers.DisableMFA)
+		auth.POST("/mfa/setup-auth", handlers.SetupMFAAuth)   // 已登录用户自助绑定
+		auth.POST("/mfa/confirm-auth", handlers.ConfirmMFAAuth) // 已登录用户确认绑定
 		// 管理员 MFA 管理
 		auth.GET("/mfa/admin/list", middleware.AdminMiddleware(), handlers.AdminListMFA)
 		auth.DELETE("/mfa/admin/:username", middleware.AdminMiddleware(), handlers.AdminResetMFA)
@@ -298,9 +300,8 @@ func main() {
 		// SSH WebSocket 隧道：转发到计算节点 SSH 端口
 		auth.GET("/ssh/proxy", handlers.SSHWebSocketProxy)
 
-		// WebDAV 文件系统挂载（供 hpc-client mount 使用）
-		// 支持 Bearer Token 和 Basic Auth（Windows/macOS 原生挂载）
-		r.Any("/api/webdav/*path", middleware.WebDAVAuthMiddleware(), handlers.WebDAVHandler)
+		// WebDAV 文件系统挂载（暂时禁用）
+		// r.Any("/api/webdav/*path", middleware.WebDAVAuthMiddleware(), handlers.WebDAVHandler)
 
 		// 文件管理 API
 		files := auth.Group("/files")

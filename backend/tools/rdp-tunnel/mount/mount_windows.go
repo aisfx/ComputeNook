@@ -102,17 +102,18 @@ func mountWithRclone(rclone string, port int, letter, driveLetter string) error 
 	}
 
 	davURL := fmt.Sprintf("http://127.0.0.1:%d", port)
-	remoteName := fmt.Sprintf("hpc-webdav-%s", letter)
 
-	// 先卸载旧的
-	exec.Command(rclone, "mount", "--daemon-stop", remoteName+":").Run() //nolint:errcheck
+	// 先卸载旧的（忽略错误）
+	exec.Command(rclone, "mount", "--daemon-stop", ":webdav:").Run() //nolint:errcheck
 	time.Sleep(500 * time.Millisecond)
 
-	// rclone mount 在后台运行
+	// 用 --webdav-url 参数而不是连接字符串，避免特殊字符被编码
 	cmd := exec.Command(rclone,
 		"mount",
-		fmt.Sprintf(":webdav,url=%s,vendor=other:", davURL),
+		":webdav:",          // remote 用简单的 :webdav: 前缀
 		driveLetter,
+		"--webdav-url", davURL,
+		"--webdav-vendor", "other",
 		"--vfs-cache-mode", "writes",
 		"--no-console",
 		"--daemon",

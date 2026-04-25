@@ -24,10 +24,12 @@
         </div>
       </div>
       <div class="fm-actions">
+        <!-- 挂载到本地功能暂时禁用
         <button class="fm-btn fm-btn-mount" @click="launchMount" title="通过 HPC 客户端挂载为本地盘符">
           <svg viewBox="0 0 24 24"><path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-5 3v2h2v2h-2v2h-2v-2H11v-2h2V9h2z"/></svg>
           挂载到本地
         </button>
+        -->
         <button class="fm-btn fm-btn-primary" @click="showUploadDialog">
           <svg viewBox="0 0 24 24"><path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z"/></svg>
           上传

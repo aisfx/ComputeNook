@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"image/png"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -19,6 +21,16 @@ import (
 	"github.com/pquerna/otp/totp"
 	"hpc-backend/models"
 )
+
+// buildOtpauthURI 手动构造标准 otpauth:// URI
+// 只保留 secret 和 issuer，去掉冗余参数，兼容性最好
+func buildOtpauthURI(issuer, account, secret string) string {
+	label := url.PathEscape(issuer) + ":" + url.PathEscape(account)
+	params := url.Values{}
+	params.Set("secret", secret)
+	params.Set("issuer", issuer)
+	return fmt.Sprintf("otpauth://totp/%s?%s", label, params.Encode())
+}
 
 // ── MFA 存储（JSON 文件） ──────────────────────────────────────
 
@@ -182,9 +194,9 @@ func SetupMFA(c *gin.Context) {
 	}
 	log.Printf("[MFA] SetupMFA: generating secret for user=%s", uname)
 
-	issuer := os.Getenv("MFA_ISSUER")
+	issuer := strings.ReplaceAll(os.Getenv("MFA_ISSUER"), " ", "-")
 	if issuer == "" {
-		issuer = "HPC Platform"
+		issuer = "HPC-Platform"
 	}
 
 	key, err := totp.Generate(totp.GenerateOpts{
@@ -227,10 +239,13 @@ func SetupMFA(c *gin.Context) {
 		return
 	}
 
+	otpauthURI := buildOtpauthURI(issuer, uname, key.Secret())
+	log.Printf("[MFA] SetupMFA: user=%s issuer=%s uri=%s", uname, issuer, otpauthURI)
+
 	c.JSON(http.StatusOK, gin.H{"data": models.MFASetupResponse{
 		Secret:     key.Secret(),
 		QRCode:     qrBase64,
-		OtpauthUri: key.URL(),
+		OtpauthUri: otpauthURI,
 		Issuer:     issuer,
 		Account:    uname,
 	}})
@@ -400,3 +415,103 @@ func ValidateTOTP(username, code string) bool {
 	return totp.Validate(code, rec.Secret)
 }
 
+
+// SetupMFAAuth POST /api/mfa/setup-auth — 已登录用户自助绑定（使用正式 JWT）
+func SetupMFAAuth(c *gin.Context) {
+	username, _ := c.Get("username")
+	uname := username.(string)
+	log.Printf("[MFA] SetupMFAAuth: generating secret for user=%s", uname)
+
+	issuer := strings.ReplaceAll(os.Getenv("MFA_ISSUER"), " ", "-")
+	if issuer == "" {
+		issuer = "HPC-Platform"
+	}
+
+	key, err := totp.Generate(totp.GenerateOpts{
+		Issuer:      issuer,
+		AccountName: uname,
+		Algorithm:   otp.AlgorithmSHA1,
+		Digits:      otp.DigitsSix,
+		Period:      30,
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "生成 MFA 密钥失败"})
+		return
+	}
+
+	img, err := key.Image(400, 400)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "生成二维码失败"})
+		return
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "编码二维码失败"})
+		return
+	}
+	qrBase64 := "data:image/png;base64," + base64.StdEncoding.EncodeToString(buf.Bytes())
+
+	mfaMu.Lock()
+	store := loadMFAStore()
+	store[uname] = &models.MFAUserRecord{
+		Username:  uname,
+		Secret:    key.Secret(),
+		Enabled:   false,
+		Confirmed: false,
+	}
+	err = saveMFAStore()
+	mfaMu.Unlock()
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存 MFA 配置失败: " + err.Error()})
+		return
+	}
+
+	otpauthURI2 := buildOtpauthURI(issuer, uname, key.Secret())
+	log.Printf("[MFA] SetupMFAAuth: user=%s issuer=%s uri=%s", uname, issuer, otpauthURI2)
+
+	c.JSON(http.StatusOK, gin.H{"data": models.MFASetupResponse{
+		Secret:     key.Secret(),
+		QRCode:     qrBase64,
+		OtpauthUri: otpauthURI2,
+		Issuer:     issuer,
+		Account:    uname,
+	}})
+}
+
+// ConfirmMFAAuth POST /api/mfa/confirm-auth — 已登录用户确认绑定（使用正式 JWT）
+func ConfirmMFAAuth(c *gin.Context) {
+	username, _ := c.Get("username")
+	uname := username.(string)
+	log.Printf("[MFA] ConfirmMFAAuth: user=%s", uname)
+
+	var req models.MFAVerifyRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	mfaMu.Lock()
+	defer mfaMu.Unlock()
+	store := loadMFAStore()
+	rec, exists := store[uname]
+	if !exists || rec.Secret == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请先调用 /api/mfa/setup-auth 生成密钥"})
+		return
+	}
+
+	if !totp.Validate(req.Code, rec.Secret) {
+		log.Printf("[MFA] ConfirmMFAAuth: invalid code for user=%s", uname)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "验证码错误"})
+		return
+	}
+
+	rec.Enabled = true
+	rec.Confirmed = true
+	if err := saveMFAStore(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存 MFA 配置失败: " + err.Error()})
+		return
+	}
+	log.Printf("[MFA] ConfirmMFAAuth: user=%s bound successfully", uname)
+	c.JSON(http.StatusOK, gin.H{"message": "MFA 绑定成功"})
+}

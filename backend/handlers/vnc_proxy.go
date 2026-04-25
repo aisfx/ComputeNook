@@ -8,9 +8,33 @@ import (
 	"strconv"
 	"time"
 
+	"hpc-backend/audit"
+	"hpc-backend/models"
+
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 )
+
+// writeDesktopAudit 记录远程桌面隧道审计日志
+func writeDesktopAudit(username, clientIP string, sessionID int, action, detail string) {
+	status := models.StatusSuccess
+	errMsg := ""
+	if action == "connect_failed" {
+		status = models.StatusFailed
+		errMsg = detail
+		detail = ""
+	}
+	audit.GetLogger().Log(models.AuditLog{
+		Username:   username,
+		Action:     "desktop_" + action,
+		Resource:   "desktop_tunnel",
+		ResourceID: fmt.Sprintf("session-%d", sessionID),
+		Details:    detail,
+		IPAddress:  clientIP,
+		Status:     status,
+		ErrorMsg:   errMsg,
+	})
+}
 
 // GET /api/desktop/sessions/:id/xpra-ws
 // 将后端到计算节点 Xpra WebSocket 端口的 TCP 连接代理给前端
@@ -62,6 +86,7 @@ func XpraWebSocketProxy(c *gin.Context) {
 	xpraConn, err := net.DialTimeout("tcp", addr, 10*time.Second)
 	if err != nil {
 		log.Printf("[XPRA-WS] session %d: tcp connect failed: %v", id, err)
+		writeDesktopAudit(username.(string), c.ClientIP(), id, "connect_failed", err.Error())
 		c.JSON(http.StatusBadGateway, gin.H{"error": "xpra connect failed: " + err.Error()})
 		return
 	}
@@ -74,6 +99,10 @@ func XpraWebSocketProxy(c *gin.Context) {
 	}
 
 	log.Printf("[XPRA-WS] session %d: connected", id)
+	writeDesktopAudit(username.(string), c.ClientIP(), id,
+		"connected", fmt.Sprintf("node=%s port=%d", session.Address, port))
+
+	start := time.Now()
 	done := make(chan struct{}, 2)
 
 	go func() {
@@ -108,6 +137,8 @@ func XpraWebSocketProxy(c *gin.Context) {
 	<-done
 	xpraConn.Close()
 	wsConn.Close()
+	writeDesktopAudit(username.(string), c.ClientIP(), id,
+		"disconnected", fmt.Sprintf("duration=%.0fs", time.Since(start).Seconds()))
 }
 
 // VNCWebSocketProxy 保留兼容旧路由

@@ -78,18 +78,6 @@ username, _ := c.Get("username")
 isAdmin, _ := c.Get("isAdmin")
 
 sshUser := c.DefaultQuery("user", username.(string))
-
-// MFA 校验：系统开启 MFA 且用户已绑定时，必须提供 mfaCode
-if IsMFARequired(username.(string)) {
-	mfaCode := c.Query("mfaCode")
-	if !ValidateTOTP(username.(string), mfaCode) {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "需要双因子验证码",
-			"code":  "MFA_REQUIRED",
-		})
-		return
-	}
-}
 if sshUser != username.(string) && isAdmin != true {
 c.JSON(http.StatusForbidden, gin.H{"error": "not allowed"})
 return

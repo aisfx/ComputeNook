@@ -93,14 +93,24 @@ export const mfaAPI = {
     const response = await axios.get('/mfa/status')
     return response.data.data
   },
-  // 生成新密钥 + 二维码
+  // 生成新密钥 + 二维码（登录流程，临时 token）
   setup: async () => {
     const response = await axios.post('/mfa/setup')
     return response.data.data
   },
-  // 扫码后确认绑定
+  // 扫码后确认绑定（登录流程，临时 token）
   confirm: async (code: string) => {
     const response = await axios.post('/mfa/confirm', { code })
+    return response.data
+  },
+  // 已登录用户自助绑定：生成密钥 + 二维码
+  setupAuth: async () => {
+    const response = await axios.post('/mfa/setup-auth')
+    return response.data.data
+  },
+  // 已登录用户自助绑定：确认验证码
+  confirmAuth: async (code: string) => {
+    const response = await axios.post('/mfa/confirm-auth', { code })
     return response.data
   },
   // 禁用 MFA（需要 code 确认）
