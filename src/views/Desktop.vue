@@ -537,13 +537,21 @@ const copyScript = () => {
 .status-badge.failed   { background: #fee2e2; color: #991b1b; }
 .status-badge.stopped  { background: #f3f4f6; color: #6b7280; }
 
-.action-buttons { display: flex; gap: .5rem; }
-.btn-action { padding: .4rem .9rem; border: none; border-radius: 6px; font-size: .85rem; font-weight: 600; cursor: pointer; }
-.btn-start  { background: #667eea; color: #fff; }
-.btn-stop   { background: #f59e0b; color: #fff; }
-.btn-detail { background: #10b981; color: #fff; }
-.btn-script { background: #6b7280; color: #fff; }
-.btn-delete { background: #ef4444; color: #fff; }
+.action-buttons { display: flex; gap: .4rem; flex-wrap: wrap; }
+.btn-action {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 4px 10px; border: 1px solid transparent;
+  border-radius: var(--radius-sm, 6px); font-size: 0.78rem; font-weight: 500;
+  cursor: pointer; white-space: nowrap; transition: opacity 0.15s;
+}
+.btn-action:hover:not(:disabled) { opacity: 0.85; }
+.btn-action:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-start   { background: #667eea; color: #fff; border-color: #667eea; }
+.btn-stop    { background: #f59e0b; color: #fff; border-color: #f59e0b; }
+.btn-connect { background: #10b981; color: #fff; border-color: #10b981; }
+.btn-script  { background: hsl(var(--secondary, 210 40% 96.1%)); color: hsl(var(--secondary-foreground, 222.2 47.4% 11.2%)); border-color: hsl(var(--border, 214.3 31.8% 91.4%)); }
+.btn-delete  { background: transparent; color: hsl(var(--destructive, 0 84.2% 60.2%)); border-color: hsl(var(--destructive, 0 84.2% 60.2%) / 0.4); }
+.btn-delete:hover:not(:disabled) { background: hsl(var(--destructive, 0 84.2% 60.2%) / 0.1); opacity: 1; }
 
 .empty-state { text-align: center; padding: 4rem 2rem; color: #999; }
 .empty-icon { font-size: 4rem; margin-bottom: 1rem; }
@@ -654,7 +662,6 @@ const copyScript = () => {
 .mode-badge { display: inline-block; padding: .2rem .6rem; border-radius: 10px; font-size: .8rem; font-weight: 600; }
 .mode-badge.desktop { background: #ede9fe; color: #5b21b6; }
 .mode-badge.app     { background: #dbeafe; color: #1e40af; }
-.btn-connect { background: #10b981; color: #fff; }
 
 /* 模式选择卡片 */
 .mode-selector { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }

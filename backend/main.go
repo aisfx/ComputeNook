@@ -79,7 +79,7 @@ func main() {
 	// 公开路由
 	api := r.Group("/api")
 	{
-		api.POST("/login", handlers.Login)
+		api.POST("/login", middleware.LoginRateLimitMiddleware(), handlers.Login)
 	}
 
 	// 客户端下载页面（公开）
@@ -194,8 +194,9 @@ func main() {
 		{
 			// 普通用户可以查看自己的使用情况
 			usage.GET("/user", handlers.GetUserUsage)
-			usage.GET("/debug", handlers.DebugUserUsage)       // 调试：解析后的记录
-			usage.GET("/debug/raw", handlers.DebugRawJobs)     // 调试：Slurm 原始 JSON
+			// debug 接口限管理员
+			usage.GET("/debug", middleware.AdminMiddleware(), handlers.DebugUserUsage)
+			usage.GET("/debug/raw", middleware.AdminMiddleware(), handlers.DebugRawJobs)
 			
 			// 管理员可以查看所有使用情况
 			usage.GET("/account", middleware.AdminMiddleware(), handlers.GetAccountUsageWithBilling)

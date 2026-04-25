@@ -54,24 +54,23 @@ func Login(c *gin.Context) {
 	}
 
 	// 生产模式：使用LDAP认证
-	// 创建 LDAP 客户端
 	client, err := ldap.NewClient()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to connect to LDAP: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "认证服务暂时不可用"})
 		return
 	}
 	defer client.Close()
 
-	// 验证用户
 	user, err := client.Authenticate(req.Username, req.Password)
 	if err != nil {
+		// 统一错误信息，防止用户名枚举
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
 		return
 	}
 
-	// 检查用户是否被禁用
 	if user.Disabled {
-		c.JSON(http.StatusForbidden, gin.H{"error": "账户已被禁用，请联系管理员"})
+		// 不透露账户是否存在，统一返回相同错误
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "用户名或密码错误"})
 		return
 	}
 
@@ -176,23 +175,3 @@ func Logout(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "已登出"})
 }
 
-// DebugIP 调试接口：显示后端收到的所有 IP 相关请求头（仅开发/排查用）
-// GET /api/debug/ip
-func DebugIP(c *gin.Context) {
-	remoteIP := c.Request.RemoteAddr
-	info := map[string]string{
-		"remote_addr":       remoteIP,
-		"x_real_ip":         c.GetHeader("X-Real-IP"),
-		"x_forwarded_for":   c.GetHeader("X-Forwarded-For"),
-		"x_forwarded_proto": c.GetHeader("X-Forwarded-Proto"),
-		"x_forwarded_host":  c.GetHeader("X-Forwarded-Host"),
-		"cf_connecting_ip":  c.GetHeader("CF-Connecting-IP"),
-		"true_client_ip":    c.GetHeader("True-Client-IP"),
-		"origin":            c.GetHeader("Origin"),
-		"referer":           c.GetHeader("Referer"),
-		"host":              c.Request.Host,
-		"user_agent":        c.Request.UserAgent(),
-		"gin_client_ip":     c.ClientIP(),
-	}
-	c.JSON(200, info)
-}
