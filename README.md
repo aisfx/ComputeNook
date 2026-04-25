@@ -178,6 +178,38 @@ LOG_FILE=./logs/slurm-web.log
 DEMO_READONLY=false   # 设为 true 时禁止修改用户信息和密码，其他功能正常
 ```
 
+### 多因子认证（MFA）
+
+```env
+# MFA_ENABLED 可选值：
+#   false    - 关闭（默认）
+#   optional - 用户自选，自行绑定后生效
+#   global   - 全局强制，所有用户必须绑定并使用 MFA
+MFA_ENABLED=false
+MFA_ISSUER=HPC Platform        # 显示在 Authenticator App 中的应用名称
+# MFA_STORE_FILE=./mfa_secrets.json  # 密钥存储路径，默认与二进制同目录
+```
+
+> 注意：`.env` 中同行注释（`# ...`）会被自动去除，无需担心污染配置值。
+
+**绑定流程（global 模式）：**
+
+1. 用户输入账号密码 → 后端返回临时 token（5 分钟有效）
+2. 前端跳转绑定页，扫描二维码（或手动输入密钥）
+3. 输入 App 中的 6 位验证码确认绑定
+4. 跳回登录页，再次登录时输入 TOTP 验证码进入系统
+
+**管理员操作：**
+
+- 用户管理页可查看所有用户 MFA 绑定状态
+- 操作菜单「重置 MFA」可清除用户绑定，用户下次登录需重新绑定
+
+### Token 有效期
+
+```env
+JWT_EXPIRE_HOURS=8   # Token 有效期（小时），默认 8 小时
+```
+
 ### 开发模式
 
 ```env
@@ -260,6 +292,15 @@ QUOTA_PATH=/nfs/home
 ### 登录
 
 访问平台地址，使用 LDAP 账号密码登录。首次登录若管理员设置了强制改密，会跳转到修改密码页面。
+
+**双因子认证（MFA）：**
+
+若系统开启了 MFA（`MFA_ENABLED=global` 或 `optional`）：
+
+- `global` 模式：首次登录自动跳转绑定页，使用 Google Authenticator / Authy 等 TOTP 应用扫码绑定
+- `optional` 模式：可在个人设置中自行开启
+- 绑定后每次登录需额外输入 6 位动态验证码
+- 连续输错密码 3 次账户锁定 10 分钟，1 次失败后出现图形验证码
 
 ---
 
@@ -392,6 +433,7 @@ Windows 映射网络驱动器时使用 Basic Auth（用户名/密码与平台账
 - **重置密码**：管理员直接设置新密码
 - **禁用用户**：禁用后用户无法登录，不删除数据
 - **强制改密**：下次登录时强制用户修改密码
+- **重置 MFA**：清除用户的 MFA 绑定，用户下次登录需重新绑定（换手机时使用）
 - **删除用户**：从 LDAP 删除用户
 
 > 演示只读模式（`DEMO_READONLY=true`）下，用户信息和密码不可修改。

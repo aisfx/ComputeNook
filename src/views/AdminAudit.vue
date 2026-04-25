@@ -16,7 +16,7 @@
     <div class="tab-bar">
       <button :class="['tab-btn', { active: activeTab === 'audit' }]" @click="activeTab = 'audit'">📋 操作审计</button>
       <button :class="['tab-btn', { active: activeTab === 'ssh' }]" @click="activeTab = 'ssh'; loadSSHLogs()">🔐 SSH 行为日志</button>
-      <button :class="['tab-btn', { active: activeTab === 'report' }]" @click="activeTab = 'report'; $nextTick(() => { rLineChart?.resize(); rScaleChart?.resize(); rUsageChart?.resize(); rStorageChart?.resize() })">📊 用量报表</button>
+      <button :class="['tab-btn', { active: activeTab === 'report' }]" @click="switchToReport">📊 用量报表</button>
     </div>
 
     <!-- 统计卡片 -->
@@ -275,6 +275,12 @@
           <div ref="rStorageRef" :style="{ width: '100%', height: Math.max(260, rStorageStats.length * 60) + 'px' }"></div>
         </div>
 
+        <!-- QoS 使用率 -->
+        <div class="rcard" v-if="rQosStats?.length">
+          <div class="rcard-title">QoS 计费核时使用率</div>
+          <div ref="rQosRef" :style="{ width: '100%', height: Math.max(200, rQosStats.length * 50) + 'px' }"></div>
+        </div>
+
         <!-- 配额进度 -->
         <div class="rchart-row">
           <div class="rcard" v-if="rUsageStats">
@@ -394,7 +400,7 @@ import { ref, onMounted } from 'vue'
 import axios from 'axios'
 import * as echarts from 'echarts'
 import notification from '../utils/notification'
-import { reportAPI, type JobStatsResult, type UsageStatsResult, type StorageStatItem, type QuotaStatsResult } from '../api/report'
+import { reportAPI, type JobStatsResult, type UsageStatsResult, type StorageStatItem, type QuotaStatsResult, type QoSUsageItem } from '../api/report'
 
 const loading = ref(false)
 const error = ref('')
@@ -665,21 +671,35 @@ const rJobStats    = ref<JobStatsResult | null>(null)
 const rUsageStats  = ref<UsageStatsResult | null>(null)
 const rStorageStats = ref<StorageStatItem[] | null>(null)
 const rQuotaStats  = ref<QuotaStatsResult | null>(null)
+const rQosStats    = ref<QoSUsageItem[] | null>(null)
 
 const rLineRef    = ref<HTMLElement | null>(null)
 const rScaleRef   = ref<HTMLElement | null>(null)
 const rUsageRef   = ref<HTMLElement | null>(null)
 const rStorageRef = ref<HTMLElement | null>(null)
+const rQosRef     = ref<HTMLElement | null>(null)
 let rLineChart: echarts.ECharts | null = null
 let rScaleChart: echarts.ECharts | null = null
 let rUsageChart: echarts.ECharts | null = null
 let rStorageChart: echarts.ECharts | null = null
+let rQosChart: echarts.ECharts | null = null
 
 import { computed, nextTick } from 'vue'
 
 const reportHasData = computed(() =>
   !!(rJobStats.value || rUsageStats.value || rStorageStats.value || rQuotaStats.value)
 )
+
+function switchToReport() {
+  activeTab.value = 'report'
+  nextTick(() => {
+    rLineChart?.resize()
+    rScaleChart?.resize()
+    rUsageChart?.resize()
+    rStorageChart?.resize()
+    rQosChart?.resize()
+  })
+}
 
 async function loadReportPartitions() {
   try {
@@ -697,6 +717,7 @@ async function loadAdminReport() {
   rScaleChart?.dispose(); rScaleChart = null
   rUsageChart?.dispose(); rUsageChart = null
   rStorageChart?.dispose(); rStorageChart = null
+  rQosChart?.dispose(); rQosChart = null
 
   const params: any = {
     start_time: reportFilters.value.startDate,
@@ -706,16 +727,18 @@ async function loadAdminReport() {
   if (reportFilters.value.username) params.user = reportFilters.value.username
 
   try {
-    const [jobRes, usageRes, storageRes, quotaRes] = await Promise.allSettled([
+    const [jobRes, usageRes, storageRes, quotaRes, qosRes] = await Promise.allSettled([
       reportAPI.getJobStats(params),
       reportAPI.getUsageStats(params),
       reportAPI.getStorageStats(params),
       reportAPI.getQuotaStats(params),
+      reportAPI.getQoSUsage(params),
     ])
     if (jobRes.status === 'fulfilled')     rJobStats.value     = jobRes.value.data.data
     if (usageRes.status === 'fulfilled')   rUsageStats.value   = usageRes.value.data.data
     if (storageRes.status === 'fulfilled') rStorageStats.value = storageRes.value.data.data
     if (quotaRes.status === 'fulfilled')   rQuotaStats.value   = quotaRes.value.data.data
+    if (qosRes.status === 'fulfilled')     rQosStats.value     = qosRes.value.data.data
     await nextTick()
     renderAdminCharts()
   } catch (e: any) {
@@ -791,12 +814,31 @@ function renderAdminCharts() {
     })
   }
 
+  // QoS 使用率图表
+  if (rQosRef.value && rQosStats.value?.length) {
+    if (!rQosChart) rQosChart = echarts.init(rQosRef.value, 'dark')
+    const items = rQosStats.value
+    rQosChart.setOption({
+      backgroundColor: 'transparent',
+      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: (params: any[]) => {
+        const i = items[params[0].dataIndex]
+        return `<b>${i.qos_name}</b><br/>已用: <b>${i.used_billing_hours.toFixed(2)}h</b><br/>` +
+          (i.total_billing_hours > 0 ? `总量: ${i.total_billing_hours.toFixed(2)}h<br/>使用率: <b>${i.usage_percent.toFixed(1)}%</b>` : '无限制')
+      }},
+      grid: { left: '3%', right: '8%', top: '8%', bottom: '3%', containLabel: true },
+      xAxis: { type: 'value', name: '小时(h)', nameTextStyle: { color: '#aaa' }, axisLabel: { color: '#aaa' }, splitLine: { lineStyle: { color: '#333' } } },
+      yAxis: { type: 'category', data: items.map(i => i.qos_name), axisLabel: { color: '#ccc' }, axisLine: { lineStyle: { color: '#444' } } },
+      series: [{ type: 'bar', data: items.map(i => ({ value: +i.used_billing_hours.toFixed(2), itemStyle: { color: i.status === 'EXCEEDED' ? '#f5222d' : i.status === 'WARNING' ? '#fa8c16' : '#52c41a' } })), label: { show: true, position: 'right', color: '#ccc', fontSize: 11, formatter: (p: any) => `${p.value}h` }, barMaxWidth: 28 }],
+    })
+  }
+
   // 延迟 resize，确保容器完全布局后图表尺寸正确
   setTimeout(() => {
     rLineChart?.resize()
     rScaleChart?.resize()
     rUsageChart?.resize()
     rStorageChart?.resize()
+    rQosChart?.resize()
   }, 100)
 }
 

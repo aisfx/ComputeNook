@@ -2,6 +2,42 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-04-25
+
+### Added
+- **多因子认证（MFA / TOTP）**
+  - 新增 `MFA_ENABLED` 配置项，支持三种模式：`false`（关闭）、`optional`（用户自选）、`global`（全局强制）
+  - 登录流程：密码验证通过后，若需要 MFA 则返回临时 token，前端弹出 TOTP 验证码输入框
+  - 首次绑定：`global` 模式下未绑定用户自动跳转绑定页，扫描二维码后输入验证码完成绑定
+  - 绑定页支持"无法扫码"备用方案，可手动复制密钥到 Authenticator App
+  - 管理员可在用户管理页查看所有用户 MFA 绑定状态，并一键重置
+  - Web Shell 和 SSH 隧道连接时，若用户已绑定 MFA，需额外输入 TOTP 验证码
+  - MFA 密钥存储在 `mfa_secrets.json`（权限 0600），支持 `MFA_STORE_FILE` 环境变量自定义路径
+  - 兼容 Google Authenticator、Authy 等标准 TOTP 应用
+
+- **账户锁定 + 图形验证码**
+  - 登录失败 1 次后出现图形验证码（`/api/captcha/new` + `/api/captcha/:id.png`）
+  - 连续失败 3 次锁定账户 10 分钟，前端显示倒计时
+  - 锁定基于用户名（非 IP），防止账号暴力破解
+
+- **安全加固**
+  - CORS：生产模式下未配置 `CORS_ORIGINS` 时拒绝所有跨域请求，仅 `DEV_MODE=true` 时放行
+  - WebSocket 来源校验：`wsUpgrader` 和 `vncWsUpgrader` 统一使用 `checkWebSocketOrigin`，与 CORS 策略一致
+  - 用户列表分页：`GET /api/users` 支持 `page`/`limit` 参数，最大 100 条，防止枚举
+  - 参数注入过滤：全局中间件拦截含 `[$]` 或 `__` 的查询参数，返回 400
+  - Token 有效期：默认从 24 小时缩短为 8 小时，支持 `JWT_EXPIRE_HOURS` 自定义
+  - IP 级速率限制收紧：5 次/10 分钟窗口，锁定 5 分钟
+
+- **报表数据一致性**
+  - AdminAudit 报表 tab 补充 QoS 计费核时使用率图表，与 Reports.vue 数据维度对齐
+  - 修复 tab 切换时 echarts `resize` 的 TypeScript `never` 类型错误
+
+### Fixed
+- MFA `GetMFAMode` 自动去除行内注释（`# ...`）和首尾空格，避免 `.env` 注释污染配置值
+- MFA 存储并发 bug：统一使用单一 `sync.Mutex` 保护读-改-写全程，修复写入丢失问题
+- MFA 文件路径自动探测工作目录，支持 `MFA_STORE_FILE` 环境变量显式指定
+- `ratelimit.go` 中 `int(lockDur - now.Sub(a.lockedAt)).Seconds()` 类型错误
+
 ## [0.2.1] - 2026-04-18
 
 ### Fixed
