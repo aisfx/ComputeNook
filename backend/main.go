@@ -271,6 +271,10 @@ func main() {
 			// VNC WebSocket 代理：通过 SSH 隧道连接计算节点 VNC
 			desktop.GET("/sessions/:id/vnc-ws", handlers.VNCWebSocketProxy)
 			desktop.GET("/sessions/:id/xpra-ws", handlers.XpraWebSocketProxy)
+
+		// Xpra HTML5 代理：独立路由，不强制 JWT（子资源无法带 header）
+		// 安全性依赖 session ID 的不可猜测性
+		r.GET("/api/desktop/sessions/:id/xpra-html/*path", handlers.XpraHTTPProxy)
 		}
 
 		// SSH WebSocket 隧道：转发到计算节点 SSH 端口

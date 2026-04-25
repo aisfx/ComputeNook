@@ -6,7 +6,9 @@ export default defineConfig({
   plugins: [vue()],
   resolve: {
     alias: {
-      '@': resolve(__dirname, 'src')
+      '@': resolve(__dirname, 'src'),
+      // xpra-html5-client 的 exports 字段不含 dist 子路径，直接指向主文件
+      'xpra-html5-client': resolve(__dirname, 'node_modules/xpra-html5-client/dist/xpra.es.js'),
     }
   },
   server: {

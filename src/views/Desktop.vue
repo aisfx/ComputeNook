@@ -140,40 +140,56 @@
       </div>
     </div>
 
-    <!-- 启动进度弹窗 -->
-    <div v-if="showStartModal" class="modal-overlay">
+    <!-- 悬浮启动进度条（启动中可最小化，不阻塞页面操作） -->
+    <Teleport to="body">
+      <div v-if="startingStatus === 'starting' && launchingSession" class="launch-float" :class="{ minimized: launchMinimized }">
+        <div class="launch-float-header" @click="launchMinimized = !launchMinimized">
+          <div class="launch-float-title">
+            <div class="launch-spinner"></div>
+            <span>启动中 · {{ launchingSession.name }}</span>
+            <span class="launch-jobid" v-if="currentJobId">作业 #{{ currentJobId }}</span>
+          </div>
+          <div class="launch-float-actions">
+            <button class="launch-icon-btn" :title="launchMinimized ? '展开' : '最小化'">
+              {{ launchMinimized ? '▲' : '▼' }}
+            </button>
+            <button class="launch-icon-btn" title="关闭（后台继续启动）" @click.stop="showStartModal = false; startingStatus = 'bg'">✕</button>
+          </div>
+        </div>
+        <div v-if="!launchMinimized" class="launch-float-body">
+          <div class="launch-progress">
+            <div class="launch-progress-fill" :style="{ width: startProgress + '%' }"></div>
+          </div>
+          <div class="log-panel">
+            <div class="log-header">
+              <span>日志</span>
+              <div class="log-tabs">
+                <button :class="['log-tab', { active: logType === 'out' }]" @click="logType = 'out'">stdout</button>
+                <button :class="['log-tab', { active: logType === 'err' }]" @click="logType = 'err'">stderr</button>
+              </div>
+            </div>
+            <div class="log-body" ref="logBodyRef">
+              <div v-if="logLines.length === 0" class="log-empty">等待日志...</div>
+              <div v-for="(line, i) in logLines" :key="i" class="log-line">{{ line }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- 启动结果弹窗（就绪/失败时显示） -->
+    <div v-if="showStartModal && startingStatus !== 'starting' && startingStatus !== 'bg'" class="modal-overlay">
       <div class="modal-content start-modal" @click.stop>
         <div class="modal-header">
-          <h2>{{ startingStatus === 'ready' ? '会话已就绪' : startingStatus === 'failed' ? '启动失败' : '启动中...' }}</h2>
+          <h2>{{ startingStatus === 'ready' ? '会话已就绪' : '启动失败' }}</h2>
           <button @click="showStartModal = false" class="btn-close">✕</button>
         </div>
         <div class="modal-body">
-          <div v-if="startingStatus === 'starting'" class="status-starting">
-            <div class="loading-icon"></div>
-            <p>作业 ID: <code>{{ currentJobId }}</code></p>
-            <div class="progress-bar-container">
-              <div class="progress-bar-fill" :style="{ width: startProgress + '%' }"></div>
-            </div>
-            <div class="log-panel">
-              <div class="log-header">
-                <span>日志</span>
-                <div class="log-tabs">
-                  <button :class="['log-tab', { active: logType === 'out' }]" @click="logType = 'out'">stdout</button>
-                  <button :class="['log-tab', { active: logType === 'err' }]" @click="logType = 'err'">stderr</button>
-                </div>
-              </div>
-              <div class="log-body" ref="logBodyRef">
-                <div v-if="logLines.length === 0" class="log-empty">等待日志...</div>
-                <div v-for="(line, i) in logLines" :key="i" class="log-line">{{ line }}</div>
-              </div>
-            </div>
-          </div>
-
-          <div v-else-if="startingStatus === 'failed'" class="status-failed">
+          <div v-if="startingStatus === 'failed'" class="status-failed">
             <div class="fail-icon">✕</div>
             <h4>会话启动失败</h4>
             <div class="log-panel">
-              <div class="log-body" ref="logBodyRef">
+              <div class="log-body">
                 <div v-for="(line, i) in logLines" :key="i" class="log-line">{{ line }}</div>
               </div>
             </div>
@@ -181,8 +197,6 @@
               <button class="btn-secondary" @click="showStartModal = false">关闭</button>
             </div>
           </div>
-
-          <div v-else-if="startingStatus === 'ready'" class="status-ready">
             <div class="success-icon">✅</div>
             <h4>会话已就绪</h4>
             <div class="connection-info">
@@ -204,18 +218,22 @@
                 </div>
                 <button class="btn-primary" @click="openNoVNC">打开</button>
               </div>
-              <!-- hpc-client 隧道 -->
+              <!-- hpc-client 一键隧道 + Xpra 客户端 -->
               <div class="method-item method-item-block">
                 <div class="method-top">
                   <span class="method-icon">🔌</span>
                   <div class="method-content">
-                    <strong>hpc-client 隧道（推荐）</strong>
-                    <p>通过本地端口连接，性能更好，支持任意 VNC 客户端</p>
+                    <strong>hpc-client 一键连接（推荐）</strong>
+                    <p>自动建立 SSH 隧道并启动 Xpra 客户端，需先安装 hpc-client</p>
                   </div>
-                  <button class="btn-secondary" @click="copyTunnelCmd">复制命令</button>
+                  <div style="display:flex;gap:6px;flex-shrink:0">
+                    <button class="btn-secondary" @click="launchTunnel">🔌 建立隧道</button>
+                    <button class="btn-primary" @click="launchXpraClient">🖥️ 启动 Xpra</button>
+                  </div>
                 </div>
-                <pre class="tunnel-cmd">{{ tunnelCmd }}</pre>
-                <p class="tunnel-hint">执行后用 VNC 客户端连接 <code>localhost:{{ localVncPort }}</code>，密码同上</p>
+                <p class="tunnel-hint" style="margin-top:8px">
+                  先点「建立隧道」，等待本地端口 <code>{{ localVncPort }}</code> 就绪后，再点「启动 Xpra」
+                </p>
               </div>
             </div>
             <div class="modal-actions">
@@ -230,13 +248,13 @@
     <!-- Xpra 内嵌全屏 -->
     <div v-if="showXpraModal" class="vnc-overlay">
       <div class="vnc-toolbar">
-        <span>{{ selectedSession?.mode === 'app' ? '📦' : '🖥️' }} {{ selectedSession?.name }} — {{ selectedSession?.address }}</span>
+        <span>🖥️ {{ selectedSession?.name }} — {{ selectedSession?.address }}</span>
         <div style="display:flex;gap:8px;align-items:center">
           <button class="btn-secondary" @click="toggleFullscreen">全屏</button>
           <button class="btn-secondary" @click="showXpraModal = false">关闭</button>
         </div>
       </div>
-      <iframe ref="xpraFrame" :src="xpraUrl" class="xpra-frame" allow="fullscreen"></iframe>
+      <XpraViewer :ws-url="xpraWsUrl" :password="selectedSession?.vncPassword" class="xpra-viewer-fill" />
     </div>
 
     <!-- 脚本预览 -->
@@ -261,6 +279,7 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import axios from 'axios'
 import { desktopAPI } from '../api/index'
+import XpraViewer from '../components/XpraViewer.vue'
 
 const sessions = ref<any[]>([])
 const partitions = ref<any[]>([])
@@ -272,15 +291,17 @@ const showCreateModal = ref(false)
 const showStartModal = ref(false)
 const showXpraModal = ref(false)
 const showScriptModal = ref(false)
-const startingStatus = ref<'starting' | 'ready' | 'failed'>('starting')
+const startingStatus = ref<'starting' | 'ready' | 'failed' | 'bg'>('starting')
 const startProgress = ref(0)
 const currentJobId = ref('')
 const selectedSession = ref<any>(null)
+const launchingSession = ref<any>(null)
+const launchMinimized = ref(false)
 const logLines = ref<string[]>([])
 const logType = ref<'out' | 'err'>('out')
 const logBodyRef = ref<HTMLElement | null>(null)
 const xpraFrame = ref<HTMLIFrameElement | null>(null)
-const xpraUrl = ref('')
+const xpraWsUrl = ref('')
 const scriptInfo = ref({ script: '', partition: '', workdir: '' })
 
 let logTimer: any = null
@@ -395,6 +416,8 @@ const deleteSession = async (session: any) => {
 
 const startSession = async (session: any) => {
   selectedSession.value = session
+  launchingSession.value = session
+  launchMinimized.value = false
   showStartModal.value = true
   startingStatus.value = 'starting'
   startProgress.value = 0
@@ -407,6 +430,7 @@ const startSession = async (session: any) => {
     startPollStatus(session.id)
   } catch (e: any) {
     startingStatus.value = 'failed'
+    showStartModal.value = true
     alert('启动失败: ' + (e.response?.data?.error || e.message))
   }
 }
@@ -438,11 +462,15 @@ const startPollStatus = (id: number) => {
         clearInterval(pollTimer); if (logTimer) clearInterval(logTimer)
         startingStatus.value = 'ready'
         selectedSession.value = s
+        launchingSession.value = null
+        showStartModal.value = true  // 自动弹出就绪弹窗
         const idx = sessions.value.findIndex((x: any) => x.id === id)
         if (idx >= 0) sessions.value[idx] = s
       } else if (s.status === 'failed') {
         clearInterval(pollTimer); if (logTimer) clearInterval(logTimer)
         startingStatus.value = 'failed'
+        launchingSession.value = null
+        showStartModal.value = true  // 自动弹出失败弹窗
       }
     } catch { /* ignore */ }
   }, 3000)
@@ -473,39 +501,36 @@ const copyTunnelCmd = () => {
     .catch(() => alert(tunnelCmd.value))
 }
 
-// 浏览器连接：通过后端 WebSocket 代理打开 Xpra HTML5 客户端
+// 浏览器连接：直接用 XpraViewer 组件通过后端 WS 代理连接
 const openNoVNC = () => {
   if (!selectedSession.value) return
   showStartModal.value = false
   const token = localStorage.getItem('token') || sessionStorage.getItem('token') || ''
-  const ssl = location.protocol === 'https:' ? '1' : '0'
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws'
   const port = location.port || (location.protocol === 'https:' ? '443' : '80')
-  // xpra-html5 URL 参数格式：host/port/path/ssl
-  // path 指向后端 WS 代理，token 通过 query string 传递
-  const wsPath = `api/desktop/sessions/${selectedSession.value.id}/xpra-ws?token=${encodeURIComponent(token)}`
-  const url = `/xpra/index.html?host=${location.hostname}&port=${port}&path=${encodeURIComponent(wsPath)}&ssl=${ssl}&autoconnect=true`
-  window.open(url, '_blank')
-}
-  if (!selectedSession.value) return
-  showStartModal.value = false
-  const port = selectedSession.value.xpraPort || selectedSession.value.vncPort
-  const token = localStorage.getItem('token') || sessionStorage.getItem('token') || ''
-  // 通过后端代理路径访问 Xpra HTML5
-  const wsPath = `/api/desktop/sessions/${selectedSession.value.id}/xpra-ws?token=${encodeURIComponent(token)}`
-  const wsProto = location.protocol === 'https:' ? 'wss' : 'ws'
-  const wsUrl = `${wsProto}://${location.host}${wsPath}`
-  // Xpra HTML5 内置客户端 URL（需要计算节点上 xpra 的 html 目录）
-  xpraUrl.value = `/api/desktop/sessions/${selectedSession.value.id}/xpra-html?token=${encodeURIComponent(token)}`
+  xpraWsUrl.value = `${proto}://${location.hostname}:${port}/api/desktop/sessions/${selectedSession.value.id}/xpra-ws?token=${encodeURIComponent(token)}`
   showXpraModal.value = true
 }
 
-// Xpra 原生客户端一键连接
+// 一键建立 SSH 隧道：通过 hpcc:// 协议拉起 hpc-client 建立端口转发
+const launchTunnel = () => {
+  if (!selectedSession.value) return
+  const token = localStorage.getItem('token') || sessionStorage.getItem('token') || ''
+  const node = selectedSession.value.address || ''
+  const remotePort = selectedSession.value.xpraPort || selectedSession.value.vncPort || 5901
+  const localPort = localVncPort.value
+  // hpcc://ssh 协议：hpc-client 建立 SSH 隧道并做端口转发
+  const uri = `hpcc://ssh?server=${encodeURIComponent(location.origin)}&token=${encodeURIComponent(token)}&host=${encodeURIComponent(node)}&remote_port=${remotePort}&local_port=${localPort}&mode=tunnel`
+  window.location.href = uri
+}
+
+// 启动本地 Xpra 客户端连接到隧道本地端口
 const launchXpraClient = () => {
   if (!selectedSession.value) return
-  const port = selectedSession.value.xpraPort || selectedSession.value.vncPort
-  const token = localStorage.getItem('token') || sessionStorage.getItem('token') || ''
-  // xpra:// 协议由 xpra 客户端注册
-  const uri = `xpra://ws/${location.hostname}:${location.port || (location.protocol === 'https:' ? 443 : 80)}/api/desktop/sessions/${selectedSession.value.id}/xpra-ws?token=${encodeURIComponent(token)}`
+  const localPort = localVncPort.value
+  const pwd = selectedSession.value.vncPassword || ''
+  // xpra:// 协议由本地 Xpra 客户端注册，连接到本地隧道端口
+  const uri = `xpra://tcp/localhost:${localPort}/${pwd ? '?password=' + encodeURIComponent(pwd) : ''}`
   window.location.href = uri
 }
 
@@ -633,6 +658,30 @@ const copyScript = () => {
 .vnc-overlay { position: fixed; inset: 0; background: #000; z-index: 2000; display: flex; flex-direction: column; }
 .vnc-toolbar { display: flex; justify-content: space-between; align-items: center; padding: .5rem 1rem; background: #1e1e1e; color: #fff; font-size: .9rem; flex-shrink: 0; }
 .vnc-canvas-wrap { flex: 1; overflow: hidden; background: #000; }
+
+/* 悬浮启动进度条 */
+.launch-float {
+  position: fixed; bottom: 24px; right: 24px; z-index: 3000;
+  width: 380px; background: #1e293b; border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4); overflow: hidden;
+  transition: all 0.2s;
+}
+.launch-float.minimized { width: 280px; }
+.launch-float-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 14px; cursor: pointer; user-select: none;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+}
+.launch-float-title { display: flex; align-items: center; gap: 8px; color: #fff; font-size: 0.85rem; font-weight: 600; }
+.launch-jobid { font-size: 0.75rem; opacity: 0.75; font-weight: 400; }
+.launch-float-actions { display: flex; gap: 4px; }
+.launch-icon-btn { background: rgba(255,255,255,0.15); border: none; color: #fff; width: 22px; height: 22px; border-radius: 4px; cursor: pointer; font-size: 0.7rem; display: flex; align-items: center; justify-content: center; }
+.launch-icon-btn:hover { background: rgba(255,255,255,0.3); }
+.launch-float-body { padding: 12px 14px; }
+.launch-progress { height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; margin-bottom: 10px; overflow: hidden; }
+.launch-progress-fill { height: 100%; background: linear-gradient(90deg, #667eea, #a78bfa); border-radius: 2px; transition: width 0.5s; }
+.launch-spinner { width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 0.8s linear infinite; flex-shrink: 0; }
+@keyframes spin { to { transform: rotate(360deg); } }
 .vnc-canvas-wrap :deep(canvas) { width: 100% !important; height: 100% !important; }
 
 /* 脚本 */
@@ -684,5 +733,6 @@ const copyScript = () => {
 
 /* Xpra iframe */
 .xpra-frame { flex: 1; width: 100%; height: 100%; border: none; background: #000; }
+.xpra-viewer-fill { flex: 1; min-height: 0; width: 100%; }
 </style>
 

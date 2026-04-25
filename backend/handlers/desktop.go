@@ -461,34 +461,26 @@ return
 c.JSON(http.StatusOK, gin.H{"message": "deleted"})
 }
 
-// buildXpraScript 生成 sbatch 脚本：通过 Xpra 启动桌面或应用
-// mode="desktop" 启动完整桌面（xfce4/gnome/kde）
-// mode="app"     启动单个应用（appCommand 指定）
+// buildDesktopScript 生成 sbatch 脚本：通过 Xpra 启动桌面或应用
+// 所有运行时文件放到 $HOME/.xpra/job-${SLURM_JOB_ID}/ 目录，完全隔离
+// 端口通过动态扫描获取，写入状态文件供后端读取
 func buildDesktopScript(session *DesktopSession) string {
 	homeBase := os.Getenv("HOME_BASE_PATH")
 	if homeBase == "" {
 		homeBase = "/home"
 	}
+	// 状态文件仍按 session ID 存放，供后端轮询
 	statusDir := fmt.Sprintf("%s/%s/.desktop", homeBase, session.Username)
 	statusFile := fmt.Sprintf("%s/%d.status", statusDir, session.ID)
-
-	// Xpra 使用 14500+id 作为 WebSocket 端口，避免与其他服务冲突
-	baseWsPort := 14500 + session.ID
-	// display 范围：用 uid*10 作为基准，每个用户独立范围，避免多用户冲突
-	// 例如 uid=1000 → display 从 10000 开始，uid=1001 → 从 10010 开始
-	baseDisplay := 100 + session.ID
 
 	resolution := session.Resolution
 	if resolution == "" || resolution == "auto" {
 		resolution = "1920x1080"
 	}
-
 	mode := session.Mode
 	if mode == "" {
 		mode = "desktop"
 	}
-
-	// 桌面类型
 	desktopEnv := "xfce4"
 	if session.Type != "" {
 		switch session.Type {
@@ -496,16 +488,12 @@ func buildDesktopScript(session *DesktopSession) string {
 			desktopEnv = "gnome"
 		case "kde":
 			desktopEnv = "kde"
-		default:
-			desktopEnv = "xfce4"
 		}
 	}
-
 	appCmd := session.AppCommand
 	if mode == "app" && appCmd == "" {
 		appCmd = "xterm"
 	}
-
 	durationSec := session.Duration * 3600
 	if durationSec <= 0 {
 		durationSec = 4 * 3600
@@ -513,111 +501,105 @@ func buildDesktopScript(session *DesktopSession) string {
 
 	var b strings.Builder
 	b.WriteString("#!/bin/bash\n")
-	b.WriteString(fmt.Sprintf("mkdir -p %s\n\n", statusDir))
 	b.WriteString(fmt.Sprintf("export HOME=${HOME:-%s/%s}\n", homeBase, session.Username))
 	b.WriteString("export PATH=/opt/xpra/bin:/usr/bin:/usr/local/bin:/bin:/usr/sbin:/sbin:$PATH\n\n")
 
-	// 动态查找空闲端口和 display（display 基于 uid 偏移，减少跨用户冲突）
-	b.WriteString(fmt.Sprintf("BASE_WS_PORT=%d\nBASE_DISPLAY=%d\n", baseWsPort, baseDisplay))
-	// uid % 100 * 10 作为 display 偏移，不同用户用不同范围
-	b.WriteString("UID_OFFSET=$(( $(id -u) % 100 * 10 ))\n")
-	b.WriteString("DISPLAY_NUM=$(( BASE_DISPLAY + UID_OFFSET ))\n")
-	b.WriteString("WS_PORT=$BASE_WS_PORT\n")
-	// 先扫空闲 display
-	b.WriteString("for try in $(seq 0 49); do\n")
-	b.WriteString("  D=$(( BASE_DISPLAY + UID_OFFSET + try ))\n")
-	b.WriteString("  if [ ! -f /tmp/.X${D}-lock ] && [ ! -S /tmp/.X11-unix/X${D} ]; then\n")
-	b.WriteString("    DISPLAY_NUM=$D; break\n  fi\ndone\n")
-	// 再扫空闲 ws 端口
-	b.WriteString("for port in $(seq $BASE_WS_PORT 14999); do\n")
-	b.WriteString("  if ! ss -tlnp 2>/dev/null | grep -q \":${port} \"; then\n")
-	b.WriteString("    WS_PORT=$port; break\n  fi\ndone\n\n")
+	// ── 以 SLURM_JOB_ID 命名的独立工作目录 ──
+	b.WriteString("JOB_ID=${SLURM_JOB_ID:-$$}\n")
+	b.WriteString(fmt.Sprintf("XPRA_JOB_DIR=\"$HOME/.xpra/job-${JOB_ID}\"\n"))
+	b.WriteString(fmt.Sprintf("mkdir -p \"$XPRA_JOB_DIR\" %s\n\n", statusDir))
 
-	// 写状态文件
+	// ── 动态查找空闲 display ──
+	b.WriteString("# 找空闲 display（跳过有锁文件或 socket 的）\n")
+	b.WriteString("DISPLAY_NUM=\n")
+	b.WriteString("for d in $(seq 10 200); do\n")
+	b.WriteString("  if [ ! -f /tmp/.X${d}-lock ] && [ ! -S /tmp/.X11-unix/X${d} ]; then\n")
+	b.WriteString("    DISPLAY_NUM=$d; break\n")
+	b.WriteString("  fi\ndone\n")
+	b.WriteString("[ -z \"$DISPLAY_NUM\" ] && DISPLAY_NUM=99\n\n")
+
+	// ── 动态查找空闲 WebSocket 端口（14500-14999）──
+	b.WriteString("# 找空闲 WebSocket 端口\n")
+	b.WriteString("WS_PORT=\n")
+	b.WriteString("for port in $(seq 14500 14999); do\n")
+	b.WriteString("  if ! ss -tlnp 2>/dev/null | grep -q \":${port}[^0-9]\"; then\n")
+	b.WriteString("    WS_PORT=$port; break\n")
+	b.WriteString("  fi\ndone\n")
+	b.WriteString("[ -z \"$WS_PORT\" ] && WS_PORT=14500\n\n")
+
+	// ── 写状态文件 ──
 	b.WriteString(fmt.Sprintf("echo 'status=starting' > %s\n", statusFile))
 	b.WriteString(fmt.Sprintf("echo \"node=$(hostname)\" >> %s\n", statusFile))
 	b.WriteString(fmt.Sprintf("echo \"ws_port=$WS_PORT\" >> %s\n", statusFile))
 	b.WriteString(fmt.Sprintf("echo \"display=$DISPLAY_NUM\" >> %s\n", statusFile))
+	b.WriteString(fmt.Sprintf("echo \"job_dir=$XPRA_JOB_DIR\" >> %s\n\n", statusFile))
 
-	// 清理当前用户的所有残留 xpra lock（避免影响新作业）
-	b.WriteString("# 清理当前用户残留的 xpra display lock\n")
-	b.WriteString("for lockfile in /tmp/.X*-lock; do\n")
-	b.WriteString("  [ -f \"$lockfile\" ] || continue\n")
-	b.WriteString("  pid=$(cat \"$lockfile\" 2>/dev/null | tr -d ' ')\n")
-	b.WriteString("  [ -z \"$pid\" ] && continue\n")
-	b.WriteString("  # 检查 pid 是否属于当前用户且已死亡\n")
-	b.WriteString("  if ! kill -0 \"$pid\" 2>/dev/null; then\n")
-	b.WriteString("    dnum=$(echo \"$lockfile\" | grep -oP '(?<=\\.X)\\d+')\n")
-	b.WriteString("    rm -f \"$lockfile\" /tmp/.X11-unix/X${dnum} 2>/dev/null\n")
-	b.WriteString("    xpra stop :${dnum} 2>/dev/null || true\n")
-	b.WriteString("  fi\n")
-	b.WriteString("done\n")
-	// 清理当前 display
+	// ── 清理残留 ──
 	b.WriteString("xpra stop :${DISPLAY_NUM} 2>/dev/null || true\n")
 	b.WriteString("sleep 1\n")
-	b.WriteString("rm -f /tmp/.X${DISPLAY_NUM}-lock /tmp/.X11-unix/X${DISPLAY_NUM} 2>/dev/null || true\n")
-	b.WriteString("rm -f \"$XDG_RUNTIME_DIR/xpra/:${DISPLAY_NUM}\" 2>/dev/null || true\n")
-	b.WriteString("rm -f /tmp/xpra-:${DISPLAY_NUM} 2>/dev/null || true\n\n")
+	b.WriteString("rm -f /tmp/.X${DISPLAY_NUM}-lock /tmp/.X11-unix/X${DISPLAY_NUM} 2>/dev/null || true\n\n")
 
-	// XDG_RUNTIME_DIR 必须先 export 再 mkdir
+	// ── XDG / dbus ──
 	b.WriteString("export XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/tmp/xpra-runtime-$(id -u)}\n")
-	b.WriteString("mkdir -p \"$XDG_RUNTIME_DIR\" && chmod 700 \"$XDG_RUNTIME_DIR\"\n\n")
-
-	// 启动 dbus（桌面环境必须）
+	b.WriteString("mkdir -p \"$XDG_RUNTIME_DIR\" && chmod 700 \"$XDG_RUNTIME_DIR\"\n")
 	b.WriteString("if [ -z \"$DBUS_SESSION_BUS_ADDRESS\" ]; then\n")
-	b.WriteString("  eval $(dbus-launch --sh-syntax)\n")
-	b.WriteString("  export DBUS_SESSION_BUS_ADDRESS\n")
+	b.WriteString("  eval $(dbus-launch --sh-syntax) || true\n")
 	b.WriteString("fi\n\n")
 
+	// ── 启动 Xpra，所有文件放到 job 目录 ──
+	logFile := "\"$XPRA_JOB_DIR/xpra.log\""
+	socketDir := "\"$XPRA_JOB_DIR\""
+
 	if mode == "app" {
-		// 应用模式：--start-child 配合 exit-with-children（4.x 要求）
 		b.WriteString(fmt.Sprintf(
 			"xpra start :${DISPLAY_NUM} \\\n"+
 				"  --bind-ws=0.0.0.0:${WS_PORT} \\\n"+
 				"  --html=on \\\n"+
+				"  --socket-dir=%s \\\n"+
+				"  --log-file=%s \\\n"+
 				"  --start-child=\"%s\" \\\n"+
 				"  --exit-with-children=yes \\\n"+
 				"  --daemon=no \\\n"+
 				"  --resize-display=%s \\\n"+
-				"  --log-file=%s/%d-xpra.log \\\n"+
 				"  &\n\n",
-			appCmd, resolution, statusDir, session.ID,
+			socketDir, logFile, appCmd, resolution,
 		))
 	} else {
-		// 桌面模式：start-desktop + --start-child
-		var startDesktopCmd string
+		var startCmd string
 		switch desktopEnv {
-		case "gnome-session":
-			startDesktopCmd = "gnome-session"
-		case "startplasma-x11":
-			startDesktopCmd = "startplasma-x11"
+		case "gnome":
+			startCmd = "gnome-session"
+		case "kde":
+			startCmd = "startplasma-x11"
 		default:
-			startDesktopCmd = "startxfce4"
+			startCmd = "startxfce4"
 		}
 		b.WriteString(fmt.Sprintf(
 			"xpra start-desktop :${DISPLAY_NUM} \\\n"+
 				"  --bind-ws=0.0.0.0:${WS_PORT} \\\n"+
 				"  --html=on \\\n"+
+				"  --socket-dir=%s \\\n"+
+				"  --log-file=%s \\\n"+
 				"  --start-child=%s \\\n"+
 				"  --exit-with-children=no \\\n"+
 				"  --daemon=no \\\n"+
 				"  --resize-display=%s \\\n"+
-				"  --log-file=%s/%d-xpra.log \\\n"+
 				"  &\n\n",
-			startDesktopCmd, resolution, statusDir, session.ID,
+			socketDir, logFile, startCmd, resolution,
 		))
 	}
 
 	b.WriteString("XPRA_PID=$!\n\n")
 
-	// 等待 WebSocket 端口就绪（最多 60 秒）
-	b.WriteString("for i in $(seq 1 60); do\n")
-	b.WriteString("  ss -tlnp 2>/dev/null | grep -q \":${WS_PORT} \" && break\n  sleep 1\ndone\n\n")
-	b.WriteString("if ! ss -tlnp 2>/dev/null | grep -q \":${WS_PORT} \"; then\n")
+	// ── 等待端口就绪（最多 90 秒）──
+	b.WriteString("for i in $(seq 1 90); do\n")
+	b.WriteString("  ss -tlnp 2>/dev/null | grep -q \":${WS_PORT}[^0-9]\" && break\n")
+	b.WriteString("  sleep 1\ndone\n\n")
+	b.WriteString(fmt.Sprintf("if ! ss -tlnp 2>/dev/null | grep -q \":${WS_PORT}[^0-9]\"; then\n"))
 	b.WriteString(fmt.Sprintf("  echo 'status=failed' >> %s\n  exit 1\nfi\n\n", statusFile))
 	b.WriteString(fmt.Sprintf("echo 'status=running' >> %s\n\n", statusFile))
 
-	// 保持运行
+	// ── 保持运行 ──
 	b.WriteString(fmt.Sprintf("END_TIME=$(($(date +%%s) + %d))\n", durationSec))
 	b.WriteString("while [ $(date +%s) -lt $END_TIME ]; do\n")
 	b.WriteString("  kill -0 $XPRA_PID 2>/dev/null || break\n  sleep 30\ndone\n\n")

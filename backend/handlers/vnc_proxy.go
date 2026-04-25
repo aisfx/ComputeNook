@@ -114,3 +114,90 @@ func XpraWebSocketProxy(c *gin.Context) {
 func VNCWebSocketProxy(c *gin.Context) {
 	XpraWebSocketProxy(c)
 }
+
+// XpraHTTPProxy GET /api/desktop/sessions/:id/xpra-html/*path
+// 将 Xpra 内置 HTML5 客户端的 HTTP 请求反向代理到计算节点
+func XpraHTTPProxy(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+
+	sessions, err := loadDesktopSessions()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	var session *DesktopSession
+	for i := range sessions {
+		if sessions[i].ID == id {
+			session = &sessions[i]
+			break
+		}
+	}
+	if session == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+		return
+	}
+
+	if session.Status != "running" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "session is not running"})
+		return
+	}
+
+	port := session.XpraPort
+	if port == 0 {
+		port = session.VNCPort
+	}
+
+	subPath := c.Param("path")
+	if subPath == "" || subPath == "/" {
+		subPath = "/"
+	}
+
+	target := fmt.Sprintf("http://%s:%d%s", session.Address, port, subPath)
+	if c.Request.URL.RawQuery != "" {
+		target += "?" + c.Request.URL.RawQuery
+	}
+
+	proxyReq, err := http.NewRequest(c.Request.Method, target, c.Request.Body)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	for k, vv := range c.Request.Header {
+		for _, v := range vv {
+			proxyReq.Header.Add(k, v)
+		}
+	}
+	proxyReq.Header.Set("Host", fmt.Sprintf("%s:%d", session.Address, port))
+
+	httpClient := &http.Client{Timeout: 30 * time.Second}
+	resp, err := httpClient.Do(proxyReq)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "xpra http proxy failed: " + err.Error()})
+		return
+	}
+	defer resp.Body.Close()
+
+	for k, vv := range resp.Header {
+		for _, v := range vv {
+			c.Header(k, v)
+		}
+	}
+	c.Status(resp.StatusCode)
+
+	buf := make([]byte, 32*1024)
+	for {
+		n, readErr := resp.Body.Read(buf)
+		if n > 0 {
+			c.Writer.Write(buf[:n])
+		}
+		if readErr != nil {
+			break
+		}
+	}
+}
