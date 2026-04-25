@@ -2,6 +2,8 @@ package handlers
 
 import (
 	"net/http"
+	"sync"
+	"time"
 
 	"github.com/dchest/captcha"
 	"github.com/gin-gonic/gin"
@@ -12,18 +14,44 @@ func init() {
 	captcha.SetCustomStore(captcha.NewMemoryStore(1024, 5*60))
 }
 
+// captchaRateLimit 验证码生成频率限制：同一 IP 每分钟最多 10 次
+var (
+	captchaIPMu    sync.Mutex
+	captchaIPCount = map[string]struct {
+		count int
+		reset time.Time
+	}{}
+)
+
+func captchaRateLimitCheck(ip string) bool {
+	captchaIPMu.Lock()
+	defer captchaIPMu.Unlock()
+	now := time.Now()
+	entry := captchaIPCount[ip]
+	if now.After(entry.reset) {
+		entry = struct {
+			count int
+			reset time.Time
+		}{0, now.Add(time.Minute)}
+	}
+	entry.count++
+	captchaIPCount[ip] = entry
+	return entry.count <= 10
+}
+
 // GetCaptcha GET /api/captcha/new
-// 返回验证码 ID 和 PNG 图片（base64）
 func GetCaptcha(c *gin.Context) {
+	if !captchaRateLimitCheck(c.ClientIP()) {
+		c.JSON(http.StatusTooManyRequests, gin.H{"error": "请求过于频繁，请稍后再试"})
+		return
+	}
 	id := captcha.New()
 	c.JSON(http.StatusOK, gin.H{"captchaId": id})
 }
 
 // GetCaptchaImage GET /api/captcha/:id.png
-// 直接返回验证码图片
 func GetCaptchaImage(c *gin.Context) {
 	id := c.Param("id")
-	// 去掉 .png 后缀
 	if len(id) > 4 && id[len(id)-4:] == ".png" {
 		id = id[:len(id)-4]
 	}
@@ -34,8 +62,7 @@ func GetCaptchaImage(c *gin.Context) {
 	}
 }
 
-// validateCaptcha 验证验证码（内部使用）
-// 验证后自动销毁，防止重放
+// validateCaptcha 验证验证码（内部使用），验证后自动销毁防重放
 func validateCaptcha(id, digits string) bool {
 	if id == "" || digits == "" {
 		return false

@@ -40,6 +40,12 @@ func main() {
 	logger.Info("LDAP_HOST: %s", os.Getenv("LDAP_HOST"))
 	logger.Info("LDAP_PORT: %s", os.Getenv("LDAP_PORT"))
 	logger.Info("DEV_MODE: %s", os.Getenv("DEV_MODE"))
+
+	// JWT_SECRET 安全检查
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if len(jwtSecret) < 32 {
+		log.Printf("WARNING: JWT_SECRET 长度不足 32 字节（当前 %d 字节），建议使用更长的随机字符串", len(jwtSecret))
+	}
 	logFile := os.Getenv("LOG_FILE")
 	if logFile == "" {
 		logFile = "slurm-web.log"

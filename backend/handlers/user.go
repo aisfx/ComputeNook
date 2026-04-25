@@ -6,11 +6,40 @@ import (
 	"os"
 	"strconv"
 	"time"
+	"unicode"
 
 	"github.com/gin-gonic/gin"
 	"hpc-backend/ldap"
 	"hpc-backend/models"
 )
+
+// validatePasswordStrength 校验密码复杂度：至少8位，含大写、小写、数字
+func validatePasswordStrength(password string) string {
+	if len(password) < 8 {
+		return "密码长度至少 8 位"
+	}
+	var hasUpper, hasLower, hasDigit bool
+	for _, r := range password {
+		switch {
+		case unicode.IsUpper(r):
+			hasUpper = true
+		case unicode.IsLower(r):
+			hasLower = true
+		case unicode.IsDigit(r):
+			hasDigit = true
+		}
+	}
+	if !hasUpper {
+		return "密码必须包含至少一个大写字母"
+	}
+	if !hasLower {
+		return "密码必须包含至少一个小写字母"
+	}
+	if !hasDigit {
+		return "密码必须包含至少一个数字"
+	}
+	return ""
+}
 
 // GetUsers 获取用户列表（支持分页，防止枚举）
 func GetUsers(c *gin.Context) {
@@ -245,6 +274,11 @@ func ResetPassword(c *gin.Context) {
 		return
 	}
 
+	if msg := validatePasswordStrength(req.NewPassword); msg != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": msg})
+		return
+	}
+
 	// 开发模式：模拟重置成功
 	if os.Getenv("DEV_MODE") == "true" {
 		c.JSON(http.StatusOK, gin.H{"message": "Password reset successfully (dev mode)"})
@@ -392,6 +426,11 @@ func ChangePassword(c *gin.Context) {
 	var req models.ChangePassword
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	if msg := validatePasswordStrength(req.NewPassword); msg != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": msg})
 		return
 	}
 

@@ -254,42 +254,42 @@
         <!-- 月度作业折线图 -->
         <div class="rcard" v-if="rJobStats?.monthly_job_counts.length">
           <div class="rcard-title">每月各队列作业数趋势</div>
-          <div ref="rLineRef" style="width:100%;height:260px"></div>
+          <div ref="rLineRef" style="width:100%;height:320px;position:relative"></div>
         </div>
 
         <!-- 作业规模 + 核时 -->
         <div class="rchart-row">
           <div class="rcard" v-if="rJobStats?.job_scale_distribution.length">
             <div class="rcard-title">作业规模分布</div>
-            <div ref="rScaleRef" style="width:100%;height:240px"></div>
+            <div ref="rScaleRef" style="width:100%;height:280px;position:relative"></div>
           </div>
           <div class="rcard" v-if="rUsageStats">
             <div class="rcard-title">GPU / CPU 核时用量</div>
-            <div ref="rUsageRef" style="width:100%;height:240px"></div>
+            <div ref="rUsageRef" style="width:100%;height:280px;position:relative"></div>
           </div>
         </div>
 
         <!-- 存储用量 -->
         <div class="rcard" v-if="rStorageStats?.length">
           <div class="rcard-title">存储配额使用情况</div>
-          <div ref="rStorageRef" :style="{ width: '100%', height: Math.max(260, rStorageStats.length * 60) + 'px' }"></div>
+          <div ref="rStorageRef" :style="{ width: '100%', height: Math.max(300, rStorageStats.length * 70) + 'px', position: 'relative' }"></div>
         </div>
 
         <!-- QoS 使用率 -->
         <div class="rcard" v-if="rQosStats?.length">
           <div class="rcard-title">QoS 计费核时使用率</div>
-          <div ref="rQosRef" :style="{ width: '100%', height: Math.max(200, rQosStats.length * 50) + 'px' }"></div>
+          <div ref="rQosRef" :style="{ width: '100%', height: Math.max(280, rQosStats.length * 60) + 'px', position: 'relative' }"></div>
         </div>
 
         <!-- 计费核时 + 配额仪表盘 -->
         <div class="rchart-row">
           <div class="rcard" v-if="rUsageStats">
             <div class="rcard-title">计费核时使用比例</div>
-            <div ref="rBillingRef" style="width:100%;height:280px"></div>
+            <div ref="rBillingRef" style="width:100%;height:280px;position:relative"></div>
           </div>
           <div class="rcard" v-if="rQuotaStats?.account">
             <div class="rcard-title">配额使用率 <span class="account-tag">{{ rQuotaStats.account }}</span></div>
-            <div ref="rQuotaRef" style="width:100%;height:280px"></div>
+            <div ref="rQuotaRef" style="width:100%;height:280px;position:relative"></div>
           </div>
         </div>
       </template>
@@ -682,7 +682,7 @@ let rBillingChart: echarts.ECharts | null = null
 let rQuotaChart: echarts.ECharts | null = null
 
 import { computed, nextTick } from 'vue'
-
+// 这是解决 echarts 在 v-if 条件渲染下尺寸错误的最可靠方案
 const reportHasData = computed(() =>
   !!(rJobStats.value || rUsageStats.value || rStorageStats.value || rQuotaStats.value)
 )
@@ -712,13 +712,6 @@ async function loadAdminReport() {
   reportError.value = ''
   rJobStats.value = null; rUsageStats.value = null
   rStorageStats.value = null; rQuotaStats.value = null
-  rLineChart?.dispose(); rLineChart = null
-  rScaleChart?.dispose(); rScaleChart = null
-  rUsageChart?.dispose(); rUsageChart = null
-  rStorageChart?.dispose(); rStorageChart = null
-  rQosChart?.dispose(); rQosChart = null
-  rBillingChart?.dispose(); rBillingChart = null
-  rQuotaChart?.dispose(); rQuotaChart = null
 
   const params: any = {
     start_time: reportFilters.value.startDate,
@@ -768,7 +761,9 @@ function renderAdminCharts() {
   const sc = (s: string) => s === 'EXCEEDED' ? '#ef4444' : s === 'WARNING' ? '#f59e0b' : '#10b981'
 
   if (rLineRef.value) {
-    if (!rLineChart) rLineChart = echarts.init(rLineRef.value)
+    // 每次都重新 init，确保用当前容器的正确尺寸
+    rLineChart?.dispose()
+    rLineChart = echarts.init(rLineRef.value)
     const counts = rJobStats.value?.monthly_job_counts ?? []
     const hasData = counts.length > 0
     const months = hasData ? [...new Set(counts.map(c => c.month))].sort() : ['2026-01','2026-02','2026-03','2026-04']
@@ -776,10 +771,10 @@ function renderAdminCharts() {
     rLineChart.setOption({
       backgroundColor: 'transparent',
       tooltip: { trigger: 'axis', backgroundColor: '#fff', borderColor: '#e5e7eb', textStyle: { color: C.text } },
-      legend: { data: queues, textStyle: { color: C.muted }, bottom: 4 },
-      grid: { left: '3%', right: '4%', bottom: '14%', top: '6%', containLabel: true },
+      legend: { data: queues, textStyle: { color: C.muted }, top: 4, left: 'center' },
+      grid: { left: '3%', right: '4%', bottom: '8%', top: '14%', containLabel: true },
       xAxis: { type: 'category', data: months, boundaryGap: false, axisLabel: { color: C.muted }, axisLine: { lineStyle: { color: C.axis } }, axisTick: { show: false } },
-      yAxis: { type: 'value', name: '作业数', nameTextStyle: { color: C.muted }, axisLabel: { color: C.muted }, splitLine: { lineStyle: { color: C.split } }, axisLine: { show: false } },
+      yAxis: { type: 'value', axisLabel: { color: C.muted }, splitLine: { lineStyle: { color: C.split } }, axisLine: { show: false } },
       series: queues.map((q, i) => ({
         name: q, type: 'line' as const, smooth: true, symbol: 'circle', symbolSize: 7,
         lineStyle: { width: 2.5, color: C.colors[i % C.colors.length] },
@@ -791,7 +786,8 @@ function renderAdminCharts() {
   }
 
   if (rScaleRef.value) {
-    if (!rScaleChart) rScaleChart = echarts.init(rScaleRef.value)
+    rScaleChart?.dispose()
+    rScaleChart = echarts.init(rScaleRef.value)
     const dist = rJobStats.value?.job_scale_distribution ?? []
     const total = rJobStats.value?.total_jobs ?? 0
     const ranges = dist.length > 0 ? dist : [
@@ -804,20 +800,21 @@ function renderAdminCharts() {
         formatter: (p: any) => { const pct = total > 0 ? (p[0].value / total * 100).toFixed(1) : 0; return `${p[0].name}<br/>作业数: <b>${p[0].value}</b>（${pct}%）` } },
       grid: { left: '3%', right: '4%', bottom: '3%', top: '6%', containLabel: true },
       xAxis: { type: 'category', data: ranges.map(d => d.range), axisLabel: { color: C.muted }, axisLine: { lineStyle: { color: C.axis } }, axisTick: { show: false } },
-      yAxis: { type: 'value', name: '作业数', nameTextStyle: { color: C.muted }, axisLabel: { color: C.muted }, splitLine: { lineStyle: { color: C.split } }, axisLine: { show: false } },
+      yAxis: { type: 'value', axisLabel: { color: C.muted }, splitLine: { lineStyle: { color: C.split } }, axisLine: { show: false } },
       series: [{ type: 'bar', data: ranges.map(d => d.count), itemStyle: { color: C.colors[0], borderRadius: [6,6,0,0] }, label: { show: true, position: 'top', color: C.muted, fontSize: 12 }, barMaxWidth: 56 }],
     })
   }
 
   if (rUsageRef.value) {
-    if (!rUsageChart) rUsageChart = echarts.init(rUsageRef.value)
+    rUsageChart?.dispose()
+    rUsageChart = echarts.init(rUsageRef.value)
     const u = rUsageStats.value
     rUsageChart.setOption({
       backgroundColor: 'transparent',
       tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, backgroundColor: '#fff', borderColor: '#e5e7eb', textStyle: { color: C.text } },
       grid: { left: '3%', right: '4%', bottom: '3%', top: '6%', containLabel: true },
       xAxis: { type: 'category', data: ['GPU 卡时', 'CPU 核时', '计费核时'], axisLabel: { color: C.muted }, axisLine: { lineStyle: { color: C.axis } }, axisTick: { show: false } },
-      yAxis: { type: 'value', name: '小时(h)', nameTextStyle: { color: C.muted }, axisLabel: { color: C.muted }, splitLine: { lineStyle: { color: C.split } }, axisLine: { show: false } },
+      yAxis: { type: 'value', axisLabel: { color: C.muted }, splitLine: { lineStyle: { color: C.split } }, axisLine: { show: false } },
       series: [{ type: 'bar',
         data: [
           { value: u ? +u.gpu_hours.toFixed(2) : 0,     itemStyle: { color: C.colors[0] } },
@@ -831,7 +828,8 @@ function renderAdminCharts() {
   }
 
   if (rStorageRef.value && rStorageStats.value?.length) {
-    if (!rStorageChart) rStorageChart = echarts.init(rStorageRef.value)
+    rStorageChart?.dispose()
+    rStorageChart = echarts.init(rStorageRef.value)
     const items = rStorageStats.value
     const labels = items.map(i => `${i.username}  ${i.filesystem}`)
     const barColors = items.map(i => i.over_soft_limit ? '#f59e0b' : '#10b981')
@@ -853,7 +851,8 @@ function renderAdminCharts() {
   }
 
   if (rBillingRef.value && rUsageStats.value) {
-    if (!rBillingChart) rBillingChart = echarts.init(rBillingRef.value)
+    rBillingChart?.dispose()
+    rBillingChart = echarts.init(rBillingRef.value)
     const u = rUsageStats.value
     const noLimit = u.quota_billing_hours === 0
     const used = +u.billing_hours.toFixed(2)
@@ -875,7 +874,8 @@ function renderAdminCharts() {
   }
 
   if (rQuotaRef.value) {
-    if (!rQuotaChart) rQuotaChart = echarts.init(rQuotaRef.value)
+    rQuotaChart?.dispose()
+    rQuotaChart = echarts.init(rQuotaRef.value)
     const q = rQuotaStats.value
     const used = q ? +q.used_billing_hours.toFixed(2) : 0
     const total = q ? +q.total_billing_hours.toFixed(2) : 0
@@ -897,7 +897,8 @@ function renderAdminCharts() {
   }
 
   if (rQosRef.value && rQosStats.value?.length) {
-    if (!rQosChart) rQosChart = echarts.init(rQosRef.value)
+    rQosChart?.dispose()
+    rQosChart = echarts.init(rQosRef.value)
     const items = rQosStats.value
     const names = items.map(i => i.qos_name)
     const usedData = items.map(i => +i.used_billing_hours.toFixed(2))
@@ -908,8 +909,8 @@ function renderAdminCharts() {
       tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, backgroundColor: '#fff', borderColor: '#e5e7eb', textStyle: { color: C.text },
         formatter: (params: any[]) => { const idx = params[0].dataIndex; const item = items[idx]; const quota = item.total_billing_hours > 0 ? `配额: ${item.total_billing_hours.toFixed(2)} h<br/>使用率: <b>${item.usage_percent.toFixed(1)}%</b>` : '配额: 无限制'; return `<b>${item.qos_name}</b><br/>已用: <b>${item.used_billing_hours.toFixed(2)} h</b><br/>${quota}` },
       },
-      legend: { data: ['已用核时', '配额上限'], textStyle: { color: C.muted }, bottom: 4 },
-      grid: { left: '3%', right: '4%', bottom: '14%', top: '6%', containLabel: true },
+      legend: { data: ['已用核时', '配额上限'], textStyle: { color: C.muted }, top: 4, left: 'center' },
+      grid: { left: '3%', right: '4%', bottom: '8%', top: '14%', containLabel: true },
       xAxis: { type: 'category', data: names, axisLabel: { color: C.muted }, axisLine: { lineStyle: { color: C.axis } }, axisTick: { show: false } },
       yAxis: { type: 'value', name: '核时(h)', nameTextStyle: { color: C.muted }, axisLabel: { color: C.muted }, splitLine: { lineStyle: { color: C.split } }, axisLine: { show: false } },
       series: [
@@ -920,7 +921,8 @@ function renderAdminCharts() {
   }
 
   setTimeout(() => {
-    rLineChart?.resize(); rScaleChart?.resize(); rUsageChart?.resize()
+    if (rLineRef.value && rLineChart) rLineChart.resize({ width: rLineRef.value.offsetWidth, height: rLineRef.value.offsetHeight })
+    rScaleChart?.resize(); rUsageChart?.resize()
     rStorageChart?.resize(); rBillingChart?.resize(); rQuotaChart?.resize(); rQosChart?.resize()
   }, 300)
 }
@@ -1477,16 +1479,16 @@ onMounted(() => {
 }
 
 /* ── 用量报表面板 ── */
-.report-panel { display: flex; flex-direction: column; gap: 1rem; }
+.report-panel { display: flex; flex-direction: column; gap: 1.5rem; }
 .report-filter-bar { display: flex; align-items: flex-end; gap: 0.75rem; flex-wrap: wrap; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; padding: 0.75rem 1rem; }
 .filter-item { display: flex; flex-direction: column; gap: 0.2rem; }
 .filter-item label { font-size: 0.72rem; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.04em; }
 .filter-input-sm { padding: 0.4rem 0.65rem; border: 1px solid #e5e7eb; border-radius: 7px; font-size: 0.85rem; background: #fff; color: #1e293b; outline: none; }
 .filter-input-sm:focus { border-color: #667eea; }
 .report-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.75rem; padding: 3rem; color: #6b7280; text-align: center; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; }
-.rcard { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 1.25rem 1.5rem; overflow: visible; min-width: 0; }
-.rcard-title { font-size: 0.9rem; font-weight: 700; color: #1e293b; margin-bottom: 1rem; }
-.rchart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.rcard { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 1.5rem 1.75rem; min-width: 0; }
+.rcard-title { font-size: 0.9rem; font-weight: 700; color: #1e293b; margin-bottom: 1.25rem; }
+.rchart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
 .rchart-row > .rcard { min-width: 0; }
 @media (max-width: 900px) { .rchart-row { grid-template-columns: 1fr; } }
 .account-tag { font-size: 0.75rem; font-weight: 500; color: #6b7280; background: #f1f5f9; padding: 2px 8px; border-radius: 10px; }

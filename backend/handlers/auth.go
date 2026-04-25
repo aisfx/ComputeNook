@@ -227,6 +227,9 @@ func GetCurrentUser(c *gin.Context) {
 	}
 
 	log.Printf("GetCurrentUser: Successfully retrieved user: %s", user.Username)
+	// 清除敏感字段再返回
+	user.Password = ""
+	user.HomeDir = ""
 	c.JSON(http.StatusOK, gin.H{"data": user})
 }
 

@@ -40,13 +40,13 @@ type LoginResponse struct {
 
 // PasswordReset 密码重置请求
 type PasswordReset struct {
-	NewPassword string `json:"newPassword" binding:"required,min=6"`
+	NewPassword string `json:"newPassword" binding:"required,min=8"`
 }
 
 // ChangePassword 修改密码请求（需要旧密码）
 type ChangePassword struct {
 	OldPassword string `json:"oldPassword" binding:"required"`
-	NewPassword string `json:"newPassword" binding:"required,min=6"`
+	NewPassword string `json:"newPassword" binding:"required,min=8"`
 }
 
 // UpdateProfile 更新个人信息请求
