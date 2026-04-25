@@ -359,6 +359,15 @@ func main() {
 		}
 	}
 
+	// xpra-html5 静态文件：放在 static/xpra 或 xpra-html5 目录
+	for _, xpraDir := range []string{"static/xpra", "../static/xpra", "xpra-html5", "../xpra-html5"} {
+		if _, err := os.Stat(xpraDir); err == nil {
+			r.Static("/xpra", xpraDir)
+			log.Printf("xpra-html5 served from %s", xpraDir)
+			break
+		}
+	}
+
 	port := os.Getenv("SERVER_PORT")
 	if port == "" {
 		port = "8080"

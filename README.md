@@ -317,8 +317,19 @@ QUOTA_PATH=/nfs/home
 1. 进入「远程桌面」页面
 2. 点击「新建桌面」，选择分区、CPU/内存资源
 3. 点击「启动」，等待 Slurm 分配节点
-4. 节点就绪后点击「连接」，浏览器内打开 VNC 图形界面
-5. 支持通过 hpc-client 本地隧道连接
+4. 节点就绪后有两种连接方式：
+   - **浏览器连接（Xpra HTML5）**：无需安装软件，通过后端 WebSocket 代理直接在浏览器打开
+   - **hpc-client 隧道**：复制隧道命令在本地执行，然后用任意 VNC 客户端连接 `localhost:590x`
+5. 浏览器连接需要在后端部署 xpra-html5 静态文件：
+
+```bash
+# 下载 xpra-html5
+git clone https://github.com/Xpra-org/xpra-html5.git
+# 放到后端 static/xpra 目录
+cp -r xpra-html5/html5 /opt/hpc-platform/static/xpra
+```
+
+后端启动时会自动检测 `static/xpra` 目录并挂载到 `/xpra/` 路径。
 
 ---
 

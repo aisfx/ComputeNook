@@ -52,7 +52,7 @@
     </div>
 
     <!-- 新建会话弹窗 -->
-    <div v-if="showCreateModal" class="modal-overlay" @click.self="showCreateModal = false">
+    <div v-if="showCreateModal" class="modal-overlay">
       <div class="modal-content create-modal" @click.stop>
         <div class="modal-header">
           <h2>新建远程会话</h2>
@@ -141,7 +141,7 @@
     </div>
 
     <!-- 启动进度弹窗 -->
-    <div v-if="showStartModal" class="modal-overlay" @click.self="showStartModal = false">
+    <div v-if="showStartModal" class="modal-overlay">
       <div class="modal-content start-modal" @click.stop>
         <div class="modal-header">
           <h2>{{ startingStatus === 'ready' ? '会话已就绪' : startingStatus === 'failed' ? '启动失败' : '启动中...' }}</h2>
@@ -187,24 +187,35 @@
             <h4>会话已就绪</h4>
             <div class="connection-info">
               <div class="info-item"><span class="info-label">节点:</span><code>{{ selectedSession?.address }}</code></div>
-              <div class="info-item"><span class="info-label">Xpra 端口:</span><code>{{ selectedSession?.xpraPort || selectedSession?.vncPort }}</code></div>
+              <div class="info-item"><span class="info-label">VNC 端口:</span><code>{{ selectedSession?.vncPort || selectedSession?.xpraPort }}</code></div>
+              <div class="info-item" v-if="selectedSession?.vncPassword">
+                <span class="info-label">VNC 密码:</span>
+                <code>{{ showVncPwd ? selectedSession.vncPassword : '••••••••' }}</code>
+                <button class="btn-eye-small" @click="showVncPwd = !showVncPwd">{{ showVncPwd ? '隐藏' : '显示' }}</button>
+              </div>
             </div>
             <div class="connection-methods">
+              <!-- 浏览器 Xpra HTML5 -->
               <div class="method-item">
                 <span class="method-icon">🌐</span>
                 <div class="method-content">
-                  <strong>浏览器内嵌（Xpra HTML5）</strong>
-                  <p>直接在浏览器中访问，无需安装软件</p>
+                  <strong>浏览器连接（Xpra HTML5）</strong>
+                  <p>无需安装软件，通过后端代理直接在浏览器中打开图形界面</p>
                 </div>
-                <button class="btn-primary" @click="openXpraInPage">打开</button>
+                <button class="btn-primary" @click="openNoVNC">打开</button>
               </div>
-              <div class="method-item">
-                <span class="method-icon">💻</span>
-                <div class="method-content">
-                  <strong>Xpra 原生客户端</strong>
-                  <p>性能更好，支持音频、剪贴板、文件传输</p>
+              <!-- hpc-client 隧道 -->
+              <div class="method-item method-item-block">
+                <div class="method-top">
+                  <span class="method-icon">🔌</span>
+                  <div class="method-content">
+                    <strong>hpc-client 隧道（推荐）</strong>
+                    <p>通过本地端口连接，性能更好，支持任意 VNC 客户端</p>
+                  </div>
+                  <button class="btn-secondary" @click="copyTunnelCmd">复制命令</button>
                 </div>
-                <button class="btn-secondary" @click="launchXpraClient">一键连接</button>
+                <pre class="tunnel-cmd">{{ tunnelCmd }}</pre>
+                <p class="tunnel-hint">执行后用 VNC 客户端连接 <code>localhost:{{ localVncPort }}</code>，密码同上</p>
               </div>
             </div>
             <div class="modal-actions">
@@ -229,7 +240,7 @@
     </div>
 
     <!-- 脚本预览 -->
-    <div v-if="showScriptModal" class="modal-overlay" @click.self="showScriptModal = false">
+    <div v-if="showScriptModal" class="modal-overlay">
       <div class="modal-content script-modal" @click.stop>
         <div class="modal-header">
           <h2>提交脚本</h2>
@@ -247,7 +258,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import axios from 'axios'
 import { desktopAPI } from '../api/index'
 
@@ -444,8 +455,37 @@ const openXpra = (session: any) => {
   startingStatus.value = 'ready'
 }
 
-// 浏览器内嵌 Xpra HTML5 客户端
-const openXpraInPage = () => {
+const showVncPwd = ref(false)
+
+// 本地转发端口 = VNC端口（用户可自定义，默认用远端端口）
+const localVncPort = computed(() => selectedSession.value?.vncPort || selectedSession.value?.xpraPort || 5901)
+
+const tunnelCmd = computed(() => {
+  if (!selectedSession.value) return ''
+  const node = selectedSession.value.address || 'compute-node'
+  const port = selectedSession.value.vncPort || selectedSession.value.xpraPort || 5901
+  return `hpc-client tunnel --node ${node} --remote-port ${port} --local-port ${localVncPort.value}`
+})
+
+const copyTunnelCmd = () => {
+  navigator.clipboard.writeText(tunnelCmd.value)
+    .then(() => alert('隧道命令已复制'))
+    .catch(() => alert(tunnelCmd.value))
+}
+
+// 浏览器连接：通过后端 WebSocket 代理打开 Xpra HTML5 客户端
+const openNoVNC = () => {
+  if (!selectedSession.value) return
+  showStartModal.value = false
+  const token = localStorage.getItem('token') || sessionStorage.getItem('token') || ''
+  const ssl = location.protocol === 'https:' ? '1' : '0'
+  const port = location.port || (location.protocol === 'https:' ? '443' : '80')
+  // xpra-html5 URL 参数格式：host/port/path/ssl
+  // path 指向后端 WS 代理，token 通过 query string 传递
+  const wsPath = `api/desktop/sessions/${selectedSession.value.id}/xpra-ws?token=${encodeURIComponent(token)}`
+  const url = `/xpra/index.html?host=${location.hostname}&port=${port}&path=${encodeURIComponent(wsPath)}&ssl=${ssl}&autoconnect=true`
+  window.open(url, '_blank')
+}
   if (!selectedSession.value) return
   showStartModal.value = false
   const port = selectedSession.value.xpraPort || selectedSession.value.vncPort
@@ -569,6 +609,10 @@ const copyScript = () => {
 .btn-eye-small:hover { background: #667eea; color: #fff; }
 .connection-methods { display: flex; flex-direction: column; gap: .75rem; margin-bottom: 1.5rem; }
 .method-item { display: flex; align-items: center; gap: 1rem; padding: 1rem; background: #f9fafb; border-radius: 8px; border: 1px solid #e5e7eb; }
+.method-item-block { flex-direction: column; align-items: stretch; }
+.method-top { display: flex; align-items: center; gap: 1rem; width: 100%; }
+.tunnel-cmd { background: #1e293b; color: #e2e8f0; padding: .75rem 1rem; border-radius: 6px; font-size: .82rem; font-family: monospace; margin: .75rem 0 .25rem; white-space: pre-wrap; word-break: break-all; }
+.tunnel-hint { font-size: .78rem; color: #6b7280; margin: 0; }
 .method-icon { font-size: 1.8rem; }
 .method-content { flex: 1; }
 .method-content strong { display: block; margin-bottom: .2rem; }
