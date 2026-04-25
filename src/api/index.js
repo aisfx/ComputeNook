@@ -69,6 +69,39 @@ axios.interceptors.response.use((response) => {
     }
     return Promise.reject(error);
 });
+// MFA API
+export const mfaAPI = {
+    // 获取当前用户 MFA 状态
+    getStatus: async () => {
+        const response = await axios.get('/mfa/status');
+        return response.data.data;
+    },
+    // 生成新密钥 + 二维码
+    setup: async () => {
+        const response = await axios.post('/mfa/setup');
+        return response.data.data;
+    },
+    // 扫码后确认绑定
+    confirm: async (code) => {
+        const response = await axios.post('/mfa/confirm', { code });
+        return response.data;
+    },
+    // 禁用 MFA（需要 code 确认）
+    disable: async (code) => {
+        const response = await axios.delete('/mfa', { data: { code } });
+        return response.data;
+    },
+    // 登录第二步：临时 token + TOTP code 换正式 JWT
+    verifyLogin: async (tempToken, code) => {
+        const response = await axios.post('/mfa/verify-login', { tempToken, code });
+        return response.data;
+    },
+    // 管理员重置某用户 MFA
+    adminReset: async (username) => {
+        const response = await axios.delete(`/mfa/admin/${username}`);
+        return response.data;
+    }
+};
 // 认证 API
 export const authAPI = {
     // 登录

@@ -3,6 +3,7 @@ import { createRouter, createWebHistory } from 'vue-router';
 import App from './App.vue';
 import Login from './views/Login.vue';
 import ForceChangePassword from './views/ForceChangePassword.vue';
+import MFASetup from './views/MFASetup.vue';
 import Layout from './views/Layout.vue';
 import AdminLayout from './views/AdminLayout.vue';
 import Download from './views/Download.vue';
@@ -22,6 +23,11 @@ const router = createRouter({
             name: 'ForceChangePassword',
             component: ForceChangePassword,
             meta: { requiresAuth: true, skipPasswordCheck: true }
+        },
+        {
+            path: '/mfa-setup',
+            name: 'MFASetup',
+            component: MFASetup
         },
         {
             path: '/',

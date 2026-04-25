@@ -68,17 +68,14 @@ func GetJobs(c *gin.Context) {
 	// 如果没有指定时间范围，根据视图模式设置默认时间范围
 	if startTime == 0 && endTime == 0 {
 		endTime = time.Now().Unix()
-		
-		// "我的作业"模式：显示最近1天的作业
-		// "所有作业"模式：显示最近1个月的作业
-		if queryUser != "" {
-			// 我的作业：1天
-			startTime = endTime - 24*60*60
-			logger.Debug("My jobs mode: showing jobs from last 1 day")
-		} else {
-			// 所有作业：30天
+		if isAdmin && queryUser == "" {
+			// 管理员查所有作业：30天
 			startTime = endTime - 30*24*60*60
-			logger.Debug("All jobs mode: showing jobs from last 30 days")
+			logger.Debug("Admin all-jobs mode: showing jobs from last 30 days")
+		} else {
+			// 普通用户或管理员查指定用户：1天
+			startTime = endTime - 24*60*60
+			logger.Debug("User jobs mode: showing jobs from last 1 day")
 		}
 	}
 	

@@ -84,6 +84,40 @@
       </div>
     </div>
 
+    <!-- MFA 验证弹窗（连接隧道前） -->
+    <div v-if="showMFAInput" class="modal-overlay">
+      <div class="modal-content" @click.stop>
+        <div class="modal-header">
+          <h4>🔐 双因子验证</h4>
+        </div>
+        <div class="modal-body">
+          <p style="color:#555;font-size:0.9rem;margin-bottom:1rem">
+            连接 {{ pendingNode?.name }} 需要验证身份，请输入 Authenticator App 中的 6 位验证码
+          </p>
+          <div class="password-input-group">
+            <label>TOTP 验证码</label>
+            <input
+              type="text"
+              inputmode="numeric"
+              maxlength="6"
+              v-model="mfaCodeInput"
+              @keyup.enter="confirmMFAAndConnect"
+              placeholder="000000"
+              class="password-input"
+              style="letter-spacing:0.4em;font-size:1.4rem;text-align:center"
+              ref="mfaInput"
+            />
+          </div>
+          <div class="modal-actions">
+            <button class="btn-secondary" @click="showMFAInput = false; mfaCodeInput = ''">取消</button>
+            <button class="btn-primary" @click="confirmMFAAndConnect" :disabled="mfaCodeInput.length !== 6">
+              验证并连接
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- 密钥上传 -->
     <div v-if="showKeyUpload" class="modal-overlay" @click="showKeyUpload = false">
       <div class="modal-content" @click.stop>
@@ -293,6 +327,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import axios from 'axios'
 import { Terminal } from 'xterm'
 import { FitAddon } from 'xterm-addon-fit'
 import { WebLinksAddon } from 'xterm-addon-web-links'
@@ -307,6 +342,25 @@ const showPasswordInput = ref(false)
 const showSessions = ref(false)
 const showLogs = ref(false)
 const showKeyUpload = ref(false)
+
+// MFA 弹窗
+const showMFAInput = ref(false)
+const mfaCodeInput = ref('')
+const pendingNode = ref<any>(null)
+const pendingPassword = ref('')
+// 缓存 MFA 状态，避免每次连接都请求
+const mfaStatusCache = ref<{mode: string, enabled: boolean, confirmed: boolean} | null>(null)
+
+const loadMFAStatus = async () => {
+  if (mfaStatusCache.value !== null) return mfaStatusCache.value
+  try {
+    const res = await axios.get('/mfa/status')
+    mfaStatusCache.value = res.data.data
+  } catch (_) {
+    mfaStatusCache.value = { mode: 'false', enabled: false, confirmed: false }
+  }
+  return mfaStatusCache.value
+}
 const keyTab = ref<'generate' | 'upload'>('generate')
 const generatingKey = ref(false)
 const generatedPubKey = ref('')
@@ -763,16 +817,41 @@ const connectWithPassword = () => {
   connectToNode(selectedNode.value, sshPassword.value)
   sshPassword.value = '' // 清空密码
 }
+
+// MFA 验证后连接
+const confirmMFAAndConnect = () => {
+  if (mfaCodeInput.value.length !== 6) return
+  showMFAInput.value = false
+  const code = mfaCodeInput.value
+  const node = pendingNode.value
+  const pwd = pendingPassword.value
+  mfaCodeInput.value = ''
+  pendingNode.value = null
+  pendingPassword.value = ''
+  connectToNode(node, pwd, code)
+}
 // 连接到节点
-const connectToNode = async (node: any, password: string = '') => {
+const connectToNode = async (node: any, password: string = '', mfaCode: string = '') => {
   // 确保用户信息已加载
   if (!currentUsername.value || currentUsername.value === 'unknown') {
     await loadCurrentUser()
   }
-  
+
+  // 检查是否需要 MFA（mode=false 时直接跳过，不发请求）
+  if (!mfaCode) {
+    const status = await loadMFAStatus()
+    if (status && status.mode !== 'false' && status.enabled && status.confirmed) {
+      pendingNode.value = node
+      pendingPassword.value = password
+      mfaCodeInput.value = ''
+      showMFAInput.value = true
+      return
+    }
+  }
+
   currentNode.value = node
   connectionStatus.value = 'connecting'
-  
+
   try {
     // 建立WebSocket连接
     const token = localStorage.getItem('token') || sessionStorage.getItem('token')
@@ -780,12 +859,14 @@ const connectToNode = async (node: any, password: string = '') => {
       notification.error('请先登录系统')
       return
     }
-    
+
     let wsUrl = `${getWsBase()}/api/webshell/connect?node=${node.name}&token=${encodeURIComponent(token)}`
-    
-    // 如果提供了密码，添加到URL参数中
+
     if (password) {
       wsUrl += `&password=${encodeURIComponent(password)}`
+    }
+    if (mfaCode) {
+      wsUrl += `&mfaCode=${encodeURIComponent(mfaCode)}`
     }
     
     console.log('Connecting to WebSocket with username:', currentUsername.value)

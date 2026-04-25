@@ -20,9 +20,9 @@ var (
 )
 
 const (
-	maxAttempts   = 10             // 10次失败后锁定
-	windowDur     = 10 * time.Minute
-	lockDur       = 15 * time.Minute
+	maxAttempts = 5             // IP 级别：5次/窗口锁定（配合账户级3次）
+	windowDur   = 10 * time.Minute
+	lockDur     = 5 * time.Minute
 )
 
 // LoginRateLimitMiddleware 登录接口速率限制，防暴力破解
@@ -53,7 +53,7 @@ func LoginRateLimitMiddleware() gin.HandlerFunc {
 		// 锁定期检查
 		if !a.lockedAt.IsZero() && now.Sub(a.lockedAt) < lockDur {
 			loginMu.Unlock()
-			remaining := int(lockDur - now.Sub(a.lockedAt)).Seconds()
+			remaining := int((lockDur - now.Sub(a.lockedAt)).Seconds())
 			c.JSON(http.StatusTooManyRequests, gin.H{
 				"error": "登录尝试过多，请稍后再试",
 				"retry_after": remaining,

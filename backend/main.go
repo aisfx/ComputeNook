@@ -63,6 +63,9 @@ func main() {
 	// CORS 中间件
 	r.Use(middleware.CORSMiddleware())
 
+	// 过滤非法查询参数（防 NoSQL 注入风格枚举）
+	r.Use(middleware.SanitizeQueryMiddleware())
+
 	// 只读演示模式（DEMO_READONLY=true 时拦截所有写操作）
 	r.Use(middleware.ReadOnlyMiddleware())
 
@@ -80,6 +83,13 @@ func main() {
 	api := r.Group("/api")
 	{
 		api.POST("/login", middleware.LoginRateLimitMiddleware(), handlers.Login)
+		// MFA：登录第二步和绑定流程都只需临时 token，不走 AuthMiddleware
+		api.POST("/mfa/verify-login", middleware.LoginRateLimitMiddleware(), handlers.VerifyMFALogin)
+		api.POST("/mfa/setup", handlers.SetupMFA)
+		api.POST("/mfa/confirm", handlers.ConfirmMFA)
+		// 验证码
+		api.GET("/captcha/new", handlers.GetCaptcha)
+		api.GET("/captcha/:id", handlers.GetCaptchaImage)
 	}
 
 	// 客户端下载页面（公开）
@@ -93,6 +103,13 @@ func main() {
 		auth.GET("/me/resources", handlers.GetMyResources)
 		auth.POST("/logout", handlers.Logout)
 		auth.POST("/ai/chat", handlers.AIChat)
+
+		// MFA 管理（登录用户自助）
+		auth.GET("/mfa/status", handlers.GetMFAStatus)
+		auth.DELETE("/mfa", handlers.DisableMFA)
+		// 管理员 MFA 管理
+		auth.GET("/mfa/admin/list", middleware.AdminMiddleware(), handlers.AdminListMFA)
+		auth.DELETE("/mfa/admin/:username", middleware.AdminMiddleware(), handlers.AdminResetMFA)
 
 		// 客户端下载文件（需认证）
 		auth.GET("/download/:file", handlers.DownloadClient)

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -11,8 +12,25 @@ import (
 	"hpc-backend/models"
 )
 
-// GetUsers 获取所有用户
+// GetUsers 获取用户列表（支持分页，防止枚举）
 func GetUsers(c *gin.Context) {
+	// 解析分页参数，限制最大 page size
+	page := 1
+	limit := 20
+	if p := c.Query("page"); p != "" {
+		if v, err := strconv.Atoi(p); err == nil && v > 0 {
+			page = v
+		}
+	}
+	if l := c.Query("limit"); l != "" {
+		if v, err := strconv.Atoi(l); err == nil && v > 0 {
+			if v > 100 {
+				v = 100 // 硬上限
+			}
+			limit = v
+		}
+	}
+
 	// 开发模式：返回模拟数据
 	if os.Getenv("DEV_MODE") == "true" {
 		mockUsers := []*models.User{
@@ -21,8 +39,7 @@ func GetUsers(c *gin.Context) {
 				UID:      1000,
 				GID:      1000,
 				CNName:   "管理员",
-				Email:    "admin@thhpc.cn",
-				Phone:    "13800138000",
+				Email:    "admin@example.com",
 				Shell:    "/bin/bash",
 				HomeDir:  "/home/admin",
 				IsAdmin:  true,
@@ -32,14 +49,13 @@ func GetUsers(c *gin.Context) {
 				UID:      1001,
 				GID:      1001,
 				CNName:   "用户1",
-				Email:    "user1@thhpc.cn",
-				Phone:    "13800138001",
+				Email:    "user1@example.com",
 				Shell:    "/bin/bash",
 				HomeDir:  "/home/user1",
 				IsAdmin:  false,
 			},
 		}
-		c.JSON(http.StatusOK, gin.H{"data": mockUsers})
+		c.JSON(http.StatusOK, gin.H{"data": mockUsers, "total": len(mockUsers), "page": page, "limit": limit})
 		return
 	}
 
@@ -56,7 +72,20 @@ func GetUsers(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": users})
+	// 分页切片
+	total := len(users)
+	start := (page - 1) * limit
+	end := start + limit
+	if start >= total {
+		users = []*models.User{}
+	} else {
+		if end > total {
+			end = total
+		}
+		users = users[start:end]
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": users, "total": total, "page": page, "limit": limit})
 }
 
 // GetUser 获取单个用户

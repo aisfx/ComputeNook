@@ -10,8 +10,6 @@ import (
 
 // CORSMiddleware 修复 CORS：只允许配置的来源，不使用通配符+credentials
 func CORSMiddleware() gin.HandlerFunc {
-	// 从环境变量读取允许的来源，多个用逗号分隔
-	// 例如：CORS_ORIGINS=https://hpc.example.com,http://localhost:3000
 	allowedOrigins := map[string]bool{}
 	if raw := os.Getenv("CORS_ORIGINS"); raw != "" {
 		for _, o := range strings.Split(raw, ",") {
@@ -30,14 +28,22 @@ func CORSMiddleware() gin.HandlerFunc {
 		c.Writer.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ws: wss:; frame-ancestors 'none'")
 
 		if origin != "" {
-			if len(allowedOrigins) == 0 || allowedOrigins[origin] {
-				// 明确指定来源，不使用 *
+			// CORS_ORIGINS 未配置时，拒绝所有跨域请求（同域不受影响）
+			if len(allowedOrigins) > 0 && allowedOrigins[origin] {
+				c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+				c.Writer.Header().Set("Vary", "Origin")
+				c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+				c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept, Cache-Control")
+				c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE")
+			} else if len(allowedOrigins) == 0 && os.Getenv("DEV_MODE") == "true" {
+				// 仅开发模式下允许任意来源（方便本地调试）
 				c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
 				c.Writer.Header().Set("Vary", "Origin")
 				c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
 				c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept, Cache-Control")
 				c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE")
 			}
+			// 生产模式 + 未配置 CORS_ORIGINS + 跨域请求 → 不设置 ACAO header，浏览器自动拦截
 		}
 
 		if c.Request.Method == http.MethodOptions {

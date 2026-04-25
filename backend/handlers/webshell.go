@@ -22,13 +22,11 @@ import (
 )
 
 var (
-	// WebSocket升级器
+	// WebSocket升级器（复用 ssh_proxy.go 里的 checkWebSocketOrigin）
 	upgrader = websocket.Upgrader{
-		CheckOrigin: func(r *http.Request) bool {
-			return true // 允许跨域，生产环境应该检查Origin
-		},
+		CheckOrigin: checkWebSocketOrigin,
 	}
-	
+
 	// 全局会话管理器
 	sessionManager = webshell.NewSessionManager()
 )
@@ -105,7 +103,19 @@ func ConnectWebShell(c *gin.Context) {
 	}
 	
 	log.Printf("ConnectWebShell: User authenticated - ID: %s, Username: %s", userID, username)
-	
+
+	// MFA 校验
+	if IsMFARequired(username) {
+		mfaCode := c.Query("mfaCode")
+		if !ValidateTOTP(username, mfaCode) {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error": "需要双因子验证码",
+				"code":  "MFA_REQUIRED",
+			})
+			return
+		}
+	}
+
 	// 获取连接参数
 	nodeName := c.Query("node")
 	if nodeName == "" {

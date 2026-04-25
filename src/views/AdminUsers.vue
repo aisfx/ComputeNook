@@ -26,6 +26,7 @@
             <th>家目录</th>
             <th>管理员</th>
             <th>状态</th>
+            <th>MFA</th>
             <th>操作</th>
           </tr>
         </thead>
@@ -52,6 +53,10 @@
               </div>
             </td>
             <td>
+              <span v-if="mfaStatus[user.username]?.confirmed" class="badge badge-active">🔐 已绑定</span>
+              <span v-else class="badge badge-disabled">— 未绑定</span>
+            </td>
+            <td>
               <div class="action-dropdown">
                 <button class="btn-action-toggle" @click.stop="toggleDropdown(user)">
                   操作 ▾
@@ -64,6 +69,8 @@
                   <button class="dropdown-item" @click="togglePasswordMustChange(user); closeDropdown(user)">
                     {{ user.passwordMustChange ? '🔓 取消强制改密' : '🔒 强制改密' }}
                   </button>
+                  <div class="dropdown-divider"></div>
+                  <button class="dropdown-item warning" @click="resetMFA(user); closeDropdown(user)">🔐 重置 MFA</button>
                   <div class="dropdown-divider"></div>
                   <button class="dropdown-item danger" @click="confirmDelete(user); closeDropdown(user)">🗑️ 删除</button>
                 </div>
@@ -157,7 +164,8 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted } from 'vue'
-import { userAPI } from '../api'
+import axios from 'axios'
+import { userAPI, mfaAPI } from '../api'
 
 const users = ref<any[]>([])
 const openDropdown = reactive<Record<string, boolean>>({})
@@ -196,6 +204,31 @@ const loadUsers = async () => {
     console.error('Failed to load users:', err)
   } finally {
     loading.value = false
+  }
+}
+
+// MFA 状态 map: username -> {confirmed, enabled}
+const mfaStatus = ref<Record<string, {confirmed: boolean, enabled: boolean}>>({})
+
+const loadMFAStatus = async () => {
+  try {
+    const res = await axios.get('/mfa/admin/list')
+    const map: Record<string, any> = {}
+    for (const item of res.data.data || []) {
+      map[item.username] = item
+    }
+    mfaStatus.value = map
+  } catch (_) {}
+}
+
+const resetMFA = async (user: any) => {
+  if (!confirm(`确定要重置 ${user.username} 的 MFA 绑定吗？该用户下次登录需重新绑定。`)) return
+  try {
+    await mfaAPI.adminReset(user.username)
+    delete mfaStatus.value[user.username]
+    alert('MFA 已重置')
+  } catch (err: any) {
+    alert(err.response?.data?.error || '重置失败')
   }
 }
 
@@ -374,6 +407,7 @@ const closeAllDropdowns = () => {
 
 onMounted(() => {
   loadUsers()
+  loadMFAStatus()
   document.addEventListener('click', closeAllDropdowns)
 })
 

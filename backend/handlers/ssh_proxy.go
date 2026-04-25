@@ -22,17 +22,42 @@ import (
 )
 
 var wsUpgrader = websocket.Upgrader{
-CheckOrigin:     func(r *http.Request) bool { return true },
-ReadBufferSize:  32 * 1024,
-WriteBufferSize: 32 * 1024,
+	CheckOrigin:     checkWebSocketOrigin,
+	ReadBufferSize:  32 * 1024,
+	WriteBufferSize: 32 * 1024,
 }
 
 // vncWsUpgrader 专用于 VNC 代理，支持 binary 子协议
 var vncWsUpgrader = websocket.Upgrader{
-	CheckOrigin:    func(r *http.Request) bool { return true },
+	CheckOrigin:     checkWebSocketOrigin,
 	ReadBufferSize:  32 * 1024,
 	WriteBufferSize: 32 * 1024,
-	Subprotocols:   []string{"binary"},
+	Subprotocols:    []string{"binary"},
+}
+
+// checkWebSocketOrigin 校验 WebSocket 来源，与 CORS 策略保持一致
+func checkWebSocketOrigin(r *http.Request) bool {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		return true // 非浏览器客户端（如 hpc-client）直接放行
+	}
+	// 开发模式放行所有来源
+	if os.Getenv("DEV_MODE") == "true" {
+		return true
+	}
+	// 生产模式：必须在 CORS_ORIGINS 白名单内
+	raw := os.Getenv("CORS_ORIGINS")
+	if raw == "" {
+		// 未配置白名单时只允许同源
+		host := r.Host
+		return origin == "https://"+host || origin == "http://"+host
+	}
+	for _, allowed := range strings.Split(raw, ",") {
+		if strings.TrimSpace(allowed) == origin {
+			return true
+		}
+	}
+	return false
 }
 // GET /api/ssh/proxy?host=cn1&port=22&user=alice
 // TCP 透传：给客户端 ssh/PuTTY 使用，WebSocket 里是原始 SSH 协议流。
@@ -53,6 +78,18 @@ username, _ := c.Get("username")
 isAdmin, _ := c.Get("isAdmin")
 
 sshUser := c.DefaultQuery("user", username.(string))
+
+// MFA 校验：系统开启 MFA 且用户已绑定时，必须提供 mfaCode
+if IsMFARequired(username.(string)) {
+	mfaCode := c.Query("mfaCode")
+	if !ValidateTOTP(username.(string), mfaCode) {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": "需要双因子验证码",
+			"code":  "MFA_REQUIRED",
+		})
+		return
+	}
+}
 if sshUser != username.(string) && isAdmin != true {
 c.JSON(http.StatusForbidden, gin.H{"error": "not allowed"})
 return
