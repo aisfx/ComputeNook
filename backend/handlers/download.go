@@ -90,9 +90,9 @@ const downloadHTML = `<!DOCTYPE html>
   else if (ua.includes('Mac')) os = 'darwin';
 
   const files = {
-    windows:{name:'hpc-client-windows.exe',icon:'🪟',label:'Windows',desc:'Windows 10/11 x64'},
-    darwin: {name:'hpc-client-mac',         icon:'🍎',label:'macOS',  desc:'Intel / Apple Silicon'},
-    linux:  {name:'hpc-client-linux',        icon:'🐧',label:'Linux',  desc:'x86_64'},
+    windows:{name:'hpc-client-windows.exe',icon:'🪟',label:'Windows',desc:'Windows 10/11 x64',   disabled:false},
+    darwin: {name:'hpc-client-mac',         icon:'🍎',label:'macOS',  desc:'Intel / Apple Silicon',disabled:true},
+    linux:  {name:'hpc-client-linux',        icon:'🐧',label:'Linux',  desc:'x86_64',              disabled:true},
   };
   const installCmds = {
     windows:'<pre># 以管理员身份运行 PowerShell\n.\\hpc-client-windows.exe install</pre>',
@@ -102,14 +102,18 @@ const downloadHTML = `<!DOCTYPE html>
 
   const det = document.getElementById('detected');
   det.style.display = 'block';
-  det.textContent = '🖥️ 检测到你的系统: ' + files[os].label + '，已为你高亮推荐版本';
+  det.textContent = '🖥️ 检测到你的系统: ' + files[os].label + '，macOS / Linux 版本即将推出';
 
   const cards = document.getElementById('cards');
   [os, ...Object.keys(files).filter(k=>k!==os)].forEach(k => {
     const f = files[k], cur = k===os;
-    cards.innerHTML += '<div class="card" style="'+(cur?'border-color:#6366f1;box-shadow:0 0 0 2px #e0e7ff':'')+'">'+
-      '<div class="icon">'+f.icon+'</div><h3>'+f.label+(cur?' ⭐':'')+'</h3><p>'+f.desc+'</p>'+
-      '<button class="btn" '+(token?'':'disabled')+' onclick="dl(\''+f.name+'\')">下载</button></div>';
+    const btnDisabled = f.disabled || !token;
+    const btnText = f.disabled ? '暂未开放' : '下载';
+    cards.innerHTML += '<div class="card" style="'+(cur&&!f.disabled?'border-color:#6366f1;box-shadow:0 0 0 2px #e0e7ff':'')+(f.disabled?'opacity:0.5':'')+'">'+
+      '<div class="icon">'+f.icon+'</div>'+
+      '<h3>'+f.label+(cur&&!f.disabled?' ⭐':'')+(f.disabled?' 🔜':'')+'</h3>'+
+      '<p>'+f.desc+'</p>'+
+      '<button class="btn" '+(btnDisabled?'disabled':'')+' onclick="dl(\''+f.name+'\')">'+btnText+'</button></div>';
   });
   document.getElementById('install-cmd').innerHTML = installCmds[os];
 

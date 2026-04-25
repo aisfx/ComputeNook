@@ -474,6 +474,8 @@ func buildDesktopScript(session *DesktopSession) string {
 
 	// Xpra 使用 14500+id 作为 WebSocket 端口，避免与其他服务冲突
 	baseWsPort := 14500 + session.ID
+	// display 范围：用 uid*10 作为基准，每个用户独立范围，避免多用户冲突
+	// 例如 uid=1000 → display 从 10000 开始，uid=1001 → 从 10010 开始
 	baseDisplay := 100 + session.ID
 
 	resolution := session.Resolution
@@ -515,12 +517,21 @@ func buildDesktopScript(session *DesktopSession) string {
 	b.WriteString(fmt.Sprintf("export HOME=${HOME:-%s/%s}\n", homeBase, session.Username))
 	b.WriteString("export PATH=/opt/xpra/bin:/usr/bin:/usr/local/bin:/bin:/usr/sbin:/sbin:$PATH\n\n")
 
-	// 动态查找空闲端口和 display
+	// 动态查找空闲端口和 display（display 基于 uid 偏移，减少跨用户冲突）
 	b.WriteString(fmt.Sprintf("BASE_WS_PORT=%d\nBASE_DISPLAY=%d\n", baseWsPort, baseDisplay))
-	b.WriteString("WS_PORT=$BASE_WS_PORT\nDISPLAY_NUM=$BASE_DISPLAY\n")
-	b.WriteString("for try in $(seq 0 19); do\n")
-	b.WriteString("  WS_PORT=$((BASE_WS_PORT + try))\n  DISPLAY_NUM=$((BASE_DISPLAY + try))\n")
-	b.WriteString("  if ! ss -tlnp 2>/dev/null | grep -q \":${WS_PORT}\" && [ ! -f /tmp/.X${DISPLAY_NUM}-lock ]; then\n    break\n  fi\ndone\n\n")
+	// uid % 100 * 10 作为 display 偏移，不同用户用不同范围
+	b.WriteString("UID_OFFSET=$(( $(id -u) % 100 * 10 ))\n")
+	b.WriteString("DISPLAY_NUM=$(( BASE_DISPLAY + UID_OFFSET ))\n")
+	b.WriteString("WS_PORT=$BASE_WS_PORT\n")
+	// 先扫空闲 display
+	b.WriteString("for try in $(seq 0 49); do\n")
+	b.WriteString("  D=$(( BASE_DISPLAY + UID_OFFSET + try ))\n")
+	b.WriteString("  if [ ! -f /tmp/.X${D}-lock ] && [ ! -S /tmp/.X11-unix/X${D} ]; then\n")
+	b.WriteString("    DISPLAY_NUM=$D; break\n  fi\ndone\n")
+	// 再扫空闲 ws 端口
+	b.WriteString("for port in $(seq $BASE_WS_PORT 14999); do\n")
+	b.WriteString("  if ! ss -tlnp 2>/dev/null | grep -q \":${port} \"; then\n")
+	b.WriteString("    WS_PORT=$port; break\n  fi\ndone\n\n")
 
 	// 写状态文件
 	b.WriteString(fmt.Sprintf("echo 'status=starting' > %s\n", statusFile))
@@ -528,10 +539,25 @@ func buildDesktopScript(session *DesktopSession) string {
 	b.WriteString(fmt.Sprintf("echo \"ws_port=$WS_PORT\" >> %s\n", statusFile))
 	b.WriteString(fmt.Sprintf("echo \"display=$DISPLAY_NUM\" >> %s\n", statusFile))
 
-	// 清理残留 xpra
+	// 清理当前用户的所有残留 xpra lock（避免影响新作业）
+	b.WriteString("# 清理当前用户残留的 xpra display lock\n")
+	b.WriteString("for lockfile in /tmp/.X*-lock; do\n")
+	b.WriteString("  [ -f \"$lockfile\" ] || continue\n")
+	b.WriteString("  pid=$(cat \"$lockfile\" 2>/dev/null | tr -d ' ')\n")
+	b.WriteString("  [ -z \"$pid\" ] && continue\n")
+	b.WriteString("  # 检查 pid 是否属于当前用户且已死亡\n")
+	b.WriteString("  if ! kill -0 \"$pid\" 2>/dev/null; then\n")
+	b.WriteString("    dnum=$(echo \"$lockfile\" | grep -oP '(?<=\\.X)\\d+')\n")
+	b.WriteString("    rm -f \"$lockfile\" /tmp/.X11-unix/X${dnum} 2>/dev/null\n")
+	b.WriteString("    xpra stop :${dnum} 2>/dev/null || true\n")
+	b.WriteString("  fi\n")
+	b.WriteString("done\n")
+	// 清理当前 display
 	b.WriteString("xpra stop :${DISPLAY_NUM} 2>/dev/null || true\n")
 	b.WriteString("sleep 1\n")
-	b.WriteString("rm -f /tmp/.X${DISPLAY_NUM}-lock /tmp/.X11-unix/X${DISPLAY_NUM} 2>/dev/null || true\n\n")
+	b.WriteString("rm -f /tmp/.X${DISPLAY_NUM}-lock /tmp/.X11-unix/X${DISPLAY_NUM} 2>/dev/null || true\n")
+	b.WriteString("rm -f \"$XDG_RUNTIME_DIR/xpra/:${DISPLAY_NUM}\" 2>/dev/null || true\n")
+	b.WriteString("rm -f /tmp/xpra-:${DISPLAY_NUM} 2>/dev/null || true\n\n")
 
 	// XDG_RUNTIME_DIR 必须先 export 再 mkdir
 	b.WriteString("export XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-/tmp/xpra-runtime-$(id -u)}\n")
