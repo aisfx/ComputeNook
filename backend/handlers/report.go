@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
@@ -266,17 +267,12 @@ func GetJobStats(c *gin.Context) {
 
 	var records []slurm.UsageRecord
 	if isAdmin && queryUser == "" {
-		// 管理员查全部：通过所有账户聚合
-		allUsage, err := client.GetAllAccountsUsage(startTime, endTime)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "无法连接到 Slurm API: " + err.Error()})
-			return
+		// 管理员查全部：用 SLURM_ADMIN_USER 查所有作业
+		adminUser := os.Getenv("SLURM_ADMIN_USER")
+		if adminUser == "" {
+			adminUser = "root"
 		}
-		for _, au := range allUsage {
-			_ = au // GetAllAccountsUsage 返回 AccountUsage，需要原始 records
-		}
-		// 退回：管理员无指定用户时查所有账户的 records
-		records, err = client.GetAccountUsage("", startTime, endTime)
+		records, err = client.GetUserUsage(adminUser, startTime, endTime)
 		if err != nil {
 			records = []slurm.UsageRecord{}
 		}
@@ -333,7 +329,16 @@ func GetUsageStats(c *gin.Context) {
 		return
 	}
 
-	records, err := client.GetUserUsage(queryUser, startTime, endTime)
+	// 管理员无指定用户时用 admin 账号查全部
+	effectiveUser := queryUser
+	if effectiveUser == "" {
+		effectiveUser = os.Getenv("SLURM_ADMIN_USER")
+		if effectiveUser == "" {
+			effectiveUser = "root"
+		}
+	}
+
+	records, err := client.GetUserUsage(effectiveUser, startTime, endTime)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法连接到 Slurm API: " + err.Error()})
 		return
