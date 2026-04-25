@@ -740,6 +740,10 @@ async function loadAdminReport() {
     if (storageRes.status === 'fulfilled') rStorageStats.value = storageRes.value.data.data
     if (quotaRes.status === 'fulfilled')   rQuotaStats.value   = quotaRes.value.data.data
     if (qosRes.status === 'fulfilled')     rQosStats.value     = qosRes.value.data.data
+    // 先关闭 loading，让 v-else-if="reportHasData" 的 DOM 渲染出来
+    reportLoading.value = false
+    // 等两个 tick：第一个让 v-if 条件生效，第二个让 DOM 完全挂载
+    await nextTick()
     await nextTick()
     renderAdminCharts()
   } catch (e: any) {
@@ -750,6 +754,13 @@ async function loadAdminReport() {
 }
 
 function renderAdminCharts() {
+  // 找到第一个存在的容器，检查是否已布局
+  const firstRef = rLineRef.value || rScaleRef.value || rUsageRef.value || rStorageRef.value
+  if (firstRef && firstRef.offsetWidth === 0) {
+    setTimeout(renderAdminCharts, 150)
+    return
+  }
+
   const C = {
     text: '#374151', muted: '#6b7280', axis: '#d1d5db', split: '#f3f4f6',
     colors: ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#3b82f6', '#8b5cf6'],
@@ -824,7 +835,6 @@ function renderAdminCharts() {
     const items = rStorageStats.value
     const labels = items.map(i => `${i.username}  ${i.filesystem}`)
     const barColors = items.map(i => i.over_soft_limit ? '#f59e0b' : '#10b981')
-    rStorageChart.resize()
     rStorageChart.setOption({
       backgroundColor: 'transparent',
       tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, backgroundColor: '#fff', borderColor: '#e5e7eb', textStyle: { color: C.text },
@@ -912,7 +922,7 @@ function renderAdminCharts() {
   setTimeout(() => {
     rLineChart?.resize(); rScaleChart?.resize(); rUsageChart?.resize()
     rStorageChart?.resize(); rBillingChart?.resize(); rQuotaChart?.resize(); rQosChart?.resize()
-  }, 100)
+  }, 300)
 }
 
 

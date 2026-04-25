@@ -535,6 +535,45 @@ func (c *Client) GetUserUsage(user string, startTime, endTime time.Time) ([]Usag
 	return records, nil
 }
 
+// GetAllUsersUsage 获取所有用户的机时使用情况（不带 users 过滤，管理员专用）
+func (c *Client) GetAllUsersUsage(startTime, endTime time.Time) ([]UsageRecord, error) {
+	params := fmt.Sprintf("?start_time=%d&end_time=%d", startTime.Unix(), endTime.Unix())
+	path := c.buildAPIPath("/jobs") + params
+	respBody, err := c.doRequest("GET", path, nil)
+	if err != nil {
+		errStr := err.Error()
+		if contains(errStr, "not found") || contains(errStr, "404") || contains(errStr, "No jobs") {
+			return []UsageRecord{}, nil
+		}
+		return nil, err
+	}
+
+	var response UsageResponse
+	if err := json.Unmarshal(respBody, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse usage response: %w", err)
+	}
+
+	if len(response.Errors) > 0 {
+		errMsg := response.Errors[0].Error
+		if contains(errMsg, "not found") || contains(errMsg, "No jobs") {
+			return []UsageRecord{}, nil
+		}
+		return nil, fmt.Errorf("slurm API error: %s", errMsg)
+	}
+
+	fmt.Printf("[USAGE-API] GetAllUsersUsage returned %d jobs start=%d end=%d\n",
+		len(response.Jobs), startTime.Unix(), endTime.Unix())
+
+	var records []UsageRecord
+	for _, job := range response.Jobs {
+		records = append(records, jobToRecord(job))
+	}
+	if records == nil {
+		records = []UsageRecord{}
+	}
+	return records, nil
+}
+
 // GetAccountUsage 获取账户机时使用情况
 func (c *Client) GetAccountUsage(account string, startTime, endTime time.Time) ([]UsageRecord, error) {
 	// 构建查询参数

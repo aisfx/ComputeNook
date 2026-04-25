@@ -331,6 +331,10 @@ func main() {
 			dashboard.GET("/nodes", handlers.GetDashboardNodes)
 		}
 
+		// 用户自定义看板配置（跨设备同步）
+		auth.GET("/user/dashboards", handlers.GetUserDashboards)
+		auth.POST("/user/dashboards", handlers.SaveUserDashboards)
+
 		// 监控 API
 		monitoring := auth.Group("/monitoring")
 		{

@@ -327,6 +327,7 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import * as echarts from 'echarts'
+import axios from 'axios'
 
 // ── 类型 ──────────────────────────────────────────────────────────────────────
 interface DataSource {
@@ -1252,11 +1253,32 @@ const showDbPanel = ref(false)
 const currentDashboard = computed(() => dashboards.value.find(d => d.id === currentDashboardId.value) || null)
 
 function saveDashboards() {
+  // 同时写 localStorage（离线兜底）和后端（跨设备同步）
+  const payload = {
+    dashboards: dashboards.value,
+    currentId: currentDashboardId.value,
+  }
   localStorage.setItem('pex-dashboards', JSON.stringify(dashboards.value))
   localStorage.setItem('pex-current-db', currentDashboardId.value)
+  // 异步保存到后端，失败不影响本地使用
+  axios.post('/user/dashboards', payload).catch(() => {})
 }
 
-function loadDashboards() {
+async function loadDashboards() {
+  // 优先从后端加载，失败时降级到 localStorage
+  try {
+    const res = await axios.get('/user/dashboards')
+    const data = res.data
+    if (data?.dashboards) {
+      dashboards.value = data.dashboards
+      currentDashboardId.value = data.currentId || ''
+      // 同步到 localStorage
+      localStorage.setItem('pex-dashboards', JSON.stringify(dashboards.value))
+      localStorage.setItem('pex-current-db', currentDashboardId.value)
+      return
+    }
+  } catch { /* 后端不可用，降级到本地 */ }
+  // 降级：从 localStorage 读取
   try {
     const raw = localStorage.getItem('pex-dashboards')
     if (raw) dashboards.value = JSON.parse(raw)

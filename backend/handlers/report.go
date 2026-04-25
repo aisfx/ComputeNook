@@ -267,12 +267,8 @@ func GetJobStats(c *gin.Context) {
 
 	var records []slurm.UsageRecord
 	if isAdmin && queryUser == "" {
-		// 管理员查全部：用 SLURM_ADMIN_USER 查所有作业
-		adminUser := os.Getenv("SLURM_ADMIN_USER")
-		if adminUser == "" {
-			adminUser = "root"
-		}
-		records, err = client.GetUserUsage(adminUser, startTime, endTime)
+		// 管理员查全部：不带 users 参数，获取所有用户作业
+		records, err = client.GetAllUsersUsage(startTime, endTime)
 		if err != nil {
 			records = []slurm.UsageRecord{}
 		}
@@ -329,16 +325,13 @@ func GetUsageStats(c *gin.Context) {
 		return
 	}
 
-	// 管理员无指定用户时用 admin 账号查全部
-	effectiveUser := queryUser
-	if effectiveUser == "" {
-		effectiveUser = os.Getenv("SLURM_ADMIN_USER")
-		if effectiveUser == "" {
-			effectiveUser = "root"
-		}
+	// 管理员无指定用户时查全部，否则查指定用户
+	var records []slurm.UsageRecord
+	if queryUser == "" {
+		records, err = client.GetAllUsersUsage(startTime, endTime)
+	} else {
+		records, err = client.GetUserUsage(queryUser, startTime, endTime)
 	}
-
-	records, err := client.GetUserUsage(effectiveUser, startTime, endTime)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法连接到 Slurm API: " + err.Error()})
 		return
@@ -400,20 +393,51 @@ func GetStorageStats(c *gin.Context) {
 	}
 
 	if isAdmin {
-		// 管理员：复用 GetAllQuotas 逻辑，直接调用内部函数
-		// 这里通过调用 queryQuota 逐用户获取，复用现有逻辑
-		// 简化：直接返回当前用户配额（管理员可通过 user 参数指定）
 		targetUser := c.DefaultQuery("user", "")
-		if targetUser == "" {
-			targetUser = username
-		}
-		quotas, err := queryQuota(targetUser, "")
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "存储配额查询失败: " + err.Error()})
+		if targetUser != "" {
+			// 管理员指定了用户，只查该用户
+			quotas, err := queryQuota(targetUser, "")
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "存储配额查询失败: " + err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"data": buildStorageStatItem(targetUser, quotas)})
 			return
 		}
-		items := buildStorageStatItem(targetUser, quotas)
-		c.JSON(http.StatusOK, gin.H{"data": items})
+
+		// 管理员未指定用户：查所有用户（复用 GetAllQuotas 逻辑）
+		basePath := os.Getenv("FILEMANAGER_BASE_PATH")
+		if basePath == "" {
+			basePath = "/home"
+		}
+		var allItems []StorageStatItem
+		accountUsers, _ := getUsersInSameAccount(username)
+		var userList []string
+		if len(accountUsers) > 0 {
+			for _, u := range accountUsers {
+				if u != "root" {
+					userList = append(userList, u)
+				}
+			}
+		} else {
+			entries, _ := os.ReadDir(basePath)
+			for _, e := range entries {
+				if e.IsDir() && e.Name() != "root" {
+					userList = append(userList, e.Name())
+				}
+			}
+		}
+		for _, u := range userList {
+			quotas, err := queryQuota(u, basePath+"/"+u)
+			if err != nil || len(quotas) == 0 {
+				continue
+			}
+			allItems = append(allItems, buildStorageStatItem(u, quotas)...)
+		}
+		if allItems == nil {
+			allItems = []StorageStatItem{}
+		}
+		c.JSON(http.StatusOK, gin.H{"data": allItems})
 		return
 	}
 
@@ -533,8 +557,13 @@ func GetQoSUsage(c *gin.Context) {
 		return
 	}
 
-	// 获取用户作业记录
-	records, err := client.GetUserUsage(queryUser, startTime, endTime)
+	// 获取用户作业记录（管理员无指定用户时查全部）
+	var records []slurm.UsageRecord
+	if queryUser == "" {
+		records, err = client.GetAllUsersUsage(startTime, endTime)
+	} else {
+		records, err = client.GetUserUsage(queryUser, startTime, endTime)
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法连接到 Slurm API: " + err.Error()})
 		return
