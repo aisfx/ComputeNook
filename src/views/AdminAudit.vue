@@ -281,22 +281,15 @@
           <div ref="rQosRef" :style="{ width: '100%', height: Math.max(200, rQosStats.length * 50) + 'px' }"></div>
         </div>
 
-        <!-- 配额进度 -->
+        <!-- 计费核时 + 配额仪表盘 -->
         <div class="rchart-row">
           <div class="rcard" v-if="rUsageStats">
             <div class="rcard-title">计费核时使用比例</div>
-            <div v-if="rUsageStats.quota_billing_hours === 0" class="no-limit-info">ℹ 无配额限制，实际使用：{{ rUsageStats.billing_hours.toFixed(2) }} h</div>
-            <template v-else>
-              <div class="progress-info"><span>{{ rUsageStats.billing_hours.toFixed(2) }} / {{ rUsageStats.quota_billing_hours.toFixed(2) }} h</span><span :style="{ color: rStatusColor(rUsageStats.status) }">{{ rUsageStats.usage_percent.toFixed(1) }}%</span></div>
-              <div class="progress-bar-wrap"><div class="progress-bar-fill" :style="{ width: Math.min(rUsageStats.usage_percent,100)+'%', background: rStatusColor(rUsageStats.status) }"></div></div>
-              <span class="rstatus-badge" :style="{ background: rStatusBg(rUsageStats.status), color: rStatusColor(rUsageStats.status) }">{{ rStatusLabel(rUsageStats.status) }}</span>
-            </template>
+            <div ref="rBillingRef" style="width:100%;height:280px"></div>
           </div>
           <div class="rcard" v-if="rQuotaStats?.account">
             <div class="rcard-title">配额使用率 <span class="account-tag">{{ rQuotaStats.account }}</span></div>
-            <div class="progress-info"><span>{{ rQuotaStats.used_billing_hours.toFixed(2) }} / {{ rQuotaStats.total_billing_hours.toFixed(2) }} h</span><span :style="{ color: rStatusColor(rQuotaStats.status) }">{{ rQuotaStats.usage_percent.toFixed(1) }}%</span></div>
-            <div class="progress-bar-wrap"><div class="progress-bar-fill" :style="{ width: Math.min(rQuotaStats.usage_percent,100)+'%', background: rStatusColor(rQuotaStats.status) }"></div></div>
-            <span class="rstatus-badge" :style="{ background: rStatusBg(rQuotaStats.status), color: rStatusColor(rQuotaStats.status) }">{{ rStatusLabel(rQuotaStats.status) }}</span>
+            <div ref="rQuotaRef" style="width:100%;height:280px"></div>
           </div>
         </div>
       </template>
@@ -678,11 +671,15 @@ const rScaleRef   = ref<HTMLElement | null>(null)
 const rUsageRef   = ref<HTMLElement | null>(null)
 const rStorageRef = ref<HTMLElement | null>(null)
 const rQosRef     = ref<HTMLElement | null>(null)
+const rBillingRef = ref<HTMLElement | null>(null)
+const rQuotaRef   = ref<HTMLElement | null>(null)
 let rLineChart: echarts.ECharts | null = null
 let rScaleChart: echarts.ECharts | null = null
 let rUsageChart: echarts.ECharts | null = null
 let rStorageChart: echarts.ECharts | null = null
 let rQosChart: echarts.ECharts | null = null
+let rBillingChart: echarts.ECharts | null = null
+let rQuotaChart: echarts.ECharts | null = null
 
 import { computed, nextTick } from 'vue'
 
@@ -698,6 +695,8 @@ function switchToReport() {
     rUsageChart?.resize()
     rStorageChart?.resize()
     rQosChart?.resize()
+    rBillingChart?.resize()
+    rQuotaChart?.resize()
   })
 }
 
@@ -718,6 +717,8 @@ async function loadAdminReport() {
   rUsageChart?.dispose(); rUsageChart = null
   rStorageChart?.dispose(); rStorageChart = null
   rQosChart?.dispose(); rQosChart = null
+  rBillingChart?.dispose(); rBillingChart = null
+  rQuotaChart?.dispose(); rQuotaChart = null
 
   const params: any = {
     start_time: reportFilters.value.startDate,
@@ -749,104 +750,174 @@ async function loadAdminReport() {
 }
 
 function renderAdminCharts() {
-  // 折线图
-  if (rLineRef.value && rJobStats.value?.monthly_job_counts.length) {
-    if (!rLineChart) rLineChart = echarts.init(rLineRef.value, 'dark')
-    const counts = rJobStats.value.monthly_job_counts
-    const months = [...new Set(counts.map(c => c.month))].sort()
-    const queues = [...new Set(counts.map(c => c.partition))]
+  const C = {
+    text: '#374151', muted: '#6b7280', axis: '#d1d5db', split: '#f3f4f6',
+    colors: ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#3b82f6', '#8b5cf6'],
+  }
+  const sc = (s: string) => s === 'EXCEEDED' ? '#ef4444' : s === 'WARNING' ? '#f59e0b' : '#10b981'
+
+  if (rLineRef.value) {
+    if (!rLineChart) rLineChart = echarts.init(rLineRef.value)
+    const counts = rJobStats.value?.monthly_job_counts ?? []
+    const hasData = counts.length > 0
+    const months = hasData ? [...new Set(counts.map(c => c.month))].sort() : ['2026-01','2026-02','2026-03','2026-04']
+    const queues = hasData ? [...new Set(counts.map(c => c.partition))] : ['normal','gpu']
     rLineChart.setOption({
       backgroundColor: 'transparent',
-      tooltip: { trigger: 'axis' },
-      legend: { data: queues, textStyle: { color: '#ccc' }, bottom: 0 },
-      grid: { left: '3%', right: '4%', bottom: '12%', top: '8%', containLabel: true },
-      xAxis: { type: 'category', data: months, boundaryGap: false, axisLabel: { color: '#aaa' }, axisLine: { lineStyle: { color: '#444' } } },
-      yAxis: { type: 'value', name: '作业数', nameTextStyle: { color: '#aaa' }, axisLabel: { color: '#aaa' }, splitLine: { lineStyle: { color: '#333' } } },
-      series: queues.map(q => ({ name: q, type: 'line' as const, smooth: true, symbol: 'circle', symbolSize: 6, areaStyle: { opacity: 0.08 }, data: months.map(m => counts.find(c => c.month === m && c.partition === q)?.count ?? 0) })),
+      tooltip: { trigger: 'axis', backgroundColor: '#fff', borderColor: '#e5e7eb', textStyle: { color: C.text } },
+      legend: { data: queues, textStyle: { color: C.muted }, bottom: 4 },
+      grid: { left: '3%', right: '4%', bottom: '14%', top: '6%', containLabel: true },
+      xAxis: { type: 'category', data: months, boundaryGap: false, axisLabel: { color: C.muted }, axisLine: { lineStyle: { color: C.axis } }, axisTick: { show: false } },
+      yAxis: { type: 'value', name: '作业数', nameTextStyle: { color: C.muted }, axisLabel: { color: C.muted }, splitLine: { lineStyle: { color: C.split } }, axisLine: { show: false } },
+      series: queues.map((q, i) => ({
+        name: q, type: 'line' as const, smooth: true, symbol: 'circle', symbolSize: 7,
+        lineStyle: { width: 2.5, color: C.colors[i % C.colors.length] },
+        itemStyle: { color: C.colors[i % C.colors.length] },
+        areaStyle: { color: C.colors[i % C.colors.length], opacity: 0.06 },
+        data: hasData ? months.map(m => counts.find(c => c.month === m && c.partition === q)?.count ?? 0) : [0,0,0,0],
+      })),
     })
   }
-  // 规模柱状图
-  if (rScaleRef.value && rJobStats.value?.job_scale_distribution.length) {
-    if (!rScaleChart) rScaleChart = echarts.init(rScaleRef.value, 'dark')
-    const dist = rJobStats.value.job_scale_distribution
-    const total = rJobStats.value.total_jobs
+
+  if (rScaleRef.value) {
+    if (!rScaleChart) rScaleChart = echarts.init(rScaleRef.value)
+    const dist = rJobStats.value?.job_scale_distribution ?? []
+    const total = rJobStats.value?.total_jobs ?? 0
+    const ranges = dist.length > 0 ? dist : [
+      { range: '1-4核', count: 0 }, { range: '5-16核', count: 0 },
+      { range: '17-64核', count: 0 }, { range: '64核以上', count: 0 },
+    ]
     rScaleChart.setOption({
       backgroundColor: 'transparent',
-      tooltip: { trigger: 'axis', formatter: (p: any) => `${p[0].name}<br/>作业数: <b>${p[0].value}</b>（${total > 0 ? (p[0].value/total*100).toFixed(1) : 0}%）` },
-      grid: { left: '3%', right: '4%', bottom: '3%', top: '8%', containLabel: true },
-      xAxis: { type: 'category', data: dist.map(d => d.range), axisLabel: { color: '#aaa' }, axisLine: { lineStyle: { color: '#444' } } },
-      yAxis: { type: 'value', name: '作业数', nameTextStyle: { color: '#aaa' }, axisLabel: { color: '#aaa' }, splitLine: { lineStyle: { color: '#333' } } },
-      series: [{ type: 'bar', data: dist.map(d => d.count), itemStyle: { borderRadius: [4,4,0,0] }, label: { show: true, position: 'top', color: '#ccc', fontSize: 11 }, barMaxWidth: 60 }],
+      tooltip: { trigger: 'axis', backgroundColor: '#fff', borderColor: '#e5e7eb', textStyle: { color: C.text },
+        formatter: (p: any) => { const pct = total > 0 ? (p[0].value / total * 100).toFixed(1) : 0; return `${p[0].name}<br/>作业数: <b>${p[0].value}</b>（${pct}%）` } },
+      grid: { left: '3%', right: '4%', bottom: '3%', top: '6%', containLabel: true },
+      xAxis: { type: 'category', data: ranges.map(d => d.range), axisLabel: { color: C.muted }, axisLine: { lineStyle: { color: C.axis } }, axisTick: { show: false } },
+      yAxis: { type: 'value', name: '作业数', nameTextStyle: { color: C.muted }, axisLabel: { color: C.muted }, splitLine: { lineStyle: { color: C.split } }, axisLine: { show: false } },
+      series: [{ type: 'bar', data: ranges.map(d => d.count), itemStyle: { color: C.colors[0], borderRadius: [6,6,0,0] }, label: { show: true, position: 'top', color: C.muted, fontSize: 12 }, barMaxWidth: 56 }],
     })
   }
-  // 核时柱状图
-  if (rUsageRef.value && rUsageStats.value) {
-    if (!rUsageChart) rUsageChart = echarts.init(rUsageRef.value, 'dark')
+
+  if (rUsageRef.value) {
+    if (!rUsageChart) rUsageChart = echarts.init(rUsageRef.value)
     const u = rUsageStats.value
     rUsageChart.setOption({
       backgroundColor: 'transparent',
-      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-      grid: { left: '3%', right: '4%', bottom: '3%', top: '8%', containLabel: true },
-      xAxis: { type: 'category', data: ['GPU 卡时', 'CPU 核时', '计费核时'], axisLabel: { color: '#aaa' }, axisLine: { lineStyle: { color: '#444' } } },
-      yAxis: { type: 'value', name: '小时(h)', nameTextStyle: { color: '#aaa' }, axisLabel: { color: '#aaa' }, splitLine: { lineStyle: { color: '#333' } } },
-      series: [{ type: 'bar', data: [{ value: +u.gpu_hours.toFixed(2), itemStyle: { color: '#5470c6' } }, { value: +u.cpu_hours.toFixed(2), itemStyle: { color: '#91cc75' } }, { value: +u.billing_hours.toFixed(2), itemStyle: { color: '#fac858' } }], label: { show: true, position: 'top', color: '#ccc', fontSize: 11, formatter: (p: any) => `${p.value}h` }, barMaxWidth: 60, itemStyle: { borderRadius: [4,4,0,0] } }],
+      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, backgroundColor: '#fff', borderColor: '#e5e7eb', textStyle: { color: C.text } },
+      grid: { left: '3%', right: '4%', bottom: '3%', top: '6%', containLabel: true },
+      xAxis: { type: 'category', data: ['GPU 卡时', 'CPU 核时', '计费核时'], axisLabel: { color: C.muted }, axisLine: { lineStyle: { color: C.axis } }, axisTick: { show: false } },
+      yAxis: { type: 'value', name: '小时(h)', nameTextStyle: { color: C.muted }, axisLabel: { color: C.muted }, splitLine: { lineStyle: { color: C.split } }, axisLine: { show: false } },
+      series: [{ type: 'bar',
+        data: [
+          { value: u ? +u.gpu_hours.toFixed(2) : 0,     itemStyle: { color: C.colors[0] } },
+          { value: u ? +u.cpu_hours.toFixed(2) : 0,     itemStyle: { color: C.colors[1] } },
+          { value: u ? +u.billing_hours.toFixed(2) : 0, itemStyle: { color: C.colors[2] } },
+        ],
+        label: { show: true, position: 'top', color: C.muted, fontSize: 12, formatter: (p: any) => `${p.value}h` },
+        barMaxWidth: 56, itemStyle: { borderRadius: [6,6,0,0] },
+      }],
     })
   }
-  // 存储柱状图
+
   if (rStorageRef.value && rStorageStats.value?.length) {
-    if (!rStorageChart) rStorageChart = echarts.init(rStorageRef.value, 'dark')
+    if (!rStorageChart) rStorageChart = echarts.init(rStorageRef.value)
     const items = rStorageStats.value
     const labels = items.map(i => `${i.username}  ${i.filesystem}`)
-    const barColors = items.map(i => i.over_soft_limit ? '#fa8c16' : '#52c41a')
+    const barColors = items.map(i => i.over_soft_limit ? '#f59e0b' : '#10b981')
     rStorageChart.resize()
     rStorageChart.setOption({
       backgroundColor: 'transparent',
-      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: (params: any[]) => { const i = items[params[0].dataIndex]; return `<b>${i.username}</b> ${i.filesystem}<br/>已用: <b>${i.used_gb.toFixed(2)} GB</b><br/>软限制: ${i.soft_limit_gb.toFixed(2)} GB<br/>硬限制: ${i.hard_limit_gb.toFixed(2)} GB<br/>使用率: <b>${i.usage_percent.toFixed(1)}%</b>${i.over_soft_limit ? '<br/><span style="color:#fa8c16">⚠ 超软限制</span>' : ''}` } },
-      legend: { data: ['已用量', '软限制', '硬限制'], textStyle: { color: '#ccc' }, top: 4 },
+      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, backgroundColor: '#fff', borderColor: '#e5e7eb', textStyle: { color: C.text },
+        formatter: (params: any[]) => { const i = items[params[0].dataIndex]; return `<b>${i.username}</b> ${i.filesystem}<br/>已用: <b>${i.used_gb.toFixed(2)} GB</b><br/>软限制: ${i.soft_limit_gb.toFixed(2)} GB<br/>硬限制: ${i.hard_limit_gb.toFixed(2)} GB<br/>使用率: <b>${i.usage_percent.toFixed(1)}%</b>${i.over_soft_limit ? '<br/><span style="color:#f59e0b">⚠ 超软限制</span>' : ''}` },
+      },
+      legend: { data: ['已用量', '软限制', '硬限制'], textStyle: { color: C.muted }, top: 4 },
       grid: { left: '2%', right: '8%', top: 36, bottom: '2%', containLabel: true },
-      xAxis: { type: 'value', name: 'GB', nameTextStyle: { color: '#aaa' }, axisLabel: { color: '#aaa' }, splitLine: { lineStyle: { color: '#2a2a2a' } } },
-      yAxis: { type: 'category', data: labels, axisLabel: { color: '#ccc', fontSize: 12 }, axisLine: { lineStyle: { color: '#444' } } },
+      xAxis: { type: 'value', name: 'GB', nameTextStyle: { color: C.muted }, axisLabel: { color: C.muted }, splitLine: { lineStyle: { color: C.split } }, axisLine: { show: false } },
+      yAxis: { type: 'category', data: labels, axisLabel: { color: C.text, fontSize: 12 }, axisLine: { lineStyle: { color: C.axis } } },
       series: [
-        { name: '已用量', type: 'bar', data: items.map((v, i) => ({ value: +v.used_gb.toFixed(2), itemStyle: { color: barColors[i] } })), label: { show: true, position: 'right', color: '#ccc', fontSize: 11, formatter: (p: any) => `${p.value} GB` }, barMaxWidth: 28, z: 3 },
-        { name: '软限制', type: 'bar', data: items.map(i => +i.soft_limit_gb.toFixed(2)), itemStyle: { color: 'rgba(250,140,22,0.25)', borderColor: '#fa8c16', borderWidth: 1 }, barMaxWidth: 28, barGap: '-100%', z: 2 },
-        { name: '硬限制', type: 'bar', data: items.map(i => +i.hard_limit_gb.toFixed(2)), itemStyle: { color: 'rgba(100,100,100,0.18)', borderColor: '#555', borderWidth: 1 }, barMaxWidth: 28, barGap: '-100%', z: 1 },
+        { name: '已用量', type: 'bar', data: items.map((v, i) => ({ value: +v.used_gb.toFixed(2), itemStyle: { color: barColors[i] } })), label: { show: true, position: 'right', color: C.muted, fontSize: 11, formatter: (p: any) => `${p.value} GB` }, barMaxWidth: 28, z: 3 },
+        { name: '软限制', type: 'bar', data: items.map(i => +i.soft_limit_gb.toFixed(2)), itemStyle: { color: 'rgba(245,158,11,0.15)', borderColor: '#f59e0b', borderWidth: 1 }, barMaxWidth: 28, barGap: '-100%', z: 2 },
+        { name: '硬限制', type: 'bar', data: items.map(i => +i.hard_limit_gb.toFixed(2)), itemStyle: { color: 'rgba(107,114,128,0.08)', borderColor: '#d1d5db', borderWidth: 1 }, barMaxWidth: 28, barGap: '-100%', z: 1 },
       ],
     })
   }
 
-  // QoS 使用率图表
-  if (rQosRef.value && rQosStats.value?.length) {
-    if (!rQosChart) rQosChart = echarts.init(rQosRef.value, 'dark')
-    const items = rQosStats.value
-    rQosChart.setOption({
+  if (rBillingRef.value && rUsageStats.value) {
+    if (!rBillingChart) rBillingChart = echarts.init(rBillingRef.value)
+    const u = rUsageStats.value
+    const noLimit = u.quota_billing_hours === 0
+    const used = +u.billing_hours.toFixed(2)
+    const total = noLimit ? Math.max(used * 1.5, 100) : +u.quota_billing_hours.toFixed(2)
+    const pct = noLimit ? 0 : +u.usage_percent.toFixed(1)
+    const color = noLimit ? C.colors[0] : sc(u.status)
+    rBillingChart.setOption({
       backgroundColor: 'transparent',
-      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: (params: any[]) => {
-        const i = items[params[0].dataIndex]
-        return `<b>${i.qos_name}</b><br/>已用: <b>${i.used_billing_hours.toFixed(2)}h</b><br/>` +
-          (i.total_billing_hours > 0 ? `总量: ${i.total_billing_hours.toFixed(2)}h<br/>使用率: <b>${i.usage_percent.toFixed(1)}%</b>` : '无限制')
-      }},
-      grid: { left: '3%', right: '8%', top: '8%', bottom: '3%', containLabel: true },
-      xAxis: { type: 'value', name: '小时(h)', nameTextStyle: { color: '#aaa' }, axisLabel: { color: '#aaa' }, splitLine: { lineStyle: { color: '#333' } } },
-      yAxis: { type: 'category', data: items.map(i => i.qos_name), axisLabel: { color: '#ccc' }, axisLine: { lineStyle: { color: '#444' } } },
-      series: [{ type: 'bar', data: items.map(i => ({ value: +i.used_billing_hours.toFixed(2), itemStyle: { color: i.status === 'EXCEEDED' ? '#f5222d' : i.status === 'WARNING' ? '#fa8c16' : '#52c41a' } })), label: { show: true, position: 'right', color: '#ccc', fontSize: 11, formatter: (p: any) => `${p.value}h` }, barMaxWidth: 28 }],
+      series: [{ type: 'gauge', startAngle: 200, endAngle: -20, min: 0, max: 100, radius: '88%',
+        pointer: { show: !noLimit, length: '60%', width: 4, itemStyle: { color } },
+        progress: { show: true, width: 16, itemStyle: { color } },
+        axisLine: { lineStyle: { width: 16, color: [[1, '#f3f4f6']] } },
+        axisTick: { show: false }, splitLine: { show: false }, axisLabel: { show: false },
+        detail: { valueAnimation: true, formatter: noLimit ? `${used}h` : '{value}%', color: C.text, fontSize: 22, fontWeight: 700, offsetCenter: [0, '15%'] },
+        title: { show: true, offsetCenter: [0, '50%'], color: C.muted, fontSize: 13, formatter: noLimit ? '无配额限制' : `${used} / ${total} h` },
+        data: [{ value: noLimit ? 0 : pct, name: noLimit ? '无配额限制' : `${used} / ${total} h` }],
+      }],
     })
   }
 
-  // 延迟 resize，确保容器完全布局后图表尺寸正确
+  if (rQuotaRef.value) {
+    if (!rQuotaChart) rQuotaChart = echarts.init(rQuotaRef.value)
+    const q = rQuotaStats.value
+    const used = q ? +q.used_billing_hours.toFixed(2) : 0
+    const total = q ? +q.total_billing_hours.toFixed(2) : 0
+    const pct = q ? +q.usage_percent.toFixed(1) : 0
+    const color = q ? sc(q.status) : '#d1d5db'
+    const noData = !q?.account
+    rQuotaChart.setOption({
+      backgroundColor: 'transparent',
+      series: [{ type: 'gauge', startAngle: 200, endAngle: -20, min: 0, max: 100, radius: '88%',
+        pointer: { show: !noData, length: '60%', width: 4, itemStyle: { color } },
+        progress: { show: true, width: 16, itemStyle: { color } },
+        axisLine: { lineStyle: { width: 16, color: [[1, '#f3f4f6']] } },
+        axisTick: { show: false }, splitLine: { show: false }, axisLabel: { show: false },
+        detail: { valueAnimation: true, formatter: noData ? '-' : '{value}%', color: noData ? '#d1d5db' : C.text, fontSize: 22, fontWeight: 700, offsetCenter: [0, '15%'] },
+        title: { show: true, offsetCenter: [0, '50%'], color: C.muted, fontSize: 13, formatter: noData ? '暂无配额数据' : `${used} / ${total} h` },
+        data: [{ value: pct, name: noData ? '暂无配额数据' : `${used} / ${total} h` }],
+      }],
+    })
+  }
+
+  if (rQosRef.value && rQosStats.value?.length) {
+    if (!rQosChart) rQosChart = echarts.init(rQosRef.value)
+    const items = rQosStats.value
+    const names = items.map(i => i.qos_name)
+    const usedData = items.map(i => +i.used_billing_hours.toFixed(2))
+    const totalData = items.map(i => i.total_billing_hours > 0 ? +i.total_billing_hours.toFixed(2) : 0)
+    const barColors = items.map(i => sc(i.status))
+    rQosChart.setOption({
+      backgroundColor: 'transparent',
+      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, backgroundColor: '#fff', borderColor: '#e5e7eb', textStyle: { color: C.text },
+        formatter: (params: any[]) => { const idx = params[0].dataIndex; const item = items[idx]; const quota = item.total_billing_hours > 0 ? `配额: ${item.total_billing_hours.toFixed(2)} h<br/>使用率: <b>${item.usage_percent.toFixed(1)}%</b>` : '配额: 无限制'; return `<b>${item.qos_name}</b><br/>已用: <b>${item.used_billing_hours.toFixed(2)} h</b><br/>${quota}` },
+      },
+      legend: { data: ['已用核时', '配额上限'], textStyle: { color: C.muted }, bottom: 4 },
+      grid: { left: '3%', right: '4%', bottom: '14%', top: '6%', containLabel: true },
+      xAxis: { type: 'category', data: names, axisLabel: { color: C.muted }, axisLine: { lineStyle: { color: C.axis } }, axisTick: { show: false } },
+      yAxis: { type: 'value', name: '核时(h)', nameTextStyle: { color: C.muted }, axisLabel: { color: C.muted }, splitLine: { lineStyle: { color: C.split } }, axisLine: { show: false } },
+      series: [
+        { name: '已用核时', type: 'bar', data: usedData.map((v, i) => ({ value: v, itemStyle: { color: barColors[i], borderRadius: [6,6,0,0] } })), label: { show: true, position: 'top', color: C.muted, fontSize: 12, formatter: (p: any) => `${p.value}h` }, barMaxWidth: 56, z: 2 },
+        { name: '配额上限', type: 'bar', data: totalData, itemStyle: { color: 'rgba(99,102,241,0.08)', borderColor: '#c7d2fe', borderWidth: 1, borderRadius: [6,6,0,0] }, barMaxWidth: 56, barGap: '-100%', z: 1 },
+      ],
+    })
+  }
+
   setTimeout(() => {
-    rLineChart?.resize()
-    rScaleChart?.resize()
-    rUsageChart?.resize()
-    rStorageChart?.resize()
-    rQosChart?.resize()
+    rLineChart?.resize(); rScaleChart?.resize(); rUsageChart?.resize()
+    rStorageChart?.resize(); rBillingChart?.resize(); rQuotaChart?.resize(); rQosChart?.resize()
   }, 100)
 }
 
-function rStatusColor(s: string) { return s === 'EXCEEDED' ? '#f5222d' : s === 'WARNING' ? '#fa8c16' : '#52c41a' }
-function rStatusBg(s: string)    { return s === 'EXCEEDED' ? 'rgba(245,34,45,0.12)' : s === 'WARNING' ? 'rgba(250,140,22,0.12)' : 'rgba(82,196,26,0.12)' }
-function rStatusLabel(s: string) { return s === 'EXCEEDED' ? '已超限' : s === 'WARNING' ? '警告' : '正常' }
 
 function exportAdminExcel() {
+  const rStatusLabel = (s: string) => s === 'EXCEEDED' ? '已超限' : s === 'WARNING' ? '警告' : '正常'
   import('xlsx').then(XLSX => {
     const wb = XLSX.utils.book_new()
     const { startDate, endDate, username } = reportFilters.value
