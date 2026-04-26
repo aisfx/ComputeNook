@@ -208,6 +208,17 @@ func GetJobs(c *gin.Context) {
 		})
 	}
 	
+	// 非管理员：强制过滤，只保留属于当前用户的作业（防止 Slurm API 返回其他用户数据）
+	if !isAdmin {
+		filtered := make([]map[string]interface{}, 0, len(allJobs))
+		for _, job := range allJobs {
+			if jobUser, ok := job["user_name"].(string); ok && jobUser == username.(string) {
+				filtered = append(filtered, job)
+			}
+		}
+		allJobs = filtered
+	}
+
 	// 按作业 ID 倒序排序（最新的作业在前面）
 	sort.Slice(allJobs, func(i, j int) bool {
 		return allJobs[i]["job_id"].(int64) > allJobs[j]["job_id"].(int64)

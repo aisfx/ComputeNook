@@ -47,10 +47,10 @@ func issueFullJWT(username string) (string, *models.User, error) {
 }
 
 func signJWT(user *models.User) (string, error) {
-	// 从环境变量读取有效期，默认 8 小时
-	expHours := 8
+	// 从环境变量读取有效期，默认 4 小时（安全最佳实践）
+	expHours := 4
 	if v := os.Getenv("JWT_EXPIRE_HOURS"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 24 {
 			expHours = n
 		}
 	}
@@ -58,7 +58,10 @@ func signJWT(user *models.User) (string, error) {
 		"username": user.Username,
 		"uid":      user.UID,
 		"isAdmin":  user.IsAdmin,
+		"iss":      "hpc-platform",           // issuer，防止跨系统 token 复用
+		"aud":      "hpc-platform-api",       // audience
 		"exp":      time.Now().Add(time.Duration(expHours) * time.Hour).Unix(),
+		"iat":      time.Now().Unix(),         // issued at
 	})
 	return token.SignedString([]byte(os.Getenv("JWT_SECRET")))
 }
@@ -121,13 +124,24 @@ func Login(c *gin.Context) {
 	if err != nil {
 		recordLoginFailure(req.Username)
 		newFail := getFailCount(req.Username)
+		// 检查是否刚触发锁定
+		if locked, remaining := isAccountLocked(req.Username); locked {
+			c.JSON(http.StatusTooManyRequests, gin.H{
+				"error":          "账户已被锁定，请稍后再试",
+				"code":           "ACCOUNT_LOCKED",
+				"retryAfter":     remaining,
+				"requireCaptcha": true,
+			})
+			return
+		}
 		remaining := lockMaxAttempts - newFail
+		if remaining < 0 {
+			remaining = 0
+		}
 		resp := gin.H{
 			"error":          "用户名或密码错误",
 			"requireCaptcha": newFail >= 1,
-		}
-		if remaining > 0 {
-			resp["attemptsLeft"] = remaining
+			"attemptsLeft":   remaining,
 		}
 		c.JSON(http.StatusUnauthorized, resp)
 		return

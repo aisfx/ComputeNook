@@ -36,11 +36,21 @@ func AuthMiddleware() gin.HandlerFunc {
 		// 如果有 JWT token，优先使用 JWT 认证（即使在开发模式下）
 		if tokenString != "" {
 			token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+				// 确保算法是 HS256，防止 alg:none 攻击
+				if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+					return nil, jwt.ErrSignatureInvalid
+				}
 				return []byte(os.Getenv("JWT_SECRET")), nil
 			})
 
 			if err == nil && token.Valid {
 				if claims, ok := token.Claims.(jwt.MapClaims); ok {
+					// 校验 issuer（新 token 才有，旧 token 兼容跳过）
+					if iss, ok := claims["iss"].(string); ok && iss != "" && iss != "hpc-platform" {
+						c.JSON(http.StatusUnauthorized, gin.H{"error": "token来源无效"})
+						c.Abort()
+						return
+					}
 					// 检查 token 是否已被吊销（用户已登出）
 					if IsTokenRevoked(tokenString) {
 						c.JSON(http.StatusUnauthorized, gin.H{"error": "token已失效，请重新登录"})
