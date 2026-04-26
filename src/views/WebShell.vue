@@ -418,11 +418,11 @@ const showMFAInput = ref(false)
 const mfaCodeInput = ref('')
 const pendingNode = ref<any>(null)
 const pendingPassword = ref('')
-// 缓存 MFA 状态，避免每次连接都请求
+// 缓存 MFA 状态，避免每次连接都请求（组件挂载时重置）
 const mfaStatusCache = ref<{mode: string, enabled: boolean, confirmed: boolean} | null>(null)
 
-const loadMFAStatus = async () => {
-  if (mfaStatusCache.value !== null) return mfaStatusCache.value
+const loadMFAStatus = async (forceRefresh = false) => {
+  if (!forceRefresh && mfaStatusCache.value !== null) return mfaStatusCache.value
   try {
     const res = await axios.get('/mfa/status')
     mfaStatusCache.value = res.data.data
@@ -605,7 +605,10 @@ let websocket: WebSocket | null = null
 // 初始化
 onMounted(async () => {
   console.log('WebShell component mounted, initializing...')
-  
+
+  // 每次挂载重置 MFA 缓存，防止退出再登录时用到旧用户的状态
+  mfaStatusCache.value = null
+
   // 加载保存的设置
   loadSettings()
   
@@ -619,10 +622,13 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   if (terminal) {
     terminal.dispose()
+    terminal = null
   }
   if (websocket) {
     websocket.close()
+    websocket = null
   }
+  window.removeEventListener('resize', handleResize)
 })
 
 // 加载设置
@@ -1018,6 +1024,7 @@ const connectToNode = async (node: any, password: string = '', mfaCode: string =
         terminal.dispose()
         terminal = null
       }
+      websocket = null
       window.removeEventListener('resize', handleResize)
     }
     
