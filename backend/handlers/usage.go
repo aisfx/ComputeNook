@@ -11,6 +11,27 @@ import (
 	"hpc-backend/slurm"
 )
 
+// parseTimeParam 解析时间参数，支持 Unix 时间戳、"2006-01-02T15:04:05"、"2006-01-02" 三种格式
+// isEnd=true 时，纯日期格式自动设为当天 23:59:59，避免截断当天数据
+func parseTimeParam(s string, defaultVal time.Time, isEnd bool) time.Time {
+	if s == "" {
+		return defaultVal
+	}
+	if unix, err := strconv.ParseInt(s, 10, 64); err == nil {
+		return time.Unix(unix, 0)
+	}
+	if t, err := time.ParseInLocation("2006-01-02T15:04:05", s, time.Local); err == nil {
+		return t
+	}
+	if t, err := time.Parse("2006-01-02", s); err == nil {
+		if isEnd {
+			return t.Add(23*time.Hour + 59*time.Minute + 59*time.Second)
+		}
+		return t
+	}
+	return defaultVal
+}
+
 // GetAccountUsageWithBilling 获取账户机时使用情况（包含 billing 限制）
 func GetAccountUsageWithBilling(c *gin.Context) {
 	account := c.Query("account")
@@ -19,42 +40,8 @@ func GetAccountUsageWithBilling(c *gin.Context) {
 		return
 	}
 
-	// 解析时间参数
-	startTimeStr := c.DefaultQuery("start_time", "")
-	endTimeStr := c.DefaultQuery("end_time", "")
-	
-	var startTime, endTime time.Time
-	var err error
-	
-	if startTimeStr != "" {
-		if startTimeUnix, err := strconv.ParseInt(startTimeStr, 10, 64); err == nil {
-			startTime = time.Unix(startTimeUnix, 0)
-		} else {
-			startTime, err = time.Parse("2006-01-02", startTimeStr)
-			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid start_time format"})
-				return
-			}
-		}
-	} else {
-		// 默认为30天前
-		startTime = time.Now().AddDate(0, 0, -30)
-	}
-	
-	if endTimeStr != "" {
-		if endTimeUnix, err := strconv.ParseInt(endTimeStr, 10, 64); err == nil {
-			endTime = time.Unix(endTimeUnix, 0)
-		} else {
-			endTime, err = time.Parse("2006-01-02", endTimeStr)
-			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid end_time format"})
-				return
-			}
-		}
-	} else {
-		// 默认为当前时间
-		endTime = time.Now()
-	}
+	startTime := parseTimeParam(c.DefaultQuery("start_time", ""), time.Now().AddDate(0, 0, -30), false)
+	endTime   := parseTimeParam(c.DefaultQuery("end_time", ""),   time.Now(),                    true)
 
 	// 获取当前用户
 	username, _ := c.Get("username")
@@ -84,40 +71,8 @@ func GetUserUsageByAccount(c *gin.Context) {
 		return
 	}
 
-	// 解析时间参数
-	startTimeStr := c.DefaultQuery("start_time", "")
-	endTimeStr := c.DefaultQuery("end_time", "")
-	
-	var startTime, endTime time.Time
-	var err error
-	
-	if startTimeStr != "" {
-		if startTimeUnix, err := strconv.ParseInt(startTimeStr, 10, 64); err == nil {
-			startTime = time.Unix(startTimeUnix, 0)
-		} else {
-			startTime, err = time.Parse("2006-01-02", startTimeStr)
-			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid start_time format"})
-				return
-			}
-		}
-	} else {
-		startTime = time.Now().AddDate(0, 0, -30)
-	}
-	
-	if endTimeStr != "" {
-		if endTimeUnix, err := strconv.ParseInt(endTimeStr, 10, 64); err == nil {
-			endTime = time.Unix(endTimeUnix, 0)
-		} else {
-			endTime, err = time.Parse("2006-01-02", endTimeStr)
-			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid end_time format"})
-				return
-			}
-		}
-	} else {
-		endTime = time.Now()
-	}
+	startTime := parseTimeParam(c.DefaultQuery("start_time", ""), time.Now().AddDate(0, 0, -30), false)
+	endTime   := parseTimeParam(c.DefaultQuery("end_time", ""),   time.Now(),                    true)
 
 	// 获取当前用户
 	username, _ := c.Get("username")
@@ -139,40 +94,8 @@ func GetUserUsageByAccount(c *gin.Context) {
 
 // GetAllAccountsUsage 获取所有账户的机时使用情况
 func GetAllAccountsUsage(c *gin.Context) {
-	// 解析时间参数
-	startTimeStr := c.DefaultQuery("start_time", "")
-	endTimeStr := c.DefaultQuery("end_time", "")
-	
-	var startTime, endTime time.Time
-	var err error
-	
-	if startTimeStr != "" {
-		if startTimeUnix, err := strconv.ParseInt(startTimeStr, 10, 64); err == nil {
-			startTime = time.Unix(startTimeUnix, 0)
-		} else {
-			startTime, err = time.Parse("2006-01-02", startTimeStr)
-			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid start_time format"})
-				return
-			}
-		}
-	} else {
-		startTime = time.Now().AddDate(0, 0, -7) // 默认7天
-	}
-	
-	if endTimeStr != "" {
-		if endTimeUnix, err := strconv.ParseInt(endTimeStr, 10, 64); err == nil {
-			endTime = time.Unix(endTimeUnix, 0)
-		} else {
-			endTime, err = time.Parse("2006-01-02", endTimeStr)
-			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid end_time format"})
-				return
-			}
-		}
-	} else {
-		endTime = time.Now()
-	}
+	startTime := parseTimeParam(c.DefaultQuery("start_time", ""), time.Now().AddDate(0, 0, -7), false)
+	endTime   := parseTimeParam(c.DefaultQuery("end_time", ""),   time.Now(),                   true)
 
 	// 获取当前用户
 	username, _ := c.Get("username")
@@ -196,41 +119,9 @@ func GetAllAccountsUsage(c *gin.Context) {
 func GetUsageSummary(c *gin.Context) {
 	user := c.Query("user")
 	account := c.Query("account")
-	
-	// 解析时间参数
-	startTimeStr := c.DefaultQuery("start_time", "")
-	endTimeStr := c.DefaultQuery("end_time", "")
-	
-	var startTime, endTime time.Time
-	var err error
-	
-	if startTimeStr != "" {
-		if startTimeUnix, err := strconv.ParseInt(startTimeStr, 10, 64); err == nil {
-			startTime = time.Unix(startTimeUnix, 0)
-		} else {
-			startTime, err = time.Parse("2006-01-02", startTimeStr)
-			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid start_time format"})
-				return
-			}
-		}
-	} else {
-		startTime = time.Now().AddDate(0, 0, -30)
-	}
-	
-	if endTimeStr != "" {
-		if endTimeUnix, err := strconv.ParseInt(endTimeStr, 10, 64); err == nil {
-			endTime = time.Unix(endTimeUnix, 0)
-		} else {
-			endTime, err = time.Parse("2006-01-02", endTimeStr)
-			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid end_time format"})
-				return
-			}
-		}
-	} else {
-		endTime = time.Now()
-	}
+
+	startTime := parseTimeParam(c.DefaultQuery("start_time", ""), time.Now().AddDate(0, 0, -30), false)
+	endTime   := parseTimeParam(c.DefaultQuery("end_time", ""),   time.Now(),                    true)
 
 	// 获取当前用户
 	username, _ := c.Get("username")
@@ -279,40 +170,8 @@ func GetUsageSummary(c *gin.Context) {
 
 // GetClusterUsage 获取集群整体机时使用情况
 func GetClusterUsage(c *gin.Context) {
-	// 解析时间参数
-	startTimeStr := c.DefaultQuery("start_time", "")
-	endTimeStr := c.DefaultQuery("end_time", "")
-	
-	var startTime, endTime time.Time
-	var err error
-	
-	if startTimeStr != "" {
-		if startTimeUnix, err := strconv.ParseInt(startTimeStr, 10, 64); err == nil {
-			startTime = time.Unix(startTimeUnix, 0)
-		} else {
-			startTime, err = time.Parse("2006-01-02", startTimeStr)
-			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid start_time format"})
-				return
-			}
-		}
-	} else {
-		startTime = time.Now().AddDate(0, 0, -7) // 默认7天
-	}
-	
-	if endTimeStr != "" {
-		if endTimeUnix, err := strconv.ParseInt(endTimeStr, 10, 64); err == nil {
-			endTime = time.Unix(endTimeUnix, 0)
-		} else {
-			endTime, err = time.Parse("2006-01-02", endTimeStr)
-			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid end_time format"})
-				return
-			}
-		}
-	} else {
-		endTime = time.Now()
-	}
+	startTime := parseTimeParam(c.DefaultQuery("start_time", ""), time.Now().AddDate(0, 0, -7), false)
+	endTime   := parseTimeParam(c.DefaultQuery("end_time", ""),   time.Now(),                   true)
 
 	// 获取当前用户
 	username, _ := c.Get("username")
@@ -340,39 +199,8 @@ func GetUserUsage(c *gin.Context) {
 		return
 	}
 
-	startTimeStr := c.DefaultQuery("start_time", "")
-	endTimeStr := c.DefaultQuery("end_time", "")
-
-	var startTime, endTime time.Time
-	var err error
-
-	if startTimeStr != "" {
-		if startTimeUnix, err2 := strconv.ParseInt(startTimeStr, 10, 64); err2 == nil {
-			startTime = time.Unix(startTimeUnix, 0)
-		} else {
-			startTime, err = time.Parse("2006-01-02", startTimeStr)
-			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid start_time format"})
-				return
-			}
-		}
-	} else {
-		startTime = time.Now().AddDate(0, 0, -30)
-	}
-
-	if endTimeStr != "" {
-		if endTimeUnix, err2 := strconv.ParseInt(endTimeStr, 10, 64); err2 == nil {
-			endTime = time.Unix(endTimeUnix, 0)
-		} else {
-			endTime, err = time.Parse("2006-01-02", endTimeStr)
-			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid end_time format"})
-				return
-			}
-		}
-	} else {
-		endTime = time.Now()
-	}
+	startTime := parseTimeParam(c.DefaultQuery("start_time", ""), time.Now().AddDate(0, 0, -30), false)
+	endTime   := parseTimeParam(c.DefaultQuery("end_time", ""),   time.Now(),                    true)
 
 	username, _ := c.Get("username")
 
@@ -403,40 +231,8 @@ func GetAccountUsage(c *gin.Context) {
 		return
 	}
 
-	// 解析时间参数
-	startTimeStr := c.DefaultQuery("start_time", "")
-	endTimeStr := c.DefaultQuery("end_time", "")
-	
-	var startTime, endTime time.Time
-	var err error
-	
-	if startTimeStr != "" {
-		if startTimeUnix, err := strconv.ParseInt(startTimeStr, 10, 64); err == nil {
-			startTime = time.Unix(startTimeUnix, 0)
-		} else {
-			startTime, err = time.Parse("2006-01-02", startTimeStr)
-			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid start_time format"})
-				return
-			}
-		}
-	} else {
-		startTime = time.Now().AddDate(0, 0, -30)
-	}
-	
-	if endTimeStr != "" {
-		if endTimeUnix, err := strconv.ParseInt(endTimeStr, 10, 64); err == nil {
-			endTime = time.Unix(endTimeUnix, 0)
-		} else {
-			endTime, err = time.Parse("2006-01-02", endTimeStr)
-			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid end_time format"})
-				return
-			}
-		}
-	} else {
-		endTime = time.Now()
-	}
+	startTime := parseTimeParam(c.DefaultQuery("start_time", ""), time.Now().AddDate(0, 0, -30), false)
+	endTime   := parseTimeParam(c.DefaultQuery("end_time", ""),   time.Now(),                    true)
 
 	// 获取当前用户
 	username, _ := c.Get("username")

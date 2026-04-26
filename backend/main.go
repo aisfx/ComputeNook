@@ -176,11 +176,12 @@ func main() {
 		}
 
 		// Slurm QoS 管理
+		// GET 接口普通用户也需要（作业提交时选择 QoS），写操作仅管理员
+		auth.GET("/qos", handlers.GetQoSList)
+		auth.GET("/qos/:name", handlers.GetQoS)
 		qos := auth.Group("/qos")
 		qos.Use(middleware.AdminMiddleware())
 		{
-			qos.GET("", handlers.GetQoSList)
-			qos.GET("/:name", handlers.GetQoS)
 			qos.POST("", handlers.CreateQoS)
 			qos.PUT("/:name", handlers.UpdateQoS)
 			qos.DELETE("/:name", handlers.DeleteQoS)
@@ -277,6 +278,7 @@ func main() {
 			webshell.GET("/keys/check", handlers.CheckPrivateKey)
 			webshell.POST("/keys/upload", handlers.UploadPrivateKey)
 			webshell.POST("/keys/generate", handlers.GenerateKeyPair)
+			webshell.POST("/keys/deploy", handlers.DeployPublicKey)
 			
 			// 连接测试
 			webshell.POST("/nodes/:node_name/test", handlers.TestNodeConnection)

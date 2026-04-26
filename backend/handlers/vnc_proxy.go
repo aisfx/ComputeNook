@@ -3,7 +3,6 @@ package handlers
 import (
 	"fmt"
 	"log"
-	"net"
 	"net/http"
 	"strconv"
 	"time"
@@ -83,18 +82,28 @@ func XpraWebSocketProxy(c *gin.Context) {
 	addr := fmt.Sprintf("%s:%d", session.Address, port)
 	log.Printf("[XPRA-WS] session %d: connecting to %s", id, addr)
 
-	xpraConn, err := net.DialTimeout("tcp", addr, 10*time.Second)
+	// 升级前端连接为 WebSocket
+	wsConn, err := vncWsUpgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
-		log.Printf("[XPRA-WS] session %d: tcp connect failed: %v", id, err)
-		writeDesktopAudit(username.(string), c.ClientIP(), id, "connect_failed", err.Error())
-		c.JSON(http.StatusBadGateway, gin.H{"error": "xpra connect failed: " + err.Error()})
+		log.Printf("[XPRA-WS] upgrade failed: %v", err)
 		return
 	}
 
-	wsConn, err := vncWsUpgrader.Upgrade(c.Writer, c.Request, nil)
+	// 以 WebSocket 客户端连接到 Xpra（Xpra --bind-ws 监听的是 WS 协议，不是裸 TCP）
+	xpraURL := fmt.Sprintf("ws://%s/", addr)
+	xpraDialer := websocket.Dialer{
+		HandshakeTimeout: 10 * time.Second,
+		Subprotocols:     []string{"binary"},
+	}
+	xpraWs, _, err := xpraDialer.Dial(xpraURL, http.Header{
+		"Origin": []string{fmt.Sprintf("http://%s", addr)},
+	})
 	if err != nil {
-		xpraConn.Close()
-		log.Printf("[XPRA-WS] upgrade failed: %v", err)
+		wsConn.WriteMessage(websocket.CloseMessage,
+			websocket.FormatCloseMessage(websocket.CloseInternalServerErr, "xpra connect failed: "+err.Error()))
+		wsConn.Close()
+		log.Printf("[XPRA-WS] session %d: ws connect failed: %v", id, err)
+		writeDesktopAudit(username.(string), c.ClientIP(), id, "connect_failed", err.Error())
 		return
 	}
 
@@ -105,37 +114,36 @@ func XpraWebSocketProxy(c *gin.Context) {
 	start := time.Now()
 	done := make(chan struct{}, 2)
 
+	// xpra → browser
 	go func() {
 		defer func() { done <- struct{}{} }()
-		buf := make([]byte, 32*1024)
 		for {
-			n, err := xpraConn.Read(buf)
-			if n > 0 {
-				if e := wsConn.WriteMessage(websocket.BinaryMessage, buf[:n]); e != nil {
-					return
-				}
-			}
+			mt, msg, err := xpraWs.ReadMessage()
 			if err != nil {
+				return
+			}
+			if err := wsConn.WriteMessage(mt, msg); err != nil {
 				return
 			}
 		}
 	}()
 
+	// browser → xpra
 	go func() {
 		defer func() { done <- struct{}{} }()
 		for {
-			_, msg, err := wsConn.ReadMessage()
+			mt, msg, err := wsConn.ReadMessage()
 			if err != nil {
 				return
 			}
-			if _, err := xpraConn.Write(msg); err != nil {
+			if err := xpraWs.WriteMessage(mt, msg); err != nil {
 				return
 			}
 		}
 	}()
 
 	<-done
-	xpraConn.Close()
+	xpraWs.Close()
 	wsConn.Close()
 	writeDesktopAudit(username.(string), c.ClientIP(), id,
 		"disconnected", fmt.Sprintf("duration=%.0fs", time.Since(start).Seconds()))
@@ -174,11 +182,6 @@ func XpraHTTPProxy(c *gin.Context) {
 		return
 	}
 
-	if session.Status != "running" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "session is not running"})
-		return
-	}
-
 	port := session.XpraPort
 	if port == 0 {
 		port = session.VNCPort
@@ -190,8 +193,13 @@ func XpraHTTPProxy(c *gin.Context) {
 	}
 
 	target := fmt.Sprintf("http://%s:%d%s", session.Address, port, subPath)
+	// 过滤掉 token 参数，不传给 Xpra
 	if c.Request.URL.RawQuery != "" {
-		target += "?" + c.Request.URL.RawQuery
+		q := c.Request.URL.Query()
+		q.Del("token")
+		if encoded := q.Encode(); encoded != "" {
+			target += "?" + encoded
+		}
 	}
 
 	proxyReq, err := http.NewRequest(c.Request.Method, target, c.Request.Body)

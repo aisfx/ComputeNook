@@ -31,13 +31,13 @@
         v-for="item in orderedPlatforms"
         :key="item.key"
         class="card"
-        :class="{ current: item.key === osKey }"
+        :class="{ current: item.key === osKey, disabled: item.disabled }"
       >
         <div class="icon">{{ item.icon }}</div>
-        <h3>{{ item.label }} <span v-if="item.key === osKey">⭐</span></h3>
+        <h3>{{ item.label }} <span v-if="item.key === osKey && !item.disabled">⭐</span></h3>
         <p>{{ item.desc }}</p>
-        <button class="btn" @click="downloadAndActivate(item)" :disabled="downloading === item.name">
-          {{ downloading === item.name ? '下载中...' : '下载并激活' }}
+        <button class="btn" @click="downloadAndActivate(item)" :disabled="item.disabled || downloading === item.name">
+          {{ item.disabled ? '暂未开放' : downloading === item.name ? '下载中...' : '下载并激活' }}
         </button>
       </div>
     </div>
@@ -73,9 +73,9 @@ const downloading = ref('')
 const downloadedFile = ref('')
 
 const platforms = [
-  { key: 'windows', icon: '🪟', label: 'Windows', desc: 'Windows 10/11 x64',     name: 'hpc-client-windows.exe' },
-  { key: 'darwin',  icon: '🍎', label: 'macOS',   desc: 'Intel / Apple Silicon', name: 'hpc-client-mac'         },
-  { key: 'linux',   icon: '🐧', label: 'Linux',   desc: 'x86_64',                name: 'hpc-client-linux'       },
+  { key: 'windows', icon: '🪟', label: 'Windows', desc: 'Windows 10/11 x64',     name: 'hpc-client-windows.exe', disabled: false },
+  { key: 'darwin',  icon: '🍎', label: 'macOS',   desc: 'Intel / Apple Silicon', name: 'hpc-client-mac',         disabled: true  },
+  { key: 'linux',   icon: '🐧', label: 'Linux',   desc: 'x86_64',                name: 'hpc-client-linux',       disabled: true  },
 ]
 
 const osKey = computed(() => {
@@ -97,7 +97,7 @@ const downloadAndActivate = async (item: typeof platforms[0]) => {
   try {
     const res = await axios.get(`/download/${item.name}`, {
       responseType: 'blob',
-      validateStatus: () => true, // 不抛出 HTTP 错误，手动处理
+      validateStatus: () => true,
     })
     if (res.status === 404) {
       alert('客户端文件尚未生成，请联系管理员运行 npm run release 编译客户端\n默认输出目录：/opt/hpc-platform/clients')
@@ -118,16 +118,15 @@ const downloadAndActivate = async (item: typeof platforms[0]) => {
     }
     const url = URL.createObjectURL(res.data)
     const a = document.createElement('a')
-    a.href = url; a.download = item.name; a.click()
+    // 加时间戳避免覆盖被占用的旧文件
+    const ext = item.name.includes('.') ? item.name.slice(item.name.lastIndexOf('.')) : ''
+    const base = item.name.slice(0, item.name.length - ext.length)
+    const saveName = `${base}-new${ext}`
+    a.href = url; a.download = saveName; a.click()
     URL.revokeObjectURL(url)
 
-    downloadedFile.value = item.name
+    downloadedFile.value = saveName
     step.value = 1
-
-    // 短暂延迟后尝试触发 hpcc://install，让已安装的客户端自动注册
-    setTimeout(() => {
-      window.location.href = 'hpcc://install'
-    }, 1500)
 
   } catch (e: any) {
     alert('下载失败: ' + (e.message || '网络错误'))
@@ -163,6 +162,7 @@ h1 { font-size: 26px; margin-bottom: 8px; }
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
 .card { border: 1px solid #e5e7eb; border-radius: 12px; padding: 20px; text-align: center; }
 .card.current { border-color: #6366f1; box-shadow: 0 0 0 2px #e0e7ff; }
+.card.disabled { opacity: 0.45; background: #f3f4f6; }
 .icon { font-size: 40px; margin-bottom: 8px; }
 h3 { margin: 0 0 4px; font-size: 16px; }
 .card p { color: #666; font-size: 12px; margin: 0 0 14px; }

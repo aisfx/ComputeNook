@@ -41,18 +41,17 @@
       </div>
     </div>
 
-    <!-- GPU + 优先级 -->
+    <!-- GPU + QoS -->
     <div class="form-row col2">
       <div class="form-group">
         <label>GPU 卡数</label>
         <input v-model.number="form.gpus" type="number" min="0" max="8" placeholder="0" />
       </div>
       <div class="form-group">
-        <label>优先级</label>
-        <select v-model="form.priority">
-          <option value="normal">普通</option>
-          <option value="high">高</option>
-          <option value="low">低</option>
+        <label>QoS（服务质量）</label>
+        <select v-model="form.qos" :disabled="loadingQoS">
+          <option value="">默认</option>
+          <option v-for="q in qosList" :key="q.name" :value="q.name">{{ q.name }}</option>
         </select>
       </div>
     </div>
@@ -66,18 +65,28 @@
       </div>
     </div>
 
-    <!-- 脚本文件 -->
+    <!-- 脚本内容 -->
     <div class="form-group">
-      <label>脚本文件 *</label>
-      <div class="script-selector">
-        <input v-model="form.script" type="text" class="script-input"
-          placeholder="输入脚本路径或从列表选择" list="script-files" required />
-        <datalist id="script-files">
-          <option v-for="(file, index) in scriptFiles" :key="index" :value="file.path">{{ file.name }}</option>
-        </datalist>
-        <button type="button" class="btn-small" @click="loadScriptFiles" title="刷新脚本列表">↺</button>
+      <div class="script-header">
+        <label>脚本内容 *</label>
+        <div class="template-btns">
+          <span class="template-label">模板：</span>
+          <button type="button" class="btn-tpl" @click="applyScriptTemplate('basic')">基础</button>
+          <button type="button" class="btn-tpl" @click="applyScriptTemplate('mpi')">MPI</button>
+          <button type="button" class="btn-tpl" @click="applyScriptTemplate('gpu')">GPU</button>
+          <button type="button" class="btn-tpl" @click="applyScriptTemplate('python')">Python</button>
+          <button type="button" class="btn-tpl" @click="applyScriptTemplate('array')">数组作业</button>
+        </div>
       </div>
-      <div class="help-text">可手动输入路径，或从列表中选择</div>
+      <textarea
+        v-model="form.scriptContent"
+        class="script-editor"
+        rows="12"
+        placeholder="#!/bin/bash&#10;#SBATCH -J my_job&#10;..."
+        spellcheck="false"
+        required
+      ></textarea>
+      <div class="help-text">直接编写脚本内容，或选择上方模板快速填充</div>
     </div>
 
     <!-- 输出 + 错误文件 -->
@@ -124,6 +133,8 @@ const selectedTemplateData = ref<any>(null)
 const scriptFiles = ref<any[]>([])
 const partitions = ref<any[]>([])
 const loadingPartitions = ref(false)
+const qosList = ref<any[]>([])
+const loadingQoS = ref(false)
 
 // 监听来自模板页面的事件
 const handleTemplateSelect = (template: any) => {
@@ -146,9 +157,11 @@ const form = ref({
   memory: 0,
   gpus: 0,
   time: 0,
+  qos: '',
   priority: 'normal',
   workdir: '',
   script: '',
+  scriptContent: '',
   output: '',
   error: '',
   extraParams: ''
@@ -200,6 +213,23 @@ const loadPartitions = async () => {
 const resetToHomeDir = () => {
   const homeDir = currentUser.value?.homeDir || `/home/${currentUser.value?.username || ''}`
   form.value.workdir = homeDir
+}
+
+// 加载 QoS 列表
+const loadQoSList = async () => {
+  loadingQoS.value = true
+  try {
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token')
+    if (!token) return
+    const res = await fetch(`${getApiBase()}/api/qos`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    if (!res.ok) return
+    const result = await res.json()
+    qosList.value = (result.data || []).map((q: any) => ({ name: q.name || q.Name }))
+  } catch { /* ignore */ } finally {
+    loadingQoS.value = false
+  }
 }
 
 // 加载脚本文件列表
@@ -265,9 +295,11 @@ const applyTemplateData = (template: any) => {
     memory: template.memory || 0,
     gpus: template.gpus || 0,
     time: template.time || 0,
+    qos: '',
     priority: 'normal',
     workdir: form.value.workdir,
     script: '',
+    scriptContent: form.value.scriptContent,
     output: '',
     error: '',
     extraParams: template.gpus ? `--gres=gpu:${template.gpus}` : ''
@@ -286,13 +318,125 @@ const resetForm = () => {
     memory: 0,
     gpus: 0,
     time: 0,
+    qos: '',
     priority: 'normal',
     workdir: homeDir,
     script: '',
+    scriptContent: scriptTemplates.basic,
     output: '',
     error: '',
     extraParams: ''
   }
+}
+
+const scriptTemplates: Record<string, string> = {
+  basic: `#!/bin/bash
+#SBATCH -J my_job
+#SBATCH -p compute
+#SBATCH -N 1
+#SBATCH -c 4
+#SBATCH --mem=8G
+#SBATCH -t 01:00:00
+#SBATCH -o output_%j.log
+#SBATCH -e error_%j.log
+
+echo "Job started: $(date)"
+echo "Running on node: $(hostname)"
+
+# 在此处添加你的命令
+hostname
+
+echo "Job finished: $(date)"`,
+
+  mpi: `#!/bin/bash
+#SBATCH -J mpi_job
+#SBATCH -p compute
+#SBATCH -N 2
+#SBATCH --ntasks-per-node=16
+#SBATCH --mem=32G
+#SBATCH -t 04:00:00
+#SBATCH -o mpi_%j.log
+#SBATCH -e mpi_%j.err
+
+module load openmpi
+
+echo "MPI Job started: $(date)"
+mpirun -np 32 ./your_mpi_program
+
+echo "Job finished: $(date)"`,
+
+  gpu: `#!/bin/bash
+#SBATCH -J gpu_job
+#SBATCH -p gpu
+#SBATCH -N 1
+#SBATCH -c 8
+#SBATCH --mem=32G
+#SBATCH --gres=gpu:1
+#SBATCH -t 08:00:00
+#SBATCH -o gpu_%j.log
+#SBATCH -e gpu_%j.err
+
+module load cuda
+
+echo "GPU Job started: $(date)"
+nvidia-smi
+
+# 在此处添加你的 GPU 程序
+python train.py
+
+echo "Job finished: $(date)"`,
+
+  python: `#!/bin/bash
+#SBATCH -J python_job
+#SBATCH -p compute
+#SBATCH -N 1
+#SBATCH -c 4
+#SBATCH --mem=16G
+#SBATCH -t 02:00:00
+#SBATCH -o python_%j.log
+#SBATCH -e python_%j.err
+
+module load python/3.10
+
+echo "Python Job started: $(date)"
+
+# 激活虚拟环境（如有）
+# source ~/venv/bin/activate
+
+python your_script.py
+
+echo "Job finished: $(date)"`,
+
+  array: `#!/bin/bash
+#SBATCH -J array_job
+#SBATCH -p compute
+#SBATCH -N 1
+#SBATCH -c 2
+#SBATCH --mem=4G
+#SBATCH -t 01:00:00
+#SBATCH --array=1-10
+#SBATCH -o array_%A_%a.log
+#SBATCH -e array_%A_%a.err
+
+echo "Array Job $SLURM_ARRAY_TASK_ID started: $(date)"
+
+# 根据任务 ID 处理不同输入
+INPUT_FILE="input_\${SLURM_ARRAY_TASK_ID}.dat"
+echo "Processing: $INPUT_FILE"
+
+# 在此处添加你的命令
+./process $INPUT_FILE
+
+echo "Task $SLURM_ARRAY_TASK_ID finished: $(date)"`,
+}
+
+const applyScriptTemplate = (type: string) => {
+  const tpl = scriptTemplates[type]
+  if (!tpl) return
+  form.value.scriptContent = tpl
+  // 同步更新表单里的基础参数
+  if (type === 'gpu') { form.value.gpus = 1; form.value.partition = 'gpu' }
+  if (type === 'mpi') { form.value.nodes = 2; form.value.cpus = 16 }
 }
 
 const submitJob = async () => {
@@ -306,33 +450,12 @@ const submitJob = async () => {
       return
     }
     
-    // 读取脚本文件内容
-    let scriptContent = ''
-    if (form.value.script) {
-      try {
-        const scriptResponse = await fetch(`${fileManagerApi.read()}?path=${encodeURIComponent(form.value.script)}`, {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        })
-        
-        if (!scriptResponse.ok) {
-          throw new Error('无法读取脚本文件，请确认文件路径正确')
-        }
-        
-        const scriptData = await scriptResponse.json()
-        scriptContent = scriptData.content || ''
-        
-        if (!scriptContent) {
-          throw new Error('脚本文件为空')
-        }
-        
-        console.log('Script content loaded, length:', scriptContent.length)
-      } catch (err: any) {
-        notification.error(err.message || '读取脚本文件失败')
-        submitting.value = false
-        return
-      }
+    // 直接使用编辑器里的脚本内容
+    const scriptContent = form.value.scriptContent.trim()
+    if (!scriptContent) {
+      notification.error('请填写脚本内容')
+      submitting.value = false
+      return
     }
     
     // 构建提交数据 - 只发送必需字段，让Slurm使用默认路径
@@ -344,7 +467,8 @@ const submitJob = async () => {
       cpus: form.value.cpus,
       memory: form.value.memory || 0,  // 0 表示不限制
       gpus: form.value.gpus || 0,
-      time: form.value.time || 0,  // 0 表示不限制
+      time: form.value.time || 0,
+      qos: form.value.qos || '',
       priority: form.value.priority,
       extra_params: form.value.extraParams
     }
@@ -384,10 +508,12 @@ const submitJob = async () => {
 // 初始化
 onMounted(() => {
   currentUser.value = getUser()
-  // 不自动设置workdir，让Slurm使用默认值
-  // 用户可以根据需要手动填写
   loadPartitions()
-  loadScriptFiles()
+  loadQoSList()
+  // 默认填入基础模板
+  if (!form.value.scriptContent) {
+    form.value.scriptContent = scriptTemplates.basic
+  }
 })
 </script>
 
@@ -469,6 +595,42 @@ onMounted(() => {
 .script-input {
   flex: 1;
   min-width: 0;
+}
+
+/* 脚本编辑器 */
+.script-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; flex-wrap: wrap; gap: 6px; }
+.script-header label { margin-bottom: 0; }
+.template-btns { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.template-label { font-size: 0.75rem; color: hsl(var(--muted-foreground)); }
+.btn-tpl {
+  padding: 2px 10px;
+  font-size: 0.75rem;
+  background: hsl(var(--secondary));
+  color: hsl(var(--secondary-foreground));
+  border: 1px solid hsl(var(--border));
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-tpl:hover { background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); }
+.script-editor {
+  width: 100%;
+  font-family: 'Courier New', 'Consolas', monospace;
+  font-size: 0.82rem;
+  line-height: 1.6;
+  padding: 10px 12px;
+  border: 1px solid hsl(var(--input));
+  border-radius: var(--radius-md, 8px);
+  background: #1e293b;
+  color: #e2e8f0;
+  resize: vertical;
+  outline: none;
+  box-sizing: border-box;
+  tab-size: 2;
+}
+.script-editor:focus { border-color: hsl(var(--ring)); box-shadow: 0 0 0 2px hsl(var(--ring) / 0.15); }
+
+.script-input {
   box-sizing: border-box;
   padding: 6px 9px;
   border: 1px solid hsl(var(--input));

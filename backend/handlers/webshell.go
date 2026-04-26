@@ -1,8 +1,8 @@
 package handlers
 
 import (
-	"crypto/ed25519"
-	"crypto/x509"
+	"crypto/rand"
+	"crypto/rsa"
 	"encoding/pem"
 	"encoding/json"
 	"fmt"
@@ -198,8 +198,15 @@ func ConnectWebShell(c *gin.Context) {
 	
 	// 启动会话
 	if err := session.Start(); err != nil {
-		// 使用会话的安全写入方法
-		session.WriteMessage("error", "Failed to start session: "+err.Error())
+		errMsg := err.Error()
+		// 判断是否是 SSH 认证失败，如果是则提示用户输入密码
+		if strings.Contains(errMsg, "unable to authenticate") ||
+			strings.Contains(errMsg, "no supported methods") ||
+			strings.Contains(errMsg, "handshake failed") {
+			session.WriteMessage("auth_required", "密钥认证失败，请使用密码连接")
+		} else {
+			session.WriteMessage("error", "Failed to start session: "+errMsg)
+		}
 		sessionManager.RemoveSession(sessionID)
 		return
 	}
@@ -635,7 +642,7 @@ func init() {
 
 // GenerateKeyPair 为当前用户生成 SSH 密钥对
 // POST /api/webshell/keys/generate
-// 私钥存 keys/{uid}/id_rsa，公钥返回给前端（用于添加到计算节点 authorized_keys）
+// 私钥存 keys/{uid}/id_rsa，公钥存 keys/{uid}/id_rsa.pub，并返回给前端
 func GenerateKeyPair(c *gin.Context) {
 	userInterface, exists := c.Get("user")
 	if !exists {
@@ -646,54 +653,140 @@ func GenerateKeyPair(c *gin.Context) {
 	userID := user["uid"].(string)
 	username := user["username"].(string)
 
-	// 生成 ED25519 密钥对
-	pubKey, privKey, err := generateED25519KeyPair(username)
+	// 生成 RSA 4096 密钥对（兼容性最好，等同于 ssh-keygen -t rsa -b 4096）
+	pubKey, privKey, err := generateRSAKeyPair(username)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "生成密钥失败: " + err.Error()})
 		return
 	}
 
-	// 保存私钥
+	// 保存私钥和公钥
 	keyDir := filepath.Join("keys", userID)
 	if err := os.MkdirAll(keyDir, 0700); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建目录失败"})
 		return
 	}
-	keyPath := filepath.Join(keyDir, "id_rsa")
-	if err := os.WriteFile(keyPath, []byte(privKey), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(keyDir, "id_rsa"), []byte(privKey), 0600); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存私钥失败"})
+		return
+	}
+	// 同时保存公钥，确保 deploy 时使用完全一致的公钥
+	if err := os.WriteFile(filepath.Join(keyDir, "id_rsa.pub"), []byte(pubKey), 0644); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存公钥失败"})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"public_key":  pubKey,
-		"private_key": privKey,
-		"message":     "密钥生成成功，请将公钥添加到计算节点的 ~/.ssh/authorized_keys",
+		"public_key": pubKey,
+		"message":    "密钥生成成功",
 	})
 }
 
-// generateED25519KeyPair 生成 ED25519 密钥对，返回 (公钥, 私钥PEM, error)
-func generateED25519KeyPair(comment string) (string, string, error) {
-	pub, priv, err := ed25519.GenerateKey(nil)
+// DeployPublicKey 用密码 SSH 登录节点，自动把公钥追加到 ~/.ssh/authorized_keys
+// POST /api/webshell/keys/deploy
+// Body: { "node_name": "login1", "password": "xxx" }
+func DeployPublicKey(c *gin.Context) {
+	userInterface, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+	user := userInterface.(map[string]interface{})
+	userID := user["uid"].(string)
+	username := user["username"].(string)
+
+	var req struct {
+		NodeName string `json:"node_name"`
+		Password string `json:"password"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || req.NodeName == "" || req.Password == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "node_name 和 password 不能为空"})
+		return
+	}
+
+	// 读取已保存的公钥（与私钥严格对应）
+	keyDir := filepath.Join("keys", userID)
+	pubKeyBytes, err := os.ReadFile(filepath.Join(keyDir, "id_rsa.pub"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请先生成密钥对"})
+		return
+	}
+	pubKey := strings.TrimSpace(string(pubKeyBytes))
+
+	// 找节点配置
+	nodes, err := loadNodesFromEnv()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	var nodeConfig *NodeConfig
+	for _, n := range nodes {
+		if n.Name == req.NodeName {
+			nodeConfig = &n
+			break
+		}
+	}
+	if nodeConfig == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "节点不存在"})
+		return
+	}
+
+	// 用密码 SSH 登录，执行追加命令
+	sshCfg := &gossh.ClientConfig{
+		User:            username,
+		Auth:            []gossh.AuthMethod{gossh.Password(req.Password)},
+		HostKeyCallback: gossh.InsecureIgnoreHostKey(),
+		Timeout:         15 * time.Second,
+	}
+	addr := fmt.Sprintf("%s:%d", nodeConfig.Host, nodeConfig.Port)
+	client, err := gossh.Dial("tcp", addr, sshCfg)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "SSH 连接失败: " + err.Error()})
+		return
+	}
+	defer client.Close()
+
+	sess, err := client.NewSession()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建 SSH 会话失败"})
+		return
+	}
+	defer sess.Close()
+
+	// 安全追加：先确保目录和文件存在，再去重追加
+	cmd := fmt.Sprintf(
+		`mkdir -p ~/.ssh && chmod 700 ~/.ssh && touch ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys && grep -qxF %q ~/.ssh/authorized_keys || echo %q >> ~/.ssh/authorized_keys`,
+		pubKey, pubKey,
+	)
+	if out, err := sess.CombinedOutput(cmd); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "写入公钥失败: " + string(out)})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "公钥已成功部署到 " + req.NodeName})
+}
+
+// generateRSAKeyPair 生成 RSA 4096 密钥对，等同于 ssh-keygen -t rsa -b 4096
+// 返回 (authorized_keys格式公钥, OpenSSH PEM私钥, error)
+func generateRSAKeyPair(comment string) (string, string, error) {
+	privKey, err := rsa.GenerateKey(rand.Reader, 4096)
 	if err != nil {
 		return "", "", err
 	}
 
-	// 私钥转 PEM
-	privBytes, err := x509.MarshalPKCS8PrivateKey(priv)
+	// 私钥转 OpenSSH PEM 格式
+	privPEM, err := gossh.MarshalPrivateKey(privKey, "")
 	if err != nil {
-		return "", "", err
+		return "", "", fmt.Errorf("marshal private key failed: %w", err)
 	}
-	privPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privBytes})
+	privPEMBytes := pem.EncodeToMemory(privPEM)
 
 	// 公钥转 authorized_keys 格式
-	sshPub, err := gossh.NewPublicKey(pub)
+	sshPub, err := gossh.NewPublicKey(&privKey.PublicKey)
 	if err != nil {
 		return "", "", err
 	}
-	pubStr := string(gossh.MarshalAuthorizedKey(sshPub))
-	// 追加注释
-	pubStr = strings.TrimRight(pubStr, "\n") + " " + comment + "\n"
+	pubStr := strings.TrimRight(string(gossh.MarshalAuthorizedKey(sshPub)), "\n") + " " + comment + "\n"
 
-	return pubStr, string(privPEM), nil
+	return pubStr, string(privPEMBytes), nil
 }

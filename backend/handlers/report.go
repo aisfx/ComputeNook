@@ -78,6 +78,8 @@ func parseReportTimeParams(c *gin.Context) (time.Time, time.Time, error) {
 	if startTimeStr != "" {
 		if unix, e := strconv.ParseInt(startTimeStr, 10, 64); e == nil {
 			startTime = time.Unix(unix, 0)
+		} else if t, e := time.ParseInLocation("2006-01-02T15:04:05", startTimeStr, time.Local); e == nil {
+			startTime = t
 		} else {
 			startTime, err = time.Parse("2006-01-02", startTimeStr)
 			if err != nil {
@@ -91,11 +93,15 @@ func parseReportTimeParams(c *gin.Context) (time.Time, time.Time, error) {
 	if endTimeStr != "" {
 		if unix, e := strconv.ParseInt(endTimeStr, 10, 64); e == nil {
 			endTime = time.Unix(unix, 0)
+		} else if t, e := time.ParseInLocation("2006-01-02T15:04:05", endTimeStr, time.Local); e == nil {
+			endTime = t
 		} else {
 			endTime, err = time.Parse("2006-01-02", endTimeStr)
 			if err != nil {
 				return time.Time{}, time.Time{}, err
 			}
+			// 日期只有日期部分时，设为当天末尾，避免截断当天数据
+			endTime = endTime.Add(23*time.Hour + 59*time.Minute + 59*time.Second)
 		}
 	} else {
 		endTime = time.Now()
@@ -273,10 +279,15 @@ func GetJobStats(c *gin.Context) {
 			records = []slurm.UsageRecord{}
 		}
 	} else {
-		records, err = client.GetUserUsage(queryUser, startTime, endTime)
+		uid := ResolveUID(queryUser)
+		records, err = client.GetUserUsage(uid, startTime, endTime)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "无法连接到 Slurm API: " + err.Error()})
 			return
+		}
+		// UID 查不到时退回用户名
+		if len(records) == 0 && uid != queryUser {
+			records, _ = client.GetUserUsage(queryUser, startTime, endTime)
 		}
 	}
 
@@ -330,7 +341,11 @@ func GetUsageStats(c *gin.Context) {
 	if queryUser == "" {
 		records, err = client.GetAllUsersUsage(startTime, endTime)
 	} else {
-		records, err = client.GetUserUsage(queryUser, startTime, endTime)
+		uid := ResolveUID(queryUser)
+		records, err = client.GetUserUsage(uid, startTime, endTime)
+		if err == nil && len(records) == 0 && uid != queryUser {
+			records, _ = client.GetUserUsage(queryUser, startTime, endTime)
+		}
 	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法连接到 Slurm API: " + err.Error()})
@@ -562,7 +577,11 @@ func GetQoSUsage(c *gin.Context) {
 	if queryUser == "" {
 		records, err = client.GetAllUsersUsage(startTime, endTime)
 	} else {
-		records, err = client.GetUserUsage(queryUser, startTime, endTime)
+		uid := ResolveUID(queryUser)
+		records, err = client.GetUserUsage(uid, startTime, endTime)
+		if err == nil && len(records) == 0 && uid != queryUser {
+			records, _ = client.GetUserUsage(queryUser, startTime, endTime)
+		}
 	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法连接到 Slurm API: " + err.Error()})

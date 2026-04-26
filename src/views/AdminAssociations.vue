@@ -56,7 +56,7 @@
   </div>
   <Teleport to="body">
     <!-- 创建对话框 -->
-    <div v-if="showCreateDialog" class="modal-overlay" @click.self="showCreateDialog = false">
+    <div v-if="showCreateDialog" class="modal-overlay">
       <div class="modal-content">
         <div class="modal-header">
           <h3>{{ isEditing ? '编辑资源绑定' : '创建资源绑定' }}</h3>

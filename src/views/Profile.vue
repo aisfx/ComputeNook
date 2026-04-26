@@ -91,7 +91,7 @@
           </div>
           <div class="form-group">
             <label>新密码 *</label>
-            <input type="password" v-model="passwordForm.newPassword" placeholder="至少6个字符" />
+            <input type="password" v-model="passwordForm.newPassword" placeholder="至少8位，含大小写字母和数字" />
           </div>
           <div class="form-group">
             <label>确认新密码 *</label>
@@ -386,10 +386,16 @@ const changePassword = async () => {
     return
   }
 
-  if (!passwordForm.value.newPassword || passwordForm.value.newPassword.length < 6) {
-    passwordError.value = '新密码至少需要6个字符'
+  if (!passwordForm.value.newPassword || passwordForm.value.newPassword.length < 8) {
+    passwordError.value = '新密码至少需要8个字符'
     return
   }
+
+  // 密码复杂度校验
+  const pwd = passwordForm.value.newPassword
+  if (!/[A-Z]/.test(pwd)) { passwordError.value = '新密码必须包含至少一个大写字母'; return }
+  if (!/[a-z]/.test(pwd)) { passwordError.value = '新密码必须包含至少一个小写字母'; return }
+  if (!/[0-9]/.test(pwd)) { passwordError.value = '新密码必须包含至少一个数字'; return }
 
   if (passwordForm.value.newPassword !== passwordForm.value.confirmPassword) {
     passwordError.value = '两次输入的密码不一致'

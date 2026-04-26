@@ -7,6 +7,7 @@ import (
 	"os"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -73,9 +74,9 @@ func GetJobs(c *gin.Context) {
 			startTime = endTime - 30*24*60*60
 			logger.Debug("Admin all-jobs mode: showing jobs from last 30 days")
 		} else {
-			// 普通用户或管理员查指定用户：1天
-			startTime = endTime - 24*60*60
-			logger.Debug("User jobs mode: showing jobs from last 1 day")
+			// 普通用户或管理员查指定用户：7天
+			startTime = endTime - 7*24*60*60
+			logger.Debug("User jobs mode: showing jobs from last 7 days")
 		}
 	}
 	
@@ -182,7 +183,7 @@ func GetJobs(c *gin.Context) {
 	logger.Debug("Getting jobs for user: %s, start_time: %d, end_time: %d, page: %d, page_size: %d", 
 		queryUser, startTime, endTime, page, pageSize)
 	
-	jobs, err := client.GetJobs(queryUser, startTime, endTime)
+	jobs, err := client.GetJobs(ResolveUID(queryUser), startTime, endTime)
 	if err != nil {
 		logger.Error("Failed to get jobs: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "获取作业列表失败: " + err.Error()})
@@ -192,6 +193,22 @@ func GetJobs(c *gin.Context) {
 	// 转换为前端需要的格式
 	allJobs := make([]map[string]interface{}, 0, len(jobs))
 	for _, job := range jobs {
+		startT := job.GetStartTime()
+		endT := job.GetEndTime()
+		now := time.Now().Unix()
+		var runTime int64
+		if startT > 0 {
+			if endT > 0 {
+				runTime = endT - startT
+			} else {
+				runTime = now - startT
+			}
+		}
+		// 计算节点数：nodes 字段是逗号分隔的节点名列表
+		numNodes := 0
+		if job.Nodes != "" {
+			numNodes = len(strings.Split(job.Nodes, ","))
+		}
 		allJobs = append(allJobs, map[string]interface{}{
 			"job_id":      job.JobID,
 			"name":        job.Name,
@@ -200,10 +217,12 @@ func GetJobs(c *gin.Context) {
 			"partition":   job.Partition,
 			"job_state":   job.GetJobState(),
 			"nodes":       job.Nodes,
+			"num_nodes":   numNodes,
 			"cpus":        job.GetCPUs(),
 			"submit_time": job.GetSubmitTime(),
-			"start_time":  job.GetStartTime(),
-			"end_time":    job.GetEndTime(),
+			"start_time":  startT,
+			"end_time":    endT,
+			"run_time":    runTime,
 			"work_dir":    job.GetWorkingDirectory(),
 		})
 	}

@@ -101,15 +101,14 @@ const downloadHTML = `<!DOCTYPE html>
   };
 
   const det = document.getElementById('detected');
-  det.style.display = 'block';
-  det.textContent = '🖥️ 检测到你的系统: ' + files[os].label + '，macOS / Linux 版本即将推出';
+  det.style.display = 'none';
 
   const cards = document.getElementById('cards');
   [os, ...Object.keys(files).filter(k=>k!==os)].forEach(k => {
     const f = files[k], cur = k===os;
     const btnDisabled = f.disabled || !token;
     const btnText = f.disabled ? '暂未开放' : '下载';
-    cards.innerHTML += '<div class="card" style="'+(cur&&!f.disabled?'border-color:#6366f1;box-shadow:0 0 0 2px #e0e7ff':'')+(f.disabled?'opacity:0.5':'')+'">'+
+    cards.innerHTML += '<div class="card" style="'+(cur&&!f.disabled?'border-color:#6366f1;box-shadow:0 0 0 2px #e0e7ff':'')+(f.disabled?'opacity:0.45;background:#f3f4f6;':'')+'">'+
       '<div class="icon">'+f.icon+'</div>'+
       '<h3>'+f.label+(cur&&!f.disabled?' ⭐':'')+(f.disabled?' 🔜':'')+'</h3>'+
       '<p>'+f.desc+'</p>'+

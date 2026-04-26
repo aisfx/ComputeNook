@@ -34,13 +34,18 @@ import (
 const version = "v0.1"
 
 func main() {
-	// 双击运行（无参数）时自动执行安装
+	// 双击运行（无参数）时弹框提示安装
 	if len(os.Args) < 2 {
-		if err := install(); err != nil {
-			ui.Error("安装失败", err.Error())
-			os.Exit(1)
+		msg := "HPC 客户端 " + version + "\n\n" +
+			"首次使用请点击「是」自动注册 hpcc:// 协议。\n" +
+			"注册后在网页点击「连接」按钮即可自动启动隧道。"
+		if ui.Confirm("HPC 客户端", msg) {
+			if err := install(); err != nil {
+				ui.Error("安装失败", err.Error())
+			} else {
+				ui.Info("HPC 客户端", "✅ hpcc:// 协议注册成功！\n\n现在可以在网页上点击「一键连接」按钮直接启动远程桌面或挂载文件系统。")
+			}
 		}
-		ui.Info("HPC 客户端", "✅ hpcc:// 协议注册成功！\n\n现在可以在网页上点击「一键连接」按钮直接启动远程桌面或挂载文件系统。")
 		return
 	}
 
@@ -120,6 +125,20 @@ func handleURI(uri string) {
 		wsURL := toWS(server + fmt.Sprintf("/api/desktop/sessions/%s/vnc-ws", sessionID))
 		startTunnel("VNC", wsURL, token, port, func(p int) {
 			launchVNCViewer(p)
+		})
+
+	case "xpra":
+		sessionID := q.Get("session")
+		port, _ := strconv.Atoi(q.Get("port"))
+		if port <= 0 {
+			port = 14500
+		}
+		if server == "" || token == "" || sessionID == "" {
+			log.Fatal("URI 缺少必要参数: server, token, session")
+		}
+		wsURL := toWS(server + fmt.Sprintf("/api/desktop/sessions/%s/xpra-ws", sessionID))
+		startTunnel("Xpra", wsURL, token, port, func(p int) {
+			launchXpraClient(p)
 		})
 
 	case "rdp":
@@ -360,45 +379,30 @@ autoreconnection enabled:i:1
 	}
 }
 
-// launchSSH 隧道就绪后弹出 cmd 窗口显示连接样例
+// launchSSH 隧道就绪后直接打开终端并执行 SSH 连接
 func launchSSH(port int, sshUser string) {
 	switch runtime.GOOS {
 	case "windows":
-		// 弹出 cmd 窗口，显示连接信息和可直接执行的 SSH 命令
+		// 直接弹出 cmd 窗口并执行 SSH，连接断开后窗口保持（pause）
 		sshCmd := fmt.Sprintf("ssh -p %d %s@localhost", port, sshUser)
 		content := fmt.Sprintf(
-			"echo.\r\n"+
-				"echo  ============================================\r\n"+
-				"echo   HPC SSH 隧道已就绪\r\n"+
-				"echo  ============================================\r\n"+
-				"echo.\r\n"+
-				"echo   节点已通过隧道映射到本地端口 %d\r\n"+
-				"echo.\r\n"+
-				"echo   SSH 连接命令：\r\n"+
-				"echo     %s\r\n"+
-				"echo.\r\n"+
-				"echo   或使用 PuTTY / Xshell 连接：\r\n"+
-				"echo     主机: localhost   端口: %d\r\n"+
-				"echo.\r\n"+
-				"echo  --------------------------------------------\r\n"+
-				"echo   按回车直接连接，关闭此窗口将断开隧道\r\n"+
-				"echo  --------------------------------------------\r\n"+
-				"echo.\r\n"+
-				"set /p _=按回车键直接连接 SSH... \r\n"+
-				"%s\r\n",
-			port, sshCmd, port, sshCmd,
+			"@echo off\r\n"+
+				"chcp 65001 >nul\r\n"+
+				"%s\r\n"+
+				"pause\r\n",
+			sshCmd,
 		)
-		ui.CmdWindow("HPC SSH 隧道已就绪", content)
+		ui.CmdWindow("HPC SSH Tunnel", content)
 	case "darwin":
-		script := fmt.Sprintf(`tell application "Terminal" to do script "echo '=== HPC SSH 隧道已就绪 ===' && echo '连接命令: ssh -p %d %s@localhost' && ssh -p %d %s@localhost"`, port, sshUser, port, sshUser)
+		script := fmt.Sprintf(`tell application "Terminal" to do script "ssh -p %d %s@localhost"`, port, sshUser)
 		exec.Command("osascript", "-e", script).Start() //nolint:errcheck
 	default:
 		addr := fmt.Sprintf("%s@localhost", sshUser)
 		portStr := fmt.Sprintf("%d", port)
 		for _, term := range [][]string{
-			{"gnome-terminal", "--", "bash", "-c", fmt.Sprintf("echo '=== HPC SSH 隧道已就绪 ===' && ssh -p %s %s; read", portStr, addr)},
-			{"xterm", "-e", "bash", "-c", fmt.Sprintf("echo '=== HPC SSH 隧道已就绪 ===' && ssh -p %s %s; read", portStr, addr)},
-			{"konsole", "-e", "bash", "-c", fmt.Sprintf("echo '=== HPC SSH 隧道已就绪 ===' && ssh -p %s %s; read", portStr, addr)},
+			{"gnome-terminal", "--", "bash", "-c", fmt.Sprintf("ssh -p %s %s; read", portStr, addr)},
+			{"xterm", "-e", "bash", "-c", fmt.Sprintf("ssh -p %s %s; read", portStr, addr)},
+			{"konsole", "-e", "bash", "-c", fmt.Sprintf("ssh -p %s %s; read", portStr, addr)},
 		} {
 			if _, err := exec.LookPath(term[0]); err == nil {
 				exec.Command(term[0], term[1:]...).Start() //nolint:errcheck
@@ -406,6 +410,37 @@ func launchSSH(port int, sshUser string) {
 			}
 		}
 		fmt.Printf("\n✅ SSH 隧道已就绪\n连接命令: ssh -p %d %s@localhost\n", port, sshUser)
+	}
+}
+
+// launchXpraClient 隧道就绪后启动 Xpra 客户端
+func launchXpraClient(port int) {
+	switch runtime.GOOS {
+	case "windows":
+		// 尝试启动 Xpra 客户端
+		for _, p := range []string{
+			`C:\Program Files\Xpra\Xpra.exe`,
+			`C:\Program Files (x86)\Xpra\Xpra.exe`,
+		} {
+			if _, err := os.Stat(p); err == nil {
+				exec.Command(p, "attach", fmt.Sprintf("tcp://localhost:%d/", port)).Start() //nolint:errcheck
+				return
+			}
+		}
+		// 没有 Xpra 客户端，弹出提示
+		content := fmt.Sprintf(
+			"@echo off\r\nchcp 65001 >nul\r\necho Xpra 隧道已就绪，本地端口: %d\r\necho 请安装 Xpra 客户端后连接 tcp://localhost:%d/\r\npause\r\n",
+			port, port,
+		)
+		ui.CmdWindow("HPC Xpra Tunnel", content)
+	case "darwin":
+		exec.Command("open", fmt.Sprintf("xpra://tcp/localhost:%d/", port)).Start() //nolint:errcheck
+	default:
+		if p, err := exec.LookPath("xpra"); err == nil {
+			exec.Command(p, "attach", fmt.Sprintf("tcp://localhost:%d/", port)).Start() //nolint:errcheck
+		} else {
+			fmt.Printf("\n✅ Xpra 隧道已就绪，本地端口: %d\n连接命令: xpra attach tcp://localhost:%d/\n", port, port)
+		}
 	}
 }
 
@@ -494,39 +529,30 @@ func runMountDirect(server, token string, port int, mountPoint string) {
 }
 
 // fixURIEncoding 修复 Windows 注册表传递 URI 时对 %xx 做 decode 导致的解析问题
-// 例如 server=http://192.168.5.250:8080 中的 :// 会破坏 url.Parse 的解析
-// 策略：找到 server= 参数，把其值里的 :// 重新 encode
+// 例如 server=http://202.189.51.151:18081 中的 :// 会破坏 url.Parse 的解析
+// 策略：找到每个参数值，如果包含未编码的 ://，用 url.QueryEscape 重新编码
 func fixURIEncoding(uri string) string {
-	// 找到 ?server= 的位置
-	const marker = "?server="
-	const ampMarker = "&server="
-
-	fix := func(s, prefix string) string {
-		idx := strings.Index(s, prefix)
-		if idx < 0 {
-			return s
-		}
-		start := idx + len(prefix)
-		// 找到值的结束位置（下一个 & 或字符串末尾）
-		end := strings.Index(s[start:], "&")
-		var val string
-		if end < 0 {
-			val = s[start:]
-		} else {
-			val = s[start : start+end]
-		}
-		// 如果值里包含未编码的 ://，说明被 decode 过，重新 encode
-		if strings.Contains(val, "://") {
-			encoded := strings.ReplaceAll(val, "://", "%3A%2F%2F")
-			encoded = strings.ReplaceAll(encoded, ":", "%3A")
-			// 但 %3A%2F%2F 里的 %3A 不要再 encode，还原一下
-			encoded = strings.ReplaceAll(encoded, "%25", "%")
-			s = s[:start] + url.QueryEscape(val) + s[start+len(val):]
-		}
-		return s
+	// 找到 ? 开始的 query 部分，逐参数修复
+	qIdx := strings.Index(uri, "?")
+	if qIdx < 0 {
+		return uri
 	}
+	base := uri[:qIdx+1]
+	query := uri[qIdx+1:]
 
-	uri = fix(uri, marker)
-	uri = fix(uri, ampMarker)
-	return uri
+	// 逐个 & 分割参数，对每个值单独处理
+	parts := strings.Split(query, "&")
+	for i, part := range parts {
+		eqIdx := strings.Index(part, "=")
+		if eqIdx < 0 {
+			continue
+		}
+		key := part[:eqIdx]
+		val := part[eqIdx+1:]
+		// 如果值里有未编码的 ://，说明被 Windows shell 做了一次 decode，重新 encode
+		if strings.Contains(val, "://") {
+			parts[i] = key + "=" + url.QueryEscape(val)
+		}
+	}
+	return base + strings.Join(parts, "&")
 }

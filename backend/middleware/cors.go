@@ -22,7 +22,6 @@ func CORSMiddleware() gin.HandlerFunc {
 
 		// ── 1. 基础安全头 ──────────────────────────────────────
 		c.Writer.Header().Set("X-Content-Type-Options", "nosniff")
-		c.Writer.Header().Set("X-Frame-Options", "DENY")
 		c.Writer.Header().Set("X-XSS-Protection", "1; mode=block")
 		c.Writer.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
 
@@ -33,21 +32,45 @@ func CORSMiddleware() gin.HandlerFunc {
 		}
 
 		// ── 3. CSP ────────────────────────────────────────────
-		// script-src 去掉 unsafe-inline，只保留 unsafe-eval（echarts 需要 new Function()）
-		// style-src 保留 unsafe-inline（Vue 运行时动态注入 <style> 标签）
-		// connect-src 允许 ws/wss 用于 WebSocket 隧道/Shell
-		csp := strings.Join([]string{
-			"default-src 'self'",
-			"script-src 'self' 'unsafe-eval'",  // 去掉 unsafe-inline，echarts 需要 unsafe-eval
-			"style-src 'self' 'unsafe-inline'", // Vue 动态样式必须保留 unsafe-inline
-			"img-src 'self' data: blob:",
-			"font-src 'self' data:",
-			"connect-src 'self' ws: wss:",                     // WebSocket 隧道/Shell
-			"frame-ancestors 'none'",                          // 禁止被 iframe 嵌入
-			"base-uri 'self'",
-			"form-action 'self'",
-		}, "; ")
+		// xpra-html 路径需要被 iframe 嵌入，跳过 frame-ancestors 限制
+		isXpraProxy := strings.HasPrefix(c.Request.URL.Path, "/api/desktop/sessions/") &&
+			strings.Contains(c.Request.URL.Path, "/xpra-html")
+
+		var csp string
+		if isXpraProxy {
+			// xpra 内置 HTML5 客户端页面：允许被同源 iframe 嵌入，放宽限制
+			csp = strings.Join([]string{
+				"default-src 'self' blob: data:",
+				"script-src 'self' 'unsafe-eval' 'unsafe-inline'",
+				"style-src 'self' 'unsafe-inline'",
+				"img-src * data: blob:",
+				"font-src 'self' data:",
+				"media-src 'self' blob:",
+				"connect-src 'self' ws: wss:",
+				"frame-ancestors 'self'",
+			}, "; ")
+		} else {
+			csp = strings.Join([]string{
+				"default-src 'self'",
+				"script-src 'self' 'unsafe-eval' 'unsafe-inline'",
+				"style-src 'self' 'unsafe-inline'",
+				"img-src 'self' data: blob:",
+				"font-src 'self' data:",
+				"media-src 'self' blob:",
+				"connect-src 'self' ws: wss:",
+				"frame-src 'self'",
+				"frame-ancestors 'none'",
+				"base-uri 'self'",
+				"form-action 'self'",
+			}, "; ")
+		}
 		c.Writer.Header().Set("Content-Security-Policy", csp)
+		// xpra 代理页面也需要允许被 iframe 嵌入
+		if isXpraProxy {
+			c.Writer.Header().Set("X-Frame-Options", "SAMEORIGIN")
+		} else {
+			c.Writer.Header().Set("X-Frame-Options", "DENY")
+		}
 
 		// ── 4. CORS ───────────────────────────────────────────
 		if origin != "" {

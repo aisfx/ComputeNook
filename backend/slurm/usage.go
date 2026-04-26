@@ -208,14 +208,14 @@ func jobToRecord(job map[string]interface{}) UsageRecord {
 		}
 	}
 
-	// elapsed: time.elapsed（秒）
+	// elapsed: time.elapsed（秒）—— v0.0.43 直接是数字
 	elapsed := extractNestedInt64(job, "time", "elapsed")
 	if elapsed == 0 {
 		elapsed = extractInt64(job, "elapsed_time")
 	}
 	record.ElapsedSecs = elapsed
 
-	// start/end time
+	// start/end time —— v0.0.43 直接是数字
 	startTs := extractNestedInt64(job, "time", "start")
 	if startTs == 0 {
 		startTs = extractInt64(job, "start_time")
@@ -232,10 +232,30 @@ func jobToRecord(job map[string]interface{}) UsageRecord {
 		record.EndTime = time.Unix(endTs, 0)
 	}
 
-	// cpu time: time.total（秒）
-	cpuTime := extractNestedInt64(job, "time", "total")
+	// cpu time: v0.0.43 中 time.total 是 {"seconds":N,"microseconds":N} 结构
+	cpuTime := extractNestedInt64(job, "time", "total", "seconds")
+	if cpuTime == 0 {
+		// 兼容直接数字的旧版本
+		cpuTime = extractNestedInt64(job, "time", "total")
+	}
 	if cpuTime == 0 {
 		cpuTime = extractInt64(job, "cpu_time")
+	}
+	// total.seconds 为 0 时用 elapsed * cpus 估算
+	if cpuTime == 0 && elapsed > 0 {
+		// 从 TRES 里取 cpu count 来计算
+		if tresRaw, ok := job["tres"]; ok {
+			if tresMap, ok := tresRaw.(map[string]interface{}); ok {
+				if alloc, ok := tresMap["allocated"]; ok {
+					for _, item := range parseTRESList(alloc) {
+						if item.Type == "cpu" {
+							cpuTime = elapsed * item.Count
+							break
+						}
+					}
+				}
+			}
+		}
 	}
 	record.CPUTime = cpuTime
 	record.CPUHours = float64(cpuTime) / 3600.0
@@ -492,34 +512,35 @@ func (c *Client) GetUserUsageByAccount(user, account string, startTime, endTime 
 	}, nil
 }
 
+// resolveUserParam 将用户名转换为 UID 字符串供 slurmdbd 查询使用
+// 由调用方（handler）负责传入已解析的 UID 或用户名
+func resolveUserParam(username string) string {
+	return username
+}
+
 // GetUserUsage 获取用户机时使用情况
+// user 参数应传入 UID 字符串（由 handler 层通过 ResolveUID 解析）
 func (c *Client) GetUserUsage(user string, startTime, endTime time.Time) ([]UsageRecord, error) {
+	userParam := user
 	params := fmt.Sprintf("?users=%s&start_time=%d&end_time=%d",
-		user, startTime.Unix(), endTime.Unix())
+		userParam, startTime.Unix(), endTime.Unix())
 
 	path := c.buildAPIPath("/jobs") + params
 	respBody, err := c.doRequest("GET", path, nil)
 	if err != nil {
-		// 404 / not found 视为无记录，返回空列表
-		errStr := err.Error()
-		if contains(errStr, "not found") || contains(errStr, "404") || contains(errStr, "No jobs") {
-			return []UsageRecord{}, nil
-		}
-		return nil, err
+		// slurmdbd 未配置或不可用时，返回空列表而不是报错
+		return []UsageRecord{}, nil
 	}
 
 	var response UsageResponse
 	if err := json.Unmarshal(respBody, &response); err != nil {
-		return nil, fmt.Errorf("failed to parse usage response: %w", err)
+		return []UsageRecord{}, nil
 	}
 
 	// Slurm 有时把 "not found" 放在 errors 里，视为无记录
 	if len(response.Errors) > 0 {
-		errMsg := response.Errors[0].Error
-		if contains(errMsg, "not found") || contains(errMsg, "No jobs") || contains(errMsg, "Invalid user") {
-			return []UsageRecord{}, nil
-		}
-		return nil, fmt.Errorf("slurm API error: %s", errMsg)
+		// 任何 slurmdbd 错误都视为无记录，不向上抛出
+		return []UsageRecord{}, nil
 	}
 
 	fmt.Printf("[USAGE-API] GetUserUsage returned %d jobs for user=%s start=%d end=%d\n",
@@ -541,24 +562,16 @@ func (c *Client) GetAllUsersUsage(startTime, endTime time.Time) ([]UsageRecord, 
 	path := c.buildAPIPath("/jobs") + params
 	respBody, err := c.doRequest("GET", path, nil)
 	if err != nil {
-		errStr := err.Error()
-		if contains(errStr, "not found") || contains(errStr, "404") || contains(errStr, "No jobs") {
-			return []UsageRecord{}, nil
-		}
-		return nil, err
+		return []UsageRecord{}, nil
 	}
 
 	var response UsageResponse
 	if err := json.Unmarshal(respBody, &response); err != nil {
-		return nil, fmt.Errorf("failed to parse usage response: %w", err)
+		return []UsageRecord{}, nil
 	}
 
 	if len(response.Errors) > 0 {
-		errMsg := response.Errors[0].Error
-		if contains(errMsg, "not found") || contains(errMsg, "No jobs") {
-			return []UsageRecord{}, nil
-		}
-		return nil, fmt.Errorf("slurm API error: %s", errMsg)
+		return []UsageRecord{}, nil
 	}
 
 	fmt.Printf("[USAGE-API] GetAllUsersUsage returned %d jobs start=%d end=%d\n",
@@ -576,27 +589,22 @@ func (c *Client) GetAllUsersUsage(startTime, endTime time.Time) ([]UsageRecord, 
 
 // GetAccountUsage 获取账户机时使用情况
 func (c *Client) GetAccountUsage(account string, startTime, endTime time.Time) ([]UsageRecord, error) {
-	// 构建查询参数
 	params := fmt.Sprintf("?accounts=%s&start_time=%d&end_time=%d",
 		account, startTime.Unix(), endTime.Unix())
 
 	path := c.buildAPIPath("/jobs") + params
 	respBody, err := c.doRequest("GET", path, nil)
 	if err != nil {
-		return nil, err
+		return []UsageRecord{}, nil
 	}
 
 	var response UsageResponse
 	if err := json.Unmarshal(respBody, &response); err != nil {
-		return nil, fmt.Errorf("failed to parse usage response: %w", err)
+		return []UsageRecord{}, nil
 	}
 
 	if len(response.Errors) > 0 {
-		errMsg := response.Errors[0].Error
-		if contains(errMsg, "not found") || contains(errMsg, "No jobs") {
-			return []UsageRecord{}, nil
-		}
-		return nil, fmt.Errorf("slurm API error: %s", errMsg)
+		return []UsageRecord{}, nil
 	}
 
 	// 转换为 UsageRecord

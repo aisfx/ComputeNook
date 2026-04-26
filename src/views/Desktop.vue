@@ -132,6 +132,17 @@
               <input v-model.number="createForm.duration" type="number" min="1" max="24" style="width:120px" />
             </div>
 
+            <div class="form-group">
+              <label>GPU 数量</label>
+              <select v-model.number="createForm.gpus" style="width:120px">
+                <option :value="0">不使用</option>
+                <option :value="1">1 卡</option>
+                <option :value="2">2 卡</option>
+                <option :value="4">4 卡</option>
+                <option :value="8">8 卡</option>
+              </select>
+            </div>
+
             <div class="form-actions">
               <button type="button" class="btn-secondary" @click="showCreateModal = false">取消</button>
               <button type="submit" class="btn-primary" :disabled="submitting">{{ submitting ? '创建中...' : '创建' }}</button>
@@ -376,7 +387,7 @@ const builtinApps = [
 
 const createForm = ref({
   name: '', mode: 'desktop', desktopEnv: 'xfce4', appCommand: '',
-  partition: '', duration: 4, presetIndex: 1,
+  partition: '', duration: 4, presetIndex: 1, gpus: 0,
 })
 
 const statusLabel = (s: string) => ({ stopped: '未启动', pending: '排队中', running: '运行中', failed: '失败' }[s] || s)
@@ -450,11 +461,12 @@ const createDesktop = async () => {
       duration: createForm.value.duration,
       cpus: preset?.cpus,
       memory: preset?.memory,
+      gpus: createForm.value.gpus,
       partition: createForm.value.partition,
     })
     sessions.value.unshift(data)
     showCreateModal.value = false
-    createForm.value = { name: '', mode: 'desktop', desktopEnv: 'xfce4', appCommand: '', partition: partitions.value[0]?.name || '', duration: 4, presetIndex: 1 }
+    createForm.value = { name: '', mode: 'desktop', desktopEnv: 'xfce4', appCommand: '', partition: partitions.value[0]?.name || '', duration: 4, presetIndex: 1, gpus: 0 }
   } catch (e: any) { alert('创建失败: ' + (e.response?.data?.error || e.message)) }
   finally { submitting.value = false }
 }
@@ -519,16 +531,19 @@ const openNoVNC = () => {
   showXpraModal.value = true
 }
 
-// 端口转发：通过 hpcc://ssh 让 hpc-client 把计算节点 Xpra 端口映射到本地
+// 端口转发：通过 hpcc://xpra 让 hpc-client 经后端 WS 代理建立本地隧道
 const launchTunnel = () => {
   if (!selectedSession.value) return
   const token = localStorage.getItem('token') || sessionStorage.getItem('token') || ''
-  const node = selectedSession.value.address || ''
-  const remotePort = selectedSession.value.xpraPort || selectedSession.value.vncPort || 14501
+  const sessionId = selectedSession.value.id
   const localPort = localVncPort.value
-  // mode=forward 告诉 hpc-client 做端口转发而不是交互式 SSH
-  const uri = `hpcc://ssh?server=${encodeURIComponent(location.origin)}&token=${encodeURIComponent(token)}&host=${encodeURIComponent(node)}&remote_port=${remotePort}&local_port=${localPort}&mode=forward`
-  window.location.href = uri
+  const uri = `hpcc://xpra?server=${encodeURIComponent(location.origin)}&token=${encodeURIComponent(token)}&session=${sessionId}&port=${localPort}`
+  const a = document.createElement('a')
+  a.href = uri
+  a.style.display = 'none'
+  document.body.appendChild(a)
+  a.click()
+  setTimeout(() => document.body.removeChild(a), 1000)
 }
 
 // 启动本地 Xpra 客户端连接到隧道本地端口

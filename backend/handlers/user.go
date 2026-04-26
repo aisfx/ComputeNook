@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"hpc-backend/ldap"
 	"hpc-backend/models"
+	"hpc-backend/slurm"
 )
 
 // validatePasswordStrength 校验密码复杂度：至少8位，含大写、小写、数字
@@ -611,6 +612,14 @@ func GetMyResources(c *gin.Context) {
 	allQoS, err := client.GetQoSList()
 	qosLimits := make([]map[string]interface{}, 0)
 	if err == nil {
+		// 预先查一次用户的历史作业，避免每个 QoS 重复查询
+		var allUserRecords []slurm.UsageRecord
+		userParam := ResolveUID(username.(string))
+		startTime := time.Now().AddDate(-1, 0, 0) // 近一年
+		endTime := time.Now()
+		allUserRecords, _ = client.GetUserUsage(userParam, startTime, endTime)
+		fmt.Printf("[BILLING] user=%s uid=%s total_records=%d\n", username, userParam, len(allUserRecords))
+
 		for _, q := range allQoS {
 			if !qosNames[q.Name] {
 				continue
@@ -629,19 +638,22 @@ func GetMyResources(c *gin.Context) {
 				fmt.Sscanf(q.GrpTRESMins, "%d", &billingLimit)
 			}
 
-			// 查询该用户在此 QoS 关联账户下的已使用 billing-minutes
+			// 统计该 QoS 下的已使用 billing-minutes（按 QoS 过滤作业）
 			var usedBillingMins float64
 			if billingLimit > 0 {
-				startTime := time.Now().AddDate(-1, 0, 0) // 近一年
-				endTime := time.Now()
-				records, uerr := client.GetUserUsage(username.(string), startTime, endTime)
-				if uerr == nil {
-					for _, r := range records {
-						usedBillingMins += r.BillingMins // 直接用已计算好的 BillingMins
+				for _, r := range allUserRecords {
+					if r.QoS == q.Name {
+						usedBillingMins += r.BillingMins
 					}
 				}
-				fmt.Printf("[BILLING] user=%s qos=%s limit=%d used=%.4f mins\n",
-					username, q.Name, billingLimit, usedBillingMins)
+				// 如果按 QoS 过滤后为 0，退回到统计所有作业（slurmdb 可能不返回 QoS 字段）
+				if usedBillingMins == 0 {
+					for _, r := range allUserRecords {
+						usedBillingMins += r.BillingMins
+					}
+				}
+				fmt.Printf("[BILLING] user=%s uid=%s qos=%s limit=%d used=%.4f mins\n",
+					username, userParam, q.Name, billingLimit, usedBillingMins)
 			}
 
 			item := map[string]interface{}{

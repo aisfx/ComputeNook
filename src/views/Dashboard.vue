@@ -454,7 +454,7 @@
                     <td>{{ formatElapsed(r.elapsed_secs) }}</td>
                     <td>{{ (r.cpu_hours || 0).toFixed(2) }}</td>
                     <td>{{ (r.gpu_hours || 0).toFixed(2) }}</td>
-                    <td><strong style="color:#667eea">{{ (r.billing_mins || r.billing_hours * 60 || 0).toFixed(1) }}</strong></td>
+                    <td><strong style="color:#667eea">{{ ((r.billing_mins || 0) || (r.billing_hours || 0) * 60 || (r.cpu_hours || 0) * 60).toFixed(1) }}</strong></td>
                   </tr>
                   <tr v-if="billingValidRecords.length === 0">
                     <td colspan="11" class="empty-cell">暂无消费记录</td>
@@ -623,8 +623,14 @@ const loadJobHistory = async () => {
     const token = localStorage.getItem('token') || sessionStorage.getItem('token')
     const username = currentUser.value?.username || ''
     let url = `${getApiBase()}/api/jobs?page=1&page_size=500&user=${encodeURIComponent(username)}`
-    if (jobStartDate.value) url += `&start_time=${jobStartDate.value}`
-    if (jobEndDate.value) url += `&end_time=${jobEndDate.value}`
+    // 后端需要 Unix 时间戳，把日期字符串转换
+    if (jobStartDate.value) {
+      url += `&start_time=${Math.floor(new Date(jobStartDate.value).getTime() / 1000)}`
+    }
+    if (jobEndDate.value) {
+      // 结束日期取当天末尾 23:59:59
+      url += `&end_time=${Math.floor(new Date(jobEndDate.value + 'T23:59:59').getTime() / 1000)}`
+    }
     const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
     const result = await res.json()
     jobHistoryList.value = result.data || []
@@ -662,10 +668,16 @@ const billingEndDate = ref('')
 
 // 过滤掉 billing=0 的记录
 const billingValidRecords = computed(() =>
-  billingRecords.value.filter(r => (r.billing_mins || r.billing_hours * 60 || 0) > 0)
+  billingRecords.value.filter(r => {
+    const mins = (r.billing_mins || 0) + (r.billing_hours || 0) * 60 + (r.cpu_hours || 0) * 60
+    return mins > 0
+  })
 )
 const billingTotalMins = computed(() =>
-  billingValidRecords.value.reduce((s, r) => s + (r.billing_mins || (r.billing_hours || 0) * 60), 0)
+  billingValidRecords.value.reduce((s, r) => {
+    const mins = (r.billing_mins || 0) || (r.billing_hours || 0) * 60 || (r.cpu_hours || 0) * 60
+    return s + mins
+  }, 0)
 )
 const billingCpuHours = computed(() =>
   billingValidRecords.value.reduce((s, r) => s + (r.cpu_hours || 0), 0)
@@ -675,7 +687,7 @@ const billingGpuHours = computed(() =>
 )
 
 watch(showBillingHistory, async (v) => {
-  if (v && billingRecords.value.length === 0) await loadBillingHistory()
+  if (v) await loadBillingHistory()
 })
 
 const loadBillingHistory = async () => {
@@ -683,12 +695,19 @@ const loadBillingHistory = async () => {
   try {
     const user = currentUser.value?.username
     if (!user) return
-    const start = billingStartDate.value || new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0]
+    const start = billingStartDate.value || new Date(Date.now() - 365 * 86400000).toISOString().split('T')[0]
     const end = billingEndDate.value || new Date().toISOString().split('T')[0]
-    const res = await usageAPI.getUserUsage(user, start, end)
+    // end_time 取当天末尾，避免今天的作业被截断
+    const res = await usageAPI.getUserUsage(user, start, end + 'T23:59:59')
+    console.log('[billing] raw response:', res)
+    console.log('[billing] res.data:', res.data)
+    console.log('[billing] records count:', (res.data || []).length)
+    if ((res.data || []).length > 0) {
+      console.log('[billing] first record:', res.data[0])
+    }
     billingRecords.value = res.data || []
   } catch (e) {
-    console.error(e)
+    console.error('[billing] error:', e)
   } finally {
     billingLoading.value = false
   }
@@ -818,17 +837,20 @@ const loadJobStats = async () => {
     const token = localStorage.getItem('token') || sessionStorage.getItem('token')
     if (!token) return
     const username = currentUser.value?.username || ''
-    const res = await fetch(`${getApiBase()}/api/jobs?page=1&page_size=1000&user=${encodeURIComponent(username)}`, { headers: { Authorization: `Bearer ${token}` } })
+    // page_size=5000 + no time filter → get all jobs for stats
+    const res = await fetch(
+      `${getApiBase()}/api/jobs?page=1&page_size=5000&user=${encodeURIComponent(username)}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    )
     if (!res.ok) return
-    const { data } = await res.json()
-    const jobs = data || []
+    const result = await res.json()
+    const jobs = result.data || []
     jobStats.value = {
-      running: jobs.filter((j: any) => j.job_state === 'RUNNING').length,
-      pending: jobs.filter((j: any) => j.job_state === 'PENDING').length,
+      running:   jobs.filter((j: any) => j.job_state === 'RUNNING').length,
+      pending:   jobs.filter((j: any) => j.job_state === 'PENDING').length,
       completed: jobs.filter((j: any) => j.job_state === 'COMPLETED').length,
-      failed: jobs.filter((j: any) => j.job_state === 'FAILED').length
+      failed:    jobs.filter((j: any) => ['FAILED','CANCELLED','TIMEOUT','NODE_FAIL'].includes(j.job_state)).length,
     }
-    // 提取运行中的作业，按提交时间倒序
     runningJobs.value = jobs
       .filter((j: any) => j.job_state === 'RUNNING')
       .sort((a: any, b: any) => (b.submit_time || 0) - (a.submit_time || 0))
@@ -890,7 +912,7 @@ onMounted(() => {
   currentUser.value = getUser()
   const now = new Date()
   billingEndDate.value = now.toISOString().split('T')[0]
-  billingStartDate.value = new Date(now.getTime() - 30 * 86400000).toISOString().split('T')[0]
+  billingStartDate.value = new Date(now.getTime() - 365 * 86400000).toISOString().split('T')[0]
   loadDashboardStats()
   loadNodes()
   loadJobStats()

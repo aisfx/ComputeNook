@@ -178,20 +178,13 @@ func (c *Client) GetJobs(username string, startTime, endTime int64) ([]Job, erro
 	}
 	
 	// 2. 获取历史作业（使用 /slurmdb/ API）
-	// 注意：如果slurmdbd未配置或认证失败，这个请求会失败，但不影响返回运行中的作业
 	historyPath := fmt.Sprintf("/slurmdb/%s/jobs", c.apiVersion)
-	
-	// 添加查询参数
+
 	hasParams := false
-	
-	// 添加用户过滤
+
 	if username != "" {
-		if hasParams {
-			historyPath += "&"
-		} else {
-			historyPath += "?"
-			hasParams = true
-		}
+		historyPath += "?"
+		hasParams = true
 		historyPath += fmt.Sprintf("users=%s", username)
 	}
 	
@@ -548,12 +541,10 @@ func (c *Client) SubmitJob(params JobSubmitParams) (int64, error) {
 		"tasks":     1, // 默认1个任务
 	}
 	
-	// 用户名和账户（必需）
+	// 用户名（必需），account 不设置让 Slurm 使用用户默认账户
 	if params.Username != "" {
 		job["user_name"] = params.Username
-		job["account"] = params.Username // 使用用户名作为account
 		logger.Info("✓ User: %s", params.Username)
-		logger.Info("✓ Account: %s", params.Username)
 	} else {
 		logger.Error("✗ Username is empty!")
 	}
@@ -601,13 +592,12 @@ func (c *Client) SubmitJob(params JobSubmitParams) (int64, error) {
 		logger.Info("✓ Time limit: %d minutes", params.TimeLimit*60)
 	}
 	
-	// QoS - 如果没有指定，使用用户名作为QoS
+	// QoS - 只在明确指定时才设置，否则让 Slurm 使用分区默认 QoS
 	if params.QoS != "" {
 		job["qos"] = params.QoS
 		logger.Info("✓ QoS: %s", params.QoS)
-	} else if params.Username != "" {
-		job["qos"] = params.Username
-		logger.Info("✓ QoS: %s (using username as default)", params.Username)
+	} else {
+		logger.Info("ℹ QoS: not set, using partition default")
 	}
 	
 	// 不设置输出和错误文件路径，让Slurm使用默认值

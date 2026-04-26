@@ -132,7 +132,7 @@
               <strong>启动 hpc-client 建立隧道</strong>
               <p style="font-size:0.82rem;color:#6b7280;margin:4px 0 8px">点击下方按钮，hpc-client 将自动把节点 SSH 端口映射到本地 <code>{{ tunnelLocalPort }}</code></p>
               <button class="btn-primary" style="width:auto;padding:6px 16px" @click="doLaunchTunnel">🔌 启动隧道</button>
-              <p style="font-size:0.75rem;color:#9ca3af;margin-top:6px">未安装 hpc-client？<a href="/download" target="_blank" style="color:#6366f1">点此下载</a></p>
+              <p style="font-size:0.75rem;color:#9ca3af;margin-top:6px">未安装 hpc-client？<a href="#" @click.prevent="$router.push('/download')" style="color:#6366f1">点此下载</a></p>
             </div>
           </div>
           <div class="tunnel-step">
@@ -168,7 +168,7 @@
           <!-- 自动生成 -->
           <div v-if="keyTab === 'generate'">
             <p style="color:#555;font-size:0.9rem;margin-bottom:1rem">
-              平台自动生成 ED25519 密钥对，私钥保存在服务端，公钥需要添加到计算节点。
+              平台自动生成 ED25519 密钥对，私钥保存在服务端，公钥自动部署到计算节点。
             </p>
             <button class="btn-primary" @click="generateKey" :disabled="generatingKey" style="width:100%;margin-bottom:1rem">
               {{ generatingKey ? '生成中...' : '🔐 一键生成密钥对' }}
@@ -176,13 +176,10 @@
 
             <div v-if="generatedPubKey" class="pubkey-box">
               <div class="pubkey-header">
-                <span>公钥（添加到计算节点 ~/.ssh/authorized_keys）</span>
+                <span>公钥（已自动部署到节点）</span>
                 <button class="btn-copy-small" @click="copyPubKey">复制</button>
               </div>
               <pre class="pubkey-content">{{ generatedPubKey }}</pre>
-              <div class="pubkey-hint">
-                在计算节点执行：<code>echo "{{ generatedPubKey.trim() }}" >> ~/.ssh/authorized_keys</code>
-              </div>
             </div>
           </div>
 
@@ -195,6 +192,46 @@
               <p class="upload-hint">支持 OpenSSH / PEM 格式</p>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 部署公钥弹窗 -->
+    <div v-if="showDeployModal" class="modal-overlay" @click.self="showDeployModal = false">
+      <div class="modal-content" @click.stop style="max-width:460px">
+        <div class="modal-header">
+          <h4>🚀 部署公钥到节点</h4>
+          <button class="close-btn" @click="showDeployModal = false">×</button>
+        </div>
+        <div class="modal-body">
+          <p style="color:#555;font-size:0.875rem;margin-bottom:1rem">
+            输入节点的 SSH 密码，系统将自动把公钥写入 <code>~/.ssh/authorized_keys</code>，之后无需密码即可连接。
+          </p>
+          <div v-if="deployError" style="background:#fee2e2;color:#991b1b;border:1px solid #ef4444;border-radius:8px;padding:0.75rem;margin-bottom:1rem;font-size:0.875rem">{{ deployError }}</div>
+          <div v-if="deploySuccess" style="background:#d1fae5;color:#065f46;border:1px solid #10b981;border-radius:8px;padding:0.75rem;margin-bottom:1rem;font-size:0.875rem">✅ {{ deploySuccess }}</div>
+          <div class="form-group" style="margin-bottom:1rem">
+            <label style="font-weight:600;color:#374151;display:block;margin-bottom:0.4rem">目标节点</label>
+            <select v-model="deployTargetNode" style="width:100%;padding:0.6rem 0.75rem;border:1px solid #d1d5db;border-radius:8px;font-size:0.9rem">
+              <option v-for="n in nodes" :key="n.name" :value="n.name">{{ n.name }} ({{ n.host }})</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label style="font-weight:600;color:#374151;display:block;margin-bottom:0.4rem">SSH 密码</label>
+            <input
+              type="password"
+              v-model="deployPassword"
+              placeholder="输入该节点的 SSH 密码"
+              style="width:100%;padding:0.6rem 0.75rem;border:1px solid #d1d5db;border-radius:8px;font-size:0.9rem;box-sizing:border-box"
+              @keyup.enter="deployPublicKey(deployTargetNode)"
+            />
+            <p style="font-size:0.78rem;color:#9ca3af;margin-top:0.3rem">密码仅用于本次部署，不会被保存</p>
+          </div>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:0.75rem;padding:1rem 1.5rem;border-top:1px solid #e5e7eb">
+          <button class="btn-secondary" @click="showDeployModal = false">关闭</button>
+          <button class="btn-primary" @click="deployPublicKey(deployTargetNode)" :disabled="deploying || !deployPassword || !deployTargetNode">
+            {{ deploying ? '部署中...' : '🚀 部署公钥' }}
+          </button>
         </div>
       </div>
     </div>
@@ -795,26 +832,55 @@ const tunnelNode = ref<any>(null)
 const tunnelLocalPort = ref(12222)
 const tunnelUser = ref('')
 
-// 点击隧道按钮：显示信息弹窗，不直接拉起 hpcc://
-const launchSSHTunnel = (node: any) => {
-  tunnelNode.value = node
-  tunnelUser.value = currentUsername.value || ''
-  tunnelLocalPort.value = 12222
-  showTunnelInfo.value = true
+// 通过隐藏 <a> 触发自定义协议，兼容浏览器弹出"打开应用"对话框
+const triggerProtocolUri = (uri: string) => {
+  const a = document.createElement('a')
+  a.href = uri
+  a.style.display = 'none'
+  document.body.appendChild(a)
+  a.click()
+  setTimeout(() => document.body.removeChild(a), 1000)
 }
 
-// 弹窗里点"启动隧道"才真正拉起 hpcc://
+// 点击隧道按钮：直接拉起 hpcc:// 协议
+const launchSSHTunnel = (node: any) => {
+  const token = localStorage.getItem('token') || sessionStorage.getItem('token') || ''
+  const user = currentUsername.value || ''
+  const localPort = 12222
+  const sshPort = node.port || 22  // 节点实际 SSH 端口
+  const uri = `hpcc://ssh?server=${encodeURIComponent(location.origin)}&token=${encodeURIComponent(token)}&host=${encodeURIComponent(node.host || node.name)}&port=${localPort}&ssh-port=${sshPort}&user=${encodeURIComponent(user)}`
+  triggerProtocolUri(uri)
+}
+
+// 保留弹窗里的启动函数（兼容弹窗内调用）
 const doLaunchTunnel = () => {
   const token = localStorage.getItem('token') || sessionStorage.getItem('token') || ''
   const node = tunnelNode.value
   if (!node) return
-  const uri = `hpcc://ssh?server=${encodeURIComponent(location.origin)}&token=${encodeURIComponent(token)}&host=${encodeURIComponent(node.host || node.name)}&port=${tunnelLocalPort.value}&user=${encodeURIComponent(tunnelUser.value)}`
-  window.location.href = uri
+  const sshPort = node.port || 22
+  const uri = `hpcc://ssh?server=${encodeURIComponent(location.origin)}&token=${encodeURIComponent(token)}&host=${encodeURIComponent(node.host || node.name)}&port=${tunnelLocalPort.value}&ssh-port=${sshPort}&user=${encodeURIComponent(tunnelUser.value)}`
+  triggerProtocolUri(uri)
 }
 
 const copySshCmd = () => {
   const cmd = `ssh -p ${tunnelLocalPort.value} ${tunnelUser.value}@localhost`
-  navigator.clipboard?.writeText(cmd).then(() => alert('命令已复制')).catch(() => alert(cmd))
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(cmd).then(() => notification.success('命令已复制')).catch(() => fallbackCopy(cmd))
+  } else {
+    fallbackCopy(cmd)
+  }
+}
+
+const fallbackCopy = (text: string) => {
+  const ta = document.createElement('textarea')
+  ta.value = text
+  ta.style.position = 'fixed'
+  ta.style.opacity = '0'
+  document.body.appendChild(ta)
+  ta.select()
+  document.execCommand('copy')
+  document.body.removeChild(ta)
+  notification.success('命令已复制')
 }
 
 // 选择节点
@@ -1095,8 +1161,21 @@ const handleWebSocketMessage = (message: any) => {
       break
       
     case 'error':
-      notification.error(message.data)
-      connectionStatus.value = 'error'
+      // 如果是 SSH 认证失败，自动提示用密码重试
+      if (typeof message.data === 'string' &&
+          (message.data.includes('unable to authenticate') ||
+           message.data.includes('no supported methods') ||
+           message.data.includes('handshake failed'))) {
+        notification.warning('密钥认证失败，请使用密码连接')
+        connectionStatus.value = 'disconnected'
+        connected.value = false
+        // 自动弹出密码输入框
+        showPasswordInput.value = true
+        nextTick(() => { passwordInput.value?.focus() })
+      } else {
+        notification.error(message.data)
+        connectionStatus.value = 'error'
+      }
       break
   }
 }
@@ -1220,6 +1299,12 @@ const generateKey = async () => {
     generatedPubKey.value = data.public_key
     hasPrivateKey.value = true
     notification.success('密钥生成成功')
+    // 自动弹出部署密码框
+    showDeployModal.value = true
+    deployTargetNode.value = nodes.value[0]?.name || ''
+    deployPassword.value = ''
+    deployError.value = ''
+    deploySuccess.value = ''
   } catch (err: any) {
     notification.error('生成失败: ' + err.message)
   } finally {
@@ -1228,8 +1313,48 @@ const generateKey = async () => {
 }
 
 const copyPubKey = () => {
-  navigator.clipboard.writeText(generatedPubKey.value)
-  notification.success('公钥已复制')
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(generatedPubKey.value).then(() => notification.success('公钥已复制')).catch(() => fallbackCopy(generatedPubKey.value))
+  } else {
+    fallbackCopy(generatedPubKey.value)
+  }
+}
+
+// 部署公钥到节点
+const showDeployModal = ref(false)
+const deployTargetNode = ref('')
+const deployPassword = ref('')
+const deployError = ref('')
+const deploySuccess = ref('')
+const deploying = ref(false)
+
+const deployPublicKey = async (nodeName: string) => {
+  if (!deployPassword.value) {
+    deployError.value = '请输入密码'
+    return
+  }
+  deploying.value = true
+  deployError.value = ''
+  deploySuccess.value = ''
+  try {
+    const res = await fetch('/api/webshell/keys/deploy', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token') || sessionStorage.getItem('token')}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ node_name: nodeName, password: deployPassword.value })
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error)
+    deploySuccess.value = data.message
+    deployPassword.value = ''
+    setTimeout(() => { showDeployModal.value = false }, 1500)
+  } catch (err: any) {
+    deployError.value = err.message
+  } finally {
+    deploying.value = false
+  }
 }
 </script>
 

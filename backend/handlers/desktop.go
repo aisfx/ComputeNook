@@ -28,6 +28,7 @@ type DesktopSession struct {
 	Duration    int    `json:"duration,omitempty"`
 	CPUs        int    `json:"cpus,omitempty"`
 	Memory      int    `json:"memory,omitempty"` // GB
+	GPUs        int    `json:"gpus,omitempty"`
 	Partition   string `json:"partition,omitempty"`
 	CreateTime  string `json:"createTime"`
 	Status      string `json:"status"`
@@ -193,6 +194,7 @@ func CreateDesktopSession(c *gin.Context) {
 		NodeType   string `json:"nodeType"`
 		CPUs       int    `json:"cpus"`
 		Memory     int    `json:"memory"`
+		GPUs       int    `json:"gpus"`
 		Partition  string `json:"partition"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -240,6 +242,7 @@ func CreateDesktopSession(c *gin.Context) {
 		NodeType:   req.NodeType,
 		CPUs:       req.CPUs,
 		Memory:     req.Memory,
+		GPUs:       req.GPUs,
 		Partition:  req.Partition,
 		CreateTime: time.Now().Format("2006-01-02T15:04:05"),
 		Status:     "stopped",
@@ -357,6 +360,7 @@ func StartDesktopSession(c *gin.Context) {
 		Nodes:     1,
 		CPUs:      cpus,
 		Memory:    memory,
+		GPUs:      session.GPUs,
 		TimeLimit: timeLimit,
 		WorkDir:   fmt.Sprintf("%s/%s", homeBase, username.(string)),
 		Output:    fmt.Sprintf("%s/%s/.desktop/%d.out", homeBase, username.(string), session.ID),
