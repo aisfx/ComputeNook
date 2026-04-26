@@ -509,39 +509,66 @@ const FORBIDDEN_RULES: Array<{
 ]
 
 // 彩蛋触发词
-const EASTER_EGGS: Array<{ keywords: string[]; reply: string }> = [
+interface EasterEgg {
+  keywords: string[]
+  reply: string
+  msgType?: string
+}
+
+const EASTER_EGGS: EasterEgg[] = [
   {
-    keywords: ['你是谁', '你叫什么', '自我介绍', '介绍一下自己'],
-    reply: '俺？\n\n俺乃**齐天大圣孙悟空**是也！🐒\n\n花果山水帘洞出身，大闹天宫出名，取经路上成佛……\n\n现在嘛，被安排在这个 HPC 平台里给各位科研大佬打下手。\n\n俺的本事：\n- 🧮 并行计算（MPI/OpenMP）\n- 🐍 科学软件（Python/R/MATLAB）\n- 📋 作业脚本编写\n- 🔧 编程环境配置\n\n有什么计算问题，尽管问！',
+    keywords: ['你是谁', '你叫什么', '自我介绍', '介绍一下自己', '你是什么'],
+    msgType: 'intro',
+    reply: `🐒✨ 俺乃——**齐天大圣孙悟空**是也！✨🐒
+
+花果山水帘洞出身，大闹天宫出名，五行山下压了五百年，取经路上打遍妖魔……
+
+如今奉命镇守此 **HPC 高性能计算平台**，专为各路科研大佬排忧解难！
+
+━━━━━━━━━━━━━━━━━━
+🧮 **并行计算**　MPI / OpenMP / CUDA
+🐍 **科学软件**　Python / R / MATLAB / GROMACS / VASP
+📋 **作业调度**　Slurm 脚本编写 / 队列管理
+🔧 **环境配置**　module / conda / 编译环境
+🔍 **故障诊断**　报错分析 / 日志解读
+━━━━━━━━━━━━━━━━━━
+
+有什么计算难题，尽管问俺老孙！
+俺的火眼金睛，专治各种疑难杂症！💪`,
   },
   {
     keywords: ['你好', 'hello', 'hi', '嗨', '在吗', '在不在'],
-    reply: '俺在！俺在！🐒\n\n齐天大圣随时待命！\n\n有什么 HPC 计算问题，尽管说！',
+    msgType: 'welcome',
+    reply: '俺在！俺在！🐒\n\n**齐天大圣**随时待命！\n\n有什么 HPC 计算问题，尽管说！',
   },
   {
     keywords: ['无聊', '没事干', '陪我聊天', '聊聊天'],
+    msgType: 'welcome',
     reply: '哈哈，俺老孙当年在花果山也是整天无所事事……\n\n后来大闹天宫，被压五行山，取经路上打妖怪……\n\n现在想想，**无聊是最奢侈的事**！\n\n不如趁这会儿，学点 MPI 并行编程？俺来教你！😄',
   },
   {
     keywords: ['谢谢', '感谢', 'thanks', '谢了'],
+    msgType: 'success',
     reply: '哎，这都是俺分内之事！🐒\n\n俺老孙最喜欢帮人解决问题了，比打妖怪还爽！\n\n还有什么问题，尽管问！',
   },
   {
     keywords: ['累了', '好累', '太难了', '搞不定', '放弃'],
-    reply: '哎，俺老孙当年被压在五行山下五百年……\n\n那才叫真的累！😅\n\n但俺没放弃，你也不能放弃！\n\n说说看，卡在哪里了？俺帮你想办法！💪',
+    msgType: 'scared',
+    reply: '哎，俺老孙当年被压在五行山下**五百年**……\n\n那才叫真的累！😅\n\n但俺没放弃，你也不能放弃！\n\n说说看，卡在哪里了？俺帮你想办法！💪',
   },
   {
     keywords: ['作业失败', '作业报错', 'job failed', 'error', '报错了'],
-    reply: '别慌！别慌！🐒\n\n俺老孙的火眼金睛来了！\n\n把报错信息发给俺看看，俺帮你分析是哪里出了问题！\n\n（把错误日志或报错截图描述给俺）',
+    msgType: 'crash',
+    reply: '别慌！别慌！🐒\n\n俺老孙的**火眼金睛**来了！\n\n把报错信息发给俺看看，俺帮你分析是哪里出了问题！\n\n（把错误日志或报错截图描述给俺）',
   },
 ]
 
 // 检测彩蛋
-const checkEasterEgg = (text: string): string | null => {
+const checkEasterEgg = (text: string): { reply: string; msgType?: string } | null => {
   const lower = text.toLowerCase()
   for (const egg of EASTER_EGGS) {
     if (egg.keywords.some(kw => lower.includes(kw))) {
-      return egg.reply
+      return { reply: egg.reply, msgType: egg.msgType }
     }
   }
   return null
@@ -582,7 +609,7 @@ const send = async () => {
     loading.value = true
     await new Promise(r => setTimeout(r, 400))
     loading.value = false
-    messages.value.push({ role: 'assistant', content: egg, time: now() })
+    messages.value.push({ role: 'assistant', content: egg.reply, time: now(), msgType: egg.msgType })
     if (!open.value) unread.value++
     scrollToBottom()
     return
@@ -632,12 +659,12 @@ const send = async () => {
     const res = await axios.post('/ai/chat', { messages: history })
     const reply = res.data.content || '抱歉，俺老孙没有理解您的问题，请重新描述。'
 
-    messages.value.push({ role: 'assistant', content: reply, time: now() })
+    messages.value.push({ role: 'assistant', content: reply, time: now(), msgType: detectReplyType(reply) })
 
     if (!open.value) unread.value++
   } catch (e: any) {
     const errMsg = e.response?.data?.error || '俺老孙连接失败了，请稍后再试。'
-    messages.value.push({ role: 'assistant', content: `❌ ${errMsg}`, time: now() })
+    messages.value.push({ role: 'assistant', content: `❌ ${errMsg}`, time: now(), msgType: 'strike' })
   } finally {
     loading.value = false
     scrollToBottom()
@@ -649,7 +676,32 @@ const clearMessages = () => {
   unread.value = 0
 }
 
-// 简单的 markdown 渲染：代码块、粗体、换行
+// 根据 AI 回复内容自动检测场景类型，给气泡加颜色
+const detectReplyType = (text: string): string | undefined => {
+  const t = text.toLowerCase()
+  // 权限不足 → 黄色紧箍咒
+  if (containsAnyStr(t, ['权限不足', '没有权限', '无权', '403', 'forbidden', '如来佛祖', '通行证', '管理员开', '找管理员'])) return 'jinjugu'
+  // 重启/危险操作 → 橙色颤抖
+  if (containsAnyStr(t, ['重启', 'reboot', '唐僧师父', '维护窗口', '中断所有作业', '找管理员.*重启'])) return 'scared'
+  // 作业失败/报错 → 黑底绿字终端风
+  if (containsAnyStr(t, ['作业失败', 'job failed', '妖怪.*bug', 'bug.*妖怪', '查日志', '错误日志', 'exit code', 'oom', 'killed', 'segfault', '内存溢出'])) return 'crash'
+  // 配额超限/磁盘满 → 紫色
+  if (containsAnyStr(t, ['配额', '乾坤袋', '磁盘满', 'quota', 'no space', 'disk full', '存储空间', '申请扩容'])) return 'confused'
+  // 节点宕机 → 红色冲击
+  if (containsAnyStr(t, ['节点宕机', '分身被打散', 'node down', '硬件故障', '节点故障', '机房'])) return 'strike'
+  // MFA/验证 → 青绿欢迎（验证成功感）
+  if (containsAnyStr(t, ['mfa', '验证码', '火眼金睛.*验', '双因子', 'totp', '身份验证'])) return 'welcome'
+  // 等待队列 → 蓝色平静
+  if (containsAnyStr(t, ['五行山', '排队', '等待队列', 'pending', '耐心等待', '等一等'])) return 'success'
+  // 操作成功 → 蓝色
+  if (containsAnyStr(t, ['成功', '完成', '大功告成', '漂亮', '妥了', '不愧是'])) return 'success'
+  return undefined
+}
+
+const containsAnyStr = (s: string, keywords: string[]): boolean =>
+  keywords.some(k => new RegExp(k).test(s))
+
+// 简单的 markdown 渲染：代码块、粗体、换行、分隔线
 const renderContent = (text: string): string => {
   return text
     .replace(/&/g, '&amp;')
@@ -658,6 +710,7 @@ const renderContent = (text: string): string => {
     .replace(/```(\w*)\n?([\s\S]*?)```/g, '<pre class="ai-code"><code>$2</code></pre>')
     .replace(/`([^`]+)`/g, '<code class="ai-inline-code">$1</code>')
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/━+/g, '<hr class="ai-divider">')
     .replace(/\n/g, '<br>')
 }
 </script>
@@ -1042,6 +1095,7 @@ const renderContent = (text: string): string => {
 .ai-msg-type-jinjugu .ai-msg-content {
   background: linear-gradient(135deg, #fef3c7, #fde68a) !important;
   border: 1px solid #f59e0b !important;
+  border-left: 4px solid #d97706 !important;
   color: #92400e !important;
   animation: jinjugu-shake 0.65s ease 0.1s;
 }
@@ -1057,6 +1111,7 @@ const renderContent = (text: string): string => {
 .ai-msg-type-crash .ai-msg-content {
   background: linear-gradient(135deg, #1e293b, #0f172a) !important;
   border: 1px solid #ef4444 !important;
+  border-left: 4px solid #ef4444 !important;
   color: #86efac !important;
   font-family: 'Courier New', monospace !important;
   animation: crash-flash 0.8s ease;
@@ -1072,11 +1127,12 @@ const renderContent = (text: string): string => {
 .ai-msg-type-scared .ai-msg-content {
   background: linear-gradient(135deg, #fff7ed, #fed7aa) !important;
   border: 1px solid #f97316 !important;
+  border-left: 4px solid #ea580c !important;
   color: #9a3412 !important;
   animation: scared-tremble 0.5s ease 0.1s 2;
 }
 
-/* 困惑/日志 — 紫色旋转进入 */
+/* 困惑/配额 — 紫色旋转进入 */
 @keyframes confused-spin {
   from { transform: rotate(-5deg) scale(0.95); opacity: 0.5; }
   to { transform: rotate(0deg) scale(1); opacity: 1; }
@@ -1084,11 +1140,12 @@ const renderContent = (text: string): string => {
 .ai-msg-type-confused .ai-msg-content {
   background: linear-gradient(135deg, #f5f3ff, #ede9fe) !important;
   border: 1px solid #8b5cf6 !important;
+  border-left: 4px solid #7c3aed !important;
   color: #4c1d95 !important;
   animation: confused-spin 0.4s ease;
 }
 
-/* 生气/骂人 — 红色冲击 */
+/* 生气/节点宕机/错误 — 红色冲击 */
 @keyframes strike-impact {
   0% { transform: scale(1.08); }
   50% { transform: scale(0.97); }
@@ -1097,7 +1154,57 @@ const renderContent = (text: string): string => {
 .ai-msg-type-strike .ai-msg-content {
   background: linear-gradient(135deg, #fef2f2, #fecaca) !important;
   border: 1px solid #ef4444 !important;
+  border-left: 4px solid #dc2626 !important;
   color: #7f1d1d !important;
   animation: strike-impact 0.35s ease;
+}
+
+/* 自我介绍 — 金色光芒 */
+@keyframes intro-glow {
+  0% { box-shadow: 0 0 0 0 rgba(251,191,36,0); transform: scale(0.97); opacity: 0.7; }
+  40% { box-shadow: 0 0 18px 4px rgba(251,191,36,0.45); transform: scale(1.02); opacity: 1; }
+  100% { box-shadow: 0 0 6px 1px rgba(251,191,36,0.15); transform: scale(1); opacity: 1; }
+}
+.ai-msg-type-intro .ai-msg-content {
+  background: linear-gradient(135deg, #fffbeb, #fef3c7, #fde68a) !important;
+  border: 2px solid #f59e0b !important;
+  color: #78350f !important;
+  animation: intro-glow 0.7s ease forwards;
+}
+.ai-msg-type-intro .ai-msg-content strong {
+  color: #b45309;
+}
+
+/* 欢迎 — 青绿色弹入 */
+@keyframes welcome-pop {
+  0% { transform: scale(0.9) translateY(6px); opacity: 0.5; }
+  70% { transform: scale(1.03) translateY(-2px); opacity: 1; }
+  100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+.ai-msg-type-welcome .ai-msg-content {
+  background: linear-gradient(135deg, #ecfdf5, #d1fae5) !important;
+  border: 1px solid #10b981 !important;
+  color: #064e3b !important;
+  animation: welcome-pop 0.4s ease forwards;
+}
+
+/* 成功 — 蓝色闪光 */
+@keyframes success-shine {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+.ai-msg-type-success .ai-msg-content {
+  background: linear-gradient(135deg, #eff6ff, #dbeafe) !important;
+  border: 1px solid #3b82f6 !important;
+  color: #1e3a8a !important;
+  animation: welcome-pop 0.35s ease forwards;
+}
+
+/* 分隔线 */
+.ai-divider {
+  border: none;
+  border-top: 1px solid currentColor;
+  opacity: 0.3;
+  margin: 6px 0;
 }
 </style>

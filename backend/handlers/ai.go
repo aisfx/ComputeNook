@@ -54,6 +54,8 @@ func AIChat(c *gin.Context) {
 	if systemPrompt == "" {
 		systemPrompt = "你是一个 HPC 高性能计算集群的应用助手，专门帮助用户解答并行计算（MPI/OpenMP）、科学软件使用（Python/R/MATLAB/GROMACS/VASP等）、编程环境配置、作业脚本编写等问题。回答简洁专业，用中文回答。不涉及集群运维管理内容。"
 	}
+	// 注入大圣人设
+	systemPrompt += knowledge.WukongSystemPromptAddon()
 
 	var req AIChatRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -73,16 +75,23 @@ func AIChat(c *gin.Context) {
 	// RAG：从知识库检索相关历史问答，注入 system prompt
 	store := knowledge.GetStore()
 	if userQuestion != "" {
+		var sb strings.Builder
+		sb.WriteString(systemPrompt)
+
+		// 根据问题场景注入大圣俏皮话作为回答风格示例
+		scene := knowledge.DetectScene(userQuestion)
+		if quote := knowledge.GetWukongQuote(scene); quote != "" {
+			sb.WriteString(fmt.Sprintf("\n\n【本次场景参考台词，可融入回答风格】\n\"%s\"", quote))
+		}
+
 		similar := store.Search(userQuestion, 3)
 		if len(similar) > 0 {
-			var sb strings.Builder
-			sb.WriteString(systemPrompt)
 			sb.WriteString("\n\n【参考历史问答 - 仅供参考，以实际情况为准】\n")
 			for _, qa := range similar {
 				sb.WriteString(fmt.Sprintf("\nQ: %s\nA: %s\n", qa.Question, qa.Answer))
 			}
-			systemPrompt = sb.String()
 		}
+		systemPrompt = sb.String()
 	}
 
 	// 构建带 system prompt 的消息列表
