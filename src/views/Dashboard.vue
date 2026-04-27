@@ -663,8 +663,8 @@ const exportJobExcel = () => {
 const showBillingHistory = ref(false)
 const billingLoading = ref(false)
 const billingRecords = ref<any[]>([])
-const billingStartDate = ref('')
-const billingEndDate = ref('')
+const billingStartDate = ref(new Date().toISOString().split('T')[0])
+const billingEndDate = ref(new Date().toISOString().split('T')[0])
 
 // 过滤掉 billing=0 的记录
 const billingValidRecords = computed(() =>
