@@ -354,9 +354,16 @@
             </div>
             <button
               class="btn-tunnel"
-              title="通过客户端 SSH 隧道连接"
+              :class="{
+                'btn-tunnel-connecting': sshTunnelStatus[node.name] === 'connecting',
+                'btn-tunnel-connected': sshTunnelStatus[node.name] === 'connected',
+                'btn-tunnel-disconnected': sshTunnelStatus[node.name] === 'disconnected'
+              }"
+              :title="sshTunnelStatus[node.name] === 'connected' ? '隧道已连接（点击重连）' :
+                      sshTunnelStatus[node.name] === 'disconnected' ? '隧道已断开（点击重连）' :
+                      sshTunnelStatus[node.name] === 'connecting' ? '连接中...' : '通过客户端 SSH 隧道连接'"
               @click.stop="launchSSHTunnel(node)"
-            >🔗</button>
+            >{{ sshTunnelStatus[node.name] === 'connected' ? '🟢' : sshTunnelStatus[node.name] === 'disconnected' ? '🔴' : sshTunnelStatus[node.name] === 'connecting' ? '⏳' : '🔗' }}</button>
           </div>
         </div>
       </div>
@@ -628,6 +635,7 @@ onBeforeUnmount(() => {
     websocket.close()
     websocket = null
   }
+  if (sshTunnelHeartbeat) clearInterval(sshTunnelHeartbeat)
   window.removeEventListener('resize', handleResize)
 })
 
@@ -837,6 +845,8 @@ const showTunnelInfo = ref(false)
 const tunnelNode = ref<any>(null)
 const tunnelLocalPort = ref(12222)
 const tunnelUser = ref('')
+const sshTunnelStatus = ref<Record<string, 'idle' | 'connecting' | 'connected' | 'disconnected'>>({})
+let sshTunnelHeartbeat: any = null
 
 // 通过隐藏 <a> 触发自定义协议，兼容浏览器弹出"打开应用"对话框
 const triggerProtocolUri = (uri: string) => {
@@ -848,14 +858,49 @@ const triggerProtocolUri = (uri: string) => {
   setTimeout(() => document.body.removeChild(a), 1000)
 }
 
+// SSH 隧道心跳检测
+const startSshTunnelHeartbeat = (nodeName: string, localPort: number) => {
+  if (sshTunnelHeartbeat) clearInterval(sshTunnelHeartbeat)
+  sshTunnelHeartbeat = setInterval(async () => {
+    if (sshTunnelStatus.value[nodeName] !== 'connected') {
+      clearInterval(sshTunnelHeartbeat); return
+    }
+    try {
+      const ws = new WebSocket(`ws://localhost:${localPort}/`)
+      await new Promise<void>((resolve, reject) => {
+        const t = setTimeout(() => { ws.close(); reject() }, 1500)
+        ws.onopen = () => { clearTimeout(t); ws.close(); resolve() }
+        ws.onerror = () => { clearTimeout(t); reject() }
+      })
+    } catch {
+      sshTunnelStatus.value = { ...sshTunnelStatus.value, [nodeName]: 'disconnected' }
+      clearInterval(sshTunnelHeartbeat)
+    }
+  }, 8000)
+}
+
 // 点击隧道按钮：直接拉起 hpcc:// 协议
 const launchSSHTunnel = (node: any) => {
+  const nodeName = node.name
+  // 如果已连接或断开，先通知断开旧隧道
+  const cur = sshTunnelStatus.value[nodeName]
+  if (cur === 'connected' || cur === 'disconnected') {
+    const token2 = localStorage.getItem('token') || sessionStorage.getItem('token') || ''
+    triggerProtocolUri(`hpcc://disconnect?server=${encodeURIComponent(location.origin)}&token=${encodeURIComponent(token2)}&host=${encodeURIComponent(node.host || node.name)}`)
+  }
   const token = localStorage.getItem('token') || sessionStorage.getItem('token') || ''
   const user = currentUsername.value || ''
   const localPort = 12222
-  const sshPort = node.port || 22  // 节点实际 SSH 端口
+  const sshPort = node.port || 22
   const uri = `hpcc://ssh?server=${encodeURIComponent(location.origin)}&token=${encodeURIComponent(token)}&host=${encodeURIComponent(node.host || node.name)}&port=${localPort}&ssh-port=${sshPort}&user=${encodeURIComponent(user)}`
   triggerProtocolUri(uri)
+  sshTunnelStatus.value = { ...sshTunnelStatus.value, [nodeName]: 'connecting' }
+  setTimeout(() => {
+    if (sshTunnelStatus.value[nodeName] === 'connecting') {
+      sshTunnelStatus.value = { ...sshTunnelStatus.value, [nodeName]: 'connected' }
+      startSshTunnelHeartbeat(nodeName, localPort)
+    }
+  }, 5000)
 }
 
 // 保留弹窗里的启动函数（兼容弹窗内调用）
@@ -1518,6 +1563,10 @@ const deployPublicKey = async (nodeName: string) => {
 }
 .host-item:hover .btn-tunnel { opacity: 1; }
 .btn-tunnel:hover { background: #f3f4f6; border-color: #6366f1; }
+.btn-tunnel-connecting { border-color: #f59e0b !important; opacity: 1 !important; }
+.btn-tunnel-connected  { border-color: #10b981 !important; background: #f0fdf4 !important; opacity: 1 !important; }
+.btn-tunnel-disconnected { border-color: #ef4444 !important; background: #fef2f2 !important; opacity: 1 !important; animation: pulse-red 2s infinite; }
+@keyframes pulse-red { 0%,100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.3); } 50% { box-shadow: 0 0 0 4px rgba(239,68,68,0.1); } }
 
 /* SSH 隧道信息弹窗 */
 .tunnel-step { display: flex; gap: 12px; margin-bottom: 1.25rem; }

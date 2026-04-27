@@ -245,8 +245,10 @@
                   <div style="display:flex;gap:6px;flex-shrink:0;align-items:center">
                     <span v-if="tunnelStatus === 'connecting'" style="font-size:0.8rem;color:#f59e0b">⏳ 连接中...</span>
                     <span v-else-if="tunnelStatus === 'connected'" style="font-size:0.8rem;color:#10b981">✓ 已连接</span>
-                    <button class="btn-primary" @click="launchTunnel">
-                      {{ tunnelStatus === 'idle' ? '一键连接' : '重新连接' }}
+                    <span v-else-if="tunnelStatus === 'disconnected'" style="font-size:0.8rem;color:#ef4444">⚠ 已断开</span>
+                    <button class="btn-primary" @click="launchTunnel"
+                      :style="tunnelStatus === 'disconnected' ? 'background:#ef4444;color:#fff;border-color:#ef4444' : ''">
+                      {{ tunnelStatus === 'idle' ? '一键连接' : tunnelStatus === 'disconnected' ? '重新连接' : '重新连接' }}
                     </button>
                   </div>
                 </div>
@@ -282,11 +284,15 @@
 
     <!-- 客户端连接最小化悬浮条 -->
     <Teleport to="body">
-      <div v-if="clientMinimized && tunnelStatus === 'connected'" class="client-float-bar">
+      <div v-if="clientMinimized && (tunnelStatus === 'connected' || tunnelStatus === 'disconnected')" class="client-float-bar"
+        :class="{ 'client-float-disconnected': tunnelStatus === 'disconnected' }">
         <span class="client-float-icon">🖥️</span>
         <span class="client-float-name">{{ selectedSession?.name }}</span>
-        <span class="client-float-status">客户端已连接</span>
-        <button class="client-float-btn" @click="showStartModal = true; clientMinimized = false">恢复</button>
+        <span v-if="tunnelStatus === 'connected'" class="client-float-status">客户端已连接</span>
+        <span v-else class="client-float-status" style="color:#ef4444">⚠ 已断开</span>
+        <button class="client-float-btn" @click="showStartModal = true; clientMinimized = false">
+          {{ tunnelStatus === 'disconnected' ? '重新连接' : '恢复' }}
+        </button>
         <button class="client-float-btn client-float-stop" @click="stopSession">停止</button>
       </div>
     </Teleport>
@@ -465,6 +471,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (listTimer) clearInterval(listTimer)
+  if (tunnelHeartbeat) clearInterval(tunnelHeartbeat)
   window.removeEventListener('beforeunload', notifyClientDisconnect)
   // 注意：不清理 launchState，让轮询继续在后台运行
 })
@@ -571,24 +578,51 @@ const openNoVNC = () => {
 }
 
 // 端口转发 + 自动启动 Xpra：一键完成隧道建立和客户端连接
-const tunnelStatus = ref<'idle' | 'connecting' | 'connected'>('idle')
+const tunnelStatus = ref<'idle' | 'connecting' | 'connected' | 'disconnected'>('idle')
 const tunnelSessionId = ref<number | null>(null)
+let tunnelHeartbeat: any = null
+
+// 心跳检测：定时检查本地隧道端口是否可达
+const startTunnelHeartbeat = (localPort: number) => {
+  if (tunnelHeartbeat) clearInterval(tunnelHeartbeat)
+  tunnelHeartbeat = setInterval(async () => {
+    if (tunnelStatus.value !== 'connected') { clearInterval(tunnelHeartbeat); return }
+    try {
+      // 尝试连接本地端口，超时1秒认为断开
+      const ws = new WebSocket(`ws://localhost:${localPort}/`)
+      await new Promise<void>((resolve, reject) => {
+        const t = setTimeout(() => { ws.close(); reject() }, 1500)
+        ws.onopen = () => { clearTimeout(t); ws.close(); resolve() }
+        ws.onerror = () => { clearTimeout(t); reject() }
+      })
+    } catch {
+      tunnelStatus.value = 'disconnected'
+      clearInterval(tunnelHeartbeat)
+    }
+  }, 8000)
+}
 
 const launchTunnel = () => {
   if (!selectedSession.value) return
+  // 如果是重连，先通知断开旧隧道
+  if (tunnelStatus.value === 'disconnected' || tunnelStatus.value === 'connected') {
+    notifyClientDisconnect()
+  }
   const token = localStorage.getItem('token') || sessionStorage.getItem('token') || ''
   const sessionId = selectedSession.value.id
   const localPort = localVncPort.value
-  const tcpPort = selectedSession.value.xpraPort  // TCP 端口给客户端
+  const tcpPort = selectedSession.value.xpraPort
   const pwd = selectedSession.value.vncPassword || ''
-  // 一个 URI 同时传隧道参数 + xpra 连接参数，hpc-client 建完隧道后自动启动 Xpra
   const uri = `hpcc://xpra?server=${encodeURIComponent(location.origin)}&token=${encodeURIComponent(token)}&session=${sessionId}&port=${localPort}&remote-port=${tcpPort}&auto-connect=1${pwd ? '&password=' + encodeURIComponent(pwd) : ''}`
   triggerUri(uri)
   tunnelStatus.value = 'connecting'
   tunnelSessionId.value = sessionId
-  // 5秒后认为隧道已建立（hpc-client 异步处理）
+  // 5秒后认为隧道已建立，开始心跳检测
   setTimeout(() => {
-    if (tunnelStatus.value === 'connecting') tunnelStatus.value = 'connected'
+    if (tunnelStatus.value === 'connecting') {
+      tunnelStatus.value = 'connected'
+      startTunnelHeartbeat(localPort)
+    }
   }, 5000)
 }
 
@@ -852,5 +886,7 @@ const copyScript = () => {
 .client-float-btn:hover { background: rgba(255,255,255,0.25); }
 .client-float-stop { background: rgba(239,68,68,0.3); }
 .client-float-stop:hover { background: rgba(239,68,68,0.5); }
+.client-float-disconnected { background: #7f1d1d; animation: pulse-red 2s infinite; }
+@keyframes pulse-red { 0%,100% { box-shadow: 0 -4px 20px rgba(239,68,68,0.3); } 50% { box-shadow: 0 -4px 20px rgba(239,68,68,0.7); } }
 </style>
 
