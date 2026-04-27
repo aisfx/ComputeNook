@@ -156,6 +156,7 @@ func VNCWebSocketProxy(c *gin.Context) {
 
 // XpraHTTPProxy GET /api/desktop/sessions/:id/xpra-html/*path
 // 将 Xpra 内置 HTML5 客户端的 HTTP 请求反向代理到计算节点
+// WebSocket 升级请求转发到 WS 端口（VNCPort）
 func XpraHTTPProxy(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.Atoi(idStr)
@@ -182,9 +183,72 @@ func XpraHTTPProxy(c *gin.Context) {
 		return
 	}
 
-	port := session.XpraPort
-	if port == 0 {
-		port = session.VNCPort
+	// WebSocket 升级请求 → 转发到 Xpra WS 端口（VNCPort = ws_port）
+	if websocket.IsWebSocketUpgrade(c.Request) {
+		wsPort := session.VNCPort
+		if wsPort == 0 {
+			wsPort = session.XpraPort
+		}
+		addr := fmt.Sprintf("%s:%d", session.Address, wsPort)
+		log.Printf("[XPRA-HTML-WS] session %d: ws upgrade → %s", id, addr)
+
+		clientWs, err := vncWsUpgrader.Upgrade(c.Writer, c.Request, nil)
+		if err != nil {
+			log.Printf("[XPRA-HTML-WS] upgrade failed: %v", err)
+			return
+		}
+
+		xpraURL := fmt.Sprintf("ws://%s/", addr)
+		xpraDialer := websocket.Dialer{
+			HandshakeTimeout: 10 * time.Second,
+			Subprotocols:     []string{"binary"},
+		}
+		xpraWs, _, err := xpraDialer.Dial(xpraURL, http.Header{
+			"Origin": []string{fmt.Sprintf("http://%s", addr)},
+		})
+		if err != nil {
+			clientWs.WriteMessage(websocket.CloseMessage,
+				websocket.FormatCloseMessage(websocket.CloseInternalServerErr, "xpra ws connect failed: "+err.Error()))
+			clientWs.Close()
+			log.Printf("[XPRA-HTML-WS] session %d: ws connect failed: %v", id, err)
+			return
+		}
+
+		done := make(chan struct{}, 2)
+		go func() {
+			defer func() { done <- struct{}{} }()
+			for {
+				mt, msg, err := xpraWs.ReadMessage()
+				if err != nil {
+					return
+				}
+				if err := clientWs.WriteMessage(mt, msg); err != nil {
+					return
+				}
+			}
+		}()
+		go func() {
+			defer func() { done <- struct{}{} }()
+			for {
+				mt, msg, err := clientWs.ReadMessage()
+				if err != nil {
+					return
+				}
+				if err := xpraWs.WriteMessage(mt, msg); err != nil {
+					return
+				}
+			}
+		}()
+		<-done
+		xpraWs.Close()
+		clientWs.Close()
+		return
+	}
+
+	// 普通 HTTP 请求 → 代理到 Xpra WS 端口（--html=on 的 HTTP 服务也在同一端口）
+	wsPort := session.VNCPort
+	if wsPort == 0 {
+		wsPort = session.XpraPort
 	}
 
 	subPath := c.Param("path")
@@ -192,7 +256,7 @@ func XpraHTTPProxy(c *gin.Context) {
 		subPath = "/"
 	}
 
-	target := fmt.Sprintf("http://%s:%d%s", session.Address, port, subPath)
+	target := fmt.Sprintf("http://%s:%d%s", session.Address, wsPort, subPath)
 	// 过滤掉 token 参数，不传给 Xpra
 	if c.Request.URL.RawQuery != "" {
 		q := c.Request.URL.Query()
@@ -212,7 +276,7 @@ func XpraHTTPProxy(c *gin.Context) {
 			proxyReq.Header.Add(k, v)
 		}
 	}
-	proxyReq.Header.Set("Host", fmt.Sprintf("%s:%d", session.Address, port))
+	proxyReq.Header.Set("Host", fmt.Sprintf("%s:%d", session.Address, wsPort))
 
 	httpClient := &http.Client{Timeout: 30 * time.Second}
 	resp, err := httpClient.Do(proxyReq)
