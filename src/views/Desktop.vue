@@ -625,7 +625,11 @@ const launchTunnel = () => {
 const notifyClientDisconnect = () => {
   if (tunnelSessionId.value === null) return
   const token = localStorage.getItem('token') || sessionStorage.getItem('token') || ''
-  const uri = `hpcc://disconnect?server=${encodeURIComponent(location.origin)}&token=${encodeURIComponent(token)}&session=${tunnelSessionId.value}`
+  // 用 sendBeacon 保证页面关闭时也能发出（比 hpcc:// 协议可靠）
+  const url = `/api/desktop/sessions/${tunnelSessionId.value}/client-exit`
+  navigator.sendBeacon(url, JSON.stringify({ token }))
+  // 同时触发 hpcc://exit 协议（hpc-client 也可以监听）
+  const uri = `hpcc://exit?server=${encodeURIComponent(location.origin)}&token=${encodeURIComponent(token)}&session=${tunnelSessionId.value}`
   triggerUri(uri)
 }
 

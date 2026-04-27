@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"hpc-backend/audit"
@@ -153,6 +154,56 @@ func XpraWebSocketProxy(c *gin.Context) {
 // VNCWebSocketProxy 保留兼容旧路由
 func VNCWebSocketProxy(c *gin.Context) {
 	XpraWebSocketProxy(c)
+}
+
+// clientExitSignals 存储各 session 的退出信号（内存，重启后清空）
+var clientExitSignals = struct {
+	sync.Mutex
+	m map[int]bool
+}{m: make(map[int]bool)}
+
+// POST /api/desktop/sessions/:id/client-exit
+// 前端页面关闭时调用，通知 hpc-client 退出
+func NotifyClientExit(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+	clientExitSignals.Lock()
+	clientExitSignals.m[id] = true
+	clientExitSignals.Unlock()
+	// 5分钟后自动清除信号，避免内存泄漏
+	go func() {
+		time.Sleep(5 * time.Minute)
+		clientExitSignals.Lock()
+		delete(clientExitSignals.m, id)
+		clientExitSignals.Unlock()
+	}()
+	c.JSON(http.StatusOK, gin.H{"signal": "exit"})
+}
+
+// GET /api/desktop/sessions/:id/client-signal
+// hpc-client 轮询此接口，收到 exit 信号后自动退出
+func GetClientSignal(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+	clientExitSignals.Lock()
+	exit := clientExitSignals.m[id]
+	if exit {
+		delete(clientExitSignals.m, id)
+	}
+	clientExitSignals.Unlock()
+	if exit {
+		c.JSON(http.StatusOK, gin.H{"signal": "exit"})
+	} else {
+		c.JSON(http.StatusOK, gin.H{"signal": "ok"})
+	}
 }
 
 // XpraHTTPProxy GET /api/desktop/sessions/:id/xpra-html/*path
