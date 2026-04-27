@@ -33,7 +33,9 @@
                   <button class="btn-action btn-stop" @click="stopSessionById(session)">停止</button>
                 </template>
                 <template v-else>
-                  <button class="btn-action btn-start" @click="startSession(session)" :disabled="session.status === 'pending'">
+                  <button class="btn-action btn-start" @click="startSession(session)"
+                    :disabled="session.status === 'pending' || hasActiveSession"
+                    :title="hasActiveSession && session.status !== 'pending' ? '已有会话运行中，请先停止' : ''">
                     {{ session.status === 'pending' ? '排队中' : '启动' }}
                   </button>
                 </template>
@@ -407,6 +409,11 @@ const createForm = ref({
 })
 
 const statusLabel = (s: string) => ({ stopped: '未启动', pending: '排队中', running: '运行中', failed: '失败' }[s] || s)
+
+// 当前用户是否已有运行中/排队中的会话
+const hasActiveSession = computed(() =>
+  sessions.value.some((s: any) => s.status === 'running' || s.status === 'pending')
+)
 
 const loadSessions = async () => {
   try { sessions.value = await desktopAPI.getSessions() } catch { /* ignore */ }

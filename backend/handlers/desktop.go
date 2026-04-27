@@ -306,6 +306,15 @@ func StartDesktopSession(c *gin.Context) {
 		}
 	}
 
+	// 限制：每个用户同时只能有一个运行中或排队中的会话
+	for _, s := range sessions {
+		if s.Username == username.(string) && s.ID != id &&
+			(s.Status == "running" || s.Status == "pending") {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("已有会话「%s」正在%s，请先停止后再启动新会话", s.Name, map[string]string{"running": "运行中", "pending": "排队中"}[s.Status])})
+			return
+		}
+	}
+
 	script := buildDesktopScript(session)
 
 	client, err := GetSlurmClientForUser(username.(string))
@@ -542,6 +551,7 @@ func buildDesktopScript(session *DesktopSession) string {
 	b.WriteString("  [ -n \"$XPRA_PID\" ] && kill \"$XPRA_PID\" 2>/dev/null || true\n")
 	b.WriteString("  [ -n \"$DISPLAY_NUM\" ] && xpra stop :${DISPLAY_NUM} 2>/dev/null || true\n")
 	b.WriteString("  [ -n \"$DISPLAY_NUM\" ] && rm -f /tmp/.X${DISPLAY_NUM}-lock /tmp/.X11-unix/X${DISPLAY_NUM} 2>/dev/null || true\n")
+	b.WriteString("  scancel $SLURM_JOB_ID 2>/dev/null || true\n")
 	b.WriteString("}\n")
 	b.WriteString("trap cleanup EXIT INT TERM\n\n")
 	// clean zombie X locks
@@ -655,12 +665,15 @@ func buildDesktopScript(session *DesktopSession) string {
 	b.WriteString(fmt.Sprintf("  echo 'status=failed' >> %s\n  exit 1\nfi\n\n", statusFile))
 	b.WriteString(fmt.Sprintf("echo 'status=running' >> %s\n\n", statusFile))
 
-	// ── 保持运行 ──
+	// ── 保持运行：xpra 退出或超时则结束作业 ──
 	b.WriteString(fmt.Sprintf("END_TIME=$(($(date +%%s) + %d))\n", durationSec))
 	b.WriteString("while [ $(date +%s) -lt $END_TIME ]; do\n")
 	b.WriteString("  kill -0 $XPRA_PID 2>/dev/null || break\n  sleep 30\ndone\n\n")
 	b.WriteString("xpra stop :${DISPLAY_NUM} 2>/dev/null || true\n")
 	b.WriteString(fmt.Sprintf("echo 'status=stopped' >> %s\n", statusFile))
+	// xpra 退出（应用关闭）时主动取消 Slurm 作业，释放资源
+	b.WriteString("# 应用/桌面退出后自动取消作业\n")
+	b.WriteString("scancel $SLURM_JOB_ID 2>/dev/null || true\n")
 
 	return b.String()
 }
