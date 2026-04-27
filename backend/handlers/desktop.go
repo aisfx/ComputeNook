@@ -671,9 +671,9 @@ func pollDesktopJob(sessionID int, jobID int64, username string) {
 		}
 	}
 
-	// 阶段1：等待 RUNNING，最多等 5 分钟
+	// 阶段1：等待 RUNNING，最多等 20 分钟（排队可能较长）
 	running := false
-	for i := 0; i < 60; i++ {
+	for i := 0; i < 240; i++ {
 		time.Sleep(5 * time.Second)
 
 		job, err := client.GetJob(jobID)
@@ -699,9 +699,22 @@ func pollDesktopJob(sessionID int, jobID int64, username string) {
 			tcpPort := 0
 			vncReady := false
 
-			// 等待状态文件里出现 status=running（最多等2分钟）
-			for w := 0; w < 24; w++ {
+			// 等待状态文件里出现 status=running（最多等5分钟，每5秒检查一次）
+			for w := 0; w < 60; w++ {
 				time.Sleep(5 * time.Second)
+
+				// 同时检查 Slurm 作业是否还在运行
+				if w > 0 && w%6 == 0 { // 每30秒检查一次作业状态
+					j2, err2 := client.GetJob(jobID)
+					if err2 == nil {
+						s2 := strings.ToUpper(strings.TrimSpace(j2.GetJobState()))
+						if s2 == "FAILED" || s2 == "CANCELLED" || s2 == "TIMEOUT" || s2 == "COMPLETED" {
+							setStatus("failed")
+							return
+						}
+					}
+				}
+
 				data, err := os.ReadFile(statusFile)
 				if err != nil {
 					continue

@@ -486,14 +486,15 @@ const startSession = async (session: any) => {
   await startDesktopLaunch(session, session.partition)
 }
 
-// 监听全局启动状态变化，就绪/失败时自动弹窗
+// 监听全局启动状态变化，就绪时自动弹窗；失败只刷新列表不弹窗
 watch(() => launchState.value?.status, (status) => {
   if (status === 'ready') {
     selectedSession.value = launchState.value?.session
     showStartModal.value = true
     loadSessions()
   } else if (status === 'failed') {
-    showStartModal.value = true
+    // 只刷新列表，不自动弹失败弹窗（避免刷新页面误弹）
+    loadSessions()
   }
 })
 
