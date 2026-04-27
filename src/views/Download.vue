@@ -74,8 +74,8 @@ const downloadedFile = ref('')
 
 const platforms = [
   { key: 'windows', icon: '🪟', label: 'Windows', desc: 'Windows 10/11 x64',     name: 'hpc-client-windows.exe', disabled: false },
-  { key: 'darwin',  icon: '🍎', label: 'macOS',   desc: 'Intel / Apple Silicon', name: 'hpc-client-mac',         disabled: true  },
-  { key: 'linux',   icon: '🐧', label: 'Linux',   desc: 'x86_64',                name: 'hpc-client-linux',       disabled: true  },
+  { key: 'darwin',  icon: '🍎', label: 'macOS',   desc: 'Intel / Apple Silicon', name: 'hpc-client-mac',         disabled: false },
+  { key: 'linux',   icon: '🐧', label: 'Linux',   desc: 'x86_64',                name: 'hpc-client-linux',       disabled: false },
 ]
 
 const osKey = computed(() => {
