@@ -193,11 +193,11 @@
     <div v-if="showStartModal && launchState?.status !== 'starting'" class="modal-overlay">
       <div class="modal-content start-modal" @click.stop>
         <div class="modal-header">
-          <h2>{{ launchState?.status === 'ready' ? '会话已就绪' : '启动失败' }}</h2>
+          <h2>{{ modalStatus === 'ready' ? '会话已就绪' : modalStatus === 'failed' ? '启动失败' : '会话已就绪' }}</h2>
           <button @click="showStartModal = false" class="btn-close">✕</button>
         </div>
         <div class="modal-body">
-          <div v-if="launchState?.status === 'failed'" class="status-failed">
+          <div v-if="modalStatus === 'failed'" class="status-failed">
             <div class="fail-icon">✕</div>
             <h4>会话启动失败</h4>
             <div class="log-panel">
@@ -210,7 +210,7 @@
             </div>
           </div>
 
-          <div v-else-if="launchState?.status === 'ready'" class="status-ready">
+          <div v-else class="status-ready">
             <div class="success-icon">✅</div>
             <h4>会话已就绪</h4>
             <div class="connection-info">
@@ -496,6 +496,14 @@ watch(() => launchState.value?.status, (status) => {
     // 只刷新列表，不自动弹失败弹窗（避免刷新页面误弹）
     loadSessions()
   }
+})
+
+// 弹窗状态：优先用 launchState（启动流程中），否则用 selectedSession.status
+const modalStatus = computed(() => {
+  if (launchState.value?.status === 'failed') return 'failed'
+  if (launchState.value?.status === 'ready') return 'ready'
+  if (selectedSession.value?.status === 'running') return 'ready'
+  return 'ready'
 })
 
 // 打开 Xpra 连接（running 状态直接连）
