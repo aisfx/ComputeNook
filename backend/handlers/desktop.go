@@ -161,6 +161,31 @@ func max1(a, b int) int {
 	return b
 }
 
+// TerminateDesktopSession 取消 Slurm 作业并将会话标为 stopped
+// 用于代理连接失败等异常场景的主动清理
+func TerminateDesktopSession(sessionID int, username string) {
+	sessions, err := loadDesktopSessions()
+	if err != nil {
+		return
+	}
+	for i := range sessions {
+		if sessions[i].ID == sessionID {
+			jobID := sessions[i].SlurmJobID
+			if jobID > 0 {
+				if client, err := GetSlurmClientForUser(username); err == nil {
+					_ = client.CancelJob(jobID)
+				}
+			}
+			sessions[i].Status = "stopped"
+			sessions[i].SlurmJobID = 0
+			sessions[i].VNCPort = 0
+			sessions[i].XpraPort = 0
+			_ = saveDesktopSessions(sessions)
+			break
+		}
+	}
+}
+
 // RecoverDesktopSessions 后端启动时恢复对 running/pending 会话的轮询
 // 防止后端重启后会话状态永远卡在"运行中"
 func RecoverDesktopSessions() {

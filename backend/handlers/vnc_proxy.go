@@ -102,7 +102,8 @@ func XpraWebSocketProxy(c *gin.Context) {
 		wsConn.WriteMessage(websocket.CloseMessage,
 			websocket.FormatCloseMessage(websocket.CloseInternalServerErr, "xpra connect failed: "+err.Error()))
 		wsConn.Close()
-		log.Printf("[XPRA-WS] session %d: ws connect failed: %v", id, err)
+		log.Printf("[XPRA-WS] session %d: ws connect failed, terminating session: %v", id, err)
+		go TerminateDesktopSession(id, session.Username)
 		writeDesktopAudit(username.(string), c.ClientIP(), id, "connect_failed", err.Error())
 		return
 	}
@@ -210,7 +211,8 @@ func XpraHTTPProxy(c *gin.Context) {
 			clientWs.WriteMessage(websocket.CloseMessage,
 				websocket.FormatCloseMessage(websocket.CloseInternalServerErr, "xpra ws connect failed: "+err.Error()))
 			clientWs.Close()
-			log.Printf("[XPRA-HTML-WS] session %d: ws connect failed: %v", id, err)
+			log.Printf("[XPRA-HTML-WS] session %d: ws connect failed, terminating session: %v", id, err)
+			go TerminateDesktopSession(id, session.Username)
 			return
 		}
 
@@ -281,6 +283,8 @@ func XpraHTTPProxy(c *gin.Context) {
 	httpClient := &http.Client{Timeout: 30 * time.Second}
 	resp, err := httpClient.Do(proxyReq)
 	if err != nil {
+		log.Printf("[XPRA-HTML] session %d: connection refused, terminating session: %v", id, err)
+		go TerminateDesktopSession(id, session.Username)
 		c.JSON(http.StatusBadGateway, gin.H{"error": "xpra http proxy failed: " + err.Error()})
 		return
 	}
