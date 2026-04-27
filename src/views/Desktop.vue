@@ -238,16 +238,19 @@
                   <span class="method-icon">🖥️</span>
                   <div class="method-content">
                     <strong>本地 Xpra 客户端</strong>
-                    <p>需安装 hpc-client 和 Xpra，性能更好，适合图形密集型应用</p>
+                    <p>需安装 hpc-client，性能更好，适合图形密集型应用</p>
                   </div>
-                  <div style="display:flex;gap:6px;flex-shrink:0">
-                    <button class="btn-secondary" @click="launchTunnel">① 建立隧道</button>
-                    <button class="btn-primary" @click="launchXpraClient">② 启动 Xpra</button>
+                  <div style="display:flex;gap:6px;flex-shrink:0;align-items:center">
+                    <span v-if="tunnelStatus === 'connecting'" style="font-size:0.8rem;color:#f59e0b">⏳ 连接中...</span>
+                    <span v-else-if="tunnelStatus === 'connected'" style="font-size:0.8rem;color:#10b981">✓ 已连接</span>
+                    <button class="btn-primary" @click="launchTunnel">
+                      {{ tunnelStatus === 'idle' ? '一键连接' : '重新连接' }}
+                    </button>
                   </div>
                 </div>
                 <div class="method-hint">
-                  <span>① 点「建立隧道」→ hpc-client 将节点 TCP 端口 <code>{{ selectedSession?.xpraPort }}</code> 映射到本地 <code>{{ localVncPort }}</code></span>
-                  <span>② 隧道就绪后点「启动 Xpra」→ 本地 Xpra 客户端自动连接</span>
+                  <span>点「一键连接」→ hpc-client 自动建立隧道并启动 Xpra 客户端</span>
+                  <span>TCP 端口: <code>{{ selectedSession?.xpraPort }}</code> → 本地: <code>{{ localVncPort }}</code></span>
                   <span style="color:#9ca3af">未安装 hpc-client？<a href="/download" target="_blank" style="color:#6366f1">点此下载</a></span>
                 </div>
               </div>
@@ -255,6 +258,7 @@
 
             <div class="modal-actions">
               <button class="btn-danger" @click="stopSession">停止会话</button>
+              <button v-if="tunnelStatus === 'connected'" class="btn-secondary" @click="showStartModal = false; clientMinimized = true">最小化</button>
               <button class="btn-secondary" @click="showStartModal = false">关闭</button>
             </div>
           </div>
@@ -273,6 +277,17 @@
       </div>
       <XpraViewer :ws-url="xpraWsUrl" :password="selectedSession?.vncPassword" class="xpra-viewer-fill" />
     </div>
+
+    <!-- 客户端连接最小化悬浮条 -->
+    <Teleport to="body">
+      <div v-if="clientMinimized && tunnelStatus === 'connected'" class="client-float-bar">
+        <span class="client-float-icon">🖥️</span>
+        <span class="client-float-name">{{ selectedSession?.name }}</span>
+        <span class="client-float-status">客户端已连接</span>
+        <button class="client-float-btn" @click="showStartModal = true; clientMinimized = false">恢复</button>
+        <button class="client-float-btn client-float-stop" @click="stopSession">停止</button>
+      </div>
+    </Teleport>
 
     <!-- 脚本预览 -->
     <div v-if="showScriptModal" class="modal-overlay">
@@ -437,10 +452,13 @@ onMounted(() => {
   listTimer = setInterval(() => {
     if (sessions.value.some((s: any) => s.status === 'pending' || s.status === 'running')) loadSessions()
   }, 8000)
+  // 浏览器关闭/刷新时通知 hpc-client 断开
+  window.addEventListener('beforeunload', notifyClientDisconnect)
 })
 
 onUnmounted(() => {
   if (listTimer) clearInterval(listTimer)
+  window.removeEventListener('beforeunload', notifyClientDisconnect)
   // 注意：不清理 launchState，让轮询继续在后台运行
 })
 
@@ -506,9 +524,13 @@ const modalStatus = computed(() => {
   return 'ready'
 })
 
+const clientMinimized = ref(false)
+
 // 打开 Xpra 连接（running 状态直接连）
 const openXpra = (session: any) => {
   selectedSession.value = session
+  clientMinimized.value = false
+  tunnelStatus.value = 'idle'
   showStartModal.value = true
 }
 
@@ -541,13 +563,37 @@ const openNoVNC = () => {
   showXpraModal.value = true
 }
 
-// 端口转发：通过 hpcc://xpra 让 hpc-client 经后端 WS 代理建立本地隧道
+// 端口转发 + 自动启动 Xpra：一键完成隧道建立和客户端连接
+const tunnelStatus = ref<'idle' | 'connecting' | 'connected'>('idle')
+const tunnelSessionId = ref<number | null>(null)
+
 const launchTunnel = () => {
   if (!selectedSession.value) return
   const token = localStorage.getItem('token') || sessionStorage.getItem('token') || ''
   const sessionId = selectedSession.value.id
   const localPort = localVncPort.value
-  const uri = `hpcc://xpra?server=${encodeURIComponent(location.origin)}&token=${encodeURIComponent(token)}&session=${sessionId}&port=${localPort}`
+  const tcpPort = selectedSession.value.xpraPort  // TCP 端口给客户端
+  const pwd = selectedSession.value.vncPassword || ''
+  // 一个 URI 同时传隧道参数 + xpra 连接参数，hpc-client 建完隧道后自动启动 Xpra
+  const uri = `hpcc://xpra?server=${encodeURIComponent(location.origin)}&token=${encodeURIComponent(token)}&session=${sessionId}&port=${localPort}&remote-port=${tcpPort}&auto-connect=1${pwd ? '&password=' + encodeURIComponent(pwd) : ''}`
+  triggerUri(uri)
+  tunnelStatus.value = 'connecting'
+  tunnelSessionId.value = sessionId
+  // 5秒后认为隧道已建立（hpc-client 异步处理）
+  setTimeout(() => {
+    if (tunnelStatus.value === 'connecting') tunnelStatus.value = 'connected'
+  }, 5000)
+}
+
+// 浏览器退出时通知 hpc-client 断开
+const notifyClientDisconnect = () => {
+  if (tunnelSessionId.value === null) return
+  const token = localStorage.getItem('token') || sessionStorage.getItem('token') || ''
+  const uri = `hpcc://disconnect?server=${encodeURIComponent(location.origin)}&token=${encodeURIComponent(token)}&session=${tunnelSessionId.value}`
+  triggerUri(uri)
+}
+
+const triggerUri = (uri: string) => {
   const a = document.createElement('a')
   a.href = uri
   a.style.display = 'none'
@@ -556,14 +602,13 @@ const launchTunnel = () => {
   setTimeout(() => document.body.removeChild(a), 1000)
 }
 
-// 启动本地 Xpra 客户端连接到隧道本地端口
+// 启动本地 Xpra 客户端连接到隧道本地端口（手动触发，隧道已就绪时用）
 const launchXpraClient = () => {
   if (!selectedSession.value) return
   const localPort = localVncPort.value
   const pwd = selectedSession.value.vncPassword || ''
-  // xpra:// 协议由本地 Xpra 客户端注册，连接到本地隧道端口
   const uri = `xpra://tcp/localhost:${localPort}/${pwd ? '?password=' + encodeURIComponent(pwd) : ''}`
-  window.location.href = uri
+  triggerUri(uri)
 }
 
 const stopSession = async () => {
@@ -780,5 +825,25 @@ const copyScript = () => {
 /* Xpra iframe */
 .xpra-frame { flex: 1; width: 100%; height: 100%; border: none; background: #000; }
 .xpra-viewer-fill { flex: 1; min-height: 0; width: 100%; }
+
+/* 客户端连接最小化悬浮条 */
+.client-float-bar {
+  position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 12px;
+  background: #1e293b; color: #fff;
+  padding: 8px 20px; border-radius: 12px 12px 0 0;
+  box-shadow: 0 -4px 20px rgba(0,0,0,0.3);
+  z-index: 3000; font-size: 0.85rem;
+}
+.client-float-icon { font-size: 1.1rem; }
+.client-float-name { font-weight: 600; }
+.client-float-status { color: #10b981; font-size: 0.78rem; }
+.client-float-btn {
+  padding: 4px 12px; border-radius: 6px; border: none; cursor: pointer;
+  font-size: 0.78rem; font-weight: 600; background: rgba(255,255,255,0.15); color: #fff;
+}
+.client-float-btn:hover { background: rgba(255,255,255,0.25); }
+.client-float-stop { background: rgba(239,68,68,0.3); }
+.client-float-stop:hover { background: rgba(239,68,68,0.5); }
 </style>
 

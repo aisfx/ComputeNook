@@ -63,6 +63,9 @@ func main() {
 	log.Printf("DEV_MODE: %s", os.Getenv("DEV_MODE"))
 	log.Println("========================================")
 
+	// 恢复后端重启前未完成的桌面会话轮询
+	handlers.RecoverDesktopSessions()
+
 	// 创建 Gin 路由
 	r := gin.Default()
 

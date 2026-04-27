@@ -161,6 +161,20 @@ func max1(a, b int) int {
 	return b
 }
 
+// RecoverDesktopSessions 后端启动时恢复对 running/pending 会话的轮询
+// 防止后端重启后会话状态永远卡在"运行中"
+func RecoverDesktopSessions() {
+	sessions, err := loadDesktopSessions()
+	if err != nil {
+		return
+	}
+	for _, s := range sessions {
+		if (s.Status == "running" || s.Status == "pending") && s.SlurmJobID > 0 {
+			go pollDesktopJob(s.ID, s.SlurmJobID, s.Username)
+		}
+	}
+}
+
 // GET /api/desktop/sessions
 func GetDesktopSessions(c *gin.Context) {
 	sessions, err := loadDesktopSessions()
