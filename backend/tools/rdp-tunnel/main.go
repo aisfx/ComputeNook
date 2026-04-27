@@ -220,6 +220,7 @@ func startTunnelWithSignal(label, wsURL, token string, port int, signalServer, s
 
 	log.Printf("启动 %s 隧道: localhost:%d", label, port)
 	if err := t.Start(wsURL, token, port); err != nil {
+		ui.Error("隧道启动失败", fmt.Sprintf("无法连接到平台：\n%v\n\n请检查：\n1. 网络是否可达\n2. 是否已登录（Token 是否过期）\n3. 平台地址是否正确", err))
 		log.Fatalf("启动失败: %v", err)
 	}
 
