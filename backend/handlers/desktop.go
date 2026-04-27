@@ -452,6 +452,15 @@ func DeleteDesktopSession(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+	for _, s := range sessions {
+		if fmt.Sprintf("%d", s.ID) == idStr {
+			if s.Status == "running" || s.Status == "pending" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "会话正在运行中，请先停止后再删除"})
+				return
+			}
+			break
+		}
+	}
 	filtered := []DesktopSession{}
 	for _, s := range sessions {
 		if fmt.Sprintf("%d", s.ID) != idStr {

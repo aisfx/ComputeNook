@@ -39,7 +39,7 @@
                 </template>
                 <button class="btn-action btn-script" @click="previewScript(session)">脚本</button>
                 <button class="btn-action btn-log" @click="viewSessionLog(session)">日志</button>
-                <button class="btn-action btn-delete" @click="deleteSession(session)">删除</button>
+                <button class="btn-action btn-delete" @click="deleteSession(session)" :disabled="session.status === 'running' || session.status === 'pending'" :style="(session.status === 'running' || session.status === 'pending') ? 'opacity:0.3;cursor:not-allowed' : ''">删除</button>
               </div>
             </td>
           </tr>
