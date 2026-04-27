@@ -17,6 +17,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
@@ -25,6 +26,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"rdp-tunnel/mount"
 	"rdp-tunnel/tunnel"
@@ -137,7 +139,7 @@ func handleURI(uri string) {
 			log.Fatal("URI 缺少必要参数: server, token, session")
 		}
 		wsURL := toWS(server + fmt.Sprintf("/api/desktop/sessions/%s/xpra-ws", sessionID))
-		startTunnel("Xpra", wsURL, token, port, func(p int) {
+		startTunnelWithSignal("Xpra", wsURL, token, port, server, sessionID, func(p int) {
 			launchXpraClient(p)
 		})
 
@@ -176,7 +178,7 @@ func handleURI(uri string) {
 			wsPath += "&user=" + url.QueryEscape(user)
 		}
 		wsURL := toWS(wsPath)
-		// URI 模式默认自动拉起 SSH 客户端
+		// URI 模式默认自动拉起 SSH 客户端，SSH 隧道不需要 exit signal（无 session ID）
 		startTunnel("SSH", wsURL, token, port, func(p int) {
 			launchSSH(p, user)
 		})
@@ -207,6 +209,10 @@ func handleURI(uri string) {
 }
 
 func startTunnel(label, wsURL, token string, port int, onReady func(int)) {
+	startTunnelWithSignal(label, wsURL, token, port, "", "", onReady)
+}
+
+func startTunnelWithSignal(label, wsURL, token string, port int, signalServer, sessionID string, onReady func(int)) {
 	t := tunnel.New()
 	t.OnStatus = func(s tunnel.Status, msg string) {
 		log.Printf("[%s] %s", label, msg)
@@ -222,7 +228,38 @@ func startTunnel(label, wsURL, token string, port int, onReady func(int)) {
 		onReady(port)
 	}
 
+	// 如果有 signalServer，启动心跳轮询，收到 exit 信号自动退出
+	if signalServer != "" && sessionID != "" {
+		go pollExitSignal(signalServer, token, sessionID, t)
+	}
+
 	waitSignal(t)
+}
+
+// pollExitSignal 轮询后端 client-signal 接口，收到 exit 信号后退出
+func pollExitSignal(server, token, sessionID string, t *tunnel.Tunnel) {
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+	for range ticker.C {
+		url := fmt.Sprintf("%s/api/desktop/sessions/%s/client-signal", server, sessionID)
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			continue
+		}
+		req.Header.Set("Authorization", "Bearer "+token)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			continue
+		}
+		body := make([]byte, 256)
+		n, _ := resp.Body.Read(body)
+		resp.Body.Close()
+		if strings.Contains(string(body[:n]), `"exit"`) {
+			log.Printf("[signal] 收到退出信号，正在关闭...")
+			t.Stop()
+			os.Exit(0)
+		}
+	}
 }
 func runRDP(args []string) {
 	fs := flag.NewFlagSet("rdp", flag.ExitOnError)

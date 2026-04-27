@@ -328,6 +328,16 @@
             </button>
           </div>
         </div>
+
+        <!-- 隧道就绪提示条 -->
+        <div v-if="!sidebarCollapsed && activeTunnelNode" class="tunnel-tip">
+          <div class="tunnel-tip-title">🟢 隧道已就绪</div>
+          <div class="tunnel-tip-cmd">
+            <code>ssh {{ activeTunnelNode.user }}@localhost -p {{ tunnelLocalPort }}</code>
+            <button class="tunnel-tip-copy" @click="copyTunnelSshCmd" title="复制">📋</button>
+          </div>
+          <div class="tunnel-tip-hint">或使用 PuTTY / Xshell 连接 localhost:{{ tunnelLocalPort }}</div>
+        </div>
         <div class="hosts-list" v-if="!sidebarCollapsed">
           <div v-if="loading" class="loading-small">加载中...</div>
           <div v-else-if="nodes.length === 0" class="empty-state">
@@ -847,6 +857,26 @@ const tunnelLocalPort = ref(12222)
 const tunnelUser = ref('')
 const sshTunnelStatus = ref<Record<string, 'idle' | 'connecting' | 'connected' | 'disconnected'>>({})
 let sshTunnelHeartbeat: any = null
+
+// 当前已连接隧道的节点（用于显示提示条）
+const activeTunnelNode = computed(() => {
+  const connectedName = Object.keys(sshTunnelStatus.value).find(
+    k => sshTunnelStatus.value[k] === 'connected'
+  )
+  if (!connectedName) return null
+  const node = nodes.value.find((n: any) => n.name === connectedName)
+  return node ? { ...node, user: currentUsername.value || node.name } : null
+})
+
+const copyTunnelSshCmd = () => {
+  if (!activeTunnelNode.value) return
+  const cmd = `ssh ${activeTunnelNode.value.user}@localhost -p ${tunnelLocalPort.value}`
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(cmd).then(() => notification.success('命令已复制'))
+  } else {
+    fallbackCopy(cmd)
+  }
+}
 
 // 通过隐藏 <a> 触发自定义协议，兼容浏览器弹出"打开应用"对话框
 const triggerProtocolUri = (uri: string) => {
@@ -1567,6 +1597,29 @@ const deployPublicKey = async (nodeName: string) => {
 .btn-tunnel-connected  { border-color: #10b981 !important; background: #f0fdf4 !important; opacity: 1 !important; }
 .btn-tunnel-disconnected { border-color: #ef4444 !important; background: #fef2f2 !important; opacity: 1 !important; animation: pulse-red 2s infinite; }
 @keyframes pulse-red { 0%,100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.3); } 50% { box-shadow: 0 0 0 4px rgba(239,68,68,0.1); } }
+
+/* 隧道就绪提示条 */
+.tunnel-tip {
+  margin: 0 0.5rem 0.5rem;
+  padding: 0.6rem 0.75rem;
+  background: #f0fdf4;
+  border: 1px solid #86efac;
+  border-radius: 8px;
+  font-size: 0.78rem;
+}
+.tunnel-tip-title { font-weight: 600; color: #15803d; margin-bottom: 0.35rem; }
+.tunnel-tip-cmd {
+  display: flex; align-items: center; gap: 4px;
+  background: #1e293b; border-radius: 5px; padding: 4px 8px;
+  margin-bottom: 0.3rem;
+}
+.tunnel-tip-cmd code { color: #86efac; font-size: 0.75rem; flex: 1; word-break: break-all; }
+.tunnel-tip-copy {
+  background: none; border: none; cursor: pointer; font-size: 0.85rem;
+  padding: 0 2px; opacity: 0.7; flex-shrink: 0;
+}
+.tunnel-tip-copy:hover { opacity: 1; }
+.tunnel-tip-hint { color: #6b7280; font-size: 0.72rem; }
 
 /* SSH 隧道信息弹窗 */
 .tunnel-step { display: flex; gap: 12px; margin-bottom: 1.25rem; }
