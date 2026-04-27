@@ -518,36 +518,71 @@ func resolveUserParam(username string) string {
 	return username
 }
 
-// GetUserUsage 获取用户机时使用情况
+// GetUserUsage 获取用户机时使用情况（历史已完成 + 当前运行中）
 // user 参数应传入 UID 字符串（由 handler 层通过 ResolveUID 解析）
 func (c *Client) GetUserUsage(user string, startTime, endTime time.Time) ([]UsageRecord, error) {
+	// 1. 查 slurmdb 历史作业
 	userParam := user
 	params := fmt.Sprintf("?users=%s&start_time=%d&end_time=%d",
 		userParam, startTime.Unix(), endTime.Unix())
 
 	path := c.buildAPIPath("/jobs") + params
 	respBody, err := c.doRequest("GET", path, nil)
-	if err != nil {
-		// slurmdbd 未配置或不可用时，返回空列表而不是报错
-		return []UsageRecord{}, nil
+
+	var historyJobs []map[string]interface{}
+	if err == nil {
+		var response UsageResponse
+		if json.Unmarshal(respBody, &response) == nil && len(response.Errors) == 0 {
+			historyJobs = response.Jobs
+		}
 	}
 
-	var response UsageResponse
-	if err := json.Unmarshal(respBody, &response); err != nil {
-		return []UsageRecord{}, nil
+	// 2. 查当前 running 作业（/slurm/ API）
+	runningPath := fmt.Sprintf("/slurm/%s/jobs?user_name=%s", c.apiVersion, user)
+	runningBody, err2 := c.doRequest("GET", runningPath, nil)
+	var runningJobs []map[string]interface{}
+	if err2 == nil {
+		var runningResp struct {
+			Jobs   []map[string]interface{} `json:"jobs"`
+			Errors []interface{}            `json:"errors"`
+		}
+		if json.Unmarshal(runningBody, &runningResp) == nil {
+			// 只取时间范围内的 running 作业
+			for _, j := range runningResp.Jobs {
+				startTs := extractNestedInt64(j, "time", "start")
+				if startTs == 0 {
+					startTs = extractInt64(j, "start_time")
+				}
+				if startTs > 0 && startTs >= startTime.Unix() {
+					runningJobs = append(runningJobs, j)
+				}
+			}
+		}
 	}
 
-	// Slurm 有时把 "not found" 放在 errors 里，视为无记录
-	if len(response.Errors) > 0 {
-		// 任何 slurmdbd 错误都视为无记录，不向上抛出
-		return []UsageRecord{}, nil
+	// 3. 合并，去重（以 job_id 为 key）
+	seen := map[int64]bool{}
+	var allJobs []map[string]interface{}
+	for _, j := range historyJobs {
+		id := extractInt64(j, "job_id")
+		if !seen[id] {
+			seen[id] = true
+			allJobs = append(allJobs, j)
+		}
+	}
+	for _, j := range runningJobs {
+		id := extractInt64(j, "job_id")
+		if !seen[id] {
+			seen[id] = true
+			allJobs = append(allJobs, j)
+		}
 	}
 
-	fmt.Printf("[USAGE-API] GetUserUsage returned %d jobs for user=%s start=%d end=%d\n",
-		len(response.Jobs), user, startTime.Unix(), endTime.Unix())
+	fmt.Printf("[USAGE-API] GetUserUsage returned %d jobs (history=%d running=%d) for user=%s start=%d end=%d\n",
+		len(allJobs), len(historyJobs), len(runningJobs), user, startTime.Unix(), endTime.Unix())
 
 	var records []UsageRecord
-	for _, job := range response.Jobs {
+	for _, job := range allJobs {
 		records = append(records, jobToRecord(job))
 	}
 	if records == nil {

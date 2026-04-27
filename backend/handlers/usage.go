@@ -221,6 +221,14 @@ func GetUserUsage(c *gin.Context) {
 		return
 	}
 
+	// UID 查不到时退回用户名
+	if len(usage) == 0 {
+		uid := ResolveUID(user)
+		if uid != user {
+			usage, _ = client.GetUserUsage(uid, startTime, endTime)
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{"data": usage})
 }
 
