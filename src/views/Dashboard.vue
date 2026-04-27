@@ -663,7 +663,7 @@ const exportJobExcel = () => {
 const showBillingHistory = ref(false)
 const billingLoading = ref(false)
 const billingRecords = ref<any[]>([])
-const billingStartDate = ref(new Date().toISOString().split('T')[0])
+const billingStartDate = ref(new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0])
 const billingEndDate = ref(new Date().toISOString().split('T')[0])
 
 // 过滤掉 billing=0 的记录
@@ -698,6 +698,7 @@ const loadBillingHistory = async () => {
     const start = billingStartDate.value || new Date().toISOString().split('T')[0]
     const end = billingEndDate.value || new Date().toISOString().split('T')[0]
     // end_time 取当天末尾，避免今天的作业被截断
+    console.log('[billing] querying user=', user, 'start=', start, 'end=', end + 'T23:59:59')
     const res = await usageAPI.getUserUsage(user, start, end + 'T23:59:59')
     console.log('[billing] raw response:', res)
     console.log('[billing] res.data:', res.data)

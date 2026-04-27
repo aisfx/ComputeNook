@@ -101,8 +101,11 @@ const loading = ref(false)
 const globalError = ref('')
 const partitions = ref<string[]>([])
 
+const sevenDaysAgo = new Date(today)
+sevenDaysAgo.setDate(today.getDate() - 7)
+
 const filters = ref({
-  startDate: formatDate(today),
+  startDate: formatDate(sevenDaysAgo),
   endDate: formatDate(today),
   partition: '',
 })
