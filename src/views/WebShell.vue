@@ -8,6 +8,17 @@
       </div>
     </div>
 
+    <!-- 隧道就绪提示条（header 下方全宽） -->
+    <div v-if="activeTunnelNode" class="tunnel-banner">
+      <span class="tunnel-banner-icon">🟢</span>
+      <span class="tunnel-banner-text">
+        SSH 隧道已就绪 · <strong>{{ activeTunnelNode.name }}</strong>
+      </span>
+      <code class="tunnel-banner-cmd">ssh {{ activeTunnelNode.user }}@localhost -p {{ tunnelLocalPort }}</code>
+      <button class="tunnel-banner-copy" @click="copyTunnelSshCmd" title="复制命令">📋 复制</button>
+      <span class="tunnel-banner-hint">或用 PuTTY / Xshell 连接 localhost:{{ tunnelLocalPort }}</span>
+    </div>
+
     <!-- 认证方式选择 -->
     <div v-if="showAuthSelector" class="modal-overlay" @click="showAuthSelector = false">
       <div class="modal-content" @click.stop>
@@ -329,15 +340,7 @@
           </div>
         </div>
 
-        <!-- 隧道就绪提示条 -->
-        <div v-if="!sidebarCollapsed && activeTunnelNode" class="tunnel-tip">
-          <div class="tunnel-tip-title">🟢 隧道已就绪</div>
-          <div class="tunnel-tip-cmd">
-            <code>ssh {{ activeTunnelNode.user }}@localhost -p {{ tunnelLocalPort }}</code>
-            <button class="tunnel-tip-copy" @click="copyTunnelSshCmd" title="复制">📋</button>
-          </div>
-          <div class="tunnel-tip-hint">或使用 PuTTY / Xshell 连接 localhost:{{ tunnelLocalPort }}</div>
-        </div>
+        <!-- 隧道就绪提示条已移至顶部 -->
         <div class="hosts-list" v-if="!sidebarCollapsed">
           <div v-if="loading" class="loading-small">加载中...</div>
           <div v-else-if="nodes.length === 0" class="empty-state">
@@ -413,7 +416,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import axios from 'axios'
 import { Terminal } from 'xterm'
 import { FitAddon } from 'xterm-addon-fit'
@@ -903,31 +906,40 @@ const startSshTunnelHeartbeat = (nodeName: string, localPort: number) => {
         ws.onerror = () => { clearTimeout(t); reject() }
       })
     } catch {
-      sshTunnelStatus.value = { ...sshTunnelStatus.value, [nodeName]: 'disconnected' }
+      sshTunnelStatus.value = { [nodeName]: 'disconnected' }
       clearInterval(sshTunnelHeartbeat)
     }
   }, 8000)
 }
 
-// 点击隧道按钮：直接拉起 hpcc:// 协议
+// 点击隧道按钮：直接拉起 hpcc:// 协议（同一时间只允许一个节点建立隧道）
 const launchSSHTunnel = (node: any) => {
   const nodeName = node.name
-  // 如果已连接或断开，先通知断开旧隧道
-  const cur = sshTunnelStatus.value[nodeName]
-  if (cur === 'connected' || cur === 'disconnected') {
-    const token2 = localStorage.getItem('token') || sessionStorage.getItem('token') || ''
-    triggerProtocolUri(`hpcc://disconnect?server=${encodeURIComponent(location.origin)}&token=${encodeURIComponent(token2)}&host=${encodeURIComponent(node.host || node.name)}`)
-  }
   const token = localStorage.getItem('token') || sessionStorage.getItem('token') || ''
+
+  // 断开所有其他节点的隧道（包括当前节点自身如果已连接）
+  Object.keys(sshTunnelStatus.value).forEach(name => {
+    const st = sshTunnelStatus.value[name]
+    if (st === 'connected' || st === 'disconnected' || st === 'connecting') {
+      const otherNode = nodes.value.find((n: any) => n.name === name)
+      if (otherNode) {
+        triggerProtocolUri(`hpcc://disconnect?server=${encodeURIComponent(location.origin)}&token=${encodeURIComponent(token)}&host=${encodeURIComponent(otherNode.host || otherNode.name)}`)
+      }
+    }
+  })
+  // 重置所有节点状态为 idle
+  sshTunnelStatus.value = {}
+  if (sshTunnelHeartbeat) { clearInterval(sshTunnelHeartbeat); sshTunnelHeartbeat = null }
+
   const user = currentUsername.value || ''
   const localPort = 12222
   const sshPort = node.port || 22
   const uri = `hpcc://ssh?server=${encodeURIComponent(location.origin)}&token=${encodeURIComponent(token)}&host=${encodeURIComponent(node.host || node.name)}&port=${localPort}&ssh-port=${sshPort}&user=${encodeURIComponent(user)}`
   triggerProtocolUri(uri)
-  sshTunnelStatus.value = { ...sshTunnelStatus.value, [nodeName]: 'connecting' }
+  sshTunnelStatus.value = { [nodeName]: 'connecting' }
   setTimeout(() => {
     if (sshTunnelStatus.value[nodeName] === 'connecting') {
-      sshTunnelStatus.value = { ...sshTunnelStatus.value, [nodeName]: 'connected' }
+      sshTunnelStatus.value = { [nodeName]: 'connected' }
       startSshTunnelHeartbeat(nodeName, localPort)
     }
   }, 5000)
@@ -1598,7 +1610,7 @@ const deployPublicKey = async (nodeName: string) => {
 .btn-tunnel-disconnected { border-color: #ef4444 !important; background: #fef2f2 !important; opacity: 1 !important; animation: pulse-red 2s infinite; }
 @keyframes pulse-red { 0%,100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.3); } 50% { box-shadow: 0 0 0 4px rgba(239,68,68,0.1); } }
 
-/* 隧道就绪提示条 */
+/* 隧道就绪提示条（旧侧边栏版，保留备用） */
 .tunnel-tip {
   margin: 0 0.5rem 0.5rem;
   padding: 0.6rem 0.75rem;
@@ -1620,6 +1632,31 @@ const deployPublicKey = async (nodeName: string) => {
 }
 .tunnel-tip-copy:hover { opacity: 1; }
 .tunnel-tip-hint { color: #6b7280; font-size: 0.72rem; }
+
+/* 隧道就绪提示条（顶部全宽横幅） */
+.tunnel-banner {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  margin: 0 0 0.75rem;
+  padding: 0.55rem 1rem;
+  background: #f0fdf4;
+  border: 1px solid #86efac;
+  border-radius: 8px;
+  font-size: 0.82rem;
+}
+.tunnel-banner-icon { font-size: 1rem; flex-shrink: 0; }
+.tunnel-banner-text { color: #15803d; font-size: 0.85rem; }
+.tunnel-banner-cmd {
+  background: #1e293b; color: #86efac;
+  padding: 3px 10px; border-radius: 5px;
+  font-size: 0.8rem; white-space: nowrap;
+}
+.tunnel-banner-copy {
+  background: #dcfce7; border: 1px solid #86efac; color: #15803d;
+  border-radius: 5px; padding: 2px 10px; font-size: 0.78rem;
+  cursor: pointer; white-space: nowrap;
+}
+.tunnel-banner-copy:hover { background: #bbf7d0; }
+.tunnel-banner-hint { color: #6b7280; font-size: 0.75rem; margin-left: auto; }
 
 /* SSH 隧道信息弹窗 */
 .tunnel-step { display: flex; gap: 12px; margin-bottom: 1.25rem; }

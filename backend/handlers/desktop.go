@@ -571,12 +571,12 @@ func buildDesktopScript(session *DesktopSession) string {
 	b.WriteString(fmt.Sprintf("mkdir -p \"$XPRA_JOB_DIR\" %s\n\n", statusDir))
 
 	// trap: cleanup on job exit (scancel/timeout/EXIT)
+	// 注意：不在 trap 里 scancel，让 Slurm 按时间限制自然结束，支持客户端重连
 	b.WriteString("DISPLAY_NUM=\nXPRA_PID=\n")
 	b.WriteString("cleanup() {\n")
 	b.WriteString("  [ -n \"$XPRA_PID\" ] && kill \"$XPRA_PID\" 2>/dev/null || true\n")
 	b.WriteString("  [ -n \"$DISPLAY_NUM\" ] && xpra stop :${DISPLAY_NUM} 2>/dev/null || true\n")
 	b.WriteString("  [ -n \"$DISPLAY_NUM\" ] && rm -f /tmp/.X${DISPLAY_NUM}-lock /tmp/.X11-unix/X${DISPLAY_NUM} 2>/dev/null || true\n")
-	b.WriteString("  scancel $SLURM_JOB_ID 2>/dev/null || true\n")
 	b.WriteString("}\n")
 	b.WriteString("trap cleanup EXIT INT TERM\n\n")
 	// clean zombie X locks
@@ -647,7 +647,7 @@ func buildDesktopScript(session *DesktopSession) string {
 				"  --socket-dir=%s \\\n"+
 				"  --log-file=%s \\\n"+
 				"  --start-child=\"%s\" \\\n"+
-				"  --exit-with-children=yes \\\n"+
+				"  --exit-with-children=no \\\n"+
 				"  --daemon=no \\\n"+
 				"  --resize-display=%s \\\n"+
 				"  &\n\n",
@@ -696,9 +696,6 @@ func buildDesktopScript(session *DesktopSession) string {
 	b.WriteString("  kill -0 $XPRA_PID 2>/dev/null || break\n  sleep 30\ndone\n\n")
 	b.WriteString("xpra stop :${DISPLAY_NUM} 2>/dev/null || true\n")
 	b.WriteString(fmt.Sprintf("echo 'status=stopped' >> %s\n", statusFile))
-	// xpra 退出（应用关闭）时主动取消 Slurm 作业，释放资源
-	b.WriteString("# 应用/桌面退出后自动取消作业\n")
-	b.WriteString("scancel $SLURM_JOB_ID 2>/dev/null || true\n")
 
 	return b.String()
 }
