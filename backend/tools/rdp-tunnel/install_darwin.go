@@ -19,8 +19,16 @@ const plistTmpl = `<?xml version="1.0" encoding="UTF-8"?>
   <string>com.hpc.client</string>
   <key>CFBundleName</key>
   <string>HPC Client</string>
+  <key>CFBundleDisplayName</key>
+  <string>HPC Client</string>
   <key>CFBundleExecutable</key>
   <string>hpc-client</string>
+  <key>CFBundleVersion</key>
+  <string>1</string>
+  <key>CFBundleShortVersionString</key>
+  <string>0.1</string>
+  <key>CFBundlePackageType</key>
+  <string>APPL</string>
   <key>CFBundleURLTypes</key>
   <array>
     <dict>
@@ -33,6 +41,8 @@ const plistTmpl = `<?xml version="1.0" encoding="UTF-8"?>
     </dict>
   </array>
   <key>LSUIElement</key>
+  <true/>
+  <key>NSHighResolutionCapable</key>
   <true/>
 </dict>
 </plist>
@@ -61,6 +71,9 @@ func install() error {
 	if err := os.WriteFile(dst, data, 0755); err != nil {
 		return err
 	}
+
+	// 清除 quarantine 隔离属性（从浏览器下载的文件会被打标，导致 Mac 拒绝启动）
+	exec.Command("xattr", "-cr", appDir).Run() //nolint:errcheck
 
 	// 写 Info.plist
 	var buf bytes.Buffer

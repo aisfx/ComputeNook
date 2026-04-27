@@ -202,6 +202,7 @@
           <div v-if="modalStatus === 'failed'" class="status-failed">
             <div class="fail-icon">✕</div>
             <h4>会话启动失败</h4>
+            <div v-if="launchState?.errorMessage" class="error-message">{{ launchState.errorMessage }}</div>
             <div class="log-panel">
               <div class="log-body">
                 <div v-for="(line, i) in launchState?.logLines || []" :key="i" class="log-line">{{ line }}</div>
@@ -513,14 +514,14 @@ const startSession = async (session: any) => {
   await startDesktopLaunch(session, session.partition)
 }
 
-// 监听全局启动状态变化，就绪时自动弹窗；失败只刷新列表不弹窗
+// 监听全局启动状态变化，就绪时自动弹窗；失败时也弹窗显示错误
 watch(() => launchState.value?.status, (status) => {
   if (status === 'ready') {
     selectedSession.value = launchState.value?.session
     showStartModal.value = true
     loadSessions()
   } else if (status === 'failed') {
-    // 只刷新列表，不自动弹失败弹窗（避免刷新页面误弹）
+    showStartModal.value = true
     loadSessions()
   }
 })
@@ -753,6 +754,7 @@ const copyScript = () => {
 
 .status-failed { text-align: center; padding: 1rem; }
 .fail-icon { width: 56px; height: 56px; line-height: 56px; border-radius: 50%; background: #fee2e2; color: #dc2626; font-size: 1.5rem; font-weight: bold; margin: 0 auto 1rem; }
+.error-message { background: #fee2e2; color: #991b1b; border-radius: 6px; padding: .6rem 1rem; margin-bottom: .75rem; font-size: .9rem; text-align: left; }
 
 .status-ready { padding: .5rem; }
 .success-icon { font-size: 2.5rem; text-align: center; margin-bottom: .75rem; }

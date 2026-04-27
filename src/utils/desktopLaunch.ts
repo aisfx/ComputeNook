@@ -15,6 +15,7 @@ export interface LaunchState {
   logLines: string[]
   logType: 'out' | 'err'
   session: any
+  errorMessage?: string
 }
 
 export const launchState = ref<LaunchState | null>(null)
@@ -55,6 +56,7 @@ export async function startDesktopLaunch(session: any, partition?: string) {
   } catch (e: any) {
     if (launchState.value) {
       launchState.value.status = 'failed'
+      launchState.value.errorMessage = e.response?.data?.error || e.message || '启动失败'
     }
   }
 }

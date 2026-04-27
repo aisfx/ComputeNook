@@ -399,7 +399,43 @@ autoreconnection enabled:i:1
 			exec.Command("mstsc", fmt.Sprintf("/v:%s", addr)).Start() //nolint:errcheck
 		}
 	case "darwin":
-		exec.Command("open", fmt.Sprintf("rdp://full%%20address=s:%s", addr)).Start() //nolint:errcheck
+		// 优先用 Microsoft Remote Desktop（App Store 版，支持 Apple Silicon）
+		// 尝试直接调用 mstsc 兼容路径，再 fallback 到 open rdp://
+		mrdpPaths := []string{
+			"/Applications/Microsoft Remote Desktop.app/Contents/MacOS/Microsoft Remote Desktop",
+			"/Applications/Microsoft Remote Desktop Beta.app/Contents/MacOS/Microsoft Remote Desktop Beta",
+		}
+		launched := false
+		for _, p := range mrdpPaths {
+			if _, err := os.Stat(p); err == nil {
+				// 生成临时 .rdp 文件，Microsoft Remote Desktop 可直接打开
+				rdpContent := fmt.Sprintf("full address:s:%s\nauthentication level:i:0\n", addr)
+				if user != "" {
+					rdpContent += fmt.Sprintf("username:s:%s\n", user)
+				}
+				tmpFile := os.TempDir() + "/hpc-rdp.rdp"
+				if err := os.WriteFile(tmpFile, []byte(rdpContent), 0600); err == nil {
+					exec.Command("open", "-a", p, tmpFile).Start() //nolint:errcheck
+					launched = true
+				}
+				break
+			}
+		}
+		if !launched {
+			// fallback: open rdp:// URI（需要 Microsoft Remote Desktop 注册了协议）
+			rdpURI := fmt.Sprintf("rdp://full%%20address=s:%s", addr)
+			if user != "" {
+				rdpURI += fmt.Sprintf("&username=s:%s", url.QueryEscape(user))
+			}
+			if err := exec.Command("open", rdpURI).Run(); err != nil {
+				// 最后兜底：Terminal 提示
+				script := fmt.Sprintf(
+					`tell application "Terminal" to do script "echo '✅ RDP 隧道已就绪'; echo '地址: %s'; echo '请安装 Microsoft Remote Desktop（App Store）后连接'"`,
+					addr,
+				)
+				exec.Command("osascript", "-e", script).Start() //nolint:errcheck
+			}
+		}
 	default:
 		args := []string{fmt.Sprintf("/v:%s", addr), "/dynamic-resolution", "+clipboard", "/sec:rdp"}
 		if user != "" {
@@ -418,10 +454,17 @@ autoreconnection enabled:i:1
 
 // launchSSH 隧道就绪后直接打开终端并执行 SSH 连接
 func launchSSH(port int, sshUser string) {
+	// sshUser 为空时不拼 user@，让 SSH 用系统当前用户
+	var sshCmd string
+	if sshUser != "" {
+		sshCmd = fmt.Sprintf("ssh -p %d %s@localhost", port, sshUser)
+	} else {
+		sshCmd = fmt.Sprintf("ssh -p %d localhost", port)
+	}
+
 	switch runtime.GOOS {
 	case "windows":
 		// 直接弹出 cmd 窗口并执行 SSH，连接断开后窗口保持（pause）
-		sshCmd := fmt.Sprintf("ssh -p %d %s@localhost", port, sshUser)
 		content := fmt.Sprintf(
 			"@echo off\r\n"+
 				"chcp 65001 >nul\r\n"+
@@ -431,7 +474,28 @@ func launchSSH(port int, sshUser string) {
 		)
 		ui.CmdWindow("HPC SSH Tunnel", content)
 	case "darwin":
-		script := fmt.Sprintf(`tell application "Terminal" to do script "ssh -p %d %s@localhost"`, port, sshUser)
+		// 优先 iTerm2，其次系统 Terminal
+		iTerm2 := "/Applications/iTerm.app"
+		if _, err := os.Stat(iTerm2); err == nil {
+			script := fmt.Sprintf(
+				`tell application "iTerm2"
+  activate
+  tell current window
+    create tab with default profile
+    tell current session
+      write text "%s"
+    end tell
+  end tell
+end tell`, sshCmd)
+			if err := exec.Command("osascript", "-e", script).Run(); err == nil {
+				return
+			}
+		}
+		// fallback: Terminal.app
+		script := fmt.Sprintf(`tell application "Terminal"
+  activate
+  do script "%s"
+end tell`, sshCmd)
 		exec.Command("osascript", "-e", script).Start() //nolint:errcheck
 	default:
 		addr := fmt.Sprintf("%s@localhost", sshUser)
@@ -471,7 +535,33 @@ func launchXpraClient(port int) {
 		)
 		ui.CmdWindow("HPC Xpra Tunnel", content)
 	case "darwin":
-		exec.Command("open", fmt.Sprintf("xpra://tcp/localhost:%d/", port)).Start() //nolint:errcheck
+		// 优先用命令行 xpra attach（比 open xpra:// 更可靠，尤其是 Apple Silicon）
+		xpraPaths := []string{
+			"/Applications/Xpra.app/Contents/MacOS/Xpra",
+			"/usr/local/bin/xpra",
+			"/opt/homebrew/bin/xpra",
+			"/usr/bin/xpra",
+		}
+		for _, p := range xpraPaths {
+			if _, err := os.Stat(p); err == nil {
+				exec.Command(p, "attach", fmt.Sprintf("tcp://localhost:%d/", port)).Start() //nolint:errcheck
+				return
+			}
+		}
+		// 尝试 PATH 里的 xpra
+		if p, err := exec.LookPath("xpra"); err == nil {
+			exec.Command(p, "attach", fmt.Sprintf("tcp://localhost:%d/", port)).Start() //nolint:errcheck
+			return
+		}
+		// 尝试通过 open 触发 xpra:// 协议（旧版兼容）
+		if err := exec.Command("open", fmt.Sprintf("xpra://tcp/localhost:%d/", port)).Run(); err != nil {
+			// 所有方式都失败，用 Terminal 弹窗提示
+			script := fmt.Sprintf(
+				`tell application "Terminal" to do script "echo '✅ Xpra 隧道已就绪，端口: %d'; echo '请安装 Xpra 后运行: xpra attach tcp://localhost:%d/'; echo '下载: https://xpra.org/'"`,
+				port, port,
+			)
+			exec.Command("osascript", "-e", script).Start() //nolint:errcheck
+		}
 	default:
 		if p, err := exec.LookPath("xpra"); err == nil {
 			exec.Command(p, "attach", fmt.Sprintf("tcp://localhost:%d/", port)).Start() //nolint:errcheck
