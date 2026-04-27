@@ -81,7 +81,7 @@
 
     <div v-else-if="!loading" class="state-card">
       <div class="empty-icon">📊</div>
-      <p>选择时间范围后点击查询</p>
+      <p>暂无数据</p>
     </div>
   </div>
 </template>
@@ -102,7 +102,7 @@ const globalError = ref('')
 const partitions = ref<string[]>([])
 
 const filters = ref({
-  startDate: formatDate(thirtyDaysAgo),
+  startDate: formatDate(today),
   endDate: formatDate(today),
   partition: '',
 })

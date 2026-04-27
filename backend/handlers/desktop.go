@@ -538,19 +538,29 @@ func buildDesktopScript(session *DesktopSession) string {
 	b.WriteString("  fi\ndone\n")
 	b.WriteString("[ -z \"$DISPLAY_NUM\" ] && DISPLAY_NUM=99\n\n")
 
-	// ── 动态查找空闲 WebSocket 端口（14500-14999）──
-	b.WriteString("# 找空闲 WebSocket 端口\n")
+	// ── 动态查找空闲端口 ──
+	// WS 端口（网页客户端用，14500-14799）
+	b.WriteString("# 找空闲 WebSocket 端口（网页客户端）\n")
 	b.WriteString("WS_PORT=\n")
-	b.WriteString("for port in $(seq 14500 14999); do\n")
+	b.WriteString("for port in $(seq 14500 14799); do\n")
 	b.WriteString("  if ! ss -tlnp 2>/dev/null | grep -q \":${port}[^0-9]\"; then\n")
 	b.WriteString("    WS_PORT=$port; break\n")
 	b.WriteString("  fi\ndone\n")
 	b.WriteString("[ -z \"$WS_PORT\" ] && WS_PORT=14500\n\n")
+	// TCP 端口（本地 Xpra 客户端用，14800-14999）
+	b.WriteString("# 找空闲 TCP 端口（本地 Xpra 客户端）\n")
+	b.WriteString("TCP_PORT=\n")
+	b.WriteString("for port in $(seq 14800 14999); do\n")
+	b.WriteString("  if ! ss -tlnp 2>/dev/null | grep -q \":${port}[^0-9]\"; then\n")
+	b.WriteString("    TCP_PORT=$port; break\n")
+	b.WriteString("  fi\ndone\n")
+	b.WriteString("[ -z \"$TCP_PORT\" ] && TCP_PORT=14800\n\n")
 
 	// ── 写状态文件 ──
 	b.WriteString(fmt.Sprintf("echo 'status=starting' > %s\n", statusFile))
 	b.WriteString(fmt.Sprintf("echo \"node=$(hostname)\" >> %s\n", statusFile))
 	b.WriteString(fmt.Sprintf("echo \"ws_port=$WS_PORT\" >> %s\n", statusFile))
+	b.WriteString(fmt.Sprintf("echo \"tcp_port=$TCP_PORT\" >> %s\n", statusFile))
 	b.WriteString(fmt.Sprintf("echo \"display=$DISPLAY_NUM\" >> %s\n", statusFile))
 	b.WriteString(fmt.Sprintf("echo \"job_dir=$XPRA_JOB_DIR\" >> %s\n\n", statusFile))
 
@@ -574,6 +584,7 @@ func buildDesktopScript(session *DesktopSession) string {
 		b.WriteString(fmt.Sprintf(
 			"xpra start :${DISPLAY_NUM} \\\n"+
 				"  --bind-ws=0.0.0.0:${WS_PORT} \\\n"+
+				"  --bind-tcp=0.0.0.0:${TCP_PORT} \\\n"+
 				"  --html=on \\\n"+
 				"  --socket-dir=%s \\\n"+
 				"  --log-file=%s \\\n"+
@@ -597,6 +608,7 @@ func buildDesktopScript(session *DesktopSession) string {
 		b.WriteString(fmt.Sprintf(
 			"xpra start-desktop :${DISPLAY_NUM} \\\n"+
 				"  --bind-ws=0.0.0.0:${WS_PORT} \\\n"+
+				"  --bind-tcp=0.0.0.0:${TCP_PORT} \\\n"+
 				"  --html=on \\\n"+
 				"  --socket-dir=%s \\\n"+
 				"  --log-file=%s \\\n"+
@@ -613,9 +625,10 @@ func buildDesktopScript(session *DesktopSession) string {
 
 	// ── 等待端口就绪（最多 90 秒）──
 	b.WriteString("for i in $(seq 1 90); do\n")
-	b.WriteString("  ss -tlnp 2>/dev/null | grep -q \":${WS_PORT}[^0-9]\" && break\n")
+	b.WriteString("  ss -tlnp 2>/dev/null | grep -q \":${WS_PORT}[^0-9]\" && \\\n")
+	b.WriteString("  ss -tlnp 2>/dev/null | grep -q \":${TCP_PORT}[^0-9]\" && break\n")
 	b.WriteString("  sleep 1\ndone\n\n")
-	b.WriteString(fmt.Sprintf("if ! ss -tlnp 2>/dev/null | grep -q \":${WS_PORT}[^0-9]\"; then\n"))
+	b.WriteString("if ! ss -tlnp 2>/dev/null | grep -q \":${WS_PORT}[^0-9]\"; then\n")
 	b.WriteString(fmt.Sprintf("  echo 'status=failed' >> %s\n  exit 1\nfi\n\n", statusFile))
 	b.WriteString(fmt.Sprintf("echo 'status=running' >> %s\n\n", statusFile))
 
@@ -682,7 +695,8 @@ func pollDesktopJob(sessionID int, jobID int64, username string) {
 
 		if strings.HasPrefix(state, "RUNNING") {
 			node := job.Nodes
-			rdpPort := 5901
+			wsPort := 0
+			tcpPort := 0
 			vncReady := false
 
 			// 等待状态文件里出现 status=running（最多等2分钟）
@@ -707,7 +721,11 @@ func pollDesktopJob(sessionID int, jobID int64, username string) {
 						switch strings.TrimSpace(parts[0]) {
 						case "ws_port":
 							if p, err := strconv.Atoi(strings.TrimSpace(parts[1])); err == nil {
-								rdpPort = p
+								wsPort = p
+							}
+						case "tcp_port":
+							if p, err := strconv.Atoi(strings.TrimSpace(parts[1])); err == nil {
+								tcpPort = p
 							}
 						case "node":
 							if v := strings.TrimSpace(parts[1]); v != "" {
@@ -730,8 +748,16 @@ func pollDesktopJob(sessionID int, jobID int64, username string) {
 				if sessions[i].ID == sessionID {
 					sessions[i].Status = "running"
 					sessions[i].Address = node
-					sessions[i].XpraPort = rdpPort
-					sessions[i].VNCPort = rdpPort // 兼容旧字段
+					// VNCPort = ws_port（网页客户端用）
+					if wsPort > 0 {
+						sessions[i].VNCPort = wsPort
+					}
+					// XpraPort = tcp_port（本地 Xpra 客户端用）
+					if tcpPort > 0 {
+						sessions[i].XpraPort = tcpPort
+					} else if wsPort > 0 {
+						sessions[i].XpraPort = wsPort
+					}
 					_ = saveDesktopSessions(sessions)
 					break
 				}

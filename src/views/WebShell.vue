@@ -1032,6 +1032,7 @@ const connectToNode = async (node: any, password: string = '', mfaCode: string =
       connectionStatus.value = 'error'
       notification.error('连接错误')
       console.error('WebSocket error:', error)
+      websocket = null
     }
     
   } catch (err: any) {
@@ -1083,7 +1084,10 @@ const initTerminal = () => {
   terminal.loadAddon(fitAddon)
   terminal.loadAddon(new WebLinksAddon())
   
-  // 挂载到容�?
+  // 清空容器，防止重连时残留旧 xterm DOM
+  terminalContainer.value.innerHTML = ''
+
+  // 挂载到容器
   terminal.open(terminalContainer.value)
   
   // 自适应大小

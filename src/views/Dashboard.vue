@@ -695,7 +695,7 @@ const loadBillingHistory = async () => {
   try {
     const user = currentUser.value?.username
     if (!user) return
-    const start = billingStartDate.value || new Date(Date.now() - 365 * 86400000).toISOString().split('T')[0]
+    const start = billingStartDate.value || new Date().toISOString().split('T')[0]
     const end = billingEndDate.value || new Date().toISOString().split('T')[0]
     // end_time 取当天末尾，避免今天的作业被截断
     const res = await usageAPI.getUserUsage(user, start, end + 'T23:59:59')
@@ -912,7 +912,7 @@ onMounted(() => {
   currentUser.value = getUser()
   const now = new Date()
   billingEndDate.value = now.toISOString().split('T')[0]
-  billingStartDate.value = new Date(now.getTime() - 365 * 86400000).toISOString().split('T')[0]
+  billingStartDate.value = now.toISOString().split('T')[0]
   loadDashboardStats()
   loadNodes()
   loadJobStats()

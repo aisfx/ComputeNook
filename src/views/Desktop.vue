@@ -215,7 +215,8 @@
             <h4>会话已就绪</h4>
             <div class="connection-info">
               <div class="info-item"><span class="info-label">节点:</span><code>{{ selectedSession?.address }}</code></div>
-              <div class="info-item"><span class="info-label">Xpra 端口:</span><code>{{ selectedSession?.xpraPort || selectedSession?.vncPort }}</code></div>
+              <div class="info-item"><span class="info-label">网页端口(WS):</span><code>{{ selectedSession?.vncPort }}</code></div>
+              <div class="info-item"><span class="info-label">客户端端口(TCP):</span><code>{{ selectedSession?.xpraPort }}</code></div>
             </div>
 
             <div class="connection-methods">
@@ -245,7 +246,7 @@
                   </div>
                 </div>
                 <div class="method-hint">
-                  <span>① 点「建立隧道」→ hpc-client 将节点端口 <code>{{ selectedSession?.xpraPort || selectedSession?.vncPort }}</code> 映射到本地 <code>{{ localVncPort }}</code></span>
+                  <span>① 点「建立隧道」→ hpc-client 将节点 TCP 端口 <code>{{ selectedSession?.xpraPort }}</code> 映射到本地 <code>{{ localVncPort }}</code></span>
                   <span>② 隧道就绪后点「启动 Xpra」→ 本地 Xpra 客户端自动连接</span>
                   <span style="color:#9ca3af">未安装 hpc-client？<a href="/download" target="_blank" style="color:#6366f1">点此下载</a></span>
                 </div>
