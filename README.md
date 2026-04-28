@@ -346,10 +346,13 @@ QUOTA_PATH=/nfs/home
 ### Web Shell
 
 1. 进入「Web Shell」页面
-2. 从节点列表选择目标节点（登录节点/计算节点）
-3. 点击「连接」，浏览器内打开 SSH 终端
-4. 支持多标签页同时连接不同节点
-5. 所有输入行为会记录到审计日志
+2. 从左侧节点列表选择目标节点
+3. 选择认证方式（SSH 私钥 / 密码）
+4. 浏览器内打开 SSH 终端，支持多标签页
+5. 点击节点旁的 🔗 按钮可通过 **hpc-client** 建立 SSH 隧道，用本地 ssh/PuTTY 连接
+   - 同一时间只能有一个节点建立隧道，切换节点时自动断开旧隧道
+   - 隧道就绪后顶部横幅显示 SSH 连接命令，一键复制
+6. 所有输入行为记录到审计日志，危险命令自动拦截或告警
 
 ---
 
@@ -358,19 +361,46 @@ QUOTA_PATH=/nfs/home
 1. 进入「远程桌面」页面
 2. 点击「新建桌面」，选择分区、CPU/内存资源
 3. 点击「启动」，等待 Slurm 分配节点
-4. 节点就绪后有两种连接方式：
-   - **浏览器连接（Xpra HTML5）**：无需安装软件，通过后端 WebSocket 代理直接在浏览器打开
-   - **hpc-client 隧道**：复制隧道命令在本地执行，然后用任意 VNC 客户端连接 `localhost:590x`
+4. 节点就绪后有三种连接方式：
+   - **浏览器连接（Xpra HTML5）**：无需安装软件，直接在浏览器打开图形界面
+   - **本地 Xpra 客户端**：安装 hpc-client 后一键建立隧道，自动启动本地 Xpra 客户端，性能更好
+   - **VNC 客户端**：通过 hpc-client 隧道连接，适合 TurboVNC / TigerVNC
 5. 浏览器连接需要在后端部署 xpra-html5 静态文件：
 
 ```bash
-# 下载 xpra-html5
 git clone https://github.com/Xpra-org/xpra-html5.git
-# 放到后端 static/xpra 目录
 cp -r xpra-html5/html5 /opt/hpc-platform/static/xpra
 ```
 
-后端启动时会自动检测 `static/xpra` 目录并挂载到 `/xpra/` 路径。
+---
+
+### hpc-client 客户端
+
+网页一键连接的本地客户端，支持 Windows / macOS（Intel + Apple Silicon）/ Linux。
+
+**安装：**
+
+1. 进入「客户端下载」页面，根据系统下载对应版本
+2. 运行安装命令注册 `hpcc://` 协议：
+
+```bash
+# macOS / Linux
+chmod +x hpc-client-mac && ./hpc-client-mac install
+
+# Windows（管理员 PowerShell）
+.\hpc-client-windows.exe install
+```
+
+3. 回到平台，点击「一键连接」按钮，浏览器弹出确认后自动启动隧道
+
+**支持功能：**
+- SSH 隧道：节点 SSH 端口映射到本地，供 ssh/PuTTY 使用
+- RDP / Xpra / VNC 隧道：远程桌面端口映射到本地，自动启动对应客户端
+- WebDAV 挂载：HPC 文件系统挂载到本地磁盘
+
+**重复连接说明：**
+
+第二次点击连接时，如果本地端口已被旧隧道占用，客户端会自动复用旧隧道直接启动客户端程序，无需手动杀进程。
 
 ---
 
