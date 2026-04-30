@@ -38,7 +38,7 @@
               </button>
             </div>
           </div>
-          <JobSubmit ref="jobSubmitRef" @job-submitted="handleJobSubmitted" />
+          <JobSubmit ref="jobSubmitRef" @job-submitted="handleJobSubmitted" @go-registry="emit('go-registry')" />
         </template>
 
         <!-- 模板管理面板 -->
@@ -69,7 +69,7 @@ import JobDetailModal from '../components/JobDetailModal.vue'
 import { jobTemplates } from '../data/jobTemplates'
 import { getApiBase } from '../utils/auth'
 
-const emit = defineEmits(['open-directory'])
+const emit = defineEmits(['open-directory', 'go-registry'])
 inject('jobManagementTab', ref('info'))
 
 const submitOpen = ref(false)

@@ -302,7 +302,7 @@
   </div>
   <Teleport to="body">
     <!-- SSH 日志内容查看弹窗 -->
-    <div v-if="showSSHLogModal" class="modal-overlay" @click.self="showSSHLogModal = false">
+    <div v-if="showSSHLogModal" class="modal-overlay">
       <div class="modal modal-large">
         <div class="modal-header">
           <h3>🔐 SSH 行为日志 — {{ sshLogFile?.file }}</h3>
@@ -314,7 +314,7 @@
       </div>
     </div>
     <!-- 详情对话框 -->
-    <div v-if="showDetailsDialog" class="modal-overlay" @click.self="closeDetails">
+    <div v-if="showDetailsDialog" class="modal-overlay">
       <div class="modal modal-large">
         <div class="modal-header">
           <h3>📋 审计日志详情</h3>

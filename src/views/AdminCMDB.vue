@@ -91,7 +91,7 @@
 
   <!-- 详情/编辑弹窗 -->
   <Teleport to="body">
-    <div v-if="showModal" class="modal-overlay" @click.self="showModal = false">
+    <div v-if="showModal" class="modal-overlay">
       <div class="modal">
         <div class="modal-header">
           <h3>{{ editMode ? '编辑主机' : (viewMode ? '主机详情' : '新增主机') }}</h3>

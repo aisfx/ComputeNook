@@ -50,7 +50,7 @@
   </div>
   <Teleport to="body">
     <!-- 添加/编辑 QoS 模态框 -->
-    <div v-if="showModal" class="modal-overlay" @click.self="closeModal">
+    <div v-if="showModal" class="modal-overlay">
       <div class="modal">
         <div class="modal-header">
           <h3>{{ isEdit ? '编辑 QoS' : '添加 QoS' }}</h3>
@@ -128,7 +128,7 @@
     </div>
 
     <!-- QoS 绑定查看模态框 -->
-    <div v-if="showBindingsModal" class="modal-overlay" @click.self="closeBindingsModal">
+    <div v-if="showBindingsModal" class="modal-overlay">
       <div class="modal modal-large">
         <div class="modal-header">
           <h3>QoS 绑定: {{ selectedQoS?.name }}</h3>

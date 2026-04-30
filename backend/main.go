@@ -65,6 +65,8 @@ func main() {
 
 	// 恢复后端重启前未完成的桌面会话轮询
 	handlers.RecoverDesktopSessions()
+	// 加载持久化的 AI 任务
+	handlers.LoadAITasks()
 
 	// 创建 Gin 路由
 	r := gin.Default()
@@ -375,6 +377,23 @@ func main() {
 			reports.GET("/storage",   handlers.GetStorageStats)
 			reports.GET("/quota",     handlers.GetQuotaStats)
 			reports.GET("/qos-usage", handlers.GetQoSUsage)
+		}
+
+		// AI 任务管理（训练/推理）
+		aiTasks := auth.Group("/ai-tasks")
+		{
+			aiTasks.GET("", handlers.ListAITasks)
+			aiTasks.GET("/stats", handlers.GetAITaskStats)
+			aiTasks.POST("", handlers.CreateAITask)
+			aiTasks.GET("/:id", handlers.GetAITask)
+			aiTasks.GET("/:id/logs", handlers.GetAITaskLogs)
+			aiTasks.POST("/:id/stop", handlers.StopAITask)
+			aiTasks.POST("/:id/restart", handlers.RestartAITask)
+			aiTasks.DELETE("/:id", handlers.DeleteAITask)
+			// 推理端口发布 & API Key
+			aiTasks.POST("/:id/endpoint", handlers.PublishInferencePort)
+			aiTasks.GET("/:id/endpoint", handlers.GetInferenceEndpoint)
+			aiTasks.DELETE("/:id/endpoint", handlers.RevokeInferenceEndpoint)
 		}
 
 		// 镜像仓库 API（Harbor 代理）

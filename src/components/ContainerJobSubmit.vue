@@ -11,19 +11,41 @@
           required
         />
         <button type="button" class="btn-pick" @click="showPicker = !showPicker">📦 选择</button>
+        <button type="button" class="btn-pick" @click="emit('go-registry')" title="前往镜像仓库">🗄</button>
       </div>
       <div v-if="showPicker" class="image-picker">
         <div class="picker-search">
           <input v-model="pickerSearch" placeholder="搜索镜像..." class="picker-input" />
         </div>
-        <div class="picker-list">
-          <div
-            v-for="img in filteredImages"
-            :key="img"
-            class="picker-item"
-            @click="form.image = img; showPicker = false"
-          >{{ img }}</div>
-          <div v-if="filteredImages.length === 0" class="picker-empty">暂无镜像，请前往镜像仓库页面</div>
+        <div v-if="loadingImages" class="picker-empty">加载中...</div>
+        <div v-else class="picker-list">
+          <template v-if="filteredImages.length > 0">
+            <div v-if="groupedImages.public.length > 0" class="picker-group-label">公共镜像</div>
+            <div
+              v-for="img in groupedImages.public"
+              :key="img.addr"
+              class="picker-item"
+              @click="form.image = img.addr; showPicker = false"
+            >
+              <span class="picker-img-name">{{ img.name }}</span>
+              <span class="picker-img-addr">{{ img.addr }}</span>
+            </div>
+            <div v-if="groupedImages.private.length > 0" class="picker-group-label">我的镜像</div>
+            <div
+              v-for="img in groupedImages.private"
+              :key="img.addr"
+              class="picker-item"
+              @click="form.image = img.addr; showPicker = false"
+            >
+              <span class="picker-img-name">{{ img.name }}</span>
+              <span class="picker-img-addr">{{ img.addr }}</span>
+            </div>
+          </template>
+          <div v-else class="picker-empty">
+            暂无镜像，
+            <span class="picker-link" @click="emit('go-registry'); showPicker = false">前往镜像仓库</span>
+            查看
+          </div>
         </div>
       </div>
     </div>
@@ -112,13 +134,26 @@ import { getApiBase } from '../utils/auth'
 import notification from '../utils/notification'
 
 const props = defineProps<{ initialImage?: string }>()
-const emit = defineEmits(['submitted'])
+const emit = defineEmits(['submitted', 'go-registry'])
 
 const submitting = ref(false)
 const showPicker = ref(false)
 const pickerSearch = ref('')
+const loadingImages = ref(false)
 const partitions = ref<string[]>([])
-const availableImages = ref<string[]>([])
+
+interface ImageItem { name: string; addr: string; project: string; isPublic: boolean }
+const allImages = ref<ImageItem[]>([])
+
+const filteredImages = computed(() =>
+  pickerSearch.value
+    ? allImages.value.filter(i => i.name.includes(pickerSearch.value) || i.addr.includes(pickerSearch.value))
+    : allImages.value
+)
+const groupedImages = computed(() => ({
+  public: filteredImages.value.filter(i => i.isPublic),
+  private: filteredImages.value.filter(i => !i.isPublic)
+}))
 
 const form = ref({
   image: props.initialImage || '',
@@ -132,11 +167,6 @@ const form = ref({
   workdir: '/workspace',
   command: '',
   time: 0,
-})
-
-const filteredImages = computed(() => {
-  if (!pickerSearch.value) return availableImages.value
-  return availableImages.value.filter(i => i.includes(pickerSearch.value))
 })
 
 const generatedScript = computed(() => {
@@ -191,34 +221,45 @@ const loadPartitions = async () => {
 }
 
 const loadImages = async () => {
+  loadingImages.value = true
   try {
     const token = localStorage.getItem('token') || sessionStorage.getItem('token')
-    // 获取仓库配置
     const cfgRes = await fetch(`${getApiBase()}/api/registry/config`, {
       headers: { Authorization: `Bearer ${token}` }
     })
     const cfg = await cfgRes.json()
-    const harborHost = cfg.harbor_url?.replace(/^https?:\/\//, '') || ''
-    const userProject = cfg.user_project || ''
+    const harborHost = (cfg.harbor_url || '').replace(/^https?:\/\//, '').replace(/\/$/, '')
+    const publicProjects: string[] = cfg.public_projects || ['library']
 
-    // 加载公共项目和用户项目的镜像
-    const projectsToLoad = ['library', userProject].filter(Boolean)
-    const images: string[] = []
-    for (const proj of projectsToLoad) {
+    const projRes = await fetch(`${getApiBase()}/api/registry/projects`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    const projData = await projRes.json()
+    const projects: any[] = projData.data || []
+
+    const images: ImageItem[] = []
+    await Promise.all(projects.map(async (proj) => {
       try {
-        const res = await fetch(`${getApiBase()}/api/registry/projects/${proj}/repositories`, {
+        const res = await fetch(`${getApiBase()}/api/registry/projects/${proj.name}/repositories`, {
           headers: { Authorization: `Bearer ${token}` }
         })
-        if (!res.ok) continue
+        if (!res.ok) return
         const data = await res.json()
         for (const repo of (data.data || [])) {
           const name = repo.name?.split('/').pop() || ''
-          if (name) images.push(`${harborHost}/${proj}/${name}:latest`)
+          if (!name) continue
+          images.push({
+            name: `${proj.name}/${name}`,
+            addr: `${harborHost}/${proj.name}/${name}:latest`,
+            project: proj.name,
+            isPublic: !!proj.is_public_project || publicProjects.includes(proj.name)
+          })
         }
       } catch { /* ignore */ }
-    }
-    availableImages.value = images
+    }))
+    allImages.value = images
   } catch { /* ignore */ }
+  finally { loadingImages.value = false }
 }
 
 const submit = async () => {
@@ -348,6 +389,18 @@ onMounted(() => {
 }
 .picker-item:hover { background: hsl(var(--accent)); }
 .picker-empty { padding: 12px 10px; font-size: 0.8rem; color: hsl(var(--muted-foreground)); text-align: center; }
+.picker-group-label {
+  padding: 5px 10px 3px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: hsl(var(--muted-foreground));
+  background: hsl(var(--muted) / 0.5);
+}
+.picker-img-name { font-weight: 600; font-size: 0.8rem; }
+.picker-img-addr { font-size: 0.72rem; color: hsl(var(--muted-foreground)); margin-left: 6px; font-family: monospace; }
+.picker-link { color: hsl(var(--primary)); cursor: pointer; text-decoration: underline; }
 
 .help-text { font-size: 0.7rem; color: hsl(var(--muted-foreground)); }
 
@@ -365,7 +418,13 @@ onMounted(() => {
   font-family: 'Courier New', monospace;
 }
 
-.form-actions { padding-top: 8px; }
+.form-actions {
+  padding-top: 8px;
+  position: sticky;
+  bottom: 0;
+  background: hsl(var(--card));
+  padding-bottom: 4px;
+}
 
 .btn-primary {
   width: 100%;

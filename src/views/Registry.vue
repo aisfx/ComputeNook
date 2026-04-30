@@ -72,7 +72,6 @@
           </div>
           <div class="repo-actions">
             <button class="btn-sm" @click="copyPullCmd(repo.name)">📋 复制地址</button>
-            <button class="btn-sm primary" @click="submitWithImage(repo.name)">🚀 提交作业</button>
             <button
               v-if="selectedProjectMeta?.can_write"
               class="btn-sm danger"
@@ -113,21 +112,7 @@ python /workspace/train.py</pre>
         </div>
       </div>
 
-      <!-- 提交容器作业弹窗 -->
-      <div v-if="showSubmitDialog" class="modal-overlay" @click="showSubmitDialog = false">
-        <div class="modal-box" style="max-width:560px" @click.stop>
-          <div class="modal-header">
-            <h3>🚀 提交容器作业</h3>
-            <button @click="showSubmitDialog = false" class="btn-close">✕</button>
-          </div>
-          <div class="modal-body">
-            <ContainerJobSubmit
-              :initial-image="selectedImage"
-              @submitted="showSubmitDialog = false"
-            />
-          </div>
-        </div>
-      </div>
+      <!-- 提交容器作业弹窗已移至作业提交页面 -->
     </Teleport>
   </div>
 </template>
@@ -136,7 +121,6 @@ python /workspace/train.py</pre>
 import { ref, computed, onMounted } from 'vue'
 import { getApiBase } from '../utils/auth'
 import notification from '../utils/notification'
-import ContainerJobSubmit from '../components/ContainerJobSubmit.vue'
 
 const projects = ref<any[]>([])
 const selectedProject = ref('')
@@ -146,8 +130,6 @@ const searchText = ref('')
 const loadingProjects = ref(false)
 const loadingRepos = ref(false)
 const showPullDialog = ref(false)
-const showSubmitDialog = ref(false)
-const selectedImage = ref('')
 const harborHost = ref('')
 const userProject = ref('')
 const isAdmin = ref(false)
@@ -232,11 +214,6 @@ const copyPullCmd = (repoName: string) => {
   const addr = `${harborHost.value}/${selectedProject.value}/${shortRepoName(repoName)}:latest`
   navigator.clipboard.writeText(addr)
   notification.success('镜像地址已复制')
-}
-
-const submitWithImage = (repoName: string) => {
-  selectedImage.value = `${harborHost.value}/${selectedProject.value}/${shortRepoName(repoName)}:latest`
-  showSubmitDialog.value = true
 }
 
 const confirmDelete = async (repo: any) => {

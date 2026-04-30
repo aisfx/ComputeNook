@@ -48,7 +48,7 @@
   </div>
   <Teleport to="body">
     <!-- 添加/编辑用户模态框 -->
-    <div v-if="showModal" class="modal-overlay" @click.self="closeModal">
+    <div v-if="showModal" class="modal-overlay">
       <div class="modal">
         <div class="modal-header">
           <h3>{{ isEditing ? '编辑用户' : '添加用户' }}</h3>

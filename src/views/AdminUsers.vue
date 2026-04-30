@@ -83,7 +83,7 @@
   </div>
   <Teleport to="body">
     <!-- 添加/编辑用户模态框 -->
-    <div v-if="showAddModal || showEditModal" class="modal-overlay" @click.self="closeModals">
+    <div v-if="showAddModal || showEditModal" class="modal-overlay">
       <div class="modal">
         <div class="modal-header">
           <h3>{{ showEditModal ? '编辑用户' : '添加用户' }}</h3>
@@ -139,7 +139,7 @@
     </div>
 
     <!-- 重置密码模态框 -->
-    <div v-if="showPasswordModal" class="modal-overlay" @click.self="showPasswordModal = false">
+    <div v-if="showPasswordModal" class="modal-overlay">
       <div class="modal">
         <div class="modal-header">
           <h3>重置密码 - {{ selectedUser?.username }}</h3>
@@ -163,9 +163,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, watch } from 'vue'
 import axios from 'axios'
 import { userAPI, mfaAPI } from '../api'
+
+// 从运行时配置读取家目录基础路径
+const getHomeBasePath = () => {
+  return ((window as any).__CONFIG__?.homeBasePath || '/home').replace(/\/$/, '')
+}
 
 const users = ref<any[]>([])
 const openDropdown = reactive<Record<string, boolean>>({})
@@ -237,19 +242,25 @@ const openAddModal = async () => {
   try {
     const [uid, gid] = await Promise.all([
       userAPI.getNextUID(),
-      userAPI.getNextUID() // 使用相同的 UID 作为默认 GID
+      userAPI.getNextUID()
     ])
     formData.value.uid = uid
     formData.value.gid = gid
-    formData.value.homeDir = `/home/${formData.value.username || 'user'}`
+    formData.value.homeDir = `${getHomeBasePath()}/${formData.value.username || ''}`
   } catch (err: any) {
     console.error('Failed to get next UID/GID:', err)
-    // 如果失败，使用默认值
     formData.value.uid = 1000
     formData.value.gid = 1000
   }
   showAddModal.value = true
 }
+
+// 用户名变化时自动更新家目录（仅添加模式）
+watch(() => formData.value.username, (newName) => {
+  if (showAddModal.value) {
+    formData.value.homeDir = `${getHomeBasePath()}/${newName}`
+  }
+})
 
 // 编辑用户
 const editUser = (user: any) => {

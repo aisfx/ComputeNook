@@ -51,7 +51,7 @@
   </div>
   <Teleport to="body">
     <!-- 添加/编辑用户组模态框 -->
-    <div v-if="showAddModal || showEditModal" class="modal-overlay" @click.self="closeModals">
+    <div v-if="showAddModal || showEditModal" class="modal-overlay">
       <div class="modal">
         <div class="modal-header">
           <h3>{{ showEditModal ? '编辑用户组' : '添加用户组' }}</h3>

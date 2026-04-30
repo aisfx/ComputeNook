@@ -78,10 +78,9 @@ func ensureUserProject(username string) error {
 	resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		// 创建私有项目
+		// 创建私有项目，Harbor v2 只通过 metadata.public 控制可见性
 		payload := map[string]interface{}{
 			"project_name": username,
-			"public":       false,
 			"metadata":     map[string]string{"public": "false"},
 		}
 		body, _ := json.Marshal(payload)
@@ -219,9 +218,12 @@ func ListRepositories(c *gin.Context) {
 	isAdmin, _ := isAdminVal.(bool)
 	project := c.Param("project")
 
-	if !isAdmin && !isPublicProject(project) && project != username.(string) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "无权访问此项目"})
-		return
+	// 权限检查：管理员全通，自己的项目全通，其他项目查 Harbor 确认是否公开
+	if !isAdmin && project != username.(string) {
+		if !checkProjectPublic(project) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "无权访问此项目"})
+			return
+		}
 	}
 
 	resp, err := harborAdmin("GET", fmt.Sprintf("/api/v2.0/projects/%s/repositories?page_size=100", project), nil)
@@ -250,9 +252,11 @@ func ListTags(c *gin.Context) {
 	project := c.Param("project")
 	repo := c.Param("repo")
 
-	if !isAdmin && !isPublicProject(project) && project != username.(string) {
-		c.JSON(http.StatusForbidden, gin.H{"error": "无权访问此项目"})
-		return
+	if !isAdmin && project != username.(string) {
+		if !checkProjectPublic(project) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "无权访问此项目"})
+			return
+		}
 	}
 
 	resp, err := harborAdmin("GET",

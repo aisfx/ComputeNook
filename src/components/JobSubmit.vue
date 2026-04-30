@@ -1,5 +1,24 @@
 <template>
-  <form @submit.prevent="submitJob" class="submit-form">
+  <div class="submit-wrapper">
+    <!-- 模式切换 -->
+    <div class="mode-tabs">
+      <button type="button" :class="['mode-tab', { active: mode === 'normal' }]" @click="mode = 'normal'">📝 普通作业</button>
+      <button type="button" :class="['mode-tab', { active: mode === 'container' }]" @click="mode = 'container'">🐳 容器作业</button>
+    </div>
+
+    <!-- 容器作业模式 -->
+    <ContainerJobSubmit
+      v-if="mode === 'container'"
+      @submitted="emit('job-submitted')"
+      @go-registry="emit('go-registry')"
+    />
+
+    <!-- AI 训练模式 -->
+
+    <!-- AI 推理模式 -->
+
+    <!-- 普通作业模式 -->
+    <form v-else @submit.prevent="submitJob" class="submit-form">
     <!-- 作业名 + 分区 -->
     <div class="form-row col2">
       <div class="form-group">
@@ -76,6 +95,11 @@
           <button type="button" class="btn-tpl" @click="applyScriptTemplate('gpu')">GPU</button>
           <button type="button" class="btn-tpl" @click="applyScriptTemplate('python')">Python</button>
           <button type="button" class="btn-tpl" @click="applyScriptTemplate('array')">数组作业</button>
+          <span class="template-label" style="margin-left:4px">AI：</span>
+          <button type="button" class="btn-tpl ai" @click="applyScriptTemplate('pytorch')">🔥 PyTorch</button>
+          <button type="button" class="btn-tpl ai" @click="applyScriptTemplate('deepspeed')">⚡ DeepSpeed</button>
+          <button type="button" class="btn-tpl ai" @click="applyScriptTemplate('vllm')">🚀 vLLM</button>
+          <button type="button" class="btn-tpl ai" @click="applyScriptTemplate('triton')">🎯 Triton</button>
         </div>
       </div>
       <textarea
@@ -116,6 +140,7 @@
       <button type="button" class="btn-ghost" @click="resetForm">重置</button>
     </div>
   </form>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -124,8 +149,10 @@ import { getUser, getApiBase } from '../utils/auth'
 import { fileManagerApi } from '../config/api'
 import notification from '../utils/notification'
 import { jobTemplates } from '../data/jobTemplates'
+import ContainerJobSubmit from './ContainerJobSubmit.vue'
 
-const emit = defineEmits(['job-submitted'])
+const emit = defineEmits(['job-submitted', 'go-registry'])
+const mode = ref<'normal' | 'container'>('normal')
 
 const currentUser = ref<any>(null)
 const selectedTemplate = ref<number | null>(null)
@@ -451,15 +478,67 @@ echo "Processing: $INPUT_FILE"
 ./process $INPUT_FILE
 
 echo "Task $SLURM_ARRAY_TASK_ID finished: $(date)"`,
+
+  pytorch: `#!/bin/bash
+#SBATCH -J pytorch_train
+#SBATCH -o slurm-%j.out
+#SBATCH -e slurm-%j.err
+
+MASTER=$(scontrol show hostnames $SLURM_JOB_NODELIST | head -n1)
+
+srun torchrun \\
+  --nproc_per_node=$SLURM_GPUS_ON_NODE \\
+  --nnodes=$SLURM_NNODES \\
+  --node_rank=$SLURM_NODEID \\
+  --master_addr=$MASTER \\
+  --master_port=29500 \\
+  train.py`,
+
+  deepspeed: `#!/bin/bash
+#SBATCH -J deepspeed_train
+#SBATCH -o slurm-%j.out
+#SBATCH -e slurm-%j.err
+
+MASTER=$(scontrol show hostnames $SLURM_JOB_NODELIST | head -n1)
+
+srun deepspeed \\
+  --num_nodes=$SLURM_NNODES \\
+  --num_gpus=$SLURM_GPUS_ON_NODE \\
+  --master_addr=$MASTER \\
+  train_ds.py --deepspeed ds_zero3.json`,
+
+  vllm: `#!/bin/bash
+#SBATCH -J vllm_infer
+#SBATCH -o slurm-%j.out
+#SBATCH -e slurm-%j.err
+
+python -m vllm.entrypoints.openai.api_server \\
+  --model /data/models/llama3-8b \\
+  --tensor-parallel-size $SLURM_GPUS_ON_NODE \\
+  --host 0.0.0.0 --port 8000 \\
+  --gpu-memory-utilization 0.9`,
+
+  triton: `#!/bin/bash
+#SBATCH -J triton_infer
+#SBATCH -o slurm-%j.out
+#SBATCH -e slurm-%j.err
+
+tritonserver \\
+  --model-repository=/data/triton_models \\
+  --http-port=8000 --grpc-port=8001 \\
+  --log-verbose=1`,
 }
 
 const applyScriptTemplate = (type: string) => {
   const tpl = scriptTemplates[type]
   if (!tpl) return
   form.value.scriptContent = tpl
-  // 同步更新表单里的基础参数
   if (type === 'gpu') { form.value.gpus = 1; form.value.partition = 'gpu' }
   if (type === 'mpi') { form.value.nodes = 2; form.value.cpus = 16 }
+  if (type === 'pytorch') { form.value.gpus = 8; form.value.cpus = 32; form.value.nodes = 1 }
+  if (type === 'deepspeed') { form.value.gpus = 8; form.value.cpus = 32; form.value.nodes = 1 }
+  if (type === 'vllm') { form.value.gpus = 4; form.value.cpus = 16; form.value.nodes = 1 }
+  if (type === 'triton') { form.value.gpus = 2; form.value.cpus = 8; form.value.nodes = 1 }
 }
 
 const submitJob = async () => {
@@ -541,6 +620,21 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.submit-wrapper { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
+
+.mode-tabs {
+  display: flex; gap: 2px; padding: 8px 14px 0;
+  border-bottom: 1px solid hsl(var(--border)); flex-shrink: 0;
+}
+.mode-tab {
+  padding: 6px 14px; border: none; background: transparent;
+  color: hsl(var(--muted-foreground)); font-size: 0.8rem; font-weight: 500;
+  cursor: pointer; border-bottom: 2px solid transparent;
+  transition: all 0.15s; margin-bottom: -1px;
+}
+.mode-tab:hover { color: hsl(var(--foreground)); }
+.mode-tab.active { color: hsl(var(--foreground)); border-bottom-color: hsl(var(--primary)); font-weight: 600; }
+
 .submit-form {
   flex: 1;
   overflow-y: auto;
@@ -636,6 +730,8 @@ onMounted(() => {
   transition: background 0.15s;
 }
 .btn-tpl:hover { background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); }
+.btn-tpl.ai { background: rgba(99,102,241,.08); color: #6366f1; border-color: rgba(99,102,241,.3); }
+.btn-tpl.ai:hover { background: #6366f1; color: #fff; }
 .script-editor {
   width: 100%;
   font-family: 'Courier New', 'Consolas', monospace;

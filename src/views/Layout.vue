@@ -6,7 +6,7 @@
       <div class="sidebar-header">
         <div class="sidebar-logo" @click="currentView = 'dashboard'">
           <div class="logo-icon">⚡</div>
-          <span class="logo-text">HPC 平台</span>
+          <span class="logo-text">算力小筑</span>
         </div>
         <button class="sidebar-collapse-btn" @click="sidebarCollapsed = !sidebarCollapsed">
           <span>{{ sidebarCollapsed ? '→' : '←' }}</span>
@@ -133,7 +133,7 @@
       <!-- Content -->
       <main class="content-area" :class="{ 'content-area--noscroll': currentView === 'rack' }">
         <Dashboard v-if="currentView === 'dashboard'" @navigate="currentView = $event" />
-        <JobManagement v-else-if="currentView === 'jobs'" @open-directory="handleOpenDirectory" />
+        <JobManagement v-else-if="currentView === 'jobs'" @open-directory="handleOpenDirectory" @go-registry="currentView = 'registry'" />
         <Monitoring v-else-if="currentView === 'monitoring' && isAdmin" :active-tab="monitoringTab" @tab-change="monitoringTab = $event" />
         <RackView v-else-if="currentView === 'rack' && isAdmin" />
         <NetworkTopology v-else-if="currentView === 'network' && isAdmin" />
@@ -141,6 +141,7 @@
         <Desktop v-else-if="currentView === 'desktop'" @open-download="currentView = 'download'" />
         <FileManager ref="fileManagerRef" v-else-if="currentView === 'files'" />
         <Registry v-else-if="currentView === 'registry'" />
+        <AITasks v-else-if="currentView === 'ai-tasks'" />
         <Reports v-else-if="currentView === 'reports'" />
         <Profile v-else-if="currentView === 'profile'" />
         <Download v-else-if="currentView === 'download'" />
@@ -178,6 +179,7 @@ import Desktop from './Desktop.vue'
 import Download from './Download.vue'
 import FileManager from './FileManager.vue'
 import Registry from './Registry.vue'
+import AITasks from './AITasks.vue'
 import Reports from './Reports.vue'
 import AdminUsers from './AdminUsers.vue'
 import AdminGroups from './AdminGroups.vue'
@@ -303,6 +305,7 @@ const PAGE_TITLES: Record<string, string> = {
   monitoring: '集群监控', rack: '机柜管理', network: '网络拓扑',
   profile: '个人信息', download: '客户端下载', admin: '系统管理',
   registry: '镜像仓库',
+  'ai-tasks': 'AI 作业',
 }
 
 // 上报页面访问，防抖避免快速切换时重复上报
