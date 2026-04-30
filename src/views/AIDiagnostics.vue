@@ -224,7 +224,7 @@ async function send(text: string) {
       content: (m.role === 'user' && idx === arr.length - 1) ? enrichedContent : m.content,
     }))
     const systemContent = snapshot.value ? buildSystemPrompt(snapshot.value) : '你是一个专业的 HPC 集群监控分析 AI，请用中文回答。'
-    const res = await fetch(getApiBase() + '/api/ai/chat', {
+    const res = await fetch(getApiBase() + '/api/ai/admin/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token() },
       body: JSON.stringify({ messages: [{ role: 'system', content: systemContent }, ...history] }),

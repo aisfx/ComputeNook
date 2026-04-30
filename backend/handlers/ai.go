@@ -37,7 +37,7 @@ type AIAPIResponse struct {
 	} `json:"error,omitempty"`
 }
 
-// AIChat 代理 AI 问答请求
+// AIChat 代理 AI 问答请求（普通用户小助手，system prompt 由后端固定，不允许前端覆盖）
 func AIChat(c *gin.Context) {
 	apiURL := os.Getenv("AI_API_URL")
 	apiKey := os.Getenv("AI_API_KEY")
@@ -63,39 +63,90 @@ func AIChat(c *gin.Context) {
 		return
 	}
 
+	// 过滤掉前端传入的 system 角色消息，防止 prompt 注入
+	filtered := make([]AIMessage, 0, len(req.Messages))
+	for _, m := range req.Messages {
+		if m.Role != "system" {
+			filtered = append(filtered, m)
+		}
+	}
+	req.Messages = filtered
+
+	doAIChat(c, apiURL, apiKey, model, systemPrompt, req.Messages, true)
+}
+
+// AIAdminChat 管理员 AI 诊断接口，允许前端传入包含集群数据的 system prompt
+func AIAdminChat(c *gin.Context) {
+	apiURL := os.Getenv("AI_API_URL")
+	apiKey := os.Getenv("AI_API_KEY")
+	model := os.Getenv("AI_MODEL")
+
+	if apiURL == "" || apiKey == "" {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "AI 服务未配置，请联系管理员"})
+		return
+	}
+	if model == "" {
+		model = "gpt-3.5-turbo"
+	}
+
+	var req AIChatRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请求格式错误"})
+		return
+	}
+
+	// 管理员接口：提取前端传入的 system prompt（含集群数据），其余消息正常传递
+	systemPrompt := ""
+	filtered := make([]AIMessage, 0, len(req.Messages))
+	for _, m := range req.Messages {
+		if m.Role == "system" {
+			systemPrompt = m.Content
+		} else {
+			filtered = append(filtered, m)
+		}
+	}
+	if systemPrompt == "" {
+		systemPrompt = "你是一个专业的 HPC 集群监控分析 AI，请用中文回答。"
+	}
+
+	doAIChat(c, apiURL, apiKey, model, systemPrompt, filtered, false)
+}
+
+// doAIChat 公共 AI 请求逻辑
+func doAIChat(c *gin.Context, apiURL, apiKey, model, systemPrompt string, userMessages []AIMessage, saveToKnowledge bool) {
 	// 提取本次用户问题（最后一条 user 消息）
 	userQuestion := ""
-	for i := len(req.Messages) - 1; i >= 0; i-- {
-		if req.Messages[i].Role == "user" {
-			userQuestion = req.Messages[i].Content
+	for i := len(userMessages) - 1; i >= 0; i-- {
+		if userMessages[i].Role == "user" {
+			userQuestion = userMessages[i].Content
 			break
 		}
 	}
 
-	// RAG：从知识库检索相关历史问答，注入 system prompt
-	store := knowledge.GetStore()
-	if userQuestion != "" {
-		var sb strings.Builder
-		sb.WriteString(systemPrompt)
+	// RAG：从知识库检索相关历史问答，注入 system prompt（仅普通用户小助手）
+	if saveToKnowledge {
+		store := knowledge.GetStore()
+		if userQuestion != "" {
+			var sb strings.Builder
+			sb.WriteString(systemPrompt)
 
-		// 根据问题场景注入大圣俏皮话作为回答风格示例
-		scene := knowledge.DetectScene(userQuestion)
-		if quote := knowledge.GetWukongQuote(scene); quote != "" {
-			sb.WriteString(fmt.Sprintf("\n\n【本次场景参考台词，可融入回答风格】\n\"%s\"", quote))
-		}
-
-		similar := store.Search(userQuestion, 3)
-		if len(similar) > 0 {
-			sb.WriteString("\n\n【参考历史问答 - 仅供参考，以实际情况为准】\n")
-			for _, qa := range similar {
-				sb.WriteString(fmt.Sprintf("\nQ: %s\nA: %s\n", qa.Question, qa.Answer))
+			scene := knowledge.DetectScene(userQuestion)
+			if quote := knowledge.GetWukongQuote(scene); quote != "" {
+				sb.WriteString(fmt.Sprintf("\n\n【本次场景参考台词，可融入回答风格】\n\"%s\"", quote))
 			}
+
+			similar := store.Search(userQuestion, 3)
+			if len(similar) > 0 {
+				sb.WriteString("\n\n【参考历史问答 - 仅供参考，以实际情况为准】\n")
+				for _, qa := range similar {
+					sb.WriteString(fmt.Sprintf("\nQ: %s\nA: %s\n", qa.Question, qa.Answer))
+				}
+			}
+			systemPrompt = sb.String()
 		}
-		systemPrompt = sb.String()
 	}
 
-	// 构建带 system prompt 的消息列表
-	messages := append([]AIMessage{{Role: "system", Content: systemPrompt}}, req.Messages...)
+	messages := append([]AIMessage{{Role: "system", Content: systemPrompt}}, userMessages...)
 
 	apiReq := AIAPIRequest{
 		Model:    model,
@@ -140,16 +191,15 @@ func AIChat(c *gin.Context) {
 
 	answer := apiResp.Choices[0].Message.Content
 
-	// 异步保存问答到知识库（不阻塞响应）
-	if userQuestion != "" && answer != "" {
+	// 仅普通用户小助手保存问答到知识库
+	if saveToKnowledge && userQuestion != "" && answer != "" {
 		username := "anonymous"
 		if u, exists := c.Get("username"); exists {
 			username = u.(string)
 		}
+		store := knowledge.GetStore()
 		go store.Save(username, userQuestion, answer)
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"content": answer,
-	})
+	c.JSON(http.StatusOK, gin.H{"content": answer})
 }

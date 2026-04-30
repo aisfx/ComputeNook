@@ -290,6 +290,16 @@ const openDirectory = (job: any) => {
   emit('open-directory', job.directory)
 }
 
+const getTodayRange = () => {
+  const now = new Date()
+  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0)
+  const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59)
+  return {
+    start: Math.floor(startOfDay.getTime() / 1000),
+    end: Math.floor(endOfDay.getTime() / 1000)
+  }
+}
+
 const loadJobs = async () => {
   loading.value = true
   error.value = ''
@@ -300,8 +310,11 @@ const loadJobs = async () => {
       throw new Error('请先登录系统')
     }
     
+    // 默认使用今天的时间范围
+    const { start, end } = getTodayRange()
+    
     // 构建 API URL
-    let url = `${getApiBase()}/api/jobs?page=${pagination.value.page}&page_size=${pagination.value.pageSize}`
+    let url = `${getApiBase()}/api/jobs?page=${pagination.value.page}&page_size=${pagination.value.pageSize}&start_time=${start}&end_time=${end}`
     
     // 如果是"我的作业"模式，添加用户名参数
     if (viewMode.value === 'my') {
@@ -456,8 +469,8 @@ onMounted(() => {
   if (!isAdmin()) {
     viewMode.value = 'my'
   }
-  updateSummary()
-  // 不自动加载，等用户点查询
+  // 自动加载当天作业
+  loadJobs()
 })
 </script>
 

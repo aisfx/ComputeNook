@@ -112,6 +112,7 @@ func main() {
 		auth.GET("/me/resources", handlers.GetMyResources)
 		auth.POST("/logout", handlers.Logout)
 		auth.POST("/ai/chat", handlers.AIChat)
+		auth.POST("/ai/admin/chat", middleware.AdminMiddleware(), handlers.AIAdminChat)
 
 		// MFA 管理（登录用户自助）
 		auth.GET("/mfa/status", handlers.GetMFAStatus)
