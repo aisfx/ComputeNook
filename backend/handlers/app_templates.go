@@ -12,7 +12,7 @@ import (
 	"hpc-backend/logger"
 )
 
-const appTemplatesFile = "app-templates.toml"
+const appTemplatesPath = "app-templates.toml"
 
 // AppTemplate 作业模板
 type AppTemplate struct {
@@ -34,7 +34,7 @@ type AppTemplate struct {
 	AppParams   map[string]string `toml:"app_params"  json:"appParams"`
 }
 
-type appTemplatesFile struct {
+type appTemplatesDoc struct {
 	Templates []AppTemplate `toml:"template"`
 }
 
@@ -45,14 +45,14 @@ var (
 )
 
 func loadTemplates() ([]AppTemplate, error) {
-	data, err := os.ReadFile(appTemplatesFile)
+	data, err := os.ReadFile(appTemplatesPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return []AppTemplate{}, nil
 		}
 		return nil, err
 	}
-	var f appTemplatesFile
+	var f appTemplatesDoc
 	if err := toml.Unmarshal(data, &f); err != nil {
 		return nil, err
 	}
@@ -60,12 +60,12 @@ func loadTemplates() ([]AppTemplate, error) {
 }
 
 func saveTemplates(templates []AppTemplate) error {
-	f := appTemplatesFile{Templates: templates}
+	f := appTemplatesDoc{Templates: templates}
 	data, err := toml.Marshal(f)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(appTemplatesFile, data, 0644)
+	return os.WriteFile(appTemplatesPath, data, 0644)
 }
 
 func getTemplates() []AppTemplate {
