@@ -135,19 +135,26 @@ function zipDir(sourceDir, zipPath, innerFolder) {
     fs.copyFileSync(outPath, path.join(backendClientsDir, ct.out))
   }
 
-  // macOS universal binary: 合并 amd64 + arm64
-  console.log('\n🍎 合并 macOS universal binary...')
+  // macOS universal binary: 合并 amd64 + arm64（仅 macOS 上有 lipo 工具）
+  console.log('\n🍎 处理 macOS binary...')
   const macAmd64 = path.join(clientsDir, 'hpc-client-mac-amd64')
   const macArm64 = path.join(clientsDir, 'hpc-client-mac-arm64')
   const macUniversal = path.join(clientsDir, 'hpc-client-mac')
   if (fs.existsSync(macAmd64) && fs.existsSync(macArm64)) {
-    run(`lipo -create -output "${macUniversal}" "${macAmd64}" "${macArm64}"`)
-    fs.unlinkSync(macAmd64)
-    fs.unlinkSync(macArm64)
-    fs.copyFileSync(macUniversal, path.join(backendClientsDir, 'hpc-client-mac'))
-    console.log('   → hpc-client-mac (universal)')
+    if (process.platform === 'darwin') {
+      run(`lipo -create -output "${macUniversal}" "${macAmd64}" "${macArm64}"`)
+      fs.unlinkSync(macAmd64)
+      fs.unlinkSync(macArm64)
+      fs.copyFileSync(macUniversal, path.join(backendClientsDir, 'hpc-client-mac'))
+      console.log('   → hpc-client-mac (universal)')
+    } else {
+      // 非 macOS 平台没有 lipo，保留两个单架构文件
+      fs.copyFileSync(macAmd64, path.join(backendClientsDir, 'hpc-client-mac-amd64'))
+      fs.copyFileSync(macArm64, path.join(backendClientsDir, 'hpc-client-mac-arm64'))
+      console.warn('   ⚠ 非 macOS 平台，跳过 lipo 合并，保留 hpc-client-mac-amd64 / hpc-client-mac-arm64')
+    }
   } else {
-    console.warn('   ⚠ macOS 单架构编译，跳过 lipo 合并')
+    console.warn('   ⚠ macOS 编译产物不完整，跳过')
   }
 
   // 4. 复制前端产物

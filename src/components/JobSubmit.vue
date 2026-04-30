@@ -287,6 +287,29 @@ const applyTemplate = () => {
 }
 
 const applyTemplateData = (template: any) => {
+  // 根据模板生成对应的脚本内容
+  const gpuLine = template.gpus ? `\n#SBATCH --gres=gpu:${template.gpus}` : ''
+  const moduleLine = template.moduleLoad ? `\nmodule load ${template.moduleLoad}` : ''
+  const runCmd = template.executable
+    ? `\nmpirun -np ${template.cpus} ${template.executable}${template.inputFile ? ' -in ' + template.inputFile : ''}`
+    : '\n# 在此处添加你的命令'
+
+  const generatedScript = `#!/bin/bash
+#SBATCH -J ${template.appType || template.name}_job
+#SBATCH -p ${template.partition}
+#SBATCH -N ${template.nodes}
+#SBATCH -c ${template.cpus}
+#SBATCH --mem=${template.memory || 0}G${gpuLine}
+#SBATCH -t ${template.time || 1}:00:00
+#SBATCH -o output_%j.log
+#SBATCH -e error_%j.log
+${moduleLine}
+echo "Job started: $(date)"
+echo "Running on node: $(hostname)"
+${runCmd}
+
+echo "Job finished: $(date)"`
+
   form.value = {
     name: '',
     partition: template.partition,
@@ -299,7 +322,7 @@ const applyTemplateData = (template: any) => {
     priority: 'normal',
     workdir: form.value.workdir,
     script: '',
-    scriptContent: form.value.scriptContent,
+    scriptContent: generatedScript,
     output: '',
     error: '',
     extraParams: template.gpus ? `--gres=gpu:${template.gpus}` : ''

@@ -377,6 +377,18 @@ func main() {
 			reports.GET("/qos-usage", handlers.GetQoSUsage)
 		}
 
+		// 镜像仓库 API（Harbor 代理）
+		registry := auth.Group("/registry")
+		{
+			registry.GET("/config", handlers.GetRegistryConfig)
+			registry.GET("/projects", handlers.ListProjects)
+			registry.GET("/projects/:project/repositories", handlers.ListRepositories)
+			registry.GET("/projects/:project/repositories/:repo/tags", handlers.ListTags)
+			registry.DELETE("/projects/:project/repositories/:repo", handlers.DeleteRepository)
+			registry.DELETE("/projects/:project/repositories/:repo/tags/:tag", handlers.DeleteTag)
+			registry.POST("/images/save", handlers.SaveContainerImage)
+		}
+
 		// CMDB 主机资产管理
 		cmdb := auth.Group("/cmdb")
 		cmdb.Use(middleware.AdminMiddleware())

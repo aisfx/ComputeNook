@@ -65,6 +65,16 @@
             <span class="nav-item-label">文件管理</span>
           </a>
 
+          <!-- 镜像仓库 -->
+          <a
+            :class="['nav-item', { active: currentView === 'registry' }]"
+            @click="currentView = 'registry'"
+            :title="sidebarCollapsed ? '镜像仓库' : ''"
+          >
+            <span class="nav-item-icon">🐳</span>
+            <span class="nav-item-label">镜像仓库</span>
+          </a>
+
           <!-- 报表中心 -->
           <a
             :class="['nav-item', { active: currentView === 'reports' }]"
@@ -130,6 +140,7 @@
         <WebShell v-else-if="currentView === 'shell'" />
         <Desktop v-else-if="currentView === 'desktop'" @open-download="currentView = 'download'" />
         <FileManager ref="fileManagerRef" v-else-if="currentView === 'files'" />
+        <Registry v-else-if="currentView === 'registry'" />
         <Reports v-else-if="currentView === 'reports'" />
         <Profile v-else-if="currentView === 'profile'" />
         <Download v-else-if="currentView === 'download'" />
@@ -166,6 +177,7 @@ import WebShell from './WebShell.vue'
 import Desktop from './Desktop.vue'
 import Download from './Download.vue'
 import FileManager from './FileManager.vue'
+import Registry from './Registry.vue'
 import Reports from './Reports.vue'
 import AdminUsers from './AdminUsers.vue'
 import AdminGroups from './AdminGroups.vue'
@@ -265,6 +277,7 @@ const currentTitle = computed(() => {
     { id: 'rack', label: '机柜管理' },
     { id: 'profile', label: '个人信息' },
     { id: 'custom-dashboard', label: '自定义看板' },
+    { id: 'registry', label: '镜像仓库' },
   ]
   if (currentView.value === 'monitoring') {
     const sub = monitoringSubItems.find(s => s.id === monitoringTab.value)
@@ -289,6 +302,7 @@ const PAGE_TITLES: Record<string, string> = {
   jobs: '作业管理', files: '文件管理', reports: '报表中心',
   monitoring: '集群监控', rack: '机柜管理', network: '网络拓扑',
   profile: '个人信息', download: '客户端下载', admin: '系统管理',
+  registry: '镜像仓库',
 }
 
 // 上报页面访问，防抖避免快速切换时重复上报

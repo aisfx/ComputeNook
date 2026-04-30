@@ -1,0 +1,384 @@
+<template>
+  <form @submit.prevent="submit" class="container-form">
+    <!-- 镜像地址 -->
+    <div class="form-group">
+      <label>容器镜像 *</label>
+      <div class="input-row">
+        <input
+          v-model="form.image"
+          type="text"
+          placeholder="harbor.example.com/library/pytorch:latest"
+          required
+        />
+        <button type="button" class="btn-pick" @click="showPicker = !showPicker">📦 选择</button>
+      </div>
+      <div v-if="showPicker" class="image-picker">
+        <div class="picker-search">
+          <input v-model="pickerSearch" placeholder="搜索镜像..." class="picker-input" />
+        </div>
+        <div class="picker-list">
+          <div
+            v-for="img in filteredImages"
+            :key="img"
+            class="picker-item"
+            @click="form.image = img; showPicker = false"
+          >{{ img }}</div>
+          <div v-if="filteredImages.length === 0" class="picker-empty">暂无镜像，请前往镜像仓库页面</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 作业名 + 分区 -->
+    <div class="form-row">
+      <div class="form-group">
+        <label>作业名称 *</label>
+        <input v-model="form.name" type="text" placeholder="container_job" required />
+      </div>
+      <div class="form-group">
+        <label>分区 *</label>
+        <select v-model="form.partition" required>
+          <option value="" disabled>-- 选择分区 --</option>
+          <option v-for="p in partitions" :key="p" :value="p">{{ p }}</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- 资源 -->
+    <div class="form-row">
+      <div class="form-group">
+        <label>节点数</label>
+        <input v-model.number="form.nodes" type="number" min="1" max="32" />
+      </div>
+      <div class="form-group">
+        <label>CPU 核心数</label>
+        <input v-model.number="form.cpus" type="number" min="1" max="256" />
+      </div>
+      <div class="form-group">
+        <label>内存 (GB)</label>
+        <input v-model.number="form.memory" type="number" min="0" placeholder="不限" />
+      </div>
+      <div class="form-group">
+        <label>GPU 卡数</label>
+        <input v-model.number="form.gpus" type="number" min="0" max="16" />
+      </div>
+    </div>
+
+    <!-- 挂载目录 -->
+    <div class="form-group">
+      <label>挂载目录</label>
+      <input
+        v-model="form.mounts"
+        type="text"
+        placeholder="/home/$USER:/workspace,/data:/data"
+      />
+      <div class="help-text">逗号分隔，格式：宿主机路径:容器内路径</div>
+    </div>
+
+    <!-- 工作目录 -->
+    <div class="form-group">
+      <label>工作目录</label>
+      <input v-model="form.workdir" type="text" placeholder="/workspace" />
+    </div>
+
+    <!-- 运行命令 -->
+    <div class="form-group">
+      <label>运行命令（可选，留空则进入交互模式）</label>
+      <input v-model="form.command" type="text" placeholder="python /workspace/train.py" />
+    </div>
+
+    <!-- 时间限制 -->
+    <div class="form-group">
+      <label>时间限制（小时）</label>
+      <input v-model.number="form.time" type="number" min="0" placeholder="不限" />
+    </div>
+
+    <!-- 生成的脚本预览 -->
+    <div class="form-group">
+      <label>生成脚本预览</label>
+      <pre class="script-preview">{{ generatedScript }}</pre>
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="btn-primary" :disabled="submitting">
+        {{ submitting ? '提交中...' : '🚀 提交容器作业' }}
+      </button>
+    </div>
+  </form>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, onMounted } from 'vue'
+import { getApiBase } from '../utils/auth'
+import notification from '../utils/notification'
+
+const props = defineProps<{ initialImage?: string }>()
+const emit = defineEmits(['submitted'])
+
+const submitting = ref(false)
+const showPicker = ref(false)
+const pickerSearch = ref('')
+const partitions = ref<string[]>([])
+const availableImages = ref<string[]>([])
+
+const form = ref({
+  image: props.initialImage || '',
+  name: 'container_job',
+  partition: '',
+  nodes: 1,
+  cpus: 8,
+  memory: 0,
+  gpus: 0,
+  mounts: '',
+  workdir: '/workspace',
+  command: '',
+  time: 0,
+})
+
+const filteredImages = computed(() => {
+  if (!pickerSearch.value) return availableImages.value
+  return availableImages.value.filter(i => i.includes(pickerSearch.value))
+})
+
+const generatedScript = computed(() => {
+  const f = form.value
+  const lines: string[] = [
+    '#!/bin/bash',
+    `#SBATCH -J ${f.name || 'container_job'}`,
+    `#SBATCH -p ${f.partition || 'compute'}`,
+    `#SBATCH -N ${f.nodes}`,
+    `#SBATCH -c ${f.cpus}`,
+  ]
+  if (f.memory) lines.push(`#SBATCH --mem=${f.memory}G`)
+  if (f.gpus) lines.push(`#SBATCH --gres=gpu:${f.gpus}`)
+  if (f.time) lines.push(`#SBATCH -t ${f.time}:00:00`)
+  lines.push(`#SBATCH -o container_%j.log`)
+  lines.push(`#SBATCH -e container_%j.err`)
+  lines.push('')
+  lines.push(`#SBATCH --container-image=${f.image}`)
+  if (f.mounts) lines.push(`#SBATCH --container-mounts=${f.mounts}`)
+  if (f.workdir) lines.push(`#SBATCH --container-workdir=${f.workdir}`)
+  lines.push('')
+  lines.push('echo "Container job started: $(date)"')
+  lines.push('echo "Image: ' + f.image + '"')
+  lines.push('')
+  if (f.command) {
+    lines.push(f.command)
+  } else {
+    lines.push('# 交互模式 - 通过 Web Shell 连接到此作业节点')
+    lines.push('sleep infinity')
+  }
+  lines.push('')
+  lines.push('echo "Job finished: $(date)"')
+  return lines.join('\n')
+})
+
+const loadPartitions = async () => {
+  try {
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token')
+    const res = await fetch(`${getApiBase()}/api/jobs/partitions/list`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    if (!res.ok) return
+    const data = await res.json()
+    partitions.value = (data.data || []).map((p: any) => p.name).filter(Boolean)
+    if (partitions.value.length > 0 && !form.value.partition) {
+      form.value.partition = partitions.value[0]
+    }
+  } catch {
+    partitions.value = ['compute', 'gpu', 'memory', 'debug']
+    form.value.partition = 'compute'
+  }
+}
+
+const loadImages = async () => {
+  try {
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token')
+    // 获取仓库配置
+    const cfgRes = await fetch(`${getApiBase()}/api/registry/config`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    const cfg = await cfgRes.json()
+    const harborHost = cfg.harbor_url?.replace(/^https?:\/\//, '') || ''
+    const userProject = cfg.user_project || ''
+
+    // 加载公共项目和用户项目的镜像
+    const projectsToLoad = ['library', userProject].filter(Boolean)
+    const images: string[] = []
+    for (const proj of projectsToLoad) {
+      try {
+        const res = await fetch(`${getApiBase()}/api/registry/projects/${proj}/repositories`, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+        if (!res.ok) continue
+        const data = await res.json()
+        for (const repo of (data.data || [])) {
+          const name = repo.name?.split('/').pop() || ''
+          if (name) images.push(`${harborHost}/${proj}/${name}:latest`)
+        }
+      } catch { /* ignore */ }
+    }
+    availableImages.value = images
+  } catch { /* ignore */ }
+}
+
+const submit = async () => {
+  submitting.value = true
+  try {
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token')
+    const res = await fetch(`${getApiBase()}/api/jobs`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: form.value.name,
+        partition: form.value.partition,
+        script: generatedScript.value,
+        nodes: form.value.nodes,
+        cpus: form.value.cpus,
+        memory: form.value.memory || 0,
+        gpus: form.value.gpus || 0,
+        time: form.value.time || 0,
+      })
+    })
+    if (!res.ok) {
+      const err = await res.json()
+      throw new Error(err.error || '提交失败')
+    }
+    const result = await res.json()
+    notification.success(`容器作业提交成功！作业ID: ${result.job_id}`)
+    emit('submitted')
+  } catch (e: any) {
+    notification.error(e.message || '提交失败')
+  } finally {
+    submitting.value = false
+  }
+}
+
+onMounted(() => {
+  loadPartitions()
+  loadImages()
+})
+</script>
+
+<style scoped>
+.container-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 8px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.form-group label {
+  font-size: 0.73rem;
+  font-weight: 600;
+  color: hsl(var(--muted-foreground));
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.form-group input,
+.form-group select {
+  padding: 6px 9px;
+  border: 1px solid hsl(var(--input));
+  border-radius: var(--radius-md);
+  font-size: 0.83rem;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  outline: none;
+  box-sizing: border-box;
+  width: 100%;
+}
+.form-group input:focus,
+.form-group select:focus {
+  border-color: hsl(var(--ring));
+  box-shadow: 0 0 0 2px hsl(var(--ring) / 0.15);
+}
+
+.input-row { display: flex; gap: 6px; }
+.input-row input { flex: 1; min-width: 0; }
+
+.btn-pick {
+  padding: 0 10px;
+  background: hsl(var(--secondary));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius-md);
+  font-size: 0.8rem;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.btn-pick:hover { background: hsl(var(--accent)); }
+
+.image-picker {
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius-md);
+  background: hsl(var(--card));
+  overflow: hidden;
+  margin-top: 2px;
+}
+.picker-search { padding: 6px; border-bottom: 1px solid hsl(var(--border)); }
+.picker-input {
+  width: 100%; box-sizing: border-box;
+  padding: 5px 8px;
+  border: 1px solid hsl(var(--input));
+  border-radius: 6px;
+  font-size: 0.8rem;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  outline: none;
+}
+.picker-list { max-height: 160px; overflow-y: auto; }
+.picker-item {
+  padding: 7px 10px;
+  font-size: 0.8rem;
+  font-family: monospace;
+  cursor: pointer;
+  color: hsl(var(--foreground));
+  transition: background 0.1s;
+}
+.picker-item:hover { background: hsl(var(--accent)); }
+.picker-empty { padding: 12px 10px; font-size: 0.8rem; color: hsl(var(--muted-foreground)); text-align: center; }
+
+.help-text { font-size: 0.7rem; color: hsl(var(--muted-foreground)); }
+
+.script-preview {
+  background: #1e293b;
+  color: #e2e8f0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  line-height: 1.6;
+  overflow-x: auto;
+  margin: 0;
+  max-height: 200px;
+  overflow-y: auto;
+  font-family: 'Courier New', monospace;
+}
+
+.form-actions { padding-top: 8px; }
+
+.btn-primary {
+  width: 100%;
+  padding: 9px;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.btn-primary:hover:not(:disabled) { opacity: 0.9; }
+.btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+</style>

@@ -18,10 +18,7 @@
         </select>
         <select v-model="partitionFilter" class="filter-select" @change="pagination.page = 1">
           <option value="">全部分区</option>
-          <option value="compute">compute</option>
-          <option value="gpu">gpu</option>
-          <option value="memory">memory</option>
-          <option value="debug">debug</option>
+          <option v-for="p in partitions" :key="p" :value="p">{{ p }}</option>
         </select>
         <button class="btn-query" @click="() => { pagination.page = 1; loadJobs() }" :disabled="loading">
           {{ loading ? '查询中...' : '查询' }}
@@ -169,6 +166,7 @@ const emit = defineEmits(['view-detail', 'open-directory', 'submit-job'])
 const viewMode = ref<'my' | 'all'>('my')
 const statusFilter = ref('')
 const partitionFilter = ref('')
+const partitions = ref<string[]>([])
 const currentUserInfo = ref<any>(null)
 const currentUser = computed(() => currentUserInfo.value?.username || '')
 const loading = ref(false)
@@ -290,6 +288,45 @@ const openDirectory = (job: any) => {
   emit('open-directory', job.directory)
 }
 
+// 展开 Slurm hostlist 格式，如 cn[0-3,5] → ['cn0','cn1','cn2','cn3','cn5']
+// 支持多组：mn0,cn[0-1] → ['mn0','cn0','cn1']
+const expandHostList = (hostlist: string): string[] => {
+  const result: string[] = []
+  // 先按逗号分割，但要跳过括号内的逗号
+  const parts: string[] = []
+  let depth = 0, cur = ''
+  for (const ch of hostlist) {
+    if (ch === '[') { depth++; cur += ch }
+    else if (ch === ']') { depth--; cur += ch }
+    else if (ch === ',' && depth === 0) { parts.push(cur.trim()); cur = '' }
+    else { cur += ch }
+  }
+  if (cur.trim()) parts.push(cur.trim())
+
+  for (const part of parts) {
+    const m = part.match(/^(.*?)\[([^\]]+)\](.*)$/)
+    if (!m) {
+      if (part) result.push(part)
+      continue
+    }
+    const prefix = m[1], ranges = m[2], suffix = m[3]
+    for (const seg of ranges.split(',')) {
+      const range = seg.trim()
+      const dash = range.match(/^(\d+)-(\d+)$/)
+      if (dash) {
+        const from = parseInt(dash[1]), to = parseInt(dash[2])
+        const pad = dash[1].length > 1 ? dash[1].length : 0
+        for (let i = from; i <= to; i++) {
+          result.push(prefix + (pad ? String(i).padStart(pad, '0') : i) + suffix)
+        }
+      } else {
+        result.push(prefix + range + suffix)
+      }
+    }
+  }
+  return result
+}
+
 const getTodayRange = () => {
   const now = new Date()
   const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0)
@@ -350,7 +387,7 @@ const loadJobs = async () => {
           runTime = Math.floor(Date.now() / 1000) - job.start_time
         }
         
-        // 解析节点数量和节点名称列表
+        // 解析节点数量和节点名称列表（支持 Slurm hostlist 格式，如 cn[0-3,5]）
         let nodeCount = 0
         let nodeNames: string[] = []
         if (typeof job.nodes === 'number') {
@@ -359,13 +396,14 @@ const loadJobs = async () => {
           if (job.nodes === 'None assigned' || job.nodes === '') {
             nodeCount = 0
           } else {
-            nodeNames = job.nodes.split(',').map((n: string) => n.trim()).filter(Boolean)
-            nodeCount = nodeNames.length
+            nodeNames = expandHostList(job.nodes)
+            nodeCount = nodeNames.length || 1
           }
         }
         // batch_host 是单节点作业的运行节点
         if (nodeNames.length === 0 && job.batch_host) {
           nodeNames = [job.batch_host]
+          nodeCount = 1
         }
         
         return {
@@ -469,9 +507,26 @@ onMounted(() => {
   if (!isAdmin()) {
     viewMode.value = 'my'
   }
+  loadPartitions()
   // 自动加载当天作业
   loadJobs()
 })
+
+const loadPartitions = async () => {
+  try {
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token')
+    if (!token) return
+    const res = await fetch(`${getApiBase()}/api/jobs/partitions/list`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    if (!res.ok) return
+    const result = await res.json()
+    partitions.value = (result.data || []).map((p: any) => p.name).filter(Boolean)
+  } catch {
+    // 加载失败时使用默认值
+    partitions.value = ['compute', 'gpu', 'memory', 'debug']
+  }
+}
 </script>
 
 <style scoped>

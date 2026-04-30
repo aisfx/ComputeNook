@@ -27,8 +27,8 @@
             <div class="jd-field">
               <div class="jd-field-label">节点</div>
               <div class="jd-field-value">
-                <span v-if="job.nodeNames && job.nodeNames.length">
-                  {{ job.nodeNames.join(', ') }}
+                <span v-if="job.nodeNames && job.nodeNames.length" class="jd-node-tags">
+                  <span v-for="n in job.nodeNames" :key="n" class="jd-node-tag">{{ n }}</span>
                 </span>
                 <span v-else>{{ job.nodes || 0 }} 个节点</span>
               </div>
@@ -39,7 +39,7 @@
             </div>
             <div class="jd-field">
               <div class="jd-field-label">内存</div>
-              <div class="jd-field-value">{{ job.memory || '16 GB' }}</div>
+              <div class="jd-field-value">{{ job.memory || '-' }}</div>
             </div>
             <div class="jd-field">
               <div class="jd-field-label">提交时间</div>
@@ -162,8 +162,43 @@
           <button v-if="job.status === 'SUSPENDED'" class="jd-btn-outline" @click="$emit('resume', job.id)">
             恢复作业
           </button>
+          <!-- 容器作业保存镜像 -->
+          <button v-if="job.status === 'RUNNING'" class="jd-btn-save-image" @click="showSaveImage = true">
+            🐳 保存镜像
+          </button>
           <button class="jd-btn-outline" @click="openLog">查看日志</button>
           <button class="jd-btn-ghost" @click="$emit('close')">关闭</button>
+        </div>
+
+        <!-- 保存镜像对话框 -->
+        <div v-if="showSaveImage" class="jd-save-overlay" @click.self="showSaveImage = false">
+          <div class="jd-save-box">
+            <div class="jd-save-header">
+              <span>🐳 保存容器镜像</span>
+              <button @click="showSaveImage = false" class="jd-close">✕</button>
+            </div>
+            <div class="jd-save-body">
+              <p class="jd-save-tip">将当前运行容器（作业 #{{ job.id }}）的环境保存为镜像，推送到你的私有仓库。</p>
+              <div class="jd-save-field">
+                <label>镜像名称</label>
+                <input v-model="saveImageName" placeholder="例：my-pytorch-env" />
+              </div>
+              <div class="jd-save-field">
+                <label>Tag</label>
+                <input v-model="saveImageTag" placeholder="latest" />
+              </div>
+              <div v-if="saveResult" :class="['jd-save-result', saveResult.ok ? 'ok' : 'err']">
+                {{ saveResult.msg }}
+                <div v-if="saveResult.target" class="jd-save-target">{{ saveResult.target }}</div>
+              </div>
+            </div>
+            <div class="jd-save-footer">
+              <button class="jd-btn-primary" @click="doSaveImage" :disabled="saving">
+                {{ saving ? '提交中...' : '🚀 开始保存' }}
+              </button>
+              <button class="jd-btn-ghost" @click="showSaveImage = false">取消</button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -185,6 +220,40 @@ const props = defineProps<{ job: any }>()
 defineEmits(['close', 'pause', 'resume', 'cancel', 'open-directory'])
 
 const refreshing = ref(false)
+const showSaveImage = ref(false)
+const saveImageName = ref('')
+const saveImageTag = ref('latest')
+const saving = ref(false)
+const saveResult = ref<{ ok: boolean; msg: string; target?: string } | null>(null)
+
+const doSaveImage = async () => {
+  if (!saveImageName.value.trim()) {
+    saveResult.value = { ok: false, msg: '请填写镜像名称' }
+    return
+  }
+  saving.value = true
+  saveResult.value = null
+  try {
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token')
+    const apiBase = (window as any).__CONFIG__?.apiUrl || (import.meta.env.DEV ? `${location.protocol}//${location.hostname}:8080` : '')
+    const res = await fetch(`${apiBase}/api/registry/images/save`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        job_id: props.job.id,
+        image_name: saveImageName.value.trim(),
+        tag: saveImageTag.value || 'latest'
+      })
+    })
+    const data = await res.json()
+    if (!res.ok) throw new Error(data.error || '保存失败')
+    saveResult.value = { ok: true, msg: data.message, target: data.target_image }
+  } catch (e: any) {
+    saveResult.value = { ok: false, msg: e.message }
+  } finally {
+    saving.value = false
+  }
+}
 const lastUpdateTime = ref(new Date().toLocaleTimeString())
 const autoRefreshInterval = ref<any>(null)
 const promConnected = ref(false)
@@ -679,6 +748,72 @@ onUnmounted(() => {
   transition: opacity 0.15s;
 }
 .jd-btn-warning:hover { opacity: 0.85; }
+
+.jd-btn-save-image {
+  padding: 7px 14px;
+  background: #0ea5e9;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.jd-btn-save-image:hover { opacity: 0.85; }
+
+/* 保存镜像对话框 */
+.jd-save-overlay {
+  position: absolute; inset: 0;
+  background: rgba(0,0,0,0.45);
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 12px;
+  z-index: 10;
+}
+.jd-save-box {
+  background: hsl(var(--card));
+  border-radius: 10px;
+  width: 380px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+  overflow: hidden;
+}
+.jd-save-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid hsl(var(--border));
+  font-size: 0.9rem; font-weight: 600;
+}
+.jd-save-body { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.jd-save-tip { font-size: 0.8rem; color: hsl(var(--muted-foreground)); margin: 0; }
+.jd-save-field { display: flex; flex-direction: column; gap: 4px; }
+.jd-save-field label { font-size: 0.72rem; font-weight: 600; color: hsl(var(--muted-foreground)); text-transform: uppercase; }
+.jd-save-field input {
+  padding: 6px 9px;
+  border: 1px solid hsl(var(--input));
+  border-radius: 6px;
+  font-size: 0.83rem;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  outline: none;
+}
+.jd-save-field input:focus { border-color: hsl(var(--ring)); }
+.jd-save-result { padding: 8px 10px; border-radius: 6px; font-size: 0.8rem; }
+.jd-save-result.ok { background: rgba(16,185,129,0.1); color: #10b981; }
+.jd-save-result.err { background: rgba(239,68,68,0.1); color: #ef4444; }
+.jd-save-target { font-family: monospace; font-size: 0.75rem; margin-top: 4px; opacity: 0.8; }
+.jd-save-footer {
+  display: flex; gap: 8px; padding: 12px 16px;
+  border-top: 1px solid hsl(var(--border));
+}
+.jd-btn-primary {
+  flex: 1; padding: 7px 14px;
+  background: hsl(var(--primary)); color: hsl(var(--primary-foreground));
+  border: none; border-radius: 6px;
+  font-size: 0.82rem; font-weight: 600; cursor: pointer;
+  transition: opacity 0.15s;
+}
+.jd-btn-primary:hover:not(:disabled) { opacity: 0.9; }
+.jd-btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .jd-btn-outline {
   padding: 7px 14px;
