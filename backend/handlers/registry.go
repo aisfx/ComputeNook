@@ -418,11 +418,13 @@ func SaveContainerImage(c *gin.Context) {
 	}
 
 	// 找节点 SSH 地址（从 WEBSHELL_NODES 配置里查，找不到就直接用节点名）
+	// enroot list/export 在登录节点上执行（pyxis 实例挂载在提交用户的登录节点空间）
 	nodeHost := nodeName
 	nodePort := 22
 	nodes, _ := loadNodesFromEnv()
+	// 优先使用登录节点（WEBSHELL_NODES 第一个 enabled 节点）
 	for _, n := range nodes {
-		if n.Name == nodeName {
+		if n.Enabled {
 			nodeHost = n.Host
 			nodePort = n.Port
 			break
@@ -437,24 +439,53 @@ func SaveContainerImage(c *gin.Context) {
 		return
 	}
 
-	// 构建 enroot export + skopeo push 命令
-	// enroot 容器名格式：pyxis.<job_id>（Pyxis 插件约定）
-	exportPath := fmt.Sprintf("/tmp/hpc_img_%d_%d.sqsh", req.JobID, time.Now().Unix())
+	// 构建 enroot export → docker-archive → skopeo push 命令
+	// pyxis 实例名格式：pyxis_<jobid>.<stepid>
+	// 流程：enroot export (squashfs) → unsquashfs (rootfs) → tar (docker archive) → skopeo push
+	ts := time.Now().Unix()
+	exportPath := fmt.Sprintf("/tmp/hpc_img_%d_%d.sqsh", req.JobID, ts)
+	rootfsDir := fmt.Sprintf("/tmp/hpc_rootfs_%d_%d", req.JobID, ts)
+	layerTar := fmt.Sprintf("/tmp/hpc_layer_%d_%d.tar", req.JobID, ts)
+	ociWorkDir := fmt.Sprintf("/tmp/hpc_oci_%d_%d", req.JobID, ts)
+	dockerTar := fmt.Sprintf("/tmp/hpc_docker_%d_%d.tar", req.JobID, ts)
 	saveScript := fmt.Sprintf(`set -e
-CONTAINER="pyxis.%d"
-EXPORT="%s"
-echo "[1/3] Exporting container $CONTAINER..."
-enroot export --output "$EXPORT" "$CONTAINER"
-echo "[2/3] Pushing to Harbor..."
+CONTAINER=$(enroot list 2>/dev/null | grep "^pyxis_%d\." | head -1)
+if [ -z "$CONTAINER" ]; then
+  echo "[ERROR] 未找到作业 %d 的 enroot 容器实例（pyxis_%d.*）"
+  exit 1
+fi
+SQSH="%s"
+ROOTFS="%s"
+LAYER_TAR="%s"
+OCI_WORK="%s"
+DOCKER_TAR="%s"
+echo "[1/4] Exporting squashfs: $CONTAINER -> $SQSH"
+enroot export --output "$SQSH" "$CONTAINER"
+echo "[2/4] Extracting rootfs..."
+unsquashfs -f -d "$ROOTFS" "$SQSH"
+echo "[3/4] Building docker archive..."
+tar -C "$ROOTFS" -cf "$LAYER_TAR" .
+LAYER_SHA=$(sha256sum "$LAYER_TAR" | awk '{print $1}')
+CONFIG_JSON="{\"architecture\":\"amd64\",\"os\":\"linux\",\"rootfs\":{\"type\":\"layers\",\"diff_ids\":[\"sha256:$LAYER_SHA\"]}}"
+CONFIG_SHA=$(echo -n "$CONFIG_JSON" | sha256sum | awk '{print $1}')
+mkdir -p "$OCI_WORK"
+echo -n "$CONFIG_JSON" > "$OCI_WORK/${CONFIG_SHA}.json"
+cp "$LAYER_TAR" "$OCI_WORK/${LAYER_SHA}.tar"
+echo "[{\"Config\":\"${CONFIG_SHA}.json\",\"RepoTags\":[\"%s\"],\"Layers\":[\"${LAYER_SHA}.tar\"]}]" \
+  > "$OCI_WORK/manifest.json"
+tar -C "$OCI_WORK" -cf "$DOCKER_TAR" .
+echo "[4/4] Pushing to Harbor..."
 skopeo copy --insecure-policy \
   --dest-creds "%s:%s" \
   --dest-tls-verify=false \
-  oci-archive:"$EXPORT" \
+  docker-archive:"$DOCKER_TAR" \
   docker://%s
-echo "[3/3] Cleaning up..."
-rm -f "$EXPORT"
+echo "Cleaning up..."
+rm -rf "$SQSH" "$ROOTFS" "$LAYER_TAR" "$OCI_WORK" "$DOCKER_TAR"
 echo "Done: %s"`,
-		req.JobID, exportPath,
+		req.JobID, req.JobID, req.JobID,
+		exportPath, rootfsDir, layerTar, ociWorkDir, dockerTar,
+		targetImage,
 		harborUser, harborPass,
 		targetImage, targetImage,
 	)

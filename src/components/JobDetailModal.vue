@@ -232,12 +232,21 @@ const execIntoContainer = () => {
     alert('无法获取作业运行节点')
     return
   }
-  // 使用 srun --overlap 附加到已运行的作业，在同一容器环境中执行 bash
-  // 这是进入 pyxis/enroot 容器的正确方式，不依赖 enroot 实例路径
+  // pyxis 实例名格式：pyxis_<jobid>.<stepid>
+  // enroot list 在登录节点上即可查到，enroot start 直接进入
+  const jobId = props.job.id
+  const initCommand =
+    `INSTANCE=$(enroot list 2>/dev/null | grep "^pyxis_${jobId}\\." | head -1); ` +
+    `if [ -n "$INSTANCE" ]; then ` +
+    `echo "进入容器: $INSTANCE"; ` +
+    `enroot start "$INSTANCE"; ` +
+    `else ` +
+    `echo "未找到容器实例 pyxis_${jobId}.* ，请确认作业正在运行中"; ` +
+    `fi\n`
   emit('exec-container', {
     node,
-    jobId: props.job.id,
-    initCommand: `srun --overlap --jobid=${props.job.id} --pty bash\n`
+    jobId,
+    initCommand,
   })
   emit('close')
 }

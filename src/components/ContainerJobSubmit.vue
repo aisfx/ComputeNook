@@ -190,6 +190,14 @@ const form = ref({
 
 const generatedScript = computed(() => {
   const f = form.value
+
+  // 构建 srun container 参数（在脚本体内用 srun 启动，避免 REST API 提交时 #SBATCH 被 job 对象覆盖）
+  const srunArgs: string[] = [
+    `--container-image=${f.image}`,
+  ]
+  if (f.mounts) srunArgs.push(`--container-mounts=${f.mounts}`)
+  if (f.workdir) srunArgs.push(`--container-workdir=${f.workdir}`)
+
   const lines: string[] = [
     '#!/bin/bash',
     `#SBATCH -J ${f.name || 'container_job'}`,
@@ -200,36 +208,22 @@ const generatedScript = computed(() => {
   if (f.memory) lines.push(`#SBATCH --mem=${f.memory}G`)
   if (f.gpus) lines.push(`#SBATCH --gres=gpu:${f.gpus}`)
   if (f.time) lines.push(`#SBATCH -t ${f.time}:00:00`)
-  // HTTP registry 需要 // 前缀，HTTPS registry 不需要
-  // 如果镜像地址不含协议前缀，自动加 // 表示使用 HTTP（适用于内网 registry）
-  const imageAddr = (() => {
-    const img = f.image
-    if (!img) return img
-    if (img.startsWith('docker://') || img.startsWith('//')) return img
-    const isHttpRegistry =
-      /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/.test(img) || /^[a-zA-Z0-9-]+:[0-9]+\//.test(img)
-    return isHttpRegistry ? `//${img}` : img
-  })()
-  // 注意：所有 #SBATCH 指令必须连续，中间不能有空行，否则 pyxis 无法识别 container 参数
-  lines.push(`#SBATCH --container-image=${imageAddr}`)
-  if (f.mounts) lines.push(`#SBATCH --container-mounts=${f.mounts}`)
-  if (f.workdir) lines.push(`#SBATCH --container-workdir=${f.workdir}`)
-  lines.push(`#SBATCH -o container_%j.log`)
-  lines.push(`#SBATCH -e container_%j.err`)
   lines.push('')
   lines.push('echo "Container job started: $(date)"')
-  lines.push('echo "Image: ' + f.image + '"')
+  lines.push(`echo "Image: ${f.image}"`)
   lines.push('')
+
+  const srunPrefix = `srun ${srunArgs.join(' ')}`
   if (f.command) {
-    lines.push(f.command)
+    lines.push(`${srunPrefix} bash -c ${JSON.stringify(f.command)}`)
     if (f.keepAlive) {
       lines.push('')
       lines.push('# 保持容器运行，方便通过 Web Shell 进入调试')
-      lines.push('sleep infinity')
+      lines.push(`${srunPrefix} sleep infinity`)
     }
   } else {
     lines.push('# 交互模式 - 通过 Web Shell 连接到此作业节点')
-    lines.push('sleep infinity')
+    lines.push(`${srunPrefix} sleep infinity`)
   }
   lines.push('')
   lines.push('echo "Job finished: $(date)"')
