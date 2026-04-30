@@ -200,24 +200,22 @@ const generatedScript = computed(() => {
   if (f.memory) lines.push(`#SBATCH --mem=${f.memory}G`)
   if (f.gpus) lines.push(`#SBATCH --gres=gpu:${f.gpus}`)
   if (f.time) lines.push(`#SBATCH -t ${f.time}:00:00`)
-  lines.push(`#SBATCH -o container_%j.log`)
-  lines.push(`#SBATCH -e container_%j.err`)
-  lines.push('')
   // HTTP registry 需要 // 前缀，HTTPS registry 不需要
   // 如果镜像地址不含协议前缀，自动加 // 表示使用 HTTP（适用于内网 registry）
   const imageAddr = (() => {
     const img = f.image
     if (!img) return img
-    // 已有协议前缀则不处理
     if (img.startsWith('docker://') || img.startsWith('//')) return img
-    // 判断是否为 HTTP registry（IP 或内网域名，非 docker hub 官方地址）
-    const isHttpRegistry = /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/.test(img) ||
-      /^[a-zA-Z0-9-]+:[0-9]+\//.test(img)
+    const isHttpRegistry =
+      /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/.test(img) || /^[a-zA-Z0-9-]+:[0-9]+\//.test(img)
     return isHttpRegistry ? `//${img}` : img
   })()
+  // 注意：所有 #SBATCH 指令必须连续，中间不能有空行，否则 pyxis 无法识别 container 参数
   lines.push(`#SBATCH --container-image=${imageAddr}`)
   if (f.mounts) lines.push(`#SBATCH --container-mounts=${f.mounts}`)
   if (f.workdir) lines.push(`#SBATCH --container-workdir=${f.workdir}`)
+  lines.push(`#SBATCH -o container_%j.log`)
+  lines.push(`#SBATCH -e container_%j.err`)
   lines.push('')
   lines.push('echo "Container job started: $(date)"')
   lines.push('echo "Image: ' + f.image + '"')
