@@ -540,19 +540,54 @@ const openJobList = async (state: string) => {
   showJobHistory.value = true
 }
 
+// 展开 Slurm hostlist 格式，如 cn[0-1] → ['cn0','cn1']
+const expandHostList = (hostlist: string): string[] => {
+  const result: string[] = []
+  const parts: string[] = []
+  let depth = 0, cur = ''
+  for (const ch of hostlist) {
+    if (ch === '[') { depth++; cur += ch }
+    else if (ch === ']') { depth--; cur += ch }
+    else if (ch === ',' && depth === 0) { parts.push(cur.trim()); cur = '' }
+    else { cur += ch }
+  }
+  if (cur.trim()) parts.push(cur.trim())
+  for (const part of parts) {
+    const m = part.match(/^(.*?)\[([^\]]+)\](.*)$/)
+    if (!m) { if (part) result.push(part); continue }
+    const prefix = m[1], ranges = m[2], suffix = m[3]
+    for (const seg of ranges.split(',')) {
+      const range = seg.trim()
+      const dash = range.match(/^(\d+)-(\d+)$/)
+      if (dash) {
+        const from = parseInt(dash[1]), to = parseInt(dash[2])
+        const pad = dash[1].length > 1 ? dash[1].length : 0
+        for (let i = from; i <= to; i++) result.push(prefix + (pad ? String(i).padStart(pad, '0') : i) + suffix)
+      } else { result.push(prefix + range + suffix) }
+    }
+  }
+  return result
+}
+
 // 将 API 作业数据映射为 JobDetailModal 期望的格式
 const openJobDetail = (job: any) => {
+  const rawNodes = typeof job.nodes === 'string' ? job.nodes : ''
+  const nodeNames = rawNodes && rawNodes !== 'None assigned'
+    ? expandHostList(rawNodes)
+    : (job.batch_host ? [job.batch_host] : [])
   selectedJob.value = {
     id: job.job_id,
     name: job.name || `Job ${job.job_id}`,
     status: job.job_state,
     user: job.user_name || job.user_id || job.user || currentUser.value?.username,
     partition: job.partition,
-    nodes: job.num_nodes || (job.nodes ? String(job.nodes).split(',').length : '-'),
+    nodes: nodeNames.length || job.num_nodes || 0,
+    nodeNames,
     cpus: job.cpus || '-',
     memory: job.memory_per_node ? `${job.memory_per_node} MB` : '-',
     submitTime: formatTime(job.submit_time),
     startTime: formatTime(job.start_time),
+    start_time: job.start_time || 0,
     runTime: formatElapsed(job.run_time),
     directory: job.work_dir || job.directory || '-',
   }
