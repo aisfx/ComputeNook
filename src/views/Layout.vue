@@ -133,7 +133,7 @@
       <!-- Content -->
       <main class="content-area" :class="{ 'content-area--noscroll': currentView === 'rack' }">
         <Dashboard v-if="currentView === 'dashboard'" @navigate="currentView = $event" />
-        <JobManagement v-else-if="currentView === 'jobs'" @open-directory="handleOpenDirectory" @go-registry="currentView = 'registry'" />
+        <JobManagement v-else-if="currentView === 'jobs'" @open-directory="handleOpenDirectory" @go-registry="currentView = 'registry'" @exec-container="currentView = 'shell'" />
         <Monitoring v-else-if="currentView === 'monitoring' && isAdmin" :active-tab="monitoringTab" @tab-change="monitoringTab = $event" />
         <RackView v-else-if="currentView === 'rack' && isAdmin" />
         <NetworkTopology v-else-if="currentView === 'network' && isAdmin" />

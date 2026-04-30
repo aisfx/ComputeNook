@@ -622,6 +622,8 @@ let terminal: Terminal | null = null
 let fitAddon: FitAddon | null = null
 let websocket: WebSocket | null = null
 
+const pendingInitCommand = ref('')
+
 // 初始化
 onMounted(async () => {
   console.log('WebShell component mounted, initializing...')
@@ -636,6 +638,22 @@ onMounted(async () => {
   console.log('Current username after mount:', currentUsername.value)
   await loadNodes()
   await checkPrivateKey()
+
+  // 检查是否有来自"进入容器"的自动连接请求
+  const autoConnectRaw = sessionStorage.getItem('webshell_auto_connect')
+  if (autoConnectRaw) {
+    sessionStorage.removeItem('webshell_auto_connect')
+    try {
+      const { node: nodeName, initCommand } = JSON.parse(autoConnectRaw)
+      // 找到对应节点对象
+      const targetNode = nodes.value.find((n: any) => n.name === nodeName)
+      if (targetNode) {
+        // 连接后自动发送进入容器命令
+        pendingInitCommand.value = initCommand
+        connectToNode(targetNode)
+      }
+    } catch { /* ignore */ }
+  }
 })
 
 // 清理
@@ -1094,6 +1112,16 @@ const connectToNode = async (node: any, password: string = '', mfaCode: string =
       // 初始化终端
       nextTick(() => {
         initTerminal()
+        // 如果有待发送的初始命令（如进入容器），延迟发送等终端就绪
+        if (pendingInitCommand.value) {
+          const cmd = pendingInitCommand.value
+          pendingInitCommand.value = ''
+          setTimeout(() => {
+            if (websocket && websocket.readyState === WebSocket.OPEN) {
+              websocket.send(JSON.stringify({ type: 'input', data: cmd }))
+            }
+          }, 800)
+        }
       })
     }
     

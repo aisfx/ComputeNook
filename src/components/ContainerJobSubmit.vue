@@ -1,4 +1,5 @@
 <template>
+  <div class="container-wrap">
   <form @submit.prevent="submit" class="container-form">
     <!-- 镜像地址 -->
     <div class="form-group">
@@ -126,11 +127,12 @@
       </button>
     </div>
   </form>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { getApiBase } from '../utils/auth'
+import { getApiBase, getUser } from '../utils/auth'
 import notification from '../utils/notification'
 
 const props = defineProps<{ initialImage?: string }>()
@@ -155,6 +157,9 @@ const groupedImages = computed(() => ({
   private: filteredImages.value.filter(i => !i.isPublic)
 }))
 
+const currentUser = getUser()
+const homeDir = currentUser?.homeDir || `/home/${currentUser?.username || '$USER'}`
+
 const form = ref({
   image: props.initialImage || '',
   name: 'container_job',
@@ -163,8 +168,8 @@ const form = ref({
   cpus: 8,
   memory: 0,
   gpus: 0,
-  mounts: '',
-  workdir: '/workspace',
+  mounts: `${homeDir}:${homeDir}`,
+  workdir: homeDir,
   command: '',
   time: 0,
 })
@@ -301,11 +306,24 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.container-wrap {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+
 .container-form {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 14px;
+  box-sizing: border-box;
 }
+.container-form::-webkit-scrollbar { width: 3px; }
+.container-form::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 2px; }
 
 .form-row {
   display: grid;
@@ -419,11 +437,10 @@ onMounted(() => {
 }
 
 .form-actions {
-  padding-top: 8px;
-  position: sticky;
-  bottom: 0;
+  padding: 8px 14px;
+  border-top: 1px solid hsl(var(--border));
   background: hsl(var(--card));
-  padding-bottom: 4px;
+  flex-shrink: 0;
 }
 
 .btn-primary {

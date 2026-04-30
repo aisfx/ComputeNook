@@ -9,6 +9,7 @@
     <!-- 容器作业模式 -->
     <ContainerJobSubmit
       v-if="mode === 'container'"
+      style="flex:1; overflow:hidden; display:flex; flex-direction:column;"
       @submitted="emit('job-submitted')"
       @go-registry="emit('go-registry')"
     />
@@ -86,22 +87,7 @@
 
     <!-- 脚本内容 -->
     <div class="form-group">
-      <div class="script-header">
-        <label>脚本内容 *</label>
-        <div class="template-btns">
-          <span class="template-label">模板：</span>
-          <button type="button" class="btn-tpl" @click="applyScriptTemplate('basic')">基础</button>
-          <button type="button" class="btn-tpl" @click="applyScriptTemplate('mpi')">MPI</button>
-          <button type="button" class="btn-tpl" @click="applyScriptTemplate('gpu')">GPU</button>
-          <button type="button" class="btn-tpl" @click="applyScriptTemplate('python')">Python</button>
-          <button type="button" class="btn-tpl" @click="applyScriptTemplate('array')">数组作业</button>
-          <span class="template-label" style="margin-left:4px">AI：</span>
-          <button type="button" class="btn-tpl ai" @click="applyScriptTemplate('pytorch')">🔥 PyTorch</button>
-          <button type="button" class="btn-tpl ai" @click="applyScriptTemplate('deepspeed')">⚡ DeepSpeed</button>
-          <button type="button" class="btn-tpl ai" @click="applyScriptTemplate('vllm')">🚀 vLLM</button>
-          <button type="button" class="btn-tpl ai" @click="applyScriptTemplate('triton')">🎯 Triton</button>
-        </div>
-      </div>
+      <label>脚本内容 *</label>
       <textarea
         v-model="form.scriptContent"
         class="script-editor"
@@ -110,7 +96,7 @@
         spellcheck="false"
         required
       ></textarea>
-      <div class="help-text">直接编写脚本内容，或选择上方模板快速填充</div>
+      <div class="help-text">直接编写脚本内容，或在模板管理中选择模板快速填充</div>
     </div>
 
     <!-- 输出 + 错误文件 -->

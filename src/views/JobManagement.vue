@@ -56,6 +56,7 @@
       @pause="handlePause"
       @cancel="handleCancel"
       @open-directory="handleOpenDirectory"
+      @exec-container="handleExecContainer"
     />
   </div>
 </template>
@@ -69,7 +70,7 @@ import JobDetailModal from '../components/JobDetailModal.vue'
 import { jobTemplates } from '../data/jobTemplates'
 import { getApiBase } from '../utils/auth'
 
-const emit = defineEmits(['open-directory', 'go-registry'])
+const emit = defineEmits(['open-directory', 'go-registry', 'exec-container'])
 inject('jobManagementTab', ref('info'))
 
 const submitOpen = ref(false)
@@ -122,6 +123,12 @@ const handlePause = async (jobId: string | number) => {
 }
 
 const handleOpenDirectory = (path: string) => { emit('open-directory', path) }
+
+const handleExecContainer = (payload: { node: string; jobId: number; initCommand: string }) => {
+  // 存入 sessionStorage，WebShell 挂载时读取并自动连接
+  sessionStorage.setItem('webshell_auto_connect', JSON.stringify(payload))
+  emit('exec-container')
+}
 </script>
 
 <style scoped>

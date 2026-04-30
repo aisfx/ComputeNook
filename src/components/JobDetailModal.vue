@@ -166,6 +166,10 @@
           <button v-if="job.status === 'RUNNING'" class="jd-btn-save-image" @click="showSaveImage = true">
             🐳 保存镜像
           </button>
+          <!-- 进入容器 -->
+          <button v-if="job.status === 'RUNNING'" class="jd-btn-exec" @click="execIntoContainer">
+            💻 进入容器
+          </button>
           <button class="jd-btn-outline" @click="openLog">查看日志</button>
           <button class="jd-btn-ghost" @click="$emit('close')">关闭</button>
         </div>
@@ -217,9 +221,26 @@ import { getToken, getApiBase } from '../utils/auth'
 echarts.use([LineChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer])
 
 const props = defineProps<{ job: any }>()
-defineEmits(['close', 'pause', 'resume', 'cancel', 'open-directory'])
+const emit = defineEmits(['close', 'pause', 'resume', 'cancel', 'open-directory', 'exec-container'])
 
 const refreshing = ref(false)
+
+const execIntoContainer = () => {
+  // 取第一个节点名
+  const node = (props.job.nodeNames && props.job.nodeNames[0]) || props.job.nodes
+  if (!node) {
+    alert('无法获取作业运行节点')
+    return
+  }
+  // 通知父组件：跳转到 WebShell，连接到该节点，并自动执行进入容器命令
+  emit('exec-container', {
+    node,
+    jobId: props.job.id,
+    // srun --overlap 允许在已有作业步骤上附加，--pty 分配伪终端
+    initCommand: `srun --jobid=${props.job.id} --overlap --pty bash\n`
+  })
+  emit('close')
+}
 const showSaveImage = ref(false)
 const saveImageName = ref('')
 const saveImageTag = ref('latest')
@@ -235,8 +256,7 @@ const doSaveImage = async () => {
   saveResult.value = null
   try {
     const token = localStorage.getItem('token') || sessionStorage.getItem('token')
-    const apiBase = (window as any).__CONFIG__?.apiUrl || (import.meta.env.DEV ? `${location.protocol}//${location.hostname}:8080` : '')
-    const res = await fetch(`${apiBase}/api/registry/images/save`, {
+    const res = await fetch(`${getApiBase()}/api/registry/images/save`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -247,7 +267,11 @@ const doSaveImage = async () => {
     })
     const data = await res.json()
     if (!res.ok) throw new Error(data.error || '保存失败')
-    saveResult.value = { ok: true, msg: data.message, target: data.target_image }
+    saveResult.value = {
+      ok: true,
+      msg: '任务已提交，正在后台执行（enroot export → skopeo push），完成后可在镜像仓库查看',
+      target: data.target_image
+    }
   } catch (e: any) {
     saveResult.value = { ok: false, msg: e.message }
   } finally {
@@ -761,6 +785,19 @@ onUnmounted(() => {
   transition: opacity 0.15s;
 }
 .jd-btn-save-image:hover { opacity: 0.85; }
+
+.jd-btn-exec {
+  padding: 7px 14px;
+  background: #7c3aed;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.jd-btn-exec:hover { opacity: 0.85; }
 
 /* 保存镜像对话框 */
 .jd-save-overlay {

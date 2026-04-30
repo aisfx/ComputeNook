@@ -180,7 +180,7 @@ const summary = ref({
 })
 
 const allJobs = ref<any[]>([])
-const queried = ref(false)
+const queried = ref(true)
 const pagination = ref({
   page: 1,
   pageSize: 15,
@@ -347,11 +347,8 @@ const loadJobs = async () => {
       throw new Error('请先登录系统')
     }
     
-    // 默认使用今天的时间范围
-    const { start, end } = getTodayRange()
-    
-    // 构建 API URL
-    let url = `${getApiBase()}/api/jobs?page=${pagination.value.page}&page_size=${pagination.value.pageSize}&start_time=${start}&end_time=${end}`
+    // 构建 API URL，不传时间范围，让后端返回所有作业（含运行中）
+    let url = `${getApiBase()}/api/jobs?page=${pagination.value.page}&page_size=${pagination.value.pageSize}`
     
     // 如果是"我的作业"模式，添加用户名参数
     if (viewMode.value === 'my') {
@@ -683,10 +680,10 @@ const loadPartitions = async () => {
   font-weight: 700;
 }
 
-.summary-value.running { color: #3b82f6; }
-.summary-value.pending { color: #f59e0b; }
-.summary-value.completed { color: #10b981; }
-.summary-value.failed { color: #ef4444; }
+.summary-value.running { color: #16a34a; }
+.summary-value.pending { color: #d97706; }
+.summary-value.completed { color: #2563eb; }
+.summary-value.failed { color: #dc2626; }
 
 .table-container {
   overflow-x: auto;
@@ -704,8 +701,25 @@ const loadPartitions = async () => {
 }
 
 .btn-link.danger {
-  color: #ef4444;
+  color: #dc2626;
 }
+
+/* 状态 badge */
+.status {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 20px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.status-running   { background: #dcfce7; color: #15803d; }
+.status-pending   { background: #fef9c3; color: #a16207; }
+.status-completed { background: #dbeafe; color: #1d4ed8; }
+.status-failed    { background: #fee2e2; color: #b91c1c; }
+.status-cancelled { background: #f1f5f9; color: #64748b; }
+.status-timeout   { background: #fce7f3; color: #9d174d; }
+.status-unknown   { background: #f3f4f6; color: #6b7280; }
 
 
 .empty-state {
