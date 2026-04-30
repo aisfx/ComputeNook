@@ -177,6 +177,15 @@ function zipDir(sourceDir, zipPath, innerFolder) {
   const rootEnv = path.join(ROOT, '.env')
   if (fs.existsSync(rootEnv)) fs.copyFileSync(rootEnv, path.join(STAGE_DIR, '.env.example'))
 
+  // 复制 app-templates.toml
+  const appTemplatesSrc = path.join(ROOT, 'backend', 'app-templates.toml')
+  if (fs.existsSync(appTemplatesSrc)) {
+    fs.copyFileSync(appTemplatesSrc, path.join(STAGE_DIR, 'app-templates.toml'))
+    console.log('   → app-templates.toml copied')
+  } else {
+    console.warn('   ⚠ app-templates.toml not found, skipping')
+  }
+
   // 6. 复制 install.sh 和 nginx.conf
   console.log('\n📝 复制安装脚本...')
   const installSrc = path.join(ROOT, 'scripts', 'install.sh')

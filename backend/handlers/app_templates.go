@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"time"
@@ -12,7 +13,22 @@ import (
 	"hpc-backend/logger"
 )
 
-const appTemplatesPath = "app-templates.toml"
+// appTemplatesPath 返回 app-templates.toml 的绝对路径
+// 优先使用可执行文件同目录（生产部署），找不到则 fallback 到工作目录（开发模式）
+func appTemplatesPath() string {
+	// 1. 可执行文件同目录（生产：/opt/hpc-platform/app-templates.toml）
+	if exe, err := os.Executable(); err == nil {
+		p := filepath.Join(filepath.Dir(exe), "app-templates.toml")
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	// 2. 工作目录（开发模式：backend/app-templates.toml）
+	if wd, err := os.Getwd(); err == nil {
+		return filepath.Join(wd, "app-templates.toml")
+	}
+	return "app-templates.toml"
+}
 
 // AppTemplate 作业模板
 type AppTemplate struct {
@@ -45,27 +61,33 @@ var (
 )
 
 func loadTemplates() ([]AppTemplate, error) {
-	data, err := os.ReadFile(appTemplatesPath)
+	p := appTemplatesPath()
+	logger.Info("loadTemplates: reading %s", p)
+	data, err := os.ReadFile(p)
 	if err != nil {
 		if os.IsNotExist(err) {
+			logger.Warn("loadTemplates: file not found: %s", p)
 			return []AppTemplate{}, nil
 		}
 		return nil, err
 	}
 	var f appTemplatesDoc
 	if err := toml.Unmarshal(data, &f); err != nil {
+		logger.Error("loadTemplates: parse error: %v", err)
 		return nil, err
 	}
+	logger.Info("loadTemplates: loaded %d templates", len(f.Templates))
 	return f.Templates, nil
 }
 
 func saveTemplates(templates []AppTemplate) error {
+	p := appTemplatesPath()
 	f := appTemplatesDoc{Templates: templates}
 	data, err := toml.Marshal(f)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(appTemplatesPath, data, 0644)
+	return os.WriteFile(p, data, 0644)
 }
 
 func getTemplates() []AppTemplate {
