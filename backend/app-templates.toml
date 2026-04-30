@@ -1,14 +1,10 @@
-# HPC 平台作业模板配置文件
-# 每个 [[template]] 块定义一个模板
-# 手动编辑后重启后端生效，或通过前端管理界面动态修改
-
 [[template]]
 id = 1
-name = "Fluent 流体仿真"
-icon = "🌊"
+name = "Fluent CFD"
+icon = "CFD"
 category = "cfd"
 app_type = "Fluent"
-description = "ANSYS Fluent 流体动力学仿真标准配置"
+description = "ANSYS Fluent CFD simulation"
 nodes = 2
 cpus = 48
 gpus = 0
@@ -18,19 +14,15 @@ partition = "compute"
 module_load = "ansys/2023R1"
 executable = "fluent"
 input_file = "case.cas"
-[template.app_params]
-版本 = "v2023R1"
-求解器 = "pressure-based"
-并行方式 = "MPI"
-精度 = "double"
+app_params = {version = "v2023R1", solver = "pressure-based", parallel = "MPI", precision = "double"}
 
 [[template]]
 id = 2
-name = "Gaussian 量子化学"
-icon = "⚗️"
+name = "Gaussian"
+icon = "QC"
 category = "chemistry"
 app_type = "Gaussian"
-description = "Gaussian 量子化学计算标准配置"
+description = "Gaussian quantum chemistry"
 nodes = 1
 cpus = 32
 gpus = 0
@@ -40,19 +32,15 @@ partition = "compute"
 module_load = "gaussian/g16"
 executable = "g16"
 input_file = "input.gjf"
-[template.app_params]
-版本 = "G16"
-计算方法 = "DFT/B3LYP"
-基组 = "6-31G(d)"
-内存 = "32GB"
+app_params = {version = "G16", method = "DFT/B3LYP", basis = "6-31G(d)"}
 
 [[template]]
 id = 3
-name = "LAMMPS 分子动力学"
-icon = "🔬"
+name = "LAMMPS MD"
+icon = "MD"
 category = "md"
 app_type = "LAMMPS"
-description = "LAMMPS 大规模原子/分子并行模拟"
+description = "LAMMPS molecular dynamics"
 nodes = 4
 cpus = 128
 gpus = 0
@@ -62,19 +50,15 @@ partition = "compute"
 module_load = "lammps/2023"
 executable = "lmp_mpi"
 input_file = "in.lammps"
-[template.app_params]
-版本 = "2023.08.02"
-力场 = "ReaxFF"
-时间步长 = "0.5 fs"
-总步数 = "1000000"
+app_params = {version = "2023.08.02", forcefield = "ReaxFF", timestep = "0.5 fs"}
 
 [[template]]
 id = 4
-name = "PyTorch 深度学习"
-icon = "🤖"
+name = "PyTorch Training"
+icon = "AI"
 category = "ai"
 app_type = "PyTorch"
-description = "PyTorch 深度学习训练标准配置"
+description = "PyTorch deep learning training"
 nodes = 1
 cpus = 16
 gpus = 4
@@ -84,19 +68,15 @@ partition = "gpu"
 module_load = "pytorch/2.1.0-cuda11.8"
 executable = "python"
 input_file = "train.py"
-[template.app_params]
-版本 = "2.1.0"
-CUDA = "11.8"
-Python = "3.10"
-批次大小 = "32"
+app_params = {version = "2.1.0", cuda = "11.8", python = "3.10"}
 
 [[template]]
 id = 5
 name = "OpenFOAM CFD"
-icon = "🌊"
+icon = "CFD"
 category = "cfd"
 app_type = "OpenFOAM"
-description = "OpenFOAM 开源 CFD 工具包"
+description = "OpenFOAM open source CFD"
 nodes = 4
 cpus = 96
 gpus = 0
@@ -106,19 +86,15 @@ partition = "compute"
 module_load = "openfoam/v2306"
 executable = "simpleFoam"
 input_file = "system/controlDict"
-[template.app_params]
-版本 = "v2306"
-求解器 = "simpleFoam"
-湍流模型 = "k-epsilon"
-网格数 = "5M cells"
+app_params = {version = "v2306", solver = "simpleFoam", turbulence = "k-epsilon"}
 
 [[template]]
 id = 6
-name = "VASP 第一性原理"
-icon = "⚗️"
+name = "VASP DFT"
+icon = "DFT"
 category = "chemistry"
 app_type = "VASP"
-description = "VASP 第一性原理计算"
+description = "VASP first-principles calculation"
 nodes = 2
 cpus = 64
 gpus = 0
@@ -128,19 +104,15 @@ partition = "compute"
 module_load = "vasp/6.4.1"
 executable = "vasp_std"
 input_file = "INCAR"
-[template.app_params]
-版本 = "6.4.1"
-泛函 = "PBE"
-截断能 = "500 eV"
-K点 = "5x5x5"
+app_params = {version = "6.4.1", functional = "PBE", encut = "500 eV"}
 
 [[template]]
 id = 101
-name = "DeepSeek-V3 推理"
-icon = "🧠"
+name = "DeepSeek-V3"
+icon = "LLM"
 category = "ai-inference"
 app_type = "DeepSeek-V3"
-description = "DeepSeek-V3 大模型本地推理服务（vLLM）"
+description = "DeepSeek-V3 inference (vLLM)"
 nodes = 1
 cpus = 32
 gpus = 8
@@ -150,19 +122,15 @@ partition = "gpu"
 module_load = ""
 executable = "python"
 input_file = ""
-[template.app_params]
-模型 = "deepseek-ai/DeepSeek-V3"
-框架 = "vLLM"
-精度 = "bfloat16"
-并发 = "256"
+app_params = {model = "deepseek-ai/DeepSeek-V3", framework = "vLLM", precision = "bfloat16"}
 
 [[template]]
 id = 102
-name = "DeepSeek-V2 推理"
-icon = "🧠"
+name = "DeepSeek-V2"
+icon = "LLM"
 category = "ai-inference"
 app_type = "DeepSeek-V2"
-description = "DeepSeek-V2 MoE 大模型推理服务（vLLM）"
+description = "DeepSeek-V2 MoE inference (vLLM)"
 nodes = 1
 cpus = 32
 gpus = 4
@@ -172,19 +140,15 @@ partition = "gpu"
 module_load = ""
 executable = "python"
 input_file = ""
-[template.app_params]
-模型 = "deepseek-ai/DeepSeek-V2"
-框架 = "vLLM"
-精度 = "bfloat16"
-并发 = "128"
+app_params = {model = "deepseek-ai/DeepSeek-V2", framework = "vLLM", precision = "bfloat16"}
 
 [[template]]
 id = 103
-name = "DeepSeek-R1 推理"
-icon = "🧠"
+name = "DeepSeek-R1"
+icon = "LLM"
 category = "ai-inference"
 app_type = "DeepSeek-R1"
-description = "DeepSeek-R1 推理增强模型（vLLM）"
+description = "DeepSeek-R1 reasoning model (vLLM)"
 nodes = 1
 cpus = 32
 gpus = 8
@@ -194,19 +158,15 @@ partition = "gpu"
 module_load = ""
 executable = "python"
 input_file = ""
-[template.app_params]
-模型 = "deepseek-ai/DeepSeek-R1"
-框架 = "vLLM"
-精度 = "bfloat16"
-并发 = "128"
+app_params = {model = "deepseek-ai/DeepSeek-R1", framework = "vLLM", precision = "bfloat16"}
 
 [[template]]
 id = 104
-name = "GLM-4 推理"
-icon = "💬"
+name = "GLM-4"
+icon = "LLM"
 category = "ai-inference"
 app_type = "GLM-4"
-description = "ChatGLM4 对话模型推理服务（vLLM）"
+description = "ChatGLM4 inference (vLLM)"
 nodes = 1
 cpus = 16
 gpus = 2
@@ -216,19 +176,15 @@ partition = "gpu"
 module_load = ""
 executable = "python"
 input_file = ""
-[template.app_params]
-模型 = "THUDM/glm-4-9b-chat"
-框架 = "vLLM"
-精度 = "bfloat16"
-并发 = "64"
+app_params = {model = "THUDM/glm-4-9b-chat", framework = "vLLM", precision = "bfloat16"}
 
 [[template]]
 id = 105
-name = "MiniMax-Text 推理"
-icon = "💬"
+name = "MiniMax-Text"
+icon = "LLM"
 category = "ai-inference"
 app_type = "MiniMax"
-description = "MiniMax Text-01 大模型推理服务（vLLM）"
+description = "MiniMax Text-01 inference (vLLM)"
 nodes = 1
 cpus = 32
 gpus = 8
@@ -238,19 +194,15 @@ partition = "gpu"
 module_load = ""
 executable = "python"
 input_file = ""
-[template.app_params]
-模型 = "MiniMaxAI/MiniMax-Text-01"
-框架 = "vLLM"
-精度 = "bfloat16"
-并发 = "128"
+app_params = {model = "MiniMaxAI/MiniMax-Text-01", framework = "vLLM", precision = "bfloat16"}
 
 [[template]]
 id = 106
-name = "Qwen2.5 推理"
-icon = "🤖"
+name = "Qwen2.5-72B"
+icon = "LLM"
 category = "ai-inference"
 app_type = "Qwen2.5"
-description = "Qwen2.5-72B 大模型推理服务（vLLM）"
+description = "Qwen2.5-72B inference (vLLM)"
 nodes = 1
 cpus = 32
 gpus = 4
@@ -260,19 +212,15 @@ partition = "gpu"
 module_load = ""
 executable = "python"
 input_file = ""
-[template.app_params]
-模型 = "Qwen/Qwen2.5-72B-Instruct"
-框架 = "vLLM"
-精度 = "bfloat16"
-并发 = "128"
+app_params = {model = "Qwen/Qwen2.5-72B-Instruct", framework = "vLLM", precision = "bfloat16"}
 
 [[template]]
 id = 107
-name = "LLaMA-3 推理"
-icon = "🦙"
+name = "LLaMA-3-70B"
+icon = "LLM"
 category = "ai-inference"
 app_type = "LLaMA-3"
-description = "Meta LLaMA-3 70B 推理服务（vLLM）"
+description = "Meta LLaMA-3 70B inference (vLLM)"
 nodes = 1
 cpus = 32
 gpus = 4
@@ -282,8 +230,34 @@ partition = "gpu"
 module_load = ""
 executable = "python"
 input_file = ""
-[template.app_params]
-模型 = "meta-llama/Meta-Llama-3-70B-Instruct"
-框架 = "vLLM"
-精度 = "bfloat16"
-并发 = "64"
+app_params = {model = "meta-llama/Meta-Llama-3-70B-Instruct", framework = "vLLM", precision = "bfloat16"}
+
+# ── HPC 科学计算软件 ──────────────────────────────────────────
+
+[[template]]
+id = 7
+name = "GROMACS MD"
+icon = "MD"
+category = "md"
+app_type = "GROMACS"
+description = "GROMACS biomolecular dynamics simulation"
+nodes = 2
+cpus = 64
+gpus = 2
+memory = 128
+time = 48
+partition = "gpu"
+module_load = "gromacs/2023.3-cuda"
+executable = "gmx_mpi"
+input_file = "topol.tpr"
+app_params = {version = "2023.3", ensemble = "NPT", timestep = "2 fs", steps = "50000000"}
+
+[[template]]
+id = 8
+name = "NAMD MD"
+icon = "MD"
+category = "md"
+app_type = "NAMD"
+description = "NAMD biomolecular dynamics simulation"
+nodes = 2
+cpus = 64
