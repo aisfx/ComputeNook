@@ -8,12 +8,55 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	gossh "golang.org/x/crypto/ssh"
 	"hpc-backend/logger"
 )
+
+// SaveImageTask 保存镜像任务状态
+type SaveImageTask struct {
+	TaskID      string `json:"task_id"`
+	Status      string `json:"status"`   // pending / running / done / error
+	Step        int    `json:"step"`     // 1-4
+	TotalSteps  int    `json:"total_steps"`
+	StepDesc    string `json:"step_desc"`
+	TargetImage string `json:"target_image"`
+	Error       string `json:"error,omitempty"`
+	UpdatedAt   int64  `json:"updated_at"`
+}
+
+var (
+	saveImageTasks   = map[string]*SaveImageTask{}
+	saveImageTasksMu sync.RWMutex
+)
+
+func setSaveTask(t *SaveImageTask) {
+	t.UpdatedAt = time.Now().Unix()
+	saveImageTasksMu.Lock()
+	saveImageTasks[t.TaskID] = t
+	saveImageTasksMu.Unlock()
+}
+
+func getSaveTask(taskID string) (*SaveImageTask, bool) {
+	saveImageTasksMu.RLock()
+	defer saveImageTasksMu.RUnlock()
+	t, ok := saveImageTasks[taskID]
+	return t, ok
+}
+
+// GetSaveImageTask 查询保存镜像任务进度
+func GetSaveImageTask(c *gin.Context) {
+	taskID := c.Param("task_id")
+	t, ok := getSaveTask(taskID)
+	if !ok {
+		c.JSON(http.StatusNotFound, gin.H{"error": "任务不存在"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": t})
+}
 
 // harborAdmin 用管理员凭证向 Harbor API 发起请求
 // 权限控制由我们的后端逻辑负责，不依赖 Harbor 自身的用户权限
@@ -448,59 +491,36 @@ func SaveContainerImage(c *gin.Context) {
 	layerTar := fmt.Sprintf("/tmp/hpc_layer_%d_%d.tar", req.JobID, ts)
 	ociWorkDir := fmt.Sprintf("/tmp/hpc_oci_%d_%d", req.JobID, ts)
 	dockerTar := fmt.Sprintf("/tmp/hpc_docker_%d_%d.tar", req.JobID, ts)
-	saveScript := fmt.Sprintf(`set -e
-CONTAINER=$(enroot list 2>/dev/null | grep "^pyxis_%d\." | head -1)
-if [ -z "$CONTAINER" ]; then
-  echo "[ERROR] 未找到作业 %d 的 enroot 容器实例（pyxis_%d.*）"
-  exit 1
-fi
-SQSH="%s"
-ROOTFS="%s"
-LAYER_TAR="%s"
-OCI_WORK="%s"
-DOCKER_TAR="%s"
-echo "[1/4] Exporting squashfs: $CONTAINER -> $SQSH"
-enroot export --output "$SQSH" "$CONTAINER"
-echo "[2/4] Extracting rootfs..."
-unsquashfs -f -d "$ROOTFS" "$SQSH"
-echo "[3/4] Building docker archive..."
-tar -C "$ROOTFS" -cf "$LAYER_TAR" .
-LAYER_SHA=$(sha256sum "$LAYER_TAR" | awk '{print $1}')
-CONFIG_JSON="{\"architecture\":\"amd64\",\"os\":\"linux\",\"rootfs\":{\"type\":\"layers\",\"diff_ids\":[\"sha256:$LAYER_SHA\"]}}"
-CONFIG_SHA=$(echo -n "$CONFIG_JSON" | sha256sum | awk '{print $1}')
-mkdir -p "$OCI_WORK"
-echo -n "$CONFIG_JSON" > "$OCI_WORK/${CONFIG_SHA}.json"
-cp "$LAYER_TAR" "$OCI_WORK/${LAYER_SHA}.tar"
-echo "[{\"Config\":\"${CONFIG_SHA}.json\",\"RepoTags\":[\"%s\"],\"Layers\":[\"${LAYER_SHA}.tar\"]}]" \
-  > "$OCI_WORK/manifest.json"
-tar -C "$OCI_WORK" -cf "$DOCKER_TAR" .
-echo "[4/4] Pushing to Harbor..."
-skopeo copy --insecure-policy \
-  --dest-creds "%s:%s" \
-  --dest-tls-verify=false \
-  docker-archive:"$DOCKER_TAR" \
-  docker://%s
-echo "Cleaning up..."
-rm -rf "$SQSH" "$ROOTFS" "$LAYER_TAR" "$OCI_WORK" "$DOCKER_TAR"
-echo "Done: %s"`,
-		req.JobID, req.JobID, req.JobID,
-		exportPath, rootfsDir, layerTar, ociWorkDir, dockerTar,
-		targetImage,
-		harborUser, harborPass,
-		targetImage, targetImage,
-	)
+	// 生成任务ID
+	taskID := fmt.Sprintf("save_%d_%d", req.JobID, ts)
+	task := &SaveImageTask{
+		TaskID:      taskID,
+		Status:      "pending",
+		Step:        0,
+		TotalSteps:  4,
+		StepDesc:    "准备中...",
+		TargetImage: targetImage,
+	}
+	setSaveTask(task)
 
-	// 异步 SSH 执行，立即返回给前端
+	// 异步 SSH 分步执行，实时更新任务状态
 	go func() {
+		updateTask := func(step int, desc, status string, errMsg string) {
+			task.Step = step
+			task.StepDesc = desc
+			task.Status = status
+			task.Error = errMsg
+			setSaveTask(task)
+		}
+
 		sshCfg := &gossh.ClientConfig{
 			User:            username.(string),
 			HostKeyCallback: gossh.InsecureIgnoreHostKey(),
 			Timeout:         10 * time.Second,
 		}
-		// 解析私钥
 		signer, err := gossh.ParsePrivateKey([]byte(privateKey))
 		if err != nil {
-			logger.Error("SaveContainerImage: parse private key failed: %v", err)
+			updateTask(0, "SSH 密钥解析失败", "error", err.Error())
 			return
 		}
 		sshCfg.Auth = []gossh.AuthMethod{gossh.PublicKeys(signer)}
@@ -508,32 +528,75 @@ echo "Done: %s"`,
 		addr := fmt.Sprintf("%s:%d", nodeHost, nodePort)
 		client, err := gossh.Dial("tcp", addr, sshCfg)
 		if err != nil {
-			logger.Error("SaveContainerImage: SSH dial %s failed: %v", addr, err)
+			updateTask(0, "SSH 连接失败", "error", err.Error())
 			return
 		}
 		defer client.Close()
 
-		sess, err := client.NewSession()
-		if err != nil {
-			logger.Error("SaveContainerImage: new session failed: %v", err)
-			return
+		// 分步执行，每步单独 SSH session 以便实时更新进度
+		steps := []struct {
+			step int
+			desc string
+			cmd  string
+		}{
+			{1, "导出容器 squashfs...", fmt.Sprintf(
+				`CONTAINER=$(enroot list 2>/dev/null | grep "^pyxis_%d\." | head -1); `+
+					`if [ -z "$CONTAINER" ]; then echo "ERROR: 未找到容器实例 pyxis_%d.*" >&2; exit 1; fi; `+
+					`enroot export --output "%s" "$CONTAINER"`,
+				req.JobID, req.JobID, exportPath)},
+			{2, "解压 rootfs...", fmt.Sprintf(
+				`unsquashfs -f -d "%s" "%s"`,
+				rootfsDir, exportPath)},
+			{3, "构建 docker archive...", fmt.Sprintf(
+				`tar -C "%s" -cf "%s" . && `+
+					`LAYER_SHA=$(sha256sum "%s" | awk '{print $1}') && `+
+					`CONFIG_JSON="{\"architecture\":\"amd64\",\"os\":\"linux\",\"rootfs\":{\"type\":\"layers\",\"diff_ids\":[\"sha256:$LAYER_SHA\"]}}" && `+
+					`CONFIG_SHA=$(echo -n "$CONFIG_JSON" | sha256sum | awk '{print $1}') && `+
+					`mkdir -p "%s" && `+
+					`echo -n "$CONFIG_JSON" > "%s/${CONFIG_SHA}.json" && `+
+					`cp "%s" "%s/${LAYER_SHA}.tar" && `+
+					`echo "[{\"Config\":\"${CONFIG_SHA}.json\",\"RepoTags\":[\"%s\"],\"Layers\":[\"${LAYER_SHA}.tar\"]}]" > "%s/manifest.json" && `+
+					`tar -C "%s" -cf "%s" .`,
+				rootfsDir, layerTar,
+				layerTar,
+				ociWorkDir,
+				ociWorkDir, layerTar, ociWorkDir,
+				targetImage, ociWorkDir,
+				ociWorkDir, dockerTar)},
+			{4, "推送到 Harbor...", fmt.Sprintf(
+				`skopeo copy --insecure-policy --dest-creds "%s:%s" --dest-tls-verify=false docker-archive:"%s" docker://%s && `+
+					`rm -rf "%s" "%s" "%s" "%s" "%s"`,
+				harborUser, harborPass, dockerTar, targetImage,
+				exportPath, rootfsDir, layerTar, ociWorkDir, dockerTar)},
 		}
-		defer sess.Close()
 
-		out, err := sess.CombinedOutput("bash -c " + shellescape(saveScript))
-		if err != nil {
-			logger.Error("SaveContainerImage: script failed: %v\nOutput: %s", err, string(out))
-		} else {
-			logger.Info("SaveContainerImage: success job=%d target=%s\n%s", req.JobID, targetImage, string(out))
+		for _, s := range steps {
+			updateTask(s.step, s.desc, "running", "")
+			sess, err := client.NewSession()
+			if err != nil {
+				updateTask(s.step, s.desc, "error", "创建 SSH session 失败: "+err.Error())
+				return
+			}
+			out, err := sess.CombinedOutput("bash -c " + shellescape(s.cmd))
+			sess.Close()
+			if err != nil {
+				errMsg := fmt.Sprintf("%v\n%s", err, string(out))
+				logger.Error("SaveContainerImage step %d failed: %s", s.step, errMsg)
+				updateTask(s.step, s.desc, "error", string(out))
+				return
+			}
+			logger.Info("SaveContainerImage step %d done: %s", s.step, string(out))
 		}
+
+		updateTask(4, "完成", "done", "")
+		logger.Info("SaveContainerImage: success job=%d target=%s", req.JobID, targetImage)
 	}()
 
-	logger.Info("SaveContainerImage: submitted async job=%d node=%s target=%s user=%s",
-		req.JobID, nodeName, targetImage, username)
+	logger.Info("SaveContainerImage: task=%s job=%d target=%s user=%s", taskID, req.JobID, targetImage, username)
 	c.JSON(http.StatusOK, gin.H{
-		"message":      "镜像保存任务已在后台执行，完成后可在镜像仓库查看",
+		"message":      "镜像保存任务已启动",
 		"target_image": targetImage,
-		"node":         nodeName,
+		"task_id":      taskID,
 	})
 }
 

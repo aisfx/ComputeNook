@@ -185,22 +185,62 @@
               <p class="jd-save-tip">将当前运行容器（作业 #{{ job.id }}）的环境保存为镜像，推送到你的私有仓库。</p>
               <div class="jd-save-field">
                 <label>镜像名称</label>
-                <input v-model="saveImageName" placeholder="例：my-pytorch-env" />
+                <input v-model="saveImageName" placeholder="例：my-pytorch-env" :disabled="saving || saveTask?.status === 'done'" />
               </div>
               <div class="jd-save-field">
                 <label>Tag</label>
-                <input v-model="saveImageTag" placeholder="latest" />
+                <input v-model="saveImageTag" placeholder="latest" :disabled="saving || saveTask?.status === 'done'" />
               </div>
-              <div v-if="saveResult" :class="['jd-save-result', saveResult.ok ? 'ok' : 'err']">
+
+              <!-- 进度条 -->
+              <div v-if="saveTask" class="jd-save-progress">
+                <div class="jd-progress-steps">
+                  <div
+                    v-for="(label, i) in ['导出 squashfs', '解压 rootfs', '构建归档', '推送 Harbor']"
+                    :key="i"
+                    :class="['jd-progress-step',
+                      saveTask.step > i + 1 || saveTask.status === 'done' ? 'done' :
+                      saveTask.step === i + 1 && saveTask.status === 'running' ? 'active' :
+                      saveTask.step === i + 1 && saveTask.status === 'error' ? 'error' : '']"
+                  >
+                    <div class="jd-step-dot">
+                      <span v-if="saveTask.step > i + 1 || saveTask.status === 'done'">✓</span>
+                      <span v-else-if="saveTask.step === i + 1 && saveTask.status === 'error'">✗</span>
+                      <span v-else-if="saveTask.step === i + 1 && saveTask.status === 'running'" class="jd-spin">⟳</span>
+                      <span v-else>{{ i + 1 }}</span>
+                    </div>
+                    <div class="jd-step-label">{{ label }}</div>
+                  </div>
+                </div>
+                <div class="jd-progress-bar-wrap">
+                  <div class="jd-progress-bar-fill"
+                    :style="{
+                      width: saveTask.status === 'done' ? '100%' :
+                             saveTask.status === 'error' ? (((saveTask.step - 1) / 4 * 100) + '%') :
+                             ((saveTask.step / 4 * 100) + '%'),
+                      background: saveTask.status === 'error' ? '#ef4444' :
+                                  saveTask.status === 'done' ? '#22c55e' : 'hsl(var(--primary))'
+                    }"
+                  ></div>
+                </div>
+                <div v-if="saveTask.status === 'error'" class="jd-save-result err">{{ saveTask.error }}</div>
+                <div v-if="saveTask.status === 'done'" class="jd-save-result ok">
+                  推送成功！
+                  <div class="jd-save-target">{{ saveTask.target_image }}</div>
+                </div>
+              </div>
+
+              <div v-else-if="saveResult && !saveTask" :class="['jd-save-result', saveResult.ok ? 'ok' : 'err']">
                 {{ saveResult.msg }}
                 <div v-if="saveResult.target" class="jd-save-target">{{ saveResult.target }}</div>
               </div>
             </div>
             <div class="jd-save-footer">
-              <button class="jd-btn-primary" @click="doSaveImage" :disabled="saving || saveResult?.ok">
-                {{ saving ? '提交中...' : saveResult?.ok ? '✅ 已提交' : '🚀 开始保存' }}
+              <button class="jd-btn-primary" @click="doSaveImage"
+                :disabled="saving || saveTask?.status === 'running' || saveTask?.status === 'done'">
+                {{ saving ? '提交中...' : saveTask?.status === 'running' ? '执行中...' : saveTask?.status === 'done' ? '✅ 已完成' : '🚀 开始保存' }}
               </button>
-              <button class="jd-btn-ghost" @click="closeSaveImage">取消</button>
+              <button class="jd-btn-ghost" @click="closeSaveImage">关闭</button>
             </div>
           </div>
         </div>
@@ -255,12 +295,35 @@ const saveImageName = ref('')
 const saveImageTag = ref('latest')
 const saving = ref(false)
 const saveResult = ref<{ ok: boolean; msg: string; target?: string } | null>(null)
+const saveTask = ref<any>(null)
+let saveTaskPollTimer: any = null
 
 const closeSaveImage = () => {
   showSaveImage.value = false
   saveResult.value = null
+  saveTask.value = null
   saveImageName.value = ''
   saveImageTag.value = 'latest'
+  if (saveTaskPollTimer) { clearInterval(saveTaskPollTimer); saveTaskPollTimer = null }
+}
+
+const pollSaveTask = (taskId: string) => {
+  if (saveTaskPollTimer) clearInterval(saveTaskPollTimer)
+  saveTaskPollTimer = setInterval(async () => {
+    try {
+      const token = localStorage.getItem('token') || sessionStorage.getItem('token')
+      const res = await fetch(`${getApiBase()}/api/registry/images/save/task/${taskId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      if (!res.ok) return
+      const data = await res.json()
+      saveTask.value = data.data
+      if (data.data?.status === 'done' || data.data?.status === 'error') {
+        clearInterval(saveTaskPollTimer)
+        saveTaskPollTimer = null
+      }
+    } catch { /* ignore */ }
+  }, 2000)
 }
 
 const doSaveImage = async () => {
@@ -270,6 +333,7 @@ const doSaveImage = async () => {
   }
   saving.value = true
   saveResult.value = null
+  saveTask.value = null
   try {
     const token = localStorage.getItem('token') || sessionStorage.getItem('token')
     const res = await fetch(`${getApiBase()}/api/registry/images/save`, {
@@ -283,10 +347,10 @@ const doSaveImage = async () => {
     })
     const data = await res.json()
     if (!res.ok) throw new Error(data.error || '保存失败')
-    saveResult.value = {
-      ok: true,
-      msg: '任务已提交，正在后台执行（enroot export → skopeo push），完成后可在镜像仓库查看',
-      target: data.target_image
+    // 开始轮询任务进度
+    if (data.task_id) {
+      saveTask.value = { task_id: data.task_id, status: 'pending', step: 0, total_steps: 4, step_desc: '准备中...', target_image: data.target_image }
+      pollSaveTask(data.task_id)
     }
   } catch (e: any) {
     saveResult.value = { ok: false, msg: e.message }
@@ -501,6 +565,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (autoRefreshInterval.value) clearInterval(autoRefreshInterval.value)
+  if (saveTaskPollTimer) clearInterval(saveTaskPollTimer)
   chartCpu?.dispose()
   chartMem?.dispose()
   chartNet?.dispose()
@@ -859,6 +924,27 @@ onUnmounted(() => {
   display: flex; gap: 8px; padding: 12px 16px;
   border-top: 1px solid hsl(var(--border));
 }
+
+/* 进度条 */
+.jd-save-progress { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
+.jd-progress-steps { display: flex; justify-content: space-between; gap: 4px; }
+.jd-progress-step { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; }
+.jd-step-dot {
+  width: 26px; height: 26px; border-radius: 50%;
+  background: hsl(var(--muted)); color: hsl(var(--muted-foreground));
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.75rem; font-weight: 600; transition: all 0.2s;
+}
+.jd-progress-step.done .jd-step-dot { background: #22c55e; color: #fff; }
+.jd-progress-step.active .jd-step-dot { background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); }
+.jd-progress-step.error .jd-step-dot { background: #ef4444; color: #fff; }
+.jd-step-label { font-size: 0.65rem; color: hsl(var(--muted-foreground)); text-align: center; }
+.jd-progress-step.done .jd-step-label,
+.jd-progress-step.active .jd-step-label { color: hsl(var(--foreground)); }
+.jd-progress-bar-wrap { height: 6px; background: hsl(var(--muted)); border-radius: 3px; overflow: hidden; }
+.jd-progress-bar-fill { height: 100%; border-radius: 3px; transition: width 0.4s ease; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.jd-spin { display: inline-block; animation: spin 1s linear infinite; }
 .jd-btn-primary {
   flex: 1; padding: 7px 14px;
   background: hsl(var(--primary)); color: hsl(var(--primary-foreground));

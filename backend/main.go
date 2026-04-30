@@ -406,6 +406,7 @@ func main() {
 			registry.DELETE("/projects/:project/repositories/:repo", handlers.DeleteRepository)
 			registry.DELETE("/projects/:project/repositories/:repo/tags/:tag", handlers.DeleteTag)
 			registry.POST("/images/save", handlers.SaveContainerImage)
+			registry.GET("/images/save/task/:task_id", handlers.GetSaveImageTask)
 		}
 
 		// CMDB 主机资产管理
