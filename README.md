@@ -1,16 +1,56 @@
-# HPC Web 管理平台
+# 算力小筑
 
-基于 Vue 3 + TypeScript + Go 构建的高性能计算集群统一管理平台，支持亮色/暗色双主题。
+> 小而美的高性能计算集群管理平台
+
+**算力小筑**是一个面向科研与工程团队的轻量级 HPC 集群管理平台，基于 Vue 3 + TypeScript + Go 构建，支持亮色/暗色双主题。
+
+不追求大而全，只做好用的那几件事：提交作业、看日志、管文件、进容器、看监控。
 
 > 更新日志见 [CHANGELOG.md](./CHANGELOG.md)
 
-## 项目对接
+---
 
-| | |
-|---|---|
-| 对接人 | sunfx |
-| QQ | 598824458 |
-| 邮箱 | 59882445@qq.com |
+## 平台能做什么
+
+### 🚀 作业管理
+- 提交普通 Slurm 作业，内置 MPI / GPU / Python / 数组作业等模板
+- 提交**容器作业**（Pyxis/Enroot），挂载目录、工作目录默认指向用户家目录
+- 查看运行中/历史作业，支持取消、暂停、恢复
+- 作业详情：节点、资源、运行时长、实时监控进度条
+- 一键**进入运行中容器**（`srun --overlap --pty bash`），直接在 Web Shell 里操作
+- 一键**保存容器镜像**，异步推送到私有 Harbor 仓库
+
+### 💻 Web Shell
+- 浏览器内 SSH 终端，支持多节点切换
+- SSH 密钥 / 密码双认证，支持 MFA 二次验证
+- 所有输入行为记录审计日志，危险命令自动告警
+
+### 🖥 远程桌面
+- 通过 Slurm 申请计算节点，启动图形桌面（Xpra）
+- 支持浏览器直连（HTML5）和本地客户端（hpc-client）两种方式
+- 支持 VNC 客户端连接
+
+### 📁 文件管理
+- 浏览器内管理家目录文件，上传/下载/预览/重命名/删除
+- 支持 WebDAV 挂载，Windows/macOS 直接映射为本地磁盘
+
+### 📊 集群监控
+- 节点 CPU / 内存 / GPU 实时使用率
+- Prometheus 历史曲线（作业维度）
+- 机柜图可视化、网络拓扑
+
+### 🤖 AI 助手
+- 右下角悬浮入口，随时提问
+- 支持 DeepSeek / MiniMax / GPT 等兼容 OpenAI API 的模型
+- 内置 HPC 知识库（Obsidian Vault 兼容），RAG 检索增强
+- AI 诊断：自动注入 Prometheus 实时数据，分析集群异常
+
+### 🔐 用户与权限
+- LDAP 统一认证，JWT 会话管理
+- 管理员可管理用户、用户组、Slurm 账户、QoS、资源绑定
+- 存储配额管理（XFS / Lustre / NFS）
+- 多因子认证（TOTP，可选 / 全局强制）
+- 操作审计日志，SSH 行为记录
 
 ---
 
@@ -22,6 +62,8 @@
 | 后端 | Go + Gin |
 | 认证 | LDAP + JWT |
 | 调度 | Slurm REST API |
+| 容器 | Pyxis / Enroot |
+| 镜像仓库 | Harbor |
 | 监控 | Prometheus + node_exporter |
 | AI | 兼容 OpenAI API（DeepSeek / MiniMax / GPT 等） |
 | 知识库 | 本地 Markdown（Obsidian Vault 兼容）+ 内存 2-gram 索引 |
@@ -33,7 +75,7 @@
 ```
 ├── src/                  # 前端源码
 │   ├── views/            # 页面组件
-│   ├── components/       # 通用组件（AIAssistant 等）
+│   ├── components/       # 通用组件
 │   ├── api/              # axios 封装
 │   ├── utils/            # 工具函数
 │   └── styles/           # 全局样式
@@ -95,7 +137,7 @@ LDAP_BIND_PASSWORD=your-password
 LDAP_BASE_DN=dc=example,dc=com
 LDAP_USER_BASE_DN=ou=people,dc=example,dc=com
 LDAP_GROUP_BASE_DN=ou=group,dc=example,dc=com
-UID_MIN=1000              # 平台管理的 UID 范围
+UID_MIN=1000
 UID_MAX=65000
 GID_MIN=1000
 GID_MAX=65000
@@ -104,12 +146,11 @@ GID_MAX=65000
 ### Slurm REST API
 
 ```env
-SLURM_REST_URL=http://slurm-host:6820   # slurmrestd 地址
-SLURM_API_VERSION=v0.0.43               # API 版本，与 slurmrestd 一致
-SLURM_ADMIN_USER=root                   # 用于生成 JWT 的 Slurm 用户
-SLURM_JWT_KEY=your-slurm-jwt-key        # Slurm JWT 签名密钥
-SLURM_JWT_LIFESPAN=86400                # JWT 有效期（秒）
-# SLURM_CLUSTER_NAME=                   # 多集群时指定集群名
+SLURM_REST_URL=http://slurm-host:6820
+SLURM_API_VERSION=v0.0.43
+SLURM_ADMIN_USER=root
+SLURM_JWT_KEY=your-slurm-jwt-key
+SLURM_JWT_LIFESPAN=86400
 ```
 
 **slurmrestd 启动示例：**
@@ -124,33 +165,36 @@ slurmrestd -a rest_auth/jwt -s openapi/v0.0.43 0.0.0.0:6820
 PROMETHEUS_URL=http://localhost:9090
 ```
 
-需要在各计算节点部署 `node_exporter`，并配置 Prometheus 抓取。
-
 ### Web Shell
 
 ```env
-# JSON 数组，配置可连接的节点
 WEBSHELL_NODES=[{"name":"ln0","host":"192.168.x.x","port":22,"description":"登录节点","enabled":true}]
 ```
-
-后端通过 SSH 密钥连接节点，需确保后端服务器的 SSH 私钥对目标节点有访问权限。
 
 ### 文件管理 & 存储配额
 
 ```env
-FILEMANAGER_BASE_PATH=/home    # 文件管理根目录
-HOME_BASE_PATH=/home           # 用户家目录基础路径
-QUOTA_FS_TYPE=xfs              # 配额文件系统类型：xfs / nfs / lustre
-QUOTA_PATH=/home               # 配额挂载点，必须与实际挂载路径一致
+FILEMANAGER_BASE_PATH=/home
+HOME_BASE_PATH=/home
+QUOTA_FS_TYPE=xfs              # xfs / nfs / lustre
+QUOTA_PATH=/home
 ```
 
 ### 远程桌面
 
 ```env
-DESKTOP_PARTITION=your-partition   # 提交桌面作业的 Slurm 分区
-DESKTOP_SSH_KEY=/root/.ssh/id_rsa  # 后端连接计算节点的 SSH 私钥
-DESKTOP_SSH_USER=root              # SSH 用户
+DESKTOP_PARTITION=your-partition
+DESKTOP_SSH_KEY=/root/.ssh/id_rsa
+DESKTOP_SSH_USER=root
 DESKTOP_SSH_PORT=22
+```
+
+### Harbor 镜像仓库
+
+```env
+HARBOR_URL=http://your-harbor
+HARBOR_ADMIN_USER=admin
+HARBOR_ADMIN_PASS=your-password
 ```
 
 ### AI 助手
@@ -160,63 +204,24 @@ AI_API_URL=https://api.openai.com/v1/chat/completions
 AI_API_KEY=your-api-key
 AI_MODEL=gpt-4o-mini
 AI_SYSTEM_PROMPT=你是一个 HPC 高性能计算集群的应用助手...
-OBSIDIAN_VAULT_DIR=./knowledge/vault   # 问答记录写入目录
-```
-
-兼容任何 OpenAI API 格式的服务，推荐国内可用的 DeepSeek 或 MiniMax。
-
-### 日志
-
-```env
-LOG_FILE=./logs/slurm-web.log
-# AUDIT_LOG_DIR=./logs/audit     # 审计日志目录，默认 ./logs/audit
-```
-
-### 演示只读模式
-
-```env
-DEMO_READONLY=false   # 设为 true 时禁止修改用户信息和密码，其他功能正常
+OBSIDIAN_VAULT_DIR=./knowledge/vault
 ```
 
 ### 多因子认证（MFA）
 
 ```env
-# MFA_ENABLED 可选值：
-#   false    - 关闭（默认）
-#   optional - 用户自选，自行绑定后生效
-#   global   - 全局强制，所有用户必须绑定并使用 MFA
+# false / optional / global
 MFA_ENABLED=false
-MFA_ISSUER=HPC Platform        # 显示在 Authenticator App 中的应用名称
-# MFA_STORE_FILE=./mfa_secrets.json  # 密钥存储路径，默认与二进制同目录
+MFA_ISSUER=算力小筑
 ```
 
-> 注意：`.env` 中同行注释（`# ...`）会被自动去除，无需担心污染配置值。
-
-**绑定流程（global 模式）：**
-
-1. 用户输入账号密码 → 后端返回临时 token（5 分钟有效）
-2. 前端跳转绑定页，扫描二维码（或手动输入密钥）
-3. 输入 App 中的 6 位验证码确认绑定
-4. 跳回登录页，再次登录时输入 TOTP 验证码进入系统
-
-**管理员操作：**
-
-- 用户管理页可查看所有用户 MFA 绑定状态
-- 操作菜单「重置 MFA」可清除用户绑定，用户下次登录需重新绑定
-
-### Token 有效期
+### 其他
 
 ```env
-JWT_EXPIRE_HOURS=8   # Token 有效期（小时），默认 8 小时
-```
-
-### 开发模式
-
-```env
-DEV_MODE=false        # true 时跳过 LDAP 认证，使用下方虚拟用户
-# DEV_USER=admin
-# DEV_USER_UID=1000
-# DEV_USER_IS_ADMIN=true
+LOG_FILE=./logs/slurm-web.log
+JWT_EXPIRE_HOURS=8
+DEMO_READONLY=false   # true 时禁止修改用户信息，适合演示环境
+DEV_MODE=false        # true 时跳过 LDAP，使用虚拟用户
 ```
 
 ---
@@ -225,33 +230,14 @@ DEV_MODE=false        # true 时跳过 LDAP 认证，使用下方虚拟用户
 
 ### XFS
 
-1. 编辑 `/etc/fstab`，挂载选项加入 `uquota,gquota`：
-
-```
+```bash
+# /etc/fstab 挂载选项加入 uquota,gquota
 /dev/sda1  /home  xfs  defaults,uquota,gquota  0 0
-```
-
-2. 重新挂载：
-
-```bash
 mount -o remount /home
-```
-
-3. 验证：
-
-```bash
 xfs_quota -x -c "state" /home
-# 看到 "User quota state on /home (ACTIVE)" 即成功
 ```
 
-4. 安装工具：
-
-```bash
-yum install xfsprogs    # CentOS/RHEL
-apt install xfsprogs    # Ubuntu/Debian
-```
-
-5. 若后端非 root 运行，配置 sudo：
+若后端非 root 运行：
 
 ```bash
 # /etc/sudoers.d/hpc-backend
@@ -261,7 +247,6 @@ hpc-user ALL=(ALL) NOPASSWD: /usr/sbin/xfs_quota
 ### Lustre
 
 ```bash
-# MGS 上开启配额
 lctl conf_param fsname.quota.mdt=ug
 lctl conf_param fsname.quota.ost=ug
 ```
@@ -273,13 +258,6 @@ QUOTA_PATH=/lustre/home
 
 ### NFS
 
-NFS 服务端需开启 quota，客户端安装 `quota` 工具包：
-
-```bash
-yum install quota    # CentOS/RHEL
-apt install quota    # Ubuntu/Debian
-```
-
 ```env
 QUOTA_FS_TYPE=nfs
 QUOTA_PATH=/nfs/home
@@ -287,304 +265,27 @@ QUOTA_PATH=/nfs/home
 
 ---
 
-## 用户手册
+## 部署
 
-### 登录
-
-访问平台地址，使用 LDAP 账号密码登录。首次登录若管理员设置了强制改密，会跳转到修改密码页面。
-
-**双因子认证（MFA）：**
-
-若系统开启了 MFA（`MFA_ENABLED=global` 或 `optional`）：
-
-- `global` 模式：首次登录自动跳转绑定页，使用 Google Authenticator / Authy 等 TOTP 应用扫码绑定
-- `optional` 模式：可在个人设置中自行开启
-- 绑定后每次登录需额外输入 6 位动态验证码
-- 连续输错密码 3 次账户锁定 10 分钟，1 次失败后出现图形验证码
-
----
-
-### 仪表盘
-
-登录后默认进入仪表盘，展示：
-
-- **集群概览**：节点总数/在线数、CPU 核数/使用率、GPU 卡数/使用中、内存总量/空闲
-- **作业统计**：运行中/等待中/已完成/失败 作业数量及占比
-- **账户配额**：当前用户在各 Slurm 账户下的 CPU 使用率、节点限额、作业上限，多账户可切换
-- **机时信息**：已用/剩余/总配额核时，使用率进度条
-- **存储配额**：已用空间/总配额/使用率，文件数统计（来自真实 quota 数据）
-- **节点列表**：各节点 CPU/内存使用率、运行作业数、状态
-- **运行中作业**：当前用户正在运行的作业列表
-
----
-
-### 作业管理
-
-**查看作业**
-
-- 普通用户只能看自己的作业，管理员可查看所有用户作业
-- 支持按状态、用户名筛选
-- 点击作业行查看详情（节点、资源、脚本、输出路径等）
-
-**提交作业**
-
-1. 点击「提交作业」按钮
-2. 选择模板（MPI/OpenMP/GPU/Python/MATLAB 等预设）或手动编写脚本
-3. 填写分区、节点数、CPU 核数、内存、时间限制
-4. 点击「提交」
-
-**作业操作**
-
-| 操作 | 说明 |
-|---|---|
-| 暂停 | 暂停 RUNNING 状态的作业 |
-| 恢复 | 恢复 SUSPENDED 状态的作业 |
-| 取消 | 取消 RUNNING 或 PENDING 状态的作业 |
-
----
-
-### Web Shell
-
-1. 进入「Web Shell」页面
-2. 从左侧节点列表选择目标节点
-3. 选择认证方式（SSH 私钥 / 密码）
-4. 浏览器内打开 SSH 终端，支持多标签页
-5. 点击节点旁的 🔗 按钮可通过 **hpc-client** 建立 SSH 隧道，用本地 ssh/PuTTY 连接
-   - 同一时间只能有一个节点建立隧道，切换节点时自动断开旧隧道
-   - 隧道就绪后顶部横幅显示 SSH 连接命令，一键复制
-6. 所有输入行为记录到审计日志，危险命令自动拦截或告警
-
----
-
-### 远程桌面
-
-1. 进入「远程桌面」页面
-2. 点击「新建桌面」，选择分区、CPU/内存资源
-3. 点击「启动」，等待 Slurm 分配节点
-4. 节点就绪后有三种连接方式：
-   - **浏览器连接（Xpra HTML5）**：无需安装软件，直接在浏览器打开图形界面
-   - **本地 Xpra 客户端**：安装 hpc-client 后一键建立隧道，自动启动本地 Xpra 客户端，性能更好
-   - **VNC 客户端**：通过 hpc-client 隧道连接，适合 TurboVNC / TigerVNC
-5. 浏览器连接需要在后端部署 xpra-html5 静态文件：
-
-```bash
-git clone https://github.com/Xpra-org/xpra-html5.git
-cp -r xpra-html5/html5 /opt/hpc-platform/static/xpra
-```
-
----
-
-### hpc-client 客户端
-
-网页一键连接的本地客户端，支持 Windows / macOS（Intel + Apple Silicon）/ Linux。
-
-**安装：**
-
-1. 进入「客户端下载」页面，根据系统下载对应版本
-2. 运行安装命令注册 `hpcc://` 协议：
-
-```bash
-# macOS / Linux
-chmod +x hpc-client-mac && ./hpc-client-mac install
-
-# Windows（管理员 PowerShell）
-.\hpc-client-windows.exe install
-```
-
-3. 回到平台，点击「一键连接」按钮，浏览器弹出确认后自动启动隧道
-
-**支持功能：**
-- SSH 隧道：节点 SSH 端口映射到本地，供 ssh/PuTTY 使用
-- RDP / Xpra / VNC 隧道：远程桌面端口映射到本地，自动启动对应客户端
-- WebDAV 挂载：HPC 文件系统挂载到本地磁盘
-
-**重复连接说明：**
-
-第二次点击连接时，如果本地端口已被旧隧道占用，客户端会自动复用旧隧道直接启动客户端程序，无需手动杀进程。
-
----
-
-### 文件管理
-
-- 左侧目录树浏览文件系统（限制在用户家目录范围内）
-- 支持上传、下载、新建文件夹、重命名、删除
-- 支持在线预览文本文件
-- 支持 WebDAV 挂载（Windows/macOS 原生挂载到本地磁盘）
-
-**WebDAV 挂载地址：**
-
-```
-http://your-server/api/webdav/
-```
-
-Windows 映射网络驱动器时使用 Basic Auth（用户名/密码与平台账号相同）。
-
----
-
-### 报表中心
-
-- 查看个人或账户的机时使用统计
-- 按时间范围筛选（日/周/月/自定义）
-- 导出 CSV 报表
-
----
-
-### 主机资产（CMDB）
-
-- 查看集群所有主机的资产信息（型号、IP、CPU、内存、操作系统等）
-- 支持 Excel 批量导入（下载模板 → 填写 → 上传）
-- 支持多 IP 地址（业务口/管理口/IB口/BMC 分类）
-- 一键同步到机柜图
-
----
-
-### HPC 应用助手
-
-页面右下角悬浮的「孙大圣」图标，点击展开 AI 对话框。
-
-适合提问：
-- MPI/OpenMP 并行程序编写和调试
-- Python/R/MATLAB/GROMACS/VASP 等科学软件使用
-- 作业脚本编写（SBATCH 参数、环境变量、模块加载）
-- 编译环境配置、依赖安装
-
-不适合提问：集群运维、硬件故障、系统管理（会触发拦截）。
-
----
-
-## 管理员手册
-
-### 用户管理
-
-进入「系统管理 → 用户管理」：
-
-- **新建用户**：填写用户名、姓名、邮箱、UID，自动同步到 LDAP
-- **编辑用户**：修改邮箱、手机、所属组等信息
-- **重置密码**：管理员直接设置新密码
-- **禁用用户**：禁用后用户无法登录，不删除数据
-- **强制改密**：下次登录时强制用户修改密码
-- **重置 MFA**：清除用户的 MFA 绑定，用户下次登录需重新绑定（换手机时使用）
-- **删除用户**：从 LDAP 删除用户
-
-> 演示只读模式（`DEMO_READONLY=true`）下，用户信息和密码不可修改。
-
----
-
-### 用户组管理
-
-进入「系统管理 → 用户管理 → 用户组」：
-
-- 新建/编辑/删除 LDAP 用户组
-- 管理组成员
-
----
-
-### Slurm 账户管理
-
-进入「系统管理 → 账户管理」：
-
-- 管理 Slurm 账户（对应 `sacctmgr` 中的 account）
-- 管理 Slurm 用户（将 LDAP 用户关联到 Slurm 账户）
-
----
-
-### QoS 配置
-
-进入「系统管理 → 资源管理 → QoS 配置」：
-
-- 新建/编辑 QoS，设置 CPU 核数上限、节点数上限、作业数上限、优先级
-- 查看 QoS 绑定情况
-
----
-
-### 资源绑定（Association）
-
-进入「系统管理 → 资源管理 → 资源绑定」：
-
-- 将用户绑定到账户和分区，分配 QoS
-- 设置机时配额（billing 限制）
-
----
-
-### 机时管理
-
-进入「系统管理 → 资源管理 → 机时管理」：
-
-- 查看各账户/用户的机时使用情况
-- 设置机时配额上限
-
----
-
-### 存储配额
-
-进入「系统管理 → 资源管理 → 存储配额」：
-
-- 查看所有用户的已用空间、软/硬限制、使用率
-- 按状态筛选：正常 / 警告（≥75%）/ 超限（≥90%）/ 未设置
-- 点击「设置」为用户配置配额，支持快速预设（50G/100G/200G/500G/1TB）
-- 软限制：超过后有宽限期（通常 7 天）
-- 硬限制：绝对上限，超过后无法写入
-
----
-
-### 集群监控
-
-进入「集群监控」：
-
-- **节点状态**：实时查看各节点 CPU/内存/GPU 使用率
-- **Prometheus 指标**：自定义 PromQL 查询
-- **告警规则**：查看当前触发的告警
-- **机柜图**：可视化机柜布局，显示设备主机名
-- **网络拓扑**：节点间连接关系
-
----
-
-### AI 诊断
-
-进入「AI 诊断」：
-
-- 前端自动从 Prometheus 拉取实时监控数据注入上下文
-- 直接提问集群状态、性能瓶颈、告警根因
-- 适合运维场景：节点异常、作业失败分析、资源瓶颈排查
-
----
-
-### 数据审计
-
-进入「系统管理 → 数据审计」：
-
-- **操作日志**：所有 API 写操作记录（用户、时间、操作类型、资源、结果）
-- **页面访问**：用户访问各页面的记录
-- **SSH 行为日志**：Web Shell 中用户输入的命令记录
-- 支持按用户名、操作类型、时间范围筛选
-- 支持导出 CSV
-
----
-
-## 部署说明
-
-### 生产部署（nginx 反向代理）
+### nginx 反向代理
 
 ```nginx
 server {
     listen 80;
     server_name your-domain.com;
 
-    # 前端静态文件
     location / {
         root /opt/hpc-platform/dist;
         try_files $uri $uri/ /index.html;
     }
 
-    # 后端 API
     location /api/ {
         proxy_pass http://127.0.0.1:8080;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     }
 
-    # WebSocket（Web Shell / VNC）
+    # WebSocket（Web Shell）
     location /api/webshell/connect {
         proxy_pass http://127.0.0.1:8080;
         proxy_http_version 1.1;
@@ -606,9 +307,8 @@ server {
 ### systemd 服务
 
 ```ini
-# /etc/systemd/system/hpc-backend.service
 [Unit]
-Description=HPC Platform Backend
+Description=算力小筑 Backend
 After=network.target
 
 [Service]
@@ -628,3 +328,13 @@ WantedBy=multi-user.target
 systemctl daemon-reload
 systemctl enable --now hpc-backend
 ```
+
+---
+
+## 联系
+
+| | |
+|---|---|
+| 对接人 | sunfx |
+| QQ | 598824458 |
+| 邮箱 | 59882445@qq.com |
