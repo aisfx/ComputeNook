@@ -4,7 +4,7 @@
     <div class="login-left">
       <div class="login-brand">
         <div class="brand-logo">⚡</div>
-        <h1>HPC 管理平台</h1>
+        <h1>算力小筑</h1>
         <p>高性能计算集群统一管理系统</p>
         <div class="brand-features">
           <div class="feature-item">
@@ -155,7 +155,7 @@
           <button class="back-btn" @click="mfaStep = 'none'; errorMessage = ''">← 返回</button>
         </div>
 
-        <div class="login-footer">HPC Management Platform v1.0</div>
+        <div class="login-footer">算力小筑 v0.1</div>
       </div>
     </div>
   </div>

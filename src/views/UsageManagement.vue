@@ -422,6 +422,7 @@ const getQoSClass = (qos: string): string => {
 // 获取状态样式
 const getStateClass = (state: string): string => {
   switch (state?.toUpperCase()) {
+    case 'RUNNING': return 'state-running'
     case 'COMPLETED': return 'state-completed'
     case 'FAILED': return 'state-failed'
     case 'CANCELLED': return 'state-cancelled'
@@ -637,24 +638,29 @@ onMounted(() => {
   color: #6b7280;
 }
 
+.state-running {
+  background: #dcfce7;
+  color: #15803d;
+}
+
 .state-completed {
-  background: #d1fae5;
-  color: #065f46;
+  background: #dbeafe;
+  color: #1d4ed8;
 }
 
 .state-failed {
   background: #fee2e2;
-  color: #991b1b;
+  color: #b91c1c;
 }
 
 .state-cancelled {
-  background: #fef3c7;
-  color: #92400e;
+  background: #f1f5f9;
+  color: #64748b;
 }
 
 .state-timeout {
-  background: #fde68a;
-  color: #78350f;
+  background: #fce7f3;
+  color: #9d174d;
 }
 
 .state-default {

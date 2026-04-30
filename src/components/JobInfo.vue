@@ -524,6 +524,8 @@ const loadPartitions = async () => {
     partitions.value = ['compute', 'gpu', 'memory', 'debug']
   }
 }
+
+defineExpose({ loadJobs })
 </script>
 
 <style scoped>

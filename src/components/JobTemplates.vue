@@ -140,6 +140,26 @@
                 <label>模块加载（module load）</label>
                 <input v-model="createForm.moduleLoad" type="text" placeholder="例：lammps/2023" />
               </div>
+              <!-- 脚本类型选择 -->
+              <div class="edit-field">
+                <label>脚本类型</label>
+                <div class="script-type-btns">
+                  <span class="tpl-group-label">通用：</span>
+                  <button v-for="t in scriptTypeOptions.general" :key="t.key" type="button"
+                    :class="['btn-script-type', { active: createForm.scriptType === t.key }]"
+                    @click="applyCreateScriptType(t.key)">{{ t.label }}</button>
+                  <span class="tpl-group-label" style="margin-left:6px">AI：</span>
+                  <button v-for="t in scriptTypeOptions.ai" :key="t.key" type="button"
+                    :class="['btn-script-type ai', { active: createForm.scriptType === t.key }]"
+                    @click="applyCreateScriptType(t.key)">{{ t.label }}</button>
+                </div>
+              </div>
+              <!-- 脚本内容 -->
+              <div class="edit-field">
+                <label>脚本内容</label>
+                <textarea v-model="createForm.scriptContent" rows="10" class="script-textarea"
+                  placeholder="#!/bin/bash&#10;#SBATCH -J my_job&#10;..."></textarea>
+              </div>
             </div>
             <div class="job-templates-config-actions" style="margin-top:1.5rem">
               <button class="job-templates-btn-primary" @click="saveCreate">💾 创建</button>
@@ -244,6 +264,168 @@ import { jobTemplates } from '../data/jobTemplates'
 
 const emit = defineEmits(['use-template'])
 
+const scriptTypeOptions = {
+  general: [
+    { key: 'basic', label: '基础' },
+    { key: 'mpi', label: 'MPI' },
+    { key: 'gpu', label: 'GPU' },
+    { key: 'python', label: 'Python' },
+    { key: 'array', label: '数组作业' },
+  ],
+  ai: [
+    { key: 'pytorch', label: '🔥 PyTorch' },
+    { key: 'deepspeed', label: '⚡ DeepSpeed' },
+    { key: 'vllm', label: '🚀 vLLM' },
+    { key: 'triton', label: '🎯 Triton' },
+  ]
+}
+
+const scriptTemplates: Record<string, string> = {
+  basic: `#!/bin/bash
+#SBATCH -J my_job
+#SBATCH -p compute
+#SBATCH -N 1
+#SBATCH -c 4
+#SBATCH --mem=8G
+#SBATCH -t 01:00:00
+#SBATCH -o output_%j.log
+#SBATCH -e error_%j.log
+
+echo "Job started: $(date)"
+echo "Running on node: $(hostname)"
+
+# 在此处添加你的命令
+hostname
+
+echo "Job finished: $(date)"`,
+
+  mpi: `#!/bin/bash
+#SBATCH -J mpi_job
+#SBATCH -p compute
+#SBATCH -N 2
+#SBATCH --ntasks-per-node=16
+#SBATCH --mem=32G
+#SBATCH -t 04:00:00
+#SBATCH -o mpi_%j.log
+#SBATCH -e mpi_%j.err
+
+module load openmpi
+
+echo "MPI Job started: $(date)"
+mpirun -np 32 ./your_mpi_program
+
+echo "Job finished: $(date)"`,
+
+  gpu: `#!/bin/bash
+#SBATCH -J gpu_job
+#SBATCH -p gpu
+#SBATCH -N 1
+#SBATCH -c 8
+#SBATCH --mem=32G
+#SBATCH --gres=gpu:1
+#SBATCH -t 08:00:00
+#SBATCH -o gpu_%j.log
+#SBATCH -e gpu_%j.err
+
+module load cuda
+
+echo "GPU Job started: $(date)"
+nvidia-smi
+
+python train.py
+
+echo "Job finished: $(date)"`,
+
+  python: `#!/bin/bash
+#SBATCH -J python_job
+#SBATCH -p compute
+#SBATCH -N 1
+#SBATCH -c 4
+#SBATCH --mem=16G
+#SBATCH -t 02:00:00
+#SBATCH -o python_%j.log
+#SBATCH -e python_%j.err
+
+module load python/3.10
+
+echo "Python Job started: $(date)"
+
+python your_script.py
+
+echo "Job finished: $(date)"`,
+
+  array: `#!/bin/bash
+#SBATCH -J array_job
+#SBATCH -p compute
+#SBATCH -N 1
+#SBATCH -c 2
+#SBATCH --mem=4G
+#SBATCH -t 01:00:00
+#SBATCH --array=1-10
+#SBATCH -o array_%A_%a.log
+#SBATCH -e array_%A_%a.err
+
+echo "Array Job \$SLURM_ARRAY_TASK_ID started: $(date)"
+INPUT_FILE="input_\${SLURM_ARRAY_TASK_ID}.dat"
+./process \$INPUT_FILE
+
+echo "Task \$SLURM_ARRAY_TASK_ID finished: $(date)"`,
+
+  pytorch: `#!/bin/bash
+#SBATCH -J pytorch_train
+#SBATCH -o slurm-%j.out
+#SBATCH -e slurm-%j.err
+
+MASTER=$(scontrol show hostnames $SLURM_JOB_NODELIST | head -n1)
+
+srun torchrun \\
+  --nproc_per_node=$SLURM_GPUS_ON_NODE \\
+  --nnodes=$SLURM_NNODES \\
+  --node_rank=$SLURM_NODEID \\
+  --master_addr=$MASTER \\
+  --master_port=29500 \\
+  train.py`,
+
+  deepspeed: `#!/bin/bash
+#SBATCH -J deepspeed_train
+#SBATCH -o slurm-%j.out
+#SBATCH -e slurm-%j.err
+
+MASTER=$(scontrol show hostnames $SLURM_JOB_NODELIST | head -n1)
+
+srun deepspeed \\
+  --num_nodes=$SLURM_NNODES \\
+  --num_gpus=$SLURM_GPUS_ON_NODE \\
+  --master_addr=$MASTER \\
+  train_ds.py --deepspeed ds_zero3.json`,
+
+  vllm: `#!/bin/bash
+#SBATCH -J vllm_infer
+#SBATCH -o slurm-%j.out
+#SBATCH -e slurm-%j.err
+
+python -m vllm.entrypoints.openai.api_server \\
+  --model /data/models/llama3-8b \\
+  --tensor-parallel-size $SLURM_GPUS_ON_NODE \\
+  --host 0.0.0.0 --port 8000 \\
+  --gpu-memory-utilization 0.9`,
+
+  triton: `#!/bin/bash
+#SBATCH -J triton_infer
+#SBATCH -o slurm-%j.out
+#SBATCH -e slurm-%j.err
+
+tritonserver \\
+  --model-repository=/data/triton_models \\
+  --http-port=8000 --grpc-port=8001 \\
+  --log-verbose=1`,
+}
+
+const applyCreateScriptType = (key: string) => {
+  createForm.value.scriptType = key
+  createForm.value.scriptContent = scriptTemplates[key] || ''
+}
+
 const showCreateModal = ref(false)
 const showConfigModal = ref(false)
 const showEditModal = ref(false)
@@ -268,7 +450,9 @@ const defaultCreateForm = () => ({
   inputFile: '',
   moduleLoad: '',
   appParams: {},
-  configTemplate: 'default'
+  configTemplate: 'default',
+  scriptType: 'basic',
+  scriptContent: scriptTemplates.basic,
 })
 
 const createForm = ref(defaultCreateForm())
@@ -918,6 +1102,54 @@ const copyConfig = () => {
 }
 
 .edit-select:focus {
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102,126,234,0.12);
+}
+
+.script-type-btns {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.tpl-group-label {
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+
+.btn-script-type {
+  padding: 3px 10px;
+  font-size: 0.75rem;
+  background: #f9fafb;
+  color: #374151;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-script-type:hover { background: #f3f4f6; border-color: #d1d5db; }
+.btn-script-type.active { background: #1e293b; color: #fff; border-color: #1e293b; }
+.btn-script-type.ai { background: rgba(99,102,241,.06); color: #6366f1; border-color: rgba(99,102,241,.3); }
+.btn-script-type.ai:hover { background: rgba(99,102,241,.12); }
+.btn-script-type.ai.active { background: #6366f1; color: #fff; border-color: #6366f1; }
+
+.script-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.6rem 0.75rem;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-family: 'Courier New', monospace;
+  line-height: 1.6;
+  background: #1e293b;
+  color: #e2e8f0;
+  resize: vertical;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.script-textarea:focus {
   border-color: #667eea;
   box-shadow: 0 0 0 3px rgba(102,126,234,0.12);
 }

@@ -105,8 +105,21 @@
 
     <!-- 运行命令 -->
     <div class="form-group">
-      <label>运行命令（可选，留空则进入交互模式）</label>
+      <label>运行命令（可选）</label>
       <input v-model="form.command" type="text" placeholder="python /workspace/train.py" />
+      <div class="help-text" v-if="!form.command">
+        💡 留空 = 交互模式（sleep infinity），可通过"进入容器"连接
+      </div>
+      <div class="help-text warn" v-else>
+        ⚠️ 填写命令后容器执行完毕即退出，如需同时保持运行请勾选下方选项
+      </div>
+    </div>
+    <!-- 保持运行选项（仅在有命令时显示） -->
+    <div class="form-group" v-if="form.command">
+      <label class="checkbox-label">
+        <input type="checkbox" v-model="form.keepAlive" />
+        命令执行后保持容器运行（追加 sleep infinity，方便进入容器调试）
+      </label>
     </div>
 
     <!-- 时间限制 -->
@@ -171,6 +184,7 @@ const form = ref({
   mounts: `${homeDir}:${homeDir}`,
   workdir: homeDir,
   command: '',
+  keepAlive: false,
   time: 0,
 })
 
@@ -189,7 +203,19 @@ const generatedScript = computed(() => {
   lines.push(`#SBATCH -o container_%j.log`)
   lines.push(`#SBATCH -e container_%j.err`)
   lines.push('')
-  lines.push(`#SBATCH --container-image=${f.image}`)
+  // HTTP registry 需要 // 前缀，HTTPS registry 不需要
+  // 如果镜像地址不含协议前缀，自动加 // 表示使用 HTTP（适用于内网 registry）
+  const imageAddr = (() => {
+    const img = f.image
+    if (!img) return img
+    // 已有协议前缀则不处理
+    if (img.startsWith('docker://') || img.startsWith('//')) return img
+    // 判断是否为 HTTP registry（IP 或内网域名，非 docker hub 官方地址）
+    const isHttpRegistry = /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/.test(img) ||
+      /^[a-zA-Z0-9-]+:[0-9]+\//.test(img)
+    return isHttpRegistry ? `//${img}` : img
+  })()
+  lines.push(`#SBATCH --container-image=${imageAddr}`)
   if (f.mounts) lines.push(`#SBATCH --container-mounts=${f.mounts}`)
   if (f.workdir) lines.push(`#SBATCH --container-workdir=${f.workdir}`)
   lines.push('')
@@ -198,6 +224,11 @@ const generatedScript = computed(() => {
   lines.push('')
   if (f.command) {
     lines.push(f.command)
+    if (f.keepAlive) {
+      lines.push('')
+      lines.push('# 保持容器运行，方便通过 Web Shell 进入调试')
+      lines.push('sleep infinity')
+    }
   } else {
     lines.push('# 交互模式 - 通过 Web Shell 连接到此作业节点')
     lines.push('sleep infinity')
@@ -251,13 +282,46 @@ const loadImages = async () => {
         if (!res.ok) return
         const data = await res.json()
         for (const repo of (data.data || [])) {
-          const name = repo.name?.split('/').pop() || ''
-          if (!name) continue
+          const repoShortName = repo.name?.split('/').pop() || ''
+          if (!repoShortName) continue
+          const isPublic = !!proj.is_public_project || publicProjects.includes(proj.name)
+
+          // 拉取该 repo 的真实 tag 列表
+          try {
+            const tagRes = await fetch(
+              `${getApiBase()}/api/registry/projects/${proj.name}/repositories/${repoShortName}/tags`,
+              { headers: { Authorization: `Bearer ${token}` } }
+            )
+            if (tagRes.ok) {
+              const tagData = await tagRes.json()
+              const artifacts: any[] = tagData.data || []
+              // 每个 artifact 可能有多个 tag
+              const tags: string[] = []
+              for (const artifact of artifacts) {
+                for (const t of (artifact.tags || [])) {
+                  if (t.name) tags.push(t.name)
+                }
+              }
+              if (tags.length > 0) {
+                for (const tag of tags) {
+                  images.push({
+                    name: `${proj.name}/${repoShortName}:${tag}`,
+                    addr: `${harborHost}/${proj.name}/${repoShortName}:${tag}`,
+                    project: proj.name,
+                    isPublic,
+                  })
+                }
+                continue
+              }
+            }
+          } catch { /* ignore, fall through to :latest */ }
+
+          // 拿不到 tag 时降级用 :latest
           images.push({
-            name: `${proj.name}/${name}`,
-            addr: `${harborHost}/${proj.name}/${name}:latest`,
+            name: `${proj.name}/${repoShortName}`,
+            addr: `${harborHost}/${proj.name}/${repoShortName}:latest`,
             project: proj.name,
-            isPublic: !!proj.is_public_project || publicProjects.includes(proj.name)
+            isPublic,
           })
         }
       } catch { /* ignore */ }
@@ -421,6 +485,18 @@ onMounted(() => {
 .picker-link { color: hsl(var(--primary)); cursor: pointer; text-decoration: underline; }
 
 .help-text { font-size: 0.7rem; color: hsl(var(--muted-foreground)); }
+.help-text.warn { color: #f59e0b; }
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  color: hsl(var(--foreground));
+  cursor: pointer;
+  font-weight: normal;
+  text-transform: none;
+  letter-spacing: normal;
+}
 
 .script-preview {
   background: #1e293b;

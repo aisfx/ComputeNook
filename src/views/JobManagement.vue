@@ -3,6 +3,7 @@
     <!-- 左：作业列表 -->
     <div class="job-list-pane">
       <JobInfo
+        ref="jobInfoRef"
         @view-detail="handleViewDetail"
         @open-directory="handleOpenDirectory"
         @submit-job="submitOpen = true; activePanel = 'submit'"
@@ -77,6 +78,7 @@ const submitOpen = ref(false)
 const activePanel = ref<'submit' | 'templates'>('submit')
 const selectedJob = ref<any>(null)
 const jobSubmitRef = ref<any>(null)
+const jobInfoRef = ref<any>(null)
 const allTemplates = ref([...jobTemplates])
 
 const getToken = () => localStorage.getItem('token') || sessionStorage.getItem('token')
@@ -92,7 +94,10 @@ const handleUseTemplate = (tpl: any) => {
 }
 
 const handleViewDetail = (job: any) => { selectedJob.value = job }
-const handleJobSubmitted = () => { submitOpen.value = false }
+const handleJobSubmitted = () => {
+  submitOpen.value = false
+  jobInfoRef.value?.loadJobs()
+}
 
 const handleCancel = async (jobId: string | number) => {
   if (!confirm(`确定要取消作业 ${jobId} 吗？`)) return

@@ -1,6 +1,6 @@
 {
-  "name": "hpc-platform",
-  "version": "1.0.0",
+  "name": "suanli-xiaozhu",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",

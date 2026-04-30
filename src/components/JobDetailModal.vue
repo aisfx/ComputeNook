@@ -175,11 +175,11 @@
         </div>
 
         <!-- 保存镜像对话框 -->
-        <div v-if="showSaveImage" class="jd-save-overlay" @click.self="showSaveImage = false">
+        <div v-if="showSaveImage" class="jd-save-overlay" @click.self="closeSaveImage">
           <div class="jd-save-box">
             <div class="jd-save-header">
               <span>🐳 保存容器镜像</span>
-              <button @click="showSaveImage = false" class="jd-close">✕</button>
+              <button @click="closeSaveImage" class="jd-close">✕</button>
             </div>
             <div class="jd-save-body">
               <p class="jd-save-tip">将当前运行容器（作业 #{{ job.id }}）的环境保存为镜像，推送到你的私有仓库。</p>
@@ -197,10 +197,10 @@
               </div>
             </div>
             <div class="jd-save-footer">
-              <button class="jd-btn-primary" @click="doSaveImage" :disabled="saving">
-                {{ saving ? '提交中...' : '🚀 开始保存' }}
+              <button class="jd-btn-primary" @click="doSaveImage" :disabled="saving || saveResult?.ok">
+                {{ saving ? '提交中...' : saveResult?.ok ? '✅ 已提交' : '🚀 开始保存' }}
               </button>
-              <button class="jd-btn-ghost" @click="showSaveImage = false">取消</button>
+              <button class="jd-btn-ghost" @click="closeSaveImage">取消</button>
             </div>
           </div>
         </div>
@@ -226,18 +226,18 @@ const emit = defineEmits(['close', 'pause', 'resume', 'cancel', 'open-directory'
 const refreshing = ref(false)
 
 const execIntoContainer = () => {
-  // 取第一个节点名
+  // 取第一个节点名（计算节点）
   const node = (props.job.nodeNames && props.job.nodeNames[0]) || props.job.nodes
   if (!node) {
     alert('无法获取作业运行节点')
     return
   }
-  // 通知父组件：跳转到 WebShell，连接到该节点，并自动执行进入容器命令
+  // 使用 srun --overlap 附加到已运行的作业，在同一容器环境中执行 bash
+  // 这是进入 pyxis/enroot 容器的正确方式，不依赖 enroot 实例路径
   emit('exec-container', {
     node,
     jobId: props.job.id,
-    // srun --overlap 允许在已有作业步骤上附加，--pty 分配伪终端
-    initCommand: `srun --jobid=${props.job.id} --overlap --pty bash\n`
+    initCommand: `srun --overlap --jobid=${props.job.id} --pty bash\n`
   })
   emit('close')
 }
@@ -246,6 +246,13 @@ const saveImageName = ref('')
 const saveImageTag = ref('latest')
 const saving = ref(false)
 const saveResult = ref<{ ok: boolean; msg: string; target?: string } | null>(null)
+
+const closeSaveImage = () => {
+  showSaveImage.value = false
+  saveResult.value = null
+  saveImageName.value = ''
+  saveImageTag.value = 'latest'
+}
 
 const doSaveImage = async () => {
   if (!saveImageName.value.trim()) {
@@ -517,6 +524,7 @@ onUnmounted(() => {
   flex-direction: column;
   box-shadow: 0 25px 50px rgba(0,0,0,0.25);
   overflow: hidden;
+  position: relative;
 }
 
 /* Header */

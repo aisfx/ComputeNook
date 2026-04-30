@@ -699,10 +699,10 @@ const copyScript = () => {
 .desktop-table tbody tr:hover { background: #f9fafb; }
 
 .status-badge { display: inline-block; padding: .2rem .6rem; border-radius: 10px; font-size: .8rem; font-weight: 600; }
-.status-badge.running  { background: #d1fae5; color: #065f46; }
-.status-badge.pending  { background: #fef3c7; color: #92400e; }
-.status-badge.failed   { background: #fee2e2; color: #991b1b; }
-.status-badge.stopped  { background: #f3f4f6; color: #6b7280; }
+.status-badge.running  { background: #dcfce7; color: #15803d; }
+.status-badge.pending  { background: #fef9c3; color: #a16207; }
+.status-badge.failed   { background: #fee2e2; color: #b91c1c; }
+.status-badge.stopped  { background: #f1f5f9; color: #64748b; }
 
 .action-buttons { display: flex; gap: .4rem; flex-wrap: wrap; }
 .btn-action {

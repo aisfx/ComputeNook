@@ -1,6 +1,6 @@
 <template>
   <div class="download-page">
-    <h1>HPC 平台客户端</h1>
+    <h1>算力小筑客户端</h1>
     <p class="subtitle">支持 RDP 远程桌面 + SSH 隧道，下载后自动激活，网页一键连接</p>
 
     <div class="detected">

@@ -45,6 +45,7 @@ export async function startDesktopLaunch(session, partition) {
     catch (e) {
         if (launchState.value) {
             launchState.value.status = 'failed';
+            launchState.value.errorMessage = e.response?.data?.error || e.message || '启动失败';
         }
     }
 }

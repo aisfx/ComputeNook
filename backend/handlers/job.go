@@ -611,12 +611,18 @@ func SubmitJob(c *gin.Context) {
 	logger.Info("Job submission request: name=%s, partition=%s, workdir=%s, script_length=%d", 
 		req.Name, req.Partition, workDir, len(req.Script))
 	
+	// 如果脚本中包含 --container-image，自动注入 enroot Harbor 认证凭证
+	script := req.Script
+	if strings.Contains(script, "--container-image") {
+		script = injectEnrootCredentials(script)
+	}
+
 	// 构建作业提交参数
 	jobParams := slurm.JobSubmitParams{
 		Name:        req.Name,
 		Partition:   req.Partition,
 		QoS:         req.QoS,
-		Script:      req.Script,
+		Script:      script,
 		Nodes:       req.Nodes,
 		CPUs:        req.CPUs,
 		Memory:      req.Memory,
@@ -682,4 +688,45 @@ func GetPartitions(c *gin.Context) {
 	
 	logger.Info("Retrieved %d partitions", len(partitionList))
 	c.JSON(http.StatusOK, gin.H{"data": partitionList})
+}
+
+// injectEnrootCredentials 在容器作业脚本的 shebang 行之后注入 enroot Harbor 认证凭证。
+// enroot 通过 ~/.config/enroot/.credentials（netrc 格式）进行 registry 认证。
+// 格式：machine <host> login <user> password <pass>
+func injectEnrootCredentials(script string) string {
+	harborURL := strings.TrimSpace(os.Getenv("HARBOR_URL"))
+	harborUser := strings.TrimSpace(os.Getenv("HARBOR_ADMIN_USER"))
+	harborPass := strings.TrimSpace(os.Getenv("HARBOR_ADMIN_PASS"))
+
+	if harborURL == "" || harborUser == "" || harborPass == "" {
+		logger.Info("injectEnrootCredentials: HARBOR_URL/USER/PASS not configured, skipping")
+		return script
+	}
+
+	// 提取 host（去掉协议和路径）
+	host := harborURL
+	host = strings.TrimPrefix(host, "https://")
+	host = strings.TrimPrefix(host, "http://")
+	host = strings.TrimRight(host, "/")
+
+	// 构建凭证写入片段（幂等：先删再写）
+	credSnippet := fmt.Sprintf(`
+# === 注入 enroot registry 认证凭证（由平台自动生成）===
+mkdir -p ~/.config/enroot
+CRED_FILE=~/.config/enroot/.credentials
+# 移除旧的同 host 条目，追加新的
+grep -v "machine %s" "$CRED_FILE" 2>/dev/null > /tmp/.enroot_creds_tmp || true
+echo "machine %s login %s password %s" >> /tmp/.enroot_creds_tmp
+mv /tmp/.enroot_creds_tmp "$CRED_FILE"
+chmod 600 "$CRED_FILE"
+# =====================================================
+`, host, host, harborUser, harborPass)
+
+	// 插入到 shebang 行之后（第一行 #!/bin/bash 后面）
+	lines := strings.SplitN(script, "\n", 2)
+	if len(lines) == 2 && strings.HasPrefix(strings.TrimSpace(lines[0]), "#!") {
+		return lines[0] + "\n" + credSnippet + lines[1]
+	}
+	// 没有 shebang，直接前置
+	return credSnippet + script
 }
