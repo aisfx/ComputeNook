@@ -259,10 +259,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import { jobTemplates } from '../data/jobTemplates'
+import { ref, computed, onMounted } from 'vue'
+import { getApiBase } from '../utils/auth'
 
 const emit = defineEmits(['use-template'])
+const token = () => localStorage.getItem('token') || sessionStorage.getItem('token')
 
 const scriptTypeOptions = {
   general: [
@@ -466,7 +467,20 @@ const categories = [
   { id: 'general', name: '通用', icon: '💻' }
 ]
 
-const templates = ref(jobTemplates)
+const templates = ref<any[]>([])
+
+const loadTemplatesFromAPI = async () => {
+  try {
+    const res = await fetch(`${getApiBase()}/api/app-templates`, {
+      headers: { Authorization: `Bearer ${token()}` }
+    })
+    if (!res.ok) return
+    const data = await res.json()
+    templates.value = data.data || []
+  } catch { /* ignore */ }
+}
+
+onMounted(loadTemplatesFromAPI)
 
 const filteredTemplates = computed(() => {
   if (selectedCategory.value === 'all') {
@@ -695,33 +709,47 @@ const editTemplate = (template: any) => {
   showEditModal.value = true
 }
 
-const saveEdit = () => {
-  const index = templates.value.findIndex(t => t.id === editForm.value.id)
-  if (index > -1) {
-    templates.value[index] = { ...templates.value[index], ...editForm.value }
-  }
-  showEditModal.value = false
+const saveEdit = async () => {
+  try {
+    const res = await fetch(`${getApiBase()}/api/app-templates/${editForm.value.id}`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(editForm.value)
+    })
+    if (!res.ok) throw new Error('保存失败')
+    await loadTemplatesFromAPI()
+    showEditModal.value = false
+  } catch (e: any) { alert(e.message) }
 }
 
-const saveCreate = () => {
+const saveCreate = async () => {
   if (!createForm.value.name.trim() || !createForm.value.appType.trim()) {
     alert('请填写模板名称和应用类型')
     return
   }
-  const newId = templates.value.length > 0 ? Math.max(...templates.value.map(t => t.id)) + 1 : 1
-  templates.value.push({ ...createForm.value, id: newId } as any)
-  createForm.value = defaultCreateForm()
-  showCreateModal.value = false
+  try {
+    const res = await fetch(`${getApiBase()}/api/app-templates`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(createForm.value)
+    })
+    if (!res.ok) throw new Error('创建失败')
+    await loadTemplatesFromAPI()
+    createForm.value = defaultCreateForm()
+    showCreateModal.value = false
+  } catch (e: any) { alert(e.message) }
 }
 
-const deleteTemplate = (id: number) => {
-  if (confirm('确定要删除此模板吗？')) {
-    const index = templates.value.findIndex(t => t.id === id)
-    if (index > -1) {
-      templates.value.splice(index, 1)
-      alert('模板已删除')
-    }
-  }
+const deleteTemplate = async (id: number) => {
+  if (!confirm('确定要删除此模板吗？')) return
+  try {
+    const res = await fetch(`${getApiBase()}/api/app-templates/${id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token()}` }
+    })
+    if (!res.ok) throw new Error('删除失败')
+    await loadTemplatesFromAPI()
+  } catch (e: any) { alert(e.message) }
 }
 
 const downloadConfig = () => {

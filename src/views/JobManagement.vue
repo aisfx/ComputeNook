@@ -63,12 +63,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, inject } from 'vue'
+import { ref, inject, onMounted } from 'vue'
 import JobInfo from '../components/JobInfo.vue'
 import JobSubmit from '../components/JobSubmit.vue'
 import JobTemplates from '../components/JobTemplates.vue'
 import JobDetailModal from '../components/JobDetailModal.vue'
-import { jobTemplates } from '../data/jobTemplates'
 import { getApiBase } from '../utils/auth'
 
 const emit = defineEmits(['open-directory', 'go-registry', 'exec-container'])
@@ -79,9 +78,22 @@ const activePanel = ref<'submit' | 'templates'>('submit')
 const selectedJob = ref<any>(null)
 const jobSubmitRef = ref<any>(null)
 const jobInfoRef = ref<any>(null)
-const allTemplates = ref([...jobTemplates])
+const allTemplates = ref<any[]>([])
 
 const getToken = () => localStorage.getItem('token') || sessionStorage.getItem('token')
+
+const loadAllTemplates = async () => {
+  try {
+    const res = await fetch(`${getApiBase()}/api/app-templates`, {
+      headers: { Authorization: `Bearer ${getToken()}` }
+    })
+    if (!res.ok) return
+    const data = await res.json()
+    allTemplates.value = data.data || []
+  } catch { /* ignore */ }
+}
+
+onMounted(loadAllTemplates)
 
 const applyTemplate = (tpl: any) => {
   activePanel.value = 'submit'

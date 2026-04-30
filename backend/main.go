@@ -263,6 +263,15 @@ func main() {
 			jobs.GET("/partitions/list", handlers.GetPartitions)
 		}
 
+		// 作业模板 API
+		appTemplates := auth.Group("/app-templates")
+		{
+			appTemplates.GET("", handlers.ListAppTemplates)
+			appTemplates.POST("", handlers.CreateAppTemplate)
+			appTemplates.PUT("/:id", handlers.UpdateAppTemplate)
+			appTemplates.DELETE("/:id", handlers.DeleteAppTemplate)
+		}
+
 		// Web Shell API
 		webshell := auth.Group("/webshell")
 		{

@@ -134,7 +134,6 @@ import { ref, onMounted } from 'vue'
 import { getUser, getApiBase } from '../utils/auth'
 import { fileManagerApi } from '../config/api'
 import notification from '../utils/notification'
-import { jobTemplates } from '../data/jobTemplates'
 import ContainerJobSubmit from './ContainerJobSubmit.vue'
 
 const emit = defineEmits(['job-submitted', 'go-registry'])
@@ -160,7 +159,19 @@ defineExpose({
   handleTemplateSelect
 })
 
-const templates = ref(jobTemplates)
+const templates = ref<any[]>([])
+
+const loadTemplatesFromAPI = async () => {
+  try {
+    const tok = localStorage.getItem('token') || sessionStorage.getItem('token')
+    const res = await fetch(`${getApiBase()}/api/app-templates`, {
+      headers: { Authorization: `Bearer ${tok}` }
+    })
+    if (!res.ok) return
+    const data = await res.json()
+    templates.value = data.data || []
+  } catch { /* ignore */ }
+}
 
 const form = ref({
   name: '',
@@ -598,7 +609,7 @@ onMounted(() => {
   currentUser.value = getUser()
   loadPartitions()
   loadQoSList()
-  // 默认填入基础模板
+  loadTemplatesFromAPI()
   if (!form.value.scriptContent) {
     form.value.scriptContent = scriptTemplates.basic
   }
