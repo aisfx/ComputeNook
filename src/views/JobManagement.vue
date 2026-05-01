@@ -89,7 +89,7 @@ const loadAllTemplates = async () => {
     })
     if (!res.ok) return
     const data = await res.json()
-    allTemplates.value = data.data || []
+    allTemplates.value = (data.data || []).filter((t: any) => t.showInQuick)
   } catch { /* ignore */ }
 }
 
@@ -227,6 +227,9 @@ const handleExecContainer = (payload: { node: string; jobId: number; initCommand
   border-bottom: 1px solid hsl(var(--border));
   flex-shrink: 0;
   background: hsl(var(--muted) / 0.3);
+  max-height: 160px;
+  display: flex;
+  flex-direction: column;
 }
 .template-bar-label {
   font-size: 0.7rem;
@@ -235,12 +238,16 @@ const handleExecContainer = (payload: { node: string; jobId: number; initCommand
   text-transform: uppercase;
   letter-spacing: 0.05em;
   margin-bottom: 7px;
+  flex-shrink: 0;
 }
 .template-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 5px;
+  overflow-y: auto;
 }
+.template-grid::-webkit-scrollbar { width: 3px; }
+.template-grid::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 2px; }
 .tpl-card {
   display: flex;
   flex-direction: column;

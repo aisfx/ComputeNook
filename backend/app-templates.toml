@@ -14,6 +14,7 @@ partition = "compute"
 module_load = "ansys/2023R1"
 executable = "fluent"
 input_file = "case.cas"
+show_in_quick = true
 app_params = {version = "v2023R1", solver = "pressure-based", parallel = "MPI", precision = "double"}
 
 [[template]]
@@ -32,6 +33,7 @@ partition = "compute"
 module_load = "gaussian/g16"
 executable = "g16"
 input_file = "input.gjf"
+show_in_quick = true
 app_params = {version = "G16", method = "DFT/B3LYP", basis = "6-31G(d)"}
 
 [[template]]
@@ -50,6 +52,7 @@ partition = "compute"
 module_load = "lammps/2023"
 executable = "lmp_mpi"
 input_file = "in.lammps"
+show_in_quick = true
 app_params = {version = "2023.08.02", forcefield = "ReaxFF", timestep = "0.5 fs"}
 
 [[template]]
@@ -68,6 +71,7 @@ partition = "gpu"
 module_load = "pytorch/2.1.0-cuda11.8"
 executable = "python"
 input_file = "train.py"
+show_in_quick = true
 app_params = {version = "2.1.0", cuda = "11.8", python = "3.10"}
 
 [[template]]
@@ -86,6 +90,7 @@ partition = "compute"
 module_load = "openfoam/v2306"
 executable = "simpleFoam"
 input_file = "system/controlDict"
+show_in_quick = false
 app_params = {version = "v2306", solver = "simpleFoam", turbulence = "k-epsilon"}
 
 [[template]]
@@ -104,6 +109,7 @@ partition = "compute"
 module_load = "vasp/6.4.1"
 executable = "vasp_std"
 input_file = "INCAR"
+show_in_quick = true
 app_params = {version = "6.4.1", functional = "PBE", encut = "500 eV"}
 
 [[template]]
@@ -122,6 +128,7 @@ partition = "gpu"
 module_load = ""
 executable = "python"
 input_file = ""
+show_in_quick = true
 app_params = {model = "deepseek-ai/DeepSeek-V3", framework = "vLLM", precision = "bfloat16"}
 
 [[template]]
@@ -140,6 +147,7 @@ partition = "gpu"
 module_load = ""
 executable = "python"
 input_file = ""
+show_in_quick = false
 app_params = {model = "deepseek-ai/DeepSeek-V2", framework = "vLLM", precision = "bfloat16"}
 
 [[template]]
@@ -158,6 +166,7 @@ partition = "gpu"
 module_load = ""
 executable = "python"
 input_file = ""
+show_in_quick = true
 app_params = {model = "deepseek-ai/DeepSeek-R1", framework = "vLLM", precision = "bfloat16"}
 
 [[template]]
@@ -176,6 +185,7 @@ partition = "gpu"
 module_load = ""
 executable = "python"
 input_file = ""
+show_in_quick = false
 app_params = {model = "THUDM/glm-4-9b-chat", framework = "vLLM", precision = "bfloat16"}
 
 [[template]]
@@ -194,6 +204,7 @@ partition = "gpu"
 module_load = ""
 executable = "python"
 input_file = ""
+show_in_quick = false
 app_params = {model = "MiniMaxAI/MiniMax-Text-01", framework = "vLLM", precision = "bfloat16"}
 
 [[template]]
@@ -212,6 +223,7 @@ partition = "gpu"
 module_load = ""
 executable = "python"
 input_file = ""
+show_in_quick = true
 app_params = {model = "Qwen/Qwen2.5-72B-Instruct", framework = "vLLM", precision = "bfloat16"}
 
 [[template]]
@@ -230,422 +242,5 @@ partition = "gpu"
 module_load = ""
 executable = "python"
 input_file = ""
+show_in_quick = false
 app_params = {model = "meta-llama/Meta-Llama-3-70B-Instruct", framework = "vLLM", precision = "bfloat16"}
-
-# ── HPC 科学计算软件 ──────────────────────────────────────────
-
-[[template]]
-id = 7
-name = "GROMACS MD"
-icon = "MD"
-category = "md"
-app_type = "GROMACS"
-description = "GROMACS biomolecular dynamics simulation"
-nodes = 2
-cpus = 64
-gpus = 2
-memory = 128
-time = 48
-partition = "gpu"
-module_load = "gromacs/2023.3-cuda"
-executable = "gmx_mpi"
-input_file = "topol.tpr"
-app_params = {version = "2023.3", ensemble = "NPT", timestep = "2 fs", steps = "50000000"}
-
-[[template]]
-id = 8
-name = "NAMD MD"
-icon = "MD"
-category = "md"
-app_type = "NAMD"
-description = "NAMD biomolecular dynamics simulation"
-nodes = 2
-cpus = 64
-gpus = 2
-memory = 128
-time = 48
-partition = "gpu"
-module_load = "namd/3.0"
-executable = "namd3"
-input_file = "run.namd"
-app_params = {version = "3.0", ensemble = "NPT", timestep = "2 fs", steps = "50000000"}
-
-[[template]]
-id = 9
-name = "Amber MD"
-icon = "MD"
-category = "md"
-app_type = "Amber"
-description = "Amber molecular dynamics simulation"
-nodes = 1
-cpus = 16
-gpus = 4
-memory = 64
-time = 48
-partition = "gpu"
-module_load = "amber/22"
-executable = "pmemd.cuda.MPI"
-input_file = "md.in"
-app_params = {version = "22", ensemble = "NPT", cutoff = "10 A", timestep = "2 fs"}
-
-[[template]]
-id = 10
-name = "Quantum ESPRESSO"
-icon = "DFT"
-category = "chemistry"
-app_type = "QE"
-description = "Quantum ESPRESSO DFT calculation"
-nodes = 2
-cpus = 64
-gpus = 0
-memory = 128
-time = 48
-partition = "compute"
-module_load = "quantum-espresso/7.2"
-executable = "pw.x"
-input_file = "scf.in"
-app_params = {version = "7.2", calculation = "scf", ecutwfc = "60 Ry", kpoints = "4x4x4"}
-
-[[template]]
-id = 11
-name = "CP2K"
-icon = "DFT"
-category = "chemistry"
-app_type = "CP2K"
-description = "CP2K ab initio molecular dynamics"
-nodes = 4
-cpus = 128
-gpus = 0
-memory = 256
-time = 72
-partition = "compute"
-module_load = "cp2k/2023.1"
-executable = "cp2k.popt"
-input_file = "input.inp"
-app_params = {version = "2023.1", method = "DFT/PBE", basis = "DZVP-MOLOPT", cutoff = "400 Ry"}
-
-[[template]]
-id = 12
-name = "ABINIT"
-icon = "DFT"
-category = "chemistry"
-app_type = "ABINIT"
-description = "ABINIT first-principles calculation"
-nodes = 2
-cpus = 64
-gpus = 0
-memory = 128
-time = 72
-partition = "compute"
-module_load = "abinit/9.10"
-executable = "abinit"
-input_file = "run.abi"
-app_params = {version = "9.10", ecut = "30 Ha", kpoints = "4x4x4", functional = "PBE"}
-
-[[template]]
-id = 13
-name = "WRF Weather"
-icon = "WRF"
-category = "earth-science"
-app_type = "WRF"
-description = "WRF weather research and forecasting"
-nodes = 8
-cpus = 256
-gpus = 0
-memory = 512
-time = 24
-partition = "compute"
-module_load = "wrf/4.5"
-executable = "wrf.exe"
-input_file = "namelist.input"
-app_params = {version = "4.5", domain = "d01", dx = "9 km", timestep = "54 s"}
-
-[[template]]
-id = 14
-name = "CESM Climate"
-icon = "CLM"
-category = "earth-science"
-app_type = "CESM"
-description = "CESM community earth system model"
-nodes = 16
-cpus = 512
-gpus = 0
-memory = 1024
-time = 72
-partition = "compute"
-module_load = "cesm/2.1.5"
-executable = "cesm.exe"
-input_file = "user_nl_cam"
-app_params = {version = "2.1.5", compset = "F2000climo", resolution = "f09_g17"}
-
-[[template]]
-id = 15
-name = "STAR-CCM+"
-icon = "CFD"
-category = "cfd"
-app_type = "STAR-CCM+"
-description = "Siemens STAR-CCM+ CFD simulation"
-nodes = 4
-cpus = 128
-gpus = 0
-memory = 256
-time = 48
-partition = "compute"
-module_load = "starccm+/18.04"
-executable = "starccm+"
-input_file = "simulation.sim"
-app_params = {version = "18.04", solver = "coupled", mesh = "polyhedral", parallel = "MPI"}
-
-[[template]]
-id = 16
-name = "COMSOL"
-icon = "FEM"
-category = "fem"
-app_type = "COMSOL"
-description = "COMSOL multiphysics FEM simulation"
-nodes = 2
-cpus = 64
-gpus = 0
-memory = 256
-time = 24
-partition = "compute"
-module_load = "comsol/6.1"
-executable = "comsol"
-input_file = "model.mph"
-app_params = {version = "6.1", physics = "structural", solver = "MUMPS", parallel = "MPI"}
-
-[[template]]
-id = 17
-name = "Abaqus FEM"
-icon = "FEM"
-category = "fem"
-app_type = "Abaqus"
-description = "Abaqus finite element analysis"
-nodes = 2
-cpus = 64
-gpus = 0
-memory = 128
-time = 24
-partition = "compute"
-module_load = "abaqus/2023"
-executable = "abaqus"
-input_file = "job.inp"
-app_params = {version = "2023", analysis = "static", solver = "direct", cpus = "64"}
-
-[[template]]
-id = 18
-name = "MATLAB"
-icon = "MAT"
-category = "general"
-app_type = "MATLAB"
-description = "MATLAB parallel computing"
-nodes = 1
-cpus = 32
-gpus = 0
-memory = 64
-time = 24
-partition = "compute"
-module_load = "matlab/R2023b"
-executable = "matlab"
-input_file = "main.m"
-app_params = {version = "R2023b", toolbox = "Parallel Computing", workers = "32"}
-
-[[template]]
-id = 19
-name = "R Statistical"
-icon = "R"
-category = "general"
-app_type = "R"
-description = "R statistical computing"
-nodes = 1
-cpus = 16
-gpus = 0
-memory = 32
-time = 12
-partition = "compute"
-module_load = "R/4.3.1"
-executable = "Rscript"
-input_file = "analysis.R"
-app_params = {version = "4.3.1", parallel = "parallel", workers = "16"}
-
-[[template]]
-id = 20
-name = "Python MPI"
-icon = "PY"
-category = "general"
-app_type = "Python-MPI"
-description = "Python MPI parallel job"
-nodes = 2
-cpus = 64
-gpus = 0
-memory = 128
-time = 12
-partition = "compute"
-module_load = "python/3.11 openmpi/4.1"
-executable = "python"
-input_file = "main.py"
-app_params = {version = "3.11", mpi = "mpi4py", workers = "64"}
-
-[[template]]
-id = 21
-name = "MPI Generic"
-icon = "MPI"
-category = "general"
-app_type = "MPI"
-description = "Generic MPI parallel job"
-nodes = 4
-cpus = 128
-gpus = 0
-memory = 256
-time = 24
-partition = "compute"
-module_load = "openmpi/4.1"
-executable = "mpirun"
-input_file = "program"
-app_params = {mpi = "OpenMPI 4.1", ppn = "32", binding = "core"}
-
-[[template]]
-id = 22
-name = "OpenMP Job"
-icon = "OMP"
-category = "general"
-app_type = "OpenMP"
-description = "OpenMP shared memory parallel job"
-nodes = 1
-cpus = 64
-gpus = 0
-memory = 128
-time = 12
-partition = "compute"
-module_load = ""
-executable = "./program"
-input_file = ""
-app_params = {threads = "64", binding = "close", schedule = "dynamic"}
-
-[[template]]
-id = 23
-name = "GPU Generic"
-icon = "GPU"
-category = "general"
-app_type = "GPU"
-description = "Generic GPU computing job"
-nodes = 1
-cpus = 16
-gpus = 4
-memory = 64
-time = 24
-partition = "gpu"
-module_load = "cuda/12.2"
-executable = "./gpu_program"
-input_file = ""
-app_params = {cuda = "12.2", gpus = "4", memory = "80GB per GPU"}
-
-[[template]]
-id = 24
-name = "Array Job"
-icon = "ARR"
-category = "general"
-app_type = "Array"
-description = "Slurm array job for parameter sweep"
-nodes = 1
-cpus = 8
-gpus = 0
-memory = 16
-time = 4
-partition = "compute"
-module_load = ""
-executable = "./run.sh"
-input_file = "params.txt"
-app_params = {array = "1-100", concurrent = "20", cpus_per_task = "8"}
-
-# ── AI 训练模板 ───────────────────────────────────────────────
-
-[[template]]
-id = 201
-name = "DeepSpeed Training"
-icon = "DS"
-category = "ai-train"
-app_type = "DeepSpeed"
-description = "DeepSpeed distributed LLM training"
-nodes = 4
-cpus = 128
-gpus = 32
-memory = 512
-time = 168
-partition = "gpu"
-module_load = "pytorch/2.1.0-cuda11.8"
-executable = "python"
-input_file = "train_ds.py"
-app_params = {framework = "DeepSpeed", zero_stage = "3", precision = "bf16", gradient_checkpointing = "true"}
-
-[[template]]
-id = 202
-name = "Megatron-LM"
-icon = "LM"
-category = "ai-train"
-app_type = "Megatron-LM"
-description = "Megatron-LM large model pre-training"
-nodes = 8
-cpus = 256
-gpus = 64
-memory = 1024
-time = 336
-partition = "gpu"
-module_load = "pytorch/2.1.0-cuda11.8"
-executable = "python"
-input_file = "pretrain_gpt.py"
-app_params = {framework = "Megatron-LM", tp = "8", pp = "4", precision = "bf16"}
-
-[[template]]
-id = 203
-name = "TensorFlow Training"
-icon = "TF"
-category = "ai-train"
-app_type = "TensorFlow"
-description = "TensorFlow distributed training"
-nodes = 2
-cpus = 64
-gpus = 8
-memory = 256
-time = 72
-partition = "gpu"
-module_load = "tensorflow/2.14-cuda11.8"
-executable = "python"
-input_file = "train.py"
-app_params = {framework = "TensorFlow 2.14", strategy = "MirroredStrategy", precision = "mixed_float16"}
-
-[[template]]
-id = 204
-name = "vLLM Inference"
-icon = "LLM"
-category = "ai-inference"
-app_type = "vLLM"
-description = "vLLM high-throughput LLM inference server"
-nodes = 1
-cpus = 32
-gpus = 4
-memory = 128
-time = 72
-partition = "gpu"
-module_load = ""
-executable = "python"
-input_file = ""
-app_params = {framework = "vLLM", model = "/data/models/your-model", tp = "4", max_model_len = "8192"}
-
-[[template]]
-id = 205
-name = "Triton Inference"
-icon = "TRT"
-category = "ai-inference"
-app_type = "Triton"
-description = "NVIDIA Triton inference server"
-nodes = 1
-cpus = 16
-gpus = 2
-memory = 64
-time = 72
-partition = "gpu"
-module_load = ""
-executable = "tritonserver"
-input_file = ""
-app_params = {framework = "Triton", model_repo = "/data/triton_models", backend = "tensorrt"}

@@ -32,22 +32,23 @@ func appTemplatesPath() string {
 
 // AppTemplate 作业模板
 type AppTemplate struct {
-	ID          int               `toml:"id"          json:"id"`
-	Name        string            `toml:"name"        json:"name"`
-	Icon        string            `toml:"icon"        json:"icon"`
-	Category    string            `toml:"category"    json:"category"`
-	AppType     string            `toml:"app_type"    json:"appType"`
-	Description string            `toml:"description" json:"description"`
-	Nodes       int               `toml:"nodes"       json:"nodes"`
-	CPUs        int               `toml:"cpus"        json:"cpus"`
-	GPUs        int               `toml:"gpus"        json:"gpus"`
-	Memory      int               `toml:"memory"      json:"memory"`
-	Time        int               `toml:"time"        json:"time"`
-	Partition   string            `toml:"partition"   json:"partition"`
-	ModuleLoad  string            `toml:"module_load" json:"moduleLoad"`
-	Executable  string            `toml:"executable"  json:"executable"`
-	InputFile   string            `toml:"input_file"  json:"inputFile"`
-	AppParams   map[string]string `toml:"app_params"  json:"appParams"`
+	ID            int               `toml:"id"             json:"id"`
+	Name          string            `toml:"name"           json:"name"`
+	Icon          string            `toml:"icon"           json:"icon"`
+	Category      string            `toml:"category"       json:"category"`
+	AppType       string            `toml:"app_type"       json:"appType"`
+	Description   string            `toml:"description"    json:"description"`
+	Nodes         int               `toml:"nodes"          json:"nodes"`
+	CPUs          int               `toml:"cpus"           json:"cpus"`
+	GPUs          int               `toml:"gpus"           json:"gpus"`
+	Memory        int               `toml:"memory"         json:"memory"`
+	Time          int               `toml:"time"           json:"time"`
+	Partition     string            `toml:"partition"      json:"partition"`
+	ModuleLoad    string            `toml:"module_load"    json:"moduleLoad"`
+	Executable    string            `toml:"executable"     json:"executable"`
+	InputFile     string            `toml:"input_file"     json:"inputFile"`
+	AppParams     map[string]string `toml:"app_params"     json:"appParams"`
+	ShowInQuick   bool              `toml:"show_in_quick"  json:"showInQuick"`
 }
 
 type appTemplatesDoc struct {

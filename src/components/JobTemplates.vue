@@ -89,7 +89,8 @@
                     <option value="cfd">CFD</option>
                     <option value="chemistry">化学</option>
                     <option value="md">分子动力学</option>
-                    <option value="ai">AI/ML</option>
+                    <option value="ai">AI 训练</option>
+                    <option value="ai-inference">AI 推理</option>
                     <option value="general">通用</option>
                   </select>
                 </div>
@@ -139,6 +140,12 @@
               <div class="edit-field">
                 <label>模块加载（module load）</label>
                 <input v-model="createForm.moduleLoad" type="text" placeholder="例：lammps/2023" />
+              </div>
+              <div class="edit-field">
+                <label class="checkbox-label">
+                  <input type="checkbox" v-model="createForm.showInQuick" />
+                  显示在快速模板栏
+                </label>
               </div>
               <!-- 脚本类型选择 -->
               <div class="edit-field">
@@ -219,6 +226,12 @@
                   <label>时间 (小时)</label>
                   <input v-model.number="editForm.time" type="number" min="0" />
                 </div>
+              </div>
+              <div class="edit-field">
+                <label class="checkbox-label">
+                  <input type="checkbox" v-model="editForm.showInQuick" />
+                  显示在快速模板栏
+                </label>
               </div>
             </div>
             <div class="job-templates-config-actions" style="margin-top:1.5rem">
@@ -454,6 +467,7 @@ const defaultCreateForm = () => ({
   configTemplate: 'default',
   scriptType: 'basic',
   scriptContent: scriptTemplates.basic,
+  showInQuick: false,
 })
 
 const createForm = ref(defaultCreateForm())
@@ -463,7 +477,8 @@ const categories = [
   { id: 'cfd', name: 'CFD', icon: '🌊' },
   { id: 'chemistry', name: '化学', icon: '⚗️' },
   { id: 'md', name: '分子动力学', icon: '🔬' },
-  { id: 'ai', name: 'AI/ML', icon: '🤖' },
+  { id: 'ai', name: 'AI 训练', icon: '🤖' },
+  { id: 'ai-inference', name: 'AI 推理', icon: '🧠' },
   { id: 'general', name: '通用', icon: '💻' }
 ]
 
@@ -825,6 +840,13 @@ const copyConfig = () => {
 .btn-link:hover { background: #f1f5f9; }
 .btn-link.danger { color: #ef4444; border-color: rgba(239,68,68,0.25); }
 .btn-link.danger:hover { background: #fef2f2; }
+
+.checkbox-label {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 0.82rem; font-weight: normal;
+  text-transform: none; letter-spacing: normal;
+  cursor: pointer; color: hsl(var(--foreground));
+}
 
 .templates-header {
   display: flex;
