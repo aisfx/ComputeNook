@@ -5,7 +5,7 @@
       <div class="sidebar-header">
         <div class="sidebar-logo" @click="goHome">
           <div class="logo-icon">⚡</div>
-          <span class="logo-text">HPC 平台</span>
+          <span class="logo-text">算力小筑</span>
         </div>
         <button class="sidebar-collapse-btn" @click="sidebarCollapsed = !sidebarCollapsed">
           <span>{{ sidebarCollapsed ? '→' : '←' }}</span>
@@ -15,6 +15,16 @@
       <nav class="sidebar-nav">
         <div class="nav-section">
           <div class="nav-section-label" v-if="!sidebarCollapsed">管理</div>
+
+          <!-- 总览 Dashboard -->
+          <a
+            :class="['nav-item', { active: adminTab === 'dashboard' }]"
+            @click="adminTab = 'dashboard'"
+            :title="sidebarCollapsed ? '总览' : ''"
+          >
+            <span class="nav-item-icon">📊</span>
+            <span class="nav-item-label">总览</span>
+          </a>
 
           <!-- 用户管理 -->
           <a
@@ -151,7 +161,8 @@
       </header>
 
       <main class="content-area">
-        <Monitoring v-if="adminTab === 'monitoring'" :active-tab="monitoringTab" @tab-change="monitoringTab = $event" />
+        <AdminDashboard v-if="adminTab === 'dashboard'" />
+        <Monitoring v-else-if="adminTab === 'monitoring'" :active-tab="monitoringTab" @tab-change="monitoringTab = $event" />
         <RackView v-else-if="adminTab === 'rack'" />
         <NetworkTopology v-else-if="adminTab === 'network'" />
         <AdminUsers v-else-if="adminTab === 'users'" />
@@ -189,10 +200,11 @@ import RackView from './RackView.vue'
 import NetworkTopology from './NetworkTopology.vue'
 import CustomDashboard from './CustomDashboard.vue'
 import AIDiagnostics from './AIDiagnostics.vue'
+import AdminDashboard from '../components/AdminDashboard.vue'
 import { getUser, logout, setupAxiosInterceptors, isAdmin as checkAdmin } from '../utils/auth'
 
 const router = useRouter()
-const adminTab = ref('users')
+const adminTab = ref('dashboard')
 const monitoringTab = ref('cluster')
 const groupExpanded = reactive({ user: true, account: false, resource: false, monitoring: true, infra: true })
 const sidebarCollapsed = ref(false)
@@ -201,6 +213,7 @@ const theme = ref<'light' | 'dark'>('light')
 
 const currentTitle = computed(() => {
   const map: Record<string, string> = {
+    dashboard: '集群总览',
     monitoring: '集群监控',
     rack: '机柜管理',
     network: '网络拓扑',
