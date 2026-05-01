@@ -13,6 +13,11 @@
       </button>
     </div>
 
+    <!-- Dashboard 总览 -->
+    <div v-if="currentTab === 'dashboard'" class="tab-content">
+      <AdminDashboard />
+    </div>
+
     <!-- 用户管理 -->
     <div v-if="currentTab === 'users'" class="tab-content">
       <div class="page-header">
@@ -521,10 +526,11 @@ import { ref, computed, onMounted } from 'vue'
 import axios from 'axios'
 import AdminAssociations from './AdminAssociations.vue'
 import AdminSlurmAccounts from './AdminSlurmAccounts.vue'
+import AdminDashboard from '../components/AdminDashboard.vue'
 
 const API_BASE_URL = ''
 
-const currentTab = ref('users')
+const currentTab = ref('dashboard')
 const showAddUserModal = ref(false)
 const showAddGroupModal = ref(false)
 const showAddQosModal = ref(false)
@@ -533,12 +539,13 @@ const editingGroup = ref<any>(null)
 const loading = ref(false)
 
 const adminTabs = [
+  { id: 'dashboard', label: '总览', icon: '📊' },
   { id: 'users', label: '用户管理', icon: '👥' },
   { id: 'groups', label: '用户组管理', icon: '👨‍👩‍👧‍👦' },
   { id: 'accounts', label: '账户管理', icon: '💼' },
   { id: 'associations', label: '账户关联', icon: '🔗' },
   { id: 'qos', label: '资源配置', icon: '⚙️' },
-  { id: 'monitoring', label: '集群监控', icon: '📊' },
+  { id: 'monitoring', label: '集群监控', icon: '🖥️' },
   { id: 'audit', label: '审计日志', icon: '📝' },
   { id: 'statistics', label: '数据统计', icon: '📈' }
 ]

@@ -235,8 +235,12 @@ func jobToRecord(job map[string]interface{}) UsageRecord {
 	// cpu time: v0.0.43 中 time.total 是 {"seconds":N,"microseconds":N} 结构
 	cpuTime := extractNestedInt64(job, "time", "total", "seconds")
 	if cpuTime == 0 {
-		// 兼容直接数字的旧版本
-		cpuTime = extractNestedInt64(job, "time", "total")
+		// 兼容直接数字的旧版本（单位可能是分钟，需转换为秒）
+		rawTotal := extractNestedInt64(job, "time", "total")
+		if rawTotal > 0 {
+			// Slurm 旧版本 time.total 单位是分钟，转换为秒
+			cpuTime = rawTotal * 60
+		}
 	}
 	if cpuTime == 0 {
 		cpuTime = extractInt64(job, "cpu_time")
