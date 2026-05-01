@@ -285,6 +285,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { getApiBase } from '../utils/auth'
 import notification from '../utils/notification'
+import dialog from '../utils/dialog'
 
 const loading = ref(false)
 const tasks = ref<any[]>([])
@@ -395,7 +396,8 @@ const submitCreate = async () => {
 }
 
 const stopTask = async (task: any) => {
-  if (!confirm('确定停止任务 ' + task.name + '？')) return
+  const ok = await dialog.confirm('确定停止任务 ' + task.name + '？', { title: '停止任务' })
+  if (!ok) return
   try {
     const res = await fetch(api('/api/ai-tasks/' + task.id + '/stop'), { method: 'POST', headers: headers() })
     const data = await res.json()
@@ -414,7 +416,8 @@ const restartTask = async (task: any) => {
 }
 
 const deleteTask = async (task: any) => {
-  if (!confirm('确定删除任务 ' + task.name + '？')) return
+  const ok = await dialog.confirmDelete(task.name, '任务')
+  if (!ok) return
   try {
     await fetch(api('/api/ai-tasks/' + task.id), { method: 'DELETE', headers: headers() })
     notification.success('删除成功'); loadAll()
@@ -445,8 +448,9 @@ const doPublishPort = async () => {
   } finally { publishing.value = false }
 }
 
-const revokeEndpoint = (task: any) => {
-  if (confirm('确定撤销 API Key？')) delete endpoints.value[task.id]
+const revokeEndpoint = async (task: any) => {
+  const ok = await dialog.confirm('确定撤销 API Key？', { title: '撤销 API Key', danger: true })
+  if (ok) delete endpoints.value[task.id]
 }
 
 const copyText = (text: string) => { navigator.clipboard.writeText(text); notification.success('已复制') }
@@ -531,8 +535,6 @@ onUnmounted(() => clearInterval(timer))
 .pf-val.key { max-width: 300px; overflow: hidden; text-overflow: ellipsis; }
 .publish-hint { font-size: .78rem; color: hsl(var(--muted-foreground)); background: hsl(var(--muted)); padding: 8px 10px; border-radius: 6px; }
 .hint-code { font-family: monospace; font-size: .75rem; }
-.btn-primary { flex: 1; padding: 8px; background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); border: none; border-radius: var(--radius-md); font-size: .85rem; font-weight: 600; cursor: pointer; }
-.btn-primary:disabled { opacity: .4; cursor: not-allowed; }
 .btn-ghost { padding: 8px 16px; background: none; color: hsl(var(--muted-foreground)); border: 1px solid hsl(var(--border)); border-radius: var(--radius-md); font-size: .83rem; cursor: pointer; }
 .log-content { background: #1e293b; color: #e2e8f0; padding: 12px 14px; border-radius: 8px; font-size: .78rem; line-height: 1.6; overflow-x: auto; margin: 0; max-height: 500px; overflow-y: auto; font-family: monospace; white-space: pre-wrap; }
 @media (max-width: 900px) { .stats-row { grid-template-columns: repeat(3, 1fr); } }

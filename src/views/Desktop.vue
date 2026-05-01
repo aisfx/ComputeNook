@@ -1,15 +1,26 @@
 ﻿<template>
   <div class="desktop-page">
     <div class="page-header">
-      <h3>🖥️ 远程会话</h3>
-      <button class="btn-primary" @click="openCreateModal">+ 新建会话</button>
+      <div class="page-header-left">
+        <h3>远程会话</h3>
+        <span class="page-subtitle">管理远程桌面与应用会话</span>
+      </div>
+      <button class="btn-new-session" @click="openCreateModal">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1v12M1 7h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        新建会话
+      </button>
     </div>
 
-    <div class="card">
-      <table class="desktop-table">
+    <div class="card table-card">
+      <table class="desktop-table" v-if="sessions.length > 0">
         <thead>
           <tr>
-            <th>名称</th><th>模式</th><th>节点</th><th>状态</th><th>创建时间</th><th>操作</th>
+            <th>名称</th>
+            <th>模式</th>
+            <th>节点</th>
+            <th>状态</th>
+            <th>创建时间</th>
+            <th>操作</th>
           </tr>
         </thead>
         <tbody>
@@ -20,12 +31,19 @@
             </td>
             <td>
               <span class="mode-badge" :class="session.mode">
-                {{ session.mode === 'app' ? '📦 应用' : '🖥️ 桌面' }}
+                {{ session.mode === 'app' ? '应用' : '桌面' }}
               </span>
             </td>
-            <td>{{ session.status === 'running' ? session.address : '-' }}</td>
-            <td><span class="status-badge" :class="session.status">{{ statusLabel(session.status) }}</span></td>
-            <td>{{ session.createTime?.slice(0,16).replace('T',' ') }}</td>
+            <td>
+              <span class="node-text">{{ session.status === 'running' ? session.address : '—' }}</span>
+            </td>
+            <td>
+              <span class="status-badge" :class="session.status">
+                <span class="status-dot"></span>
+                {{ statusLabel(session.status) }}
+              </span>
+            </td>
+            <td class="time-cell">{{ session.createTime?.slice(0,16).replace('T',' ') }}</td>
             <td>
               <div class="action-buttons">
                 <template v-if="session.status === 'running'">
@@ -34,23 +52,41 @@
                 </template>
                 <template v-else>
                   <button class="btn-action btn-start" @click="startSession(session)"
-                    :disabled="session.status === 'pending'"
-                    :title="''">
+                    :disabled="session.status === 'pending'">
                     {{ session.status === 'pending' ? '排队中' : '启动' }}
                   </button>
                 </template>
                 <button class="btn-action btn-script" @click="previewScript(session)">脚本</button>
                 <button class="btn-action btn-log" @click="viewSessionLog(session)">日志</button>
-                <button class="btn-action btn-delete" @click="deleteSession(session)" :disabled="session.status === 'running' || session.status === 'pending'" :style="(session.status === 'running' || session.status === 'pending') ? 'opacity:0.3;cursor:not-allowed' : ''">删除</button>
+                <button class="btn-action btn-delete" @click="deleteSession(session)"
+                  :disabled="session.status === 'running' || session.status === 'pending'">删除</button>
               </div>
             </td>
           </tr>
         </tbody>
       </table>
+
       <div v-if="sessions.length === 0" class="empty-state">
-        <div class="empty-icon">🖥️</div>
-        <p>暂无会话</p>
-        <p class="empty-hint">点击"新建会话"创建远程桌面或应用会话</p>
+        <div class="empty-illustration">
+          <svg width="120" height="96" viewBox="0 0 120 96" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="10" y="8" width="100" height="66" rx="8" fill="#EEF2FF" stroke="#C7D2FE" stroke-width="1.5"/>
+            <rect x="18" y="16" width="84" height="50" rx="4" fill="#F8FAFF"/>
+            <rect x="26" y="24" width="40" height="5" rx="2.5" fill="#C7D2FE"/>
+            <rect x="26" y="34" width="60" height="4" rx="2" fill="#E0E7FF"/>
+            <rect x="26" y="43" width="50" height="4" rx="2" fill="#E0E7FF"/>
+            <rect x="26" y="52" width="30" height="4" rx="2" fill="#E0E7FF"/>
+            <rect x="44" y="74" width="32" height="6" rx="3" fill="#C7D2FE"/>
+            <rect x="30" y="80" width="60" height="8" rx="4" fill="#E0E7FF"/>
+            <circle cx="88" cy="72" r="16" fill="#6366F1"/>
+            <path d="M88 65v14M81 72h14" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <p class="empty-title">暂无会话</p>
+        <p class="empty-hint">点击「新建会话」创建远程桌面或应用会话</p>
+        <button class="btn-new-session" @click="openCreateModal">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1v12M1 7h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          新建会话
+        </button>
       </div>
     </div>
 
@@ -340,6 +376,7 @@ import axios from 'axios'
 import { desktopAPI } from '../api/index'
 import XpraViewer from '../components/XpraViewer.vue'
 import { launchState, launchMinimized, startDesktopLaunch, clearLaunch } from '../utils/desktopLaunch'
+import dialog from '../utils/dialog'
 
 const sessions = ref<any[]>([])
 const partitions = ref<any[]>([])
@@ -496,16 +533,17 @@ const createDesktop = async () => {
     sessions.value.unshift(data)
     showCreateModal.value = false
     createForm.value = { name: '', mode: 'desktop', desktopEnv: 'xfce4', appCommand: '', partition: partitions.value[0]?.name || '', duration: 4, presetIndex: 1, gpus: 0 }
-  } catch (e: any) { alert('创建失败: ' + (e.response?.data?.error || e.message)) }
+  } catch (e: any) { dialog.error('创建失败: ' + (e.response?.data?.error || e.message)) }
   finally { submitting.value = false }
 }
 
 const deleteSession = async (session: any) => {
-  if (!confirm(`确认删除 "${session.name}"？`)) return
+  const ok = await dialog.confirmDelete(session.name, '会话')
+  if (!ok) return
   try {
     await desktopAPI.deleteSession(session.id)
     sessions.value = sessions.value.filter((s: any) => s.id !== session.id)
-  } catch (e: any) { alert('删除失败: ' + (e.response?.data?.error || e.message)) }
+  } catch (e: any) { dialog.error('删除失败: ' + (e.response?.data?.error || e.message)) }
 }
 
 const startSession = async (session: any) => {
@@ -558,8 +596,8 @@ const tunnelCmd = computed(() => {
 
 const copyTunnelCmd = () => {
   navigator.clipboard.writeText(tunnelCmd.value)
-    .then(() => alert('隧道命令已复制'))
-    .catch(() => alert(tunnelCmd.value))
+    .then(() => dialog.success('隧道命令已复制'))
+    .catch(() => dialog.info(tunnelCmd.value))
 }
 
 // 浏览器连接：直接用 XpraViewer 组件通过后端 WS 代理连接
@@ -653,19 +691,22 @@ const launchXpraClient = () => {
 }
 
 const stopSession = async () => {
-  if (!selectedSession.value || !confirm('确定停止此会话？')) return
+  if (!selectedSession.value) return
+  const ok = await dialog.confirm('确定停止此会话？', { title: '停止会话' })
+  if (!ok) return
   try {
     await desktopAPI.stopSession(selectedSession.value.id)
     showStartModal.value = false
     clearLaunch()
     await loadSessions()
-  } catch (e: any) { alert('停止失败: ' + (e.response?.data?.error || e.message)) }
+  } catch (e: any) { dialog.error('停止失败: ' + (e.response?.data?.error || e.message)) }
 }
 
 const stopSessionById = async (session: any) => {
-  if (!confirm(`确定停止 "${session.name}"？`)) return
+  const ok = await dialog.confirm(`确定停止 "${session.name}"？`, { title: '停止会话' })
+  if (!ok) return
   try { await desktopAPI.stopSession(session.id); await loadSessions() }
-  catch (e: any) { alert('停止失败: ' + (e.response?.data?.error || e.message)) }
+  catch (e: any) { dialog.error('停止失败: ' + (e.response?.data?.error || e.message)) }
 }
 
 const toggleFullscreen = () => {
@@ -678,115 +719,274 @@ const previewScript = async (session: any) => {
     const res = await axios.get(`/desktop/sessions/${session.id}/script`)
     scriptInfo.value = res.data
     showScriptModal.value = true
-  } catch (e: any) { alert('获取脚本失败: ' + (e.response?.data?.error || e.message)) }
+  } catch (e: any) { dialog.error('获取脚本失败: ' + (e.response?.data?.error || e.message)) }
 }
 
 const copyScript = () => {
   navigator.clipboard.writeText(scriptInfo.value.script)
-  alert('已复制')
+  dialog.success('已复制')
 }
 </script>
 
 
 <style scoped>
 .desktop-page { display: flex; flex-direction: column; gap: 1.5rem; }
+
+/* 页面头部 */
 .page-header { display: flex; justify-content: space-between; align-items: center; }
-.page-header h3 { margin: 0; font-size: 1.3rem; }
+.page-header-left { display: flex; flex-direction: column; gap: 2px; }
+.page-header h3 { margin: 0; font-size: 1.25rem; font-weight: 700; color: #111827; }
+.page-subtitle { font-size: 0.82rem; color: #9ca3af; }
 
+/* 新建按钮 */
+.btn-new-session {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 16px; background: #6366f1; color: #fff;
+  border: none; border-radius: 8px; font-size: 0.85rem; font-weight: 600;
+  cursor: pointer; transition: background 0.15s, box-shadow 0.15s;
+  box-shadow: 0 1px 4px rgba(99,102,241,0.3);
+}
+.btn-new-session:hover { background: #4f46e5; box-shadow: 0 2px 8px rgba(99,102,241,0.4); }
+
+/* 表格卡片 */
+.table-card { padding: 0; overflow: hidden; }
 .desktop-table { width: 100%; border-collapse: collapse; }
-.desktop-table th { padding: 1rem; text-align: left; font-weight: 600; color: #555; border-bottom: 2px solid #e5e7eb; background: #f9fafb; }
-.desktop-table td { padding: 1rem; border-bottom: 1px solid #e5e7eb; }
-.desktop-table tbody tr:hover { background: #f9fafb; }
+.desktop-table th {
+  padding: 11px 16px; text-align: left; font-size: 0.78rem;
+  font-weight: 600; color: #6b7280; letter-spacing: 0.04em; text-transform: uppercase;
+  border-bottom: 1px solid #f0f0f0; background: #fafafa;
+}
+.desktop-table td { padding: 13px 16px; border-bottom: 1px solid #f5f5f5; vertical-align: middle; }
+.desktop-table tbody tr:last-child td { border-bottom: none; }
+.desktop-table tbody tr:hover { background: #fafbff; }
+.node-text { font-size: 0.85rem; color: #374151; font-family: monospace; }
+.time-cell { font-size: 0.82rem; color: #9ca3af; white-space: nowrap; }
 
-.status-badge { display: inline-block; padding: .2rem .6rem; border-radius: 10px; font-size: .8rem; font-weight: 600; }
+/* 状态徽章 */
+.status-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: .25rem .65rem; border-radius: 20px; font-size: .78rem; font-weight: 600;
+}
+.status-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
 .status-badge.running  { background: #dcfce7; color: #15803d; }
+.status-badge.running .status-dot  { background: #16a34a; box-shadow: 0 0 0 2px #bbf7d0; animation: pulse-dot 2s infinite; }
 .status-badge.pending  { background: #fef9c3; color: #a16207; }
+.status-badge.pending .status-dot  { background: #ca8a04; }
 .status-badge.failed   { background: #fee2e2; color: #b91c1c; }
+.status-badge.failed .status-dot   { background: #dc2626; }
 .status-badge.stopped  { background: #f1f5f9; color: #64748b; }
+.status-badge.stopped .status-dot  { background: #94a3b8; }
+@keyframes pulse-dot { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
 
-.action-buttons { display: flex; gap: .4rem; flex-wrap: wrap; }
+/* 操作按钮 */
+.action-buttons { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
 .btn-action {
   display: inline-flex; align-items: center; justify-content: center;
   padding: 4px 10px; border: 1px solid transparent;
-  border-radius: var(--radius-sm, 6px); font-size: 0.78rem; font-weight: 500;
-  cursor: pointer; white-space: nowrap; transition: opacity 0.15s;
+  border-radius: 6px; font-size: 0.76rem; font-weight: 500;
+  cursor: pointer; white-space: nowrap; transition: all 0.15s;
 }
-.btn-action:hover:not(:disabled) { opacity: 0.85; }
-.btn-action:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-start   { background: #667eea; color: #fff; border-color: #667eea; }
+.btn-action:hover:not(:disabled) { filter: brightness(0.92); transform: translateY(-1px); }
+.btn-action:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+.btn-start   { background: #6366f1; color: #fff; border-color: #6366f1; }
 .btn-stop    { background: #f59e0b; color: #fff; border-color: #f59e0b; }
 .btn-connect { background: #10b981; color: #fff; border-color: #10b981; }
-.btn-script  { background: hsl(var(--secondary, 210 40% 96.1%)); color: hsl(var(--secondary-foreground, 222.2 47.4% 11.2%)); border-color: hsl(var(--border, 214.3 31.8% 91.4%)); }
+.btn-script  { background: #f3f4f6; color: #374151; border-color: #e5e7eb; }
 .btn-log     { background: #eff6ff; color: #2563eb; border-color: #bfdbfe; }
-.btn-log:hover:not(:disabled) { background: #dbeafe; opacity: 1; }
-.btn-delete  { background: transparent; color: hsl(var(--destructive, 0 84.2% 60.2%)); border-color: hsl(var(--destructive, 0 84.2% 60.2%) / 0.4); }
-.btn-delete:hover:not(:disabled) { background: hsl(var(--destructive, 0 84.2% 60.2%) / 0.1); opacity: 1; }
+.btn-log:hover:not(:disabled) { background: #dbeafe; filter: none; transform: translateY(-1px); }
+.btn-delete  { background: transparent; color: #ef4444; border-color: rgba(239,68,68,0.3); }
+.btn-delete:hover:not(:disabled) { background: #fef2f2; filter: none; transform: translateY(-1px); }
 .btn-tab { padding: 4px 12px; border: 1px solid #e5e7eb; border-radius: 6px; background: #f9fafb; font-size: 0.8rem; cursor: pointer; }
 .btn-tab.active { background: #2563eb; color: #fff; border-color: #2563eb; }
 .log-body { max-height: 500px; overflow-y: auto; background: #0f172a; color: #e2e8f0; }
 
-.empty-state { text-align: center; padding: 4rem 2rem; color: #999; }
+.empty-state { text-align: center; padding: 4rem 2rem; color: #999; display: flex; flex-direction: column; align-items: center; gap: 0.5rem; }
+.empty-illustration { margin-bottom: 0.5rem; }
+.empty-title { font-size: 1rem; font-weight: 600; color: #374151; margin: 0; }
+.empty-hint { font-size: .85rem; color: #9ca3af; margin: 0 0 1rem; }
 .empty-icon { font-size: 4rem; margin-bottom: 1rem; }
-.empty-hint { font-size: .9rem; }
 
-/* 弹窗 */
-.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
-.modal-content { background: #fff; border-radius: 12px; width: 90%; max-width: 600px; max-height: 90vh; overflow-y: auto; }
-.start-modal { max-width: 680px; }
-.script-modal { max-width: 750px; }
-.modal-header { display: flex; justify-content: space-between; align-items: center; padding: 1.25rem 1.5rem; border-bottom: 1px solid #e5e7eb; }
-.modal-header h2 { margin: 0; font-size: 1.2rem; }
-.modal-body { padding: 1.5rem; }
-.btn-close { background: none; border: none; font-size: 1.2rem; cursor: pointer; color: #666; }
+/* ── 弹窗基础 ── */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000;
+  animation: overlay-in 0.15s ease;
+}
+@keyframes overlay-in { from { opacity: 0; } to { opacity: 1; } }
 
-.form-group { margin-bottom: 1rem; }
-.form-group label { display: block; margin-bottom: .4rem; font-weight: 600; font-size: .9rem; color: #555; }
-.form-group input, .form-group select, .form-group textarea { width: 100%; padding: .6rem .9rem; border: 2px solid #e5e7eb; border-radius: 8px; font-size: .95rem; box-sizing: border-box; }
+.modal-content {
+  background: #fff;
+  border-radius: 18px;
+  width: 92%;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.18), 0 4px 16px rgba(0,0,0,0.08);
+  animation: modal-in 0.2s cubic-bezier(0.34,1.56,0.64,1);
+}
+@keyframes modal-in { from { opacity: 0; transform: scale(0.94) translateY(8px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+
+.start-modal { max-width: 700px; }
+.script-modal { max-width: 780px; }
+
+.modal-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 1.4rem 1.75rem 1.1rem;
+  border-bottom: 1px solid #f1f5f9;
+  position: sticky; top: 0; background: #fff; z-index: 1;
+  border-radius: 18px 18px 0 0;
+}
+.modal-header h2 {
+  margin: 0; font-size: 1.05rem; font-weight: 700;
+  color: #0f172a; letter-spacing: -0.01em;
+}
+.modal-body { padding: 1.5rem 1.75rem 1.75rem; }
+
+.btn-close {
+  width: 30px; height: 30px;
+  display: flex; align-items: center; justify-content: center;
+  background: #f1f5f9; border: none; border-radius: 8px;
+  font-size: 1rem; cursor: pointer; color: #64748b;
+  transition: all 0.15s; flex-shrink: 0;
+}
+.btn-close:hover { background: #e2e8f0; color: #0f172a; }
+
+/* ── 表单 ── */
+.form-group { margin-bottom: 1.1rem; }
+.form-group label {
+  display: block; margin-bottom: 6px;
+  font-weight: 600; font-size: 0.82rem;
+  color: #374151; letter-spacing: 0.01em;
+}
+.form-group input,
+.form-group select,
+.form-group textarea {
+  width: 100%; padding: 0.6rem 0.9rem;
+  border: 1.5px solid #e2e8f0; border-radius: 10px;
+  font-size: 0.9rem; box-sizing: border-box;
+  background: #f8fafc; color: #0f172a;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  outline: none;
+}
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99,102,241,0.12);
+  background: #fff;
+}
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-.form-actions { display: flex; justify-content: flex-end; gap: 1rem; padding-top: .5rem; }
+.form-actions {
+  display: flex; justify-content: flex-end; gap: 0.75rem;
+  padding-top: 1rem; margin-top: 0.5rem;
+  border-top: 1px solid #f1f5f9;
+}
 
-/* 启动状态 */
+/* ── 启动状态 ── */
 .status-starting { text-align: center; padding: 1rem; }
 .loading-icon { width: 48px; height: 48px; border: 4px solid #e5e7eb; border-top-color: #667eea; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 1rem; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .progress-bar-container { width: 100%; height: 20px; background: #e5e7eb; border-radius: 10px; overflow: hidden; margin: 1rem 0; }
 .progress-bar-fill { height: 100%; background: linear-gradient(90deg, #667eea, #764ba2); transition: width .5s; }
 
-.status-failed { text-align: center; padding: 1rem; }
-.fail-icon { width: 56px; height: 56px; line-height: 56px; border-radius: 50%; background: #fee2e2; color: #dc2626; font-size: 1.5rem; font-weight: bold; margin: 0 auto 1rem; }
-.error-message { background: #fee2e2; color: #991b1b; border-radius: 6px; padding: .6rem 1rem; margin-bottom: .75rem; font-size: .9rem; text-align: left; }
+/* ── 失败状态 ── */
+.status-failed { text-align: center; padding: 0.5rem; }
+.fail-icon {
+  width: 56px; height: 56px; line-height: 56px;
+  border-radius: 50%; background: #fee2e2; color: #dc2626;
+  font-size: 1.5rem; font-weight: bold; margin: 0 auto 1rem;
+}
+.error-message {
+  background: #fef2f2; color: #991b1b;
+  border: 1px solid #fecaca;
+  border-radius: 10px; padding: 0.75rem 1rem;
+  margin-bottom: 0.75rem; font-size: 0.88rem; text-align: left;
+}
 
-.status-ready { padding: .5rem; }
-.success-icon { font-size: 2.5rem; text-align: center; margin-bottom: .75rem; }
-.status-ready h4 { text-align: center; margin: 0 0 1.5rem; font-size: 1.2rem; }
-.connection-info { display: flex; gap: 2rem; background: #f9fafb; padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem; }
-.info-item { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
-.info-label { font-size: .85rem; color: #666; }
+/* ── 就绪状态 ── */
+.status-ready { padding: 0.25rem; }
+.success-icon { font-size: 2.5rem; text-align: center; margin-bottom: 0.5rem; }
+.status-ready h4 { text-align: center; margin: 0 0 1.25rem; font-size: 1.1rem; font-weight: 700; color: #0f172a; }
+
+.connection-info {
+  display: flex; gap: 0; flex-wrap: wrap;
+  background: #f8fafc; border: 1px solid #e2e8f0;
+  border-radius: 12px; margin-bottom: 1.25rem; overflow: hidden;
+}
+.info-item {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 0.75rem 1.1rem; flex: 1;
+  border-right: 1px solid #e2e8f0;
+}
+.info-item:last-child { border-right: none; }
+.info-label { font-size: 0.7rem; color: #94a3b8; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+.info-item code { font-size: 0.85rem; color: #0f172a; font-weight: 600; font-family: monospace; }
+
 .btn-eye-small { padding: .15rem .5rem; background: #e5e7eb; border: none; border-radius: 4px; font-size: .8rem; cursor: pointer; }
 .btn-eye-small:hover { background: #667eea; color: #fff; }
-.connection-methods { display: flex; flex-direction: column; gap: .75rem; margin-bottom: 1.5rem; }
-.method-item { display: flex; flex-direction: column; gap: 0; padding: 1rem; background: #f9fafb; border-radius: 8px; border: 1px solid #e5e7eb; }
-.method-recommend { border-color: #6366f1; background: #f5f3ff; }
-.method-top { display: flex; align-items: center; gap: 1rem; width: 100%; }
-.method-hint { margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid #e5e7eb; display: flex; flex-direction: column; gap: 4px; font-size: 0.78rem; color: #6b7280; }
-.recommend-tag { background: #6366f1; color: #fff; font-size: 0.7rem; padding: 1px 6px; border-radius: 4px; font-weight: 600; margin-left: 6px; vertical-align: middle; }
-.tunnel-cmd { background: #1e293b; color: #e2e8f0; padding: .75rem 1rem; border-radius: 6px; font-size: .82rem; font-family: monospace; margin: .75rem 0 .25rem; white-space: pre-wrap; word-break: break-all; }
-.tunnel-hint { font-size: .78rem; color: #6b7280; margin: 0; }
-.method-icon { font-size: 1.8rem; }
-.method-content { flex: 1; }
-.method-content strong { display: block; margin-bottom: .2rem; }
-.method-content p { margin: 0; font-size: .85rem; color: #666; }
-.modal-actions { display: flex; gap: 1rem; justify-content: flex-end; padding-top: 1rem; border-top: 1px solid #e5e7eb; }
 
-/* 日志 */
-.log-panel { margin-top: 1rem; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; text-align: left; }
-.log-header { display: flex; justify-content: space-between; align-items: center; padding: .5rem 1rem; background: #f3f4f6; font-size: .85rem; font-weight: 600; }
-.log-tabs { display: flex; gap: .25rem; }
-.log-tab { padding: .2rem .6rem; border: 1px solid #d1d5db; border-radius: 4px; background: #fff; font-size: .8rem; cursor: pointer; }
-.log-tab.active { background: #667eea; color: #fff; border-color: #667eea; }
-.log-body { height: 160px; overflow-y: auto; background: #1e1e1e; padding: .75rem 1rem; font-family: monospace; font-size: .8rem; }
-.log-empty { color: #666; font-style: italic; }
-.log-line { color: #d4d4d4; line-height: 1.5; white-space: pre-wrap; word-break: break-all; }
+.connection-methods { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.25rem; }
+.method-item {
+  display: flex; flex-direction: column;
+  padding: 1rem 1.1rem;
+  background: #f8fafc; border-radius: 12px;
+  border: 1.5px solid #e2e8f0;
+  transition: border-color 0.15s;
+}
+.method-recommend {
+  border-color: #6366f1;
+  background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
+}
+.method-top { display: flex; align-items: center; gap: 0.9rem; width: 100%; }
+.method-hint {
+  margin-top: 0.75rem; padding-top: 0.75rem;
+  border-top: 1px solid rgba(0,0,0,0.06);
+  display: flex; flex-direction: column; gap: 4px;
+  font-size: 0.76rem; color: #6b7280;
+}
+.recommend-tag {
+  background: #6366f1; color: #fff;
+  font-size: 0.68rem; padding: 1px 7px;
+  border-radius: 999px; font-weight: 600;
+  margin-left: 6px; vertical-align: middle;
+}
+.tunnel-cmd { background: #1e293b; color: #e2e8f0; padding: .75rem 1rem; border-radius: 8px; font-size: .82rem; font-family: monospace; margin: .75rem 0 .25rem; white-space: pre-wrap; word-break: break-all; }
+.tunnel-hint { font-size: .78rem; color: #6b7280; margin: 0; }
+.method-icon { font-size: 1.6rem; flex-shrink: 0; }
+.method-content { flex: 1; min-width: 0; }
+.method-content strong { display: block; margin-bottom: 3px; font-size: 0.88rem; color: #0f172a; }
+.method-content p { margin: 0; font-size: 0.8rem; color: #64748b; }
+
+.modal-actions {
+  display: flex; gap: 0.75rem; justify-content: flex-end;
+  padding-top: 1rem; border-top: 1px solid #f1f5f9;
+}
+
+/* ── 日志面板 ── */
+.log-panel {
+  margin-top: 1rem; border: 1px solid #e2e8f0;
+  border-radius: 12px; overflow: hidden; text-align: left;
+}
+.log-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 0.6rem 1rem; background: #f8fafc;
+  font-size: 0.82rem; font-weight: 600; color: #374151;
+  border-bottom: 1px solid #e2e8f0;
+}
+.log-tabs { display: flex; gap: 4px; }
+.log-tab {
+  padding: 3px 10px; border: 1px solid #e2e8f0;
+  border-radius: 6px; background: #fff;
+  font-size: 0.76rem; cursor: pointer; color: #64748b;
+  transition: all 0.15s;
+}
+.log-tab.active { background: #6366f1; color: #fff; border-color: #6366f1; }
+.log-body { height: 160px; overflow-y: auto; background: #0f172a; padding: 0.75rem 1rem; font-family: monospace; font-size: 0.8rem; }
+.log-empty { color: #475569; font-style: italic; }
+.log-line { color: #cbd5e1; line-height: 1.6; white-space: pre-wrap; word-break: break-all; }
 
 /* noVNC */
 .vnc-overlay { position: fixed; inset: 0; background: #000; z-index: 2000; display: flex; flex-direction: column; }
@@ -818,53 +1018,92 @@ const copyScript = () => {
 @keyframes spin { to { transform: rotate(360deg); } }
 .vnc-canvas-wrap :deep(canvas) { width: 100% !important; height: 100% !important; }
 
-/* 脚本 */
-.script-actions { margin-bottom: .75rem; }
-.script-body { background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: 8px; font-size: .8rem; font-family: monospace; overflow-x: auto; max-height: 400px; overflow-y: auto; white-space: pre; margin: 0; }
-
-/* 通用按钮 */
-.btn-primary { background: #fff; color: #1e293b; border: 1px solid #e2e8f0; padding: 7px 16px; border-radius: 10px; cursor: pointer; font-weight: 600; font-size: 0.85rem; box-shadow: 0 1px 3px rgba(0,0,0,0.06); transition: all 0.15s; }
-.btn-primary:hover { background: #f1f5f9; }
-.btn-primary:disabled { opacity: .6; cursor: not-allowed; }
-.btn-secondary { background: #fff; color: #1e293b; border: 1px solid #e2e8f0; padding: 7px 16px; border-radius: 10px; cursor: pointer; font-weight: 500; font-size: 0.85rem; box-shadow: 0 1px 3px rgba(0,0,0,0.06); transition: all 0.15s; }
-.btn-secondary:hover { background: #f1f5f9; }
-.btn-danger { background: #fff; color: #ef4444; border: 1px solid rgba(239,68,68,0.3); padding: 7px 16px; border-radius: 10px; cursor: pointer; font-weight: 600; font-size: 0.85rem; box-shadow: 0 1px 3px rgba(0,0,0,0.06); transition: all 0.15s; }
-.btn-danger:hover { background: #fef2f2; }
-
-/* 新增：会话列表 */
-.session-name { font-weight: 600; font-size: .9rem; }
-.session-sub { font-size: .78rem; color: #6b7280; margin-top: 2px; font-family: monospace; }
-.mode-badge { display: inline-block; padding: .2rem .6rem; border-radius: 10px; font-size: .8rem; font-weight: 600; }
+/* ── 会话列表 ── */
+.session-name { font-weight: 600; font-size: 0.9rem; color: #0f172a; }
+.session-sub { font-size: 0.76rem; color: #6b7280; margin-top: 2px; font-family: monospace; }
+.mode-badge { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 0.73rem; font-weight: 600; }
 .mode-badge.desktop { background: #ede9fe; color: #5b21b6; }
 .mode-badge.app     { background: #dbeafe; color: #1e40af; }
 
-/* 模式选择卡片 */
-.mode-selector { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
-.mode-card { border: 2px solid #e5e7eb; border-radius: 10px; padding: 1rem; cursor: pointer; text-align: center; transition: all .15s; }
-.mode-card:hover { border-color: #6366f1; background: #f5f3ff; }
-.mode-card.active { border-color: #6366f1; background: #ede9fe; }
-.mode-icon { font-size: 2rem; margin-bottom: .4rem; }
-.mode-label { font-weight: 700; font-size: .95rem; margin-bottom: .25rem; }
-.mode-desc { font-size: .78rem; color: #6b7280; }
+/* ── 脚本弹框 ── */
+.script-actions { margin-bottom: 0.75rem; }
+.script-body {
+  background: #0f172a; color: #e2e8f0;
+  padding: 1.1rem 1.25rem; border-radius: 12px;
+  font-size: 0.8rem; font-family: 'Fira Code', 'Cascadia Code', monospace;
+  overflow-x: auto; max-height: 420px; overflow-y: auto;
+  white-space: pre; margin: 0; line-height: 1.6;
+  border: 1px solid rgba(255,255,255,0.06);
+}
 
-/* 桌面环境选择 */
-.desktop-env-selector { display: flex; gap: 1rem; flex-wrap: wrap; }
-.env-option { display: flex; align-items: center; gap: .4rem; cursor: pointer; padding: .5rem .9rem; border: 2px solid #e5e7eb; border-radius: 8px; font-size: .9rem; transition: all .15s; }
-.env-option:has(input:checked) { border-color: #6366f1; background: #ede9fe; }
+/* ── 通用按钮 ── */
+.btn-secondary {
+  background: #f8fafc; color: #374151;
+  border: 1.5px solid #e2e8f0; padding: 8px 18px;
+  border-radius: 10px; cursor: pointer;
+  font-weight: 500; font-size: 0.85rem;
+  transition: all 0.15s;
+}
+.btn-secondary:hover { background: #f1f5f9; border-color: #cbd5e1; }
+
+.btn-danger {
+  background: #fff; color: #ef4444;
+  border: 1.5px solid rgba(239,68,68,0.35); padding: 8px 18px;
+  border-radius: 10px; cursor: pointer;
+  font-weight: 600; font-size: 0.85rem;
+  transition: all 0.15s;
+}
+.btn-danger:hover { background: #fef2f2; border-color: #ef4444; }
+
+/* ── 模式选择卡片 ── */
+.mode-selector { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+.mode-card {
+  border: 2px solid #e2e8f0; border-radius: 14px;
+  padding: 1.1rem 1rem; cursor: pointer; text-align: center;
+  transition: all 0.15s; background: #f8fafc;
+}
+.mode-card:hover { border-color: #a5b4fc; background: #f5f3ff; transform: translateY(-1px); }
+.mode-card.active {
+  border-color: #6366f1; background: #ede9fe;
+  box-shadow: 0 0 0 3px rgba(99,102,241,0.12);
+}
+.mode-icon { font-size: 2rem; margin-bottom: 0.5rem; }
+.mode-label { font-weight: 700; font-size: 0.92rem; margin-bottom: 0.3rem; color: #0f172a; }
+.mode-desc { font-size: 0.75rem; color: #64748b; line-height: 1.4; }
+
+/* ── 桌面环境选择 ── */
+.desktop-env-selector { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+.env-option {
+  display: flex; align-items: center; gap: 0.4rem;
+  cursor: pointer; padding: 0.5rem 1rem;
+  border: 2px solid #e2e8f0; border-radius: 10px;
+  font-size: 0.88rem; transition: all 0.15s;
+  background: #f8fafc;
+}
+.env-option:has(input:checked) { border-color: #6366f1; background: #ede9fe; color: #4338ca; font-weight: 600; }
 .env-option input { accent-color: #6366f1; }
 
-/* 应用网格 */
-.app-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: .6rem; margin-bottom: .75rem; }
-.app-card { border: 2px solid #e5e7eb; border-radius: 10px; padding: .6rem .4rem; cursor: pointer; text-align: center; transition: all .15s; }
-.app-card:hover { border-color: #6366f1; background: #f5f3ff; }
-.app-card.active { border-color: #6366f1; background: #ede9fe; }
-.app-icon { font-size: 1.6rem; margin-bottom: .25rem; }
-.app-name { font-size: .72rem; font-weight: 600; color: #374151; }
-.custom-app-row { margin-top: .25rem; }
-.custom-app-input { width: 100%; padding: .55rem .9rem; border: 2px solid #e5e7eb; border-radius: 8px; font-size: .9rem; box-sizing: border-box; }
-.custom-app-input:focus { outline: none; border-color: #6366f1; }
+/* ── 应用网格 ── */
+.app-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 0.6rem; margin-bottom: 0.75rem; }
+.app-card {
+  border: 2px solid #e2e8f0; border-radius: 12px;
+  padding: 0.65rem 0.4rem; cursor: pointer; text-align: center;
+  transition: all 0.15s; background: #f8fafc;
+}
+.app-card:hover { border-color: #a5b4fc; background: #f5f3ff; transform: translateY(-1px); }
+.app-card.active { border-color: #6366f1; background: #ede9fe; box-shadow: 0 0 0 3px rgba(99,102,241,0.1); }
+.app-icon { font-size: 1.6rem; margin-bottom: 0.25rem; }
+.app-name { font-size: 0.7rem; font-weight: 600; color: #374151; }
+.custom-app-row { margin-top: 0.25rem; }
+.custom-app-input {
+  width: 100%; padding: 0.6rem 0.9rem;
+  border: 1.5px solid #e2e8f0; border-radius: 10px;
+  font-size: 0.9rem; box-sizing: border-box;
+  background: #f8fafc; outline: none; transition: all 0.15s;
+}
+.custom-app-input:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,0.12); background: #fff; }
 
-/* Xpra iframe */
+/* ── Xpra iframe ── */
 .xpra-frame { flex: 1; width: 100%; height: 100%; border: none; background: #000; }
 .xpra-viewer-fill { flex: 1; min-height: 0; width: 100%; }
 

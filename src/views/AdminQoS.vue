@@ -1,8 +1,8 @@
-<template>
+﻿<template>
   <div class="admin-qos">
     <div class="page-header">
       <h3>⚡ QoS 管理 (服务质量)</h3>
-      <button class="btn-primary" @click="openAddModal">+ 添加 QoS</button>
+      <button class="btn btn-primary" @click="openAddModal">+ 添加 QoS</button>
     </div>
 
     <div v-if="loading" class="loading">加载中...</div>
@@ -27,7 +27,7 @@
         </thead>
         <tbody>
           <tr v-for="qos in qosList" :key="qos.name">
-            <td><strong>{{ qos.name }}</strong></td>
+            <td><span class="qos-name">{{ qos.name }}</span></td>
             <td>{{ qos.description || '-' }}</td>
             <td>{{ formatLimitValue(extractJobsLimit(qos)) }}</td>
             <td>{{ formatLimitValue(extractSubmitLimit(qos)) }}</td>
@@ -39,8 +39,8 @@
             <td>{{ formatLimitValue(extractBillingLimit(qos)) }}</td>
             <td>
               <div class="action-buttons">
-                <button class="btn-link" @click="editQoS(qos)">✏️ 编辑</button>
-                <button class="btn-link danger" @click="confirmDelete(qos)">🗑️ 删除</button>
+                <button class="btn btn-link" @click="editQoS(qos)">✏️ 编辑</button>
+                <button class="btn btn-link danger" @click="confirmDelete(qos)">🗑️ 删除</button>
               </div>
             </td>
           </tr>
@@ -119,8 +119,8 @@
           </div>
         </div>
         <div class="modal-footer">
-          <button class="btn-secondary" @click="closeModal">取消</button>
-          <button class="btn-primary" @click="saveQoS" :disabled="saving">
+          <button class="btn btn-secondary" @click="closeModal">取消</button>
+          <button class="btn btn-primary" @click="saveQoS" :disabled="saving">
             {{ saving ? '保存中...' : '保存' }}
           </button>
         </div>
@@ -146,7 +146,7 @@
               
               <div v-if="qosBindings.length === 0" class="empty-state">
                 <p>暂无绑定此 QoS 的关联</p>
-                <button class="btn-primary" @click="goToAssociations">
+                <button class="btn btn-primary" @click="goToAssociations">
                   前往账户关联页面
                 </button>
               </div>
@@ -191,8 +191,8 @@
           </div>
         </div>
         <div class="modal-footer">
-          <button class="btn-secondary" @click="closeBindingsModal">关闭</button>
-          <button class="btn-primary" @click="goToAssociations">
+          <button class="btn btn-secondary" @click="closeBindingsModal">关闭</button>
+          <button class="btn btn-primary" @click="goToAssociations">
             前往账户关联页面
           </button>
         </div>
@@ -205,6 +205,7 @@
 import { ref, onMounted, inject } from 'vue'
 import { qosAPI } from '../api'
 import notification from '../utils/notification'
+import dialog from '../utils/dialog'
 
 const qosList = ref<any[]>([])
 const loading = ref(false)
@@ -589,14 +590,14 @@ const saveQoS = async () => {
 }
 
 const confirmDelete = async (qos: any) => {
-  if (confirm(`确定要删除 QoS ${qos.name} 吗？此操作不可恢复！`)) {
-    try {
-      await qosAPI.deleteQoS(qos.name)
-      alert('QoS 删除成功！')
-      await loadQoSList()
-    } catch (err: any) {
-      alert(err.response?.data?.error || '删除失败')
-    }
+  const ok = await dialog.confirmDelete(qos.name, 'QoS')
+  if (!ok) return
+  try {
+    await qosAPI.deleteQoS(qos.name)
+    dialog.success('QoS 删除成功！')
+    await loadQoSList()
+  } catch (err: any) {
+    dialog.error(err.response?.data?.error || '删除失败')
   }
 }
 
@@ -636,391 +637,11 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.admin-qos {
-  padding: 2rem;
-}
+.admin-qos { padding: 1.5rem; }
 
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 2rem;
-}
+.bindings-section { margin-top: 1.5rem; }
+.bindings-section h4 { font-size: 0.85rem; font-weight: 600; color: hsl(var(--foreground)); margin: 0 0 0.75rem; }
 
-.page-header h3 {
-  margin: 0;
-  font-size: 1.5rem;
-}
-
-.loading {
-  text-align: center;
-  padding: 3rem;
-  color: #666;
-}
-
-.error-message {
-  padding: 1rem;
-  background: #fee;
-  color: #c00;
-  border-radius: 8px;
-  margin-bottom: 1rem;
-}
-
-.card {
-  background: white;
-  border-radius: 12px;
-  padding: 1.5rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-}
-
-.data-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.data-table th {
-  background: #f9fafb;
-  padding: 1rem;
-  text-align: left;
-  font-weight: 600;
-  color: #555;
-  border-bottom: 2px solid #e5e7eb;
-}
-
-.data-table td {
-  padding: 1rem;
-  border-bottom: 1px solid #e5e7eb;
-}
-
-.data-table tbody tr:hover {
-  background: #f9fafb;
-}
-
-.priority-badge {
-  padding: 0.25rem 0.75rem;
-  border-radius: 12px;
-  font-size: 0.85rem;
-  font-weight: 600;
-}
-
-.priority-high {
-  background: #fef3c7;
-  color: #92400e;
-}
-
-.priority-normal {
-  background: #dbeafe;
-  color: #1e40af;
-}
-
-.priority-low {
-  background: #e5e7eb;
-  color: #374151;
-}
-
-.action-buttons {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.btn-link {
-  background: none;
-  border: none;
-  color: #667eea;
-  cursor: pointer;
-  font-size: 0.9rem;
-  padding: 0.25rem 0.5rem;
-}
-
-.btn-link:hover {
-  text-decoration: underline;
-}
-
-.btn-link.danger {
-  color: #ef4444;
-}
-
-.btn-primary {
-  background: #fff;
-  color: #1e293b;
-  border: 1px solid #e2e8f0;
-  padding: 7px 16px;
-  border-radius: 10px;
-  cursor: pointer;
-  font-weight: 600;
-  font-size: 0.85rem;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-  transition: all 0.15s;
-}
-
-.btn-primary:hover {
-  background: #f1f5f9;
-}
-
-.btn-primary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.btn-secondary {
-  background: #fff;
-  color: #1e293b;
-  border: 1px solid #e2e8f0;
-  padding: 7px 16px;
-  border-radius: 10px;
-  cursor: pointer;
-  font-weight: 500;
-  font-size: 0.85rem;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-  transition: all 0.15s;
-}
-
-.btn-secondary:hover {
-  background: #f1f5f9;
-}
-
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-
-.modal {
-  background: white;
-  border-radius: 12px;
-  width: 90%;
-  max-width: 600px;
-  max-height: 90vh;
-  overflow-y: auto;
-}
-
-.modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 1.5rem;
-  border-bottom: 1px solid #e5e7eb;
-}
-
-.modal-header h3 {
-  margin: 0;
-}
-
-.btn-close {
-  background: none;
-  border: none;
-  font-size: 2rem;
-  cursor: pointer;
-  color: #9ca3af;
-  line-height: 1;
-}
-
-.modal-body {
-  padding: 1.5rem;
-}
-
-.modal-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 1rem;
-  padding: 1.5rem;
-  border-top: 1px solid #e5e7eb;
-}
-
-.alert {
-  padding: 1rem;
-  border-radius: 8px;
-  margin-bottom: 1rem;
-}
-
-.alert-error {
-  background: #fee2e2;
-  color: #991b1b;
-}
-
-.form-group {
-  margin-bottom: 1.5rem;
-}
-
-.form-group label {
-  display: block;
-  margin-bottom: 0.5rem;
-  font-weight: 600;
-  color: #374151;
-}
-
-.form-group input {
-  width: 100%;
-  padding: 0.75rem;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  font-size: 1rem;
-}
-
-.form-group input:focus {
-  outline: none;
-  border-color: #94a3b8;
-  box-shadow: 0 0 0 2px rgba(0,0,0,0.08);
-}
-
-.form-hint {
-  display: block;
-  margin-top: 0.5rem;
-  color: #6b7280;
-  font-size: 0.85rem;
-}
-
-.form-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem;
-}
-
-.info-box {
-  background: #f0f9ff;
-  border: 1px solid #bae6fd;
-  border-radius: 8px;
-  padding: 1rem;
-  margin-bottom: 1.5rem;
-}
-
-.info-box strong {
-  color: #0369a1;
-  display: block;
-  margin-bottom: 0.5rem;
-}
-
-.info-box p {
-  margin: 0;
-  color: #0c4a6e;
-  font-size: 0.9rem;
-  line-height: 1.5;
-}
-
-.modal-large {
-  max-width: 900px;
-}
-
-.bindings-section {
-  margin-bottom: 2rem;
-}
-
-.bindings-section h4 {
-  margin: 0 0 1rem 0;
-  color: #374151;
-}
-
-.hint-text {
-  color: #6b7280;
-  margin-bottom: 1rem;
-  line-height: 1.6;
-}
-
-.bindings-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 1rem;
-}
-
-.bindings-table th {
-  background: #f9fafb;
-  padding: 0.75rem;
-  text-align: left;
-  font-weight: 600;
-  color: #555;
-  border-bottom: 2px solid #e5e7eb;
-  font-size: 0.9rem;
-}
-
-.bindings-table td {
-  padding: 0.75rem;
-  border-bottom: 1px solid #e5e7eb;
-  font-size: 0.9rem;
-}
-
-.bindings-table tbody tr:hover {
-  background: #f9fafb;
-}
-
-.badge {
-  padding: 0.25rem 0.75rem;
-  border-radius: 12px;
-  font-size: 0.85rem;
-  font-weight: 600;
-}
-
-.badge-primary {
-  background: #dbeafe;
-  color: #1e40af;
-}
-
-.empty-state {
-  text-align: center;
-  padding: 3rem 1rem;
-  color: #6b7280;
-}
-
-.empty-state p {
-  margin-bottom: 1rem;
-}
-
-.bindings-info {
-  background: #f0f9ff;
-  padding: 1.5rem;
-  border-radius: 8px;
-  border-left: 4px solid #3b82f6;
-}
-
-.bindings-info h4 {
-  margin: 0 0 1rem 0;
-  color: #1e40af;
-}
-
-.bindings-info ol {
-  margin: 0;
-  padding-left: 1.5rem;
-  color: #374151;
-}
-
-.bindings-info li {
-  margin-bottom: 0.5rem;
-  line-height: 1.6;
-}
-
-.loading-text {
-  text-align: center;
-  padding: 2rem;
-  color: #6b7280;
-}
-
-.btn-link-small {
-  background: none;
-  border: none;
-  color: #667eea;
-  cursor: pointer;
-  font-size: 0.85rem;
-  padding: 0.25rem 0.5rem;
-  text-decoration: none;
-}
-
-.btn-link-small:hover {
-  text-decoration: underline;
-}
-
-@media (max-width: 768px) {
-  .form-row {
-    grid-template-columns: 1fr;
-  }
-  
-  .modal-large {
-    max-width: 95%;
-  }
-}
+.qos-name { font-weight: 500; color: hsl(var(--foreground)); }
 </style>
+

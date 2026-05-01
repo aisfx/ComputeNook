@@ -4,7 +4,7 @@
       <h3>🖥️ Web Shell</h3>
       <div class="header-actions">
         <button class="btn-secondary" @click="showSettings = true">⚙️ 终端设置</button>
-        <button class="btn-primary" @click="showKeyUpload = true">🔑 上传密钥</button>
+        <button class="btn-secondary" @click="showKeyUpload = true">🔑 上传密钥</button>
       </div>
     </div>
 
@@ -1506,7 +1506,7 @@ const deployPublicKey = async (nodeName: string) => {
   margin: 0;
   font-size: 1.1rem;
   font-weight: 600;
-  color: #374151;
+  color: hsl(var(--foreground));
 }
 
 .header-actions {
@@ -1526,14 +1526,14 @@ const deployPublicKey = async (nodeName: string) => {
 .hosts-sidebar {
   width: 200px;
   min-width: 200px;
-  background: white;
-  border: 1px solid #e5e7eb;
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
   border-radius: 12px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   transition: all 0.25s ease;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  box-shadow: var(--shadow-sm);
 }
 
 .hosts-sidebar.collapsed {
@@ -1546,8 +1546,8 @@ const deployPublicKey = async (nodeName: string) => {
   justify-content: space-between;
   align-items: center;
   padding: 0.875rem 1rem;
-  border-bottom: 1px solid #f3f4f6;
-  background: #fafafa;
+  border-bottom: 1px solid hsl(var(--border));
+  background: hsl(var(--muted) / 0.4);
   border-radius: 12px 12px 0 0;
 }
 
@@ -1555,7 +1555,7 @@ const deployPublicKey = async (nodeName: string) => {
   margin: 0;
   font-size: 0.85rem;
   font-weight: 600;
-  color: #374151;
+  color: hsl(var(--foreground));
   white-space: nowrap;
   overflow: hidden;
 }
@@ -1574,12 +1574,12 @@ const deployPublicKey = async (nodeName: string) => {
   padding: 0.25rem 0.4rem;
   border-radius: 6px;
   transition: background 0.15s;
-  color: #6b7280;
+  color: hsl(var(--muted-foreground));
 }
 
 .btn-icon:hover {
-  background: #f3f4f6;
-  color: #374151;
+  background: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
 }
 
 .hosts-list {
@@ -1601,13 +1601,13 @@ const deployPublicKey = async (nodeName: string) => {
 }
 
 .host-item:hover:not(.disabled) {
-  background: #f0f4ff;
-  border-color: #c7d2fe;
+  background: hsl(var(--accent));
+  border-color: hsl(var(--border));
 }
 
 .host-item.active {
-  background: #eef2ff;
-  border-color: #818cf8;
+  background: hsl(var(--primary) / 0.08);
+  border-color: hsl(var(--primary) / 0.4);
 }
 
 .host-item.disabled {
@@ -1702,7 +1702,7 @@ const deployPublicKey = async (nodeName: string) => {
 
 .host-name {
   font-weight: 600;
-  color: #1f2937;
+  color: hsl(var(--foreground));
   font-size: 0.85rem;
   white-space: nowrap;
   overflow: hidden;
@@ -1711,7 +1711,7 @@ const deployPublicKey = async (nodeName: string) => {
 
 .host-address {
   font-size: 0.72rem;
-  color: #9ca3af;
+  color: hsl(var(--muted-foreground));
   font-family: monospace;
   white-space: nowrap;
   overflow: hidden;
@@ -1824,9 +1824,9 @@ const deployPublicKey = async (nodeName: string) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: white;
+  background: hsl(var(--card));
   border-radius: 12px;
-  border: 2px dashed #e5e7eb;
+  border: 2px dashed hsl(var(--border));
 }
 
 .prompt-content {
@@ -1842,13 +1842,13 @@ const deployPublicKey = async (nodeName: string) => {
 
 .prompt-content h3 {
   margin: 0 0 0.5rem 0;
-  color: #374151;
+  color: hsl(var(--foreground));
   font-size: 1.1rem;
 }
 
 .prompt-content p {
   margin: 0;
-  color: #9ca3af;
+  color: hsl(var(--muted-foreground));
   font-size: 0.9rem;
 }
 
@@ -1863,29 +1863,36 @@ const deployPublicKey = async (nodeName: string) => {
   align-items: center;
   justify-content: center;
   z-index: 1000;
+  backdrop-filter: blur(2px);
 }
 
 .modal-content {
-  background: white;
-  border-radius: 12px;
+  background: hsl(var(--card));
+  color: hsl(var(--card-foreground));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius-xl);
   width: 90%;
   max-width: 600px;
   max-height: 80vh;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  box-shadow: var(--shadow-xl);
 }
 
 .modal-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1.5rem;
-  border-bottom: 1px solid #e5e7eb;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid hsl(var(--border));
 }
 
 .modal-header h4 {
   margin: 0;
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  color: hsl(var(--foreground));
 }
 
 .close-btn {
@@ -1893,11 +1900,19 @@ const deployPublicKey = async (nodeName: string) => {
   border: none;
   font-size: 1.5rem;
   cursor: pointer;
-  color: #6b7280;
+  color: hsl(var(--muted-foreground));
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  transition: all 0.15s;
 }
 
 .close-btn:hover {
-  color: #374151;
+  background: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
 }
 
 .modal-body {
@@ -1912,7 +1927,7 @@ const deployPublicKey = async (nodeName: string) => {
 }
 
 .node-card {
-  border: 2px solid #e5e7eb;
+  border: 2px solid hsl(var(--border));
   border-radius: 8px;
   padding: 1rem;
   cursor: pointer;
@@ -1920,7 +1935,7 @@ const deployPublicKey = async (nodeName: string) => {
 }
 
 .node-card:hover:not(.disabled) {
-  border-color: #667eea;
+  border-color: hsl(var(--primary));
   transform: translateY(-2px);
 }
 
@@ -1975,16 +1990,18 @@ const deployPublicKey = async (nodeName: string) => {
 }
 
 .upload-zone {
-  border: 2px dashed #d1d5db;
+  border: 2px dashed hsl(var(--border));
   border-radius: 8px;
   padding: 2rem;
   text-align: center;
   cursor: pointer;
   transition: border-color 0.2s;
+  color: hsl(var(--muted-foreground));
 }
 
 .upload-zone:hover {
-  border-color: #667eea;
+  border-color: hsl(var(--primary));
+  color: hsl(var(--foreground));
 }
 
 .key-tabs {
@@ -1996,23 +2013,24 @@ const deployPublicKey = async (nodeName: string) => {
 .key-tab {
   flex: 1;
   padding: 0.5rem;
-  border: 1px solid #e5e7eb;
+  border: 1px solid hsl(var(--border));
   border-radius: 6px;
-  background: #f9fafb;
+  background: hsl(var(--muted));
+  color: hsl(var(--foreground));
   cursor: pointer;
   font-size: 0.9rem;
   transition: all 0.15s;
 }
 
 .key-tab.active {
-  background: #667eea;
-  color: #fff;
-  border-color: #667eea;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  border-color: hsl(var(--primary));
 }
 
 .pubkey-box {
-  background: #f9fafb;
-  border: 1px solid #e5e7eb;
+  background: hsl(var(--muted));
+  border: 1px solid hsl(var(--border));
   border-radius: 8px;
   overflow: hidden;
 }
@@ -2022,15 +2040,15 @@ const deployPublicKey = async (nodeName: string) => {
   justify-content: space-between;
   align-items: center;
   padding: 0.5rem 0.75rem;
-  background: #f3f4f6;
+  background: hsl(var(--muted) / 0.7);
   font-size: 0.8rem;
-  color: #555;
+  color: hsl(var(--muted-foreground));
 }
 
 .btn-copy-small {
   padding: 0.2rem 0.6rem;
-  background: #667eea;
-  color: #fff;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
   border: none;
   border-radius: 4px;
   font-size: 0.8rem;
@@ -2087,10 +2105,11 @@ const deployPublicKey = async (nodeName: string) => {
 }
 
 .user-info {
-  background: #f0f9ff;
-  padding: 1rem;
+  background: hsl(var(--primary) / 0.06);
+  border: 1px solid hsl(var(--primary) / 0.15);
+  padding: 0.75rem 1rem;
   border-radius: 8px;
-  margin-bottom: 1.5rem;
+  margin-bottom: 1.25rem;
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -2099,15 +2118,16 @@ const deployPublicKey = async (nodeName: string) => {
 
 .info-label {
   font-weight: 600;
-  color: #1e40af;
+  color: hsl(var(--foreground));
 }
 
 .info-value {
-  color: #1e3a8a;
+  color: hsl(var(--foreground));
   font-family: monospace;
-  background: white;
-  padding: 0.25rem 0.75rem;
+  background: hsl(var(--muted));
+  padding: 0.2rem 0.6rem;
   border-radius: 4px;
+  font-size: 0.875rem;
 }
 
 .info-hint {
@@ -2124,7 +2144,7 @@ const deployPublicKey = async (nodeName: string) => {
 }
 
 .auth-option {
-  border: 2px solid #e5e7eb;
+  border: 2px solid hsl(var(--border));
   border-radius: 8px;
   padding: 1.5rem;
   text-align: center;
@@ -2134,24 +2154,19 @@ const deployPublicKey = async (nodeName: string) => {
 }
 
 .auth-option:hover {
-  border-color: #667eea;
+  border-color: hsl(var(--primary));
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
-}
-
-.auth-icon {
-  font-size: 2.5rem;
-  margin-bottom: 0.5rem;
+  box-shadow: 0 4px 12px hsl(var(--primary) / 0.15);
 }
 
 .auth-option h5 {
   margin: 0.5rem 0;
-  color: #374151;
+  color: hsl(var(--foreground));
 }
 
 .auth-option p {
   margin: 0;
-  color: #6b7280;
+  color: hsl(var(--muted-foreground));
   font-size: 0.9rem;
 }
 
@@ -2175,33 +2190,38 @@ const deployPublicKey = async (nodeName: string) => {
 }
 
 .password-input-group {
-  margin: 1.5rem 0;
+  margin: 1.25rem 0;
 }
 
 .password-input-group label {
   display: block;
   margin-bottom: 0.5rem;
   font-weight: 600;
-  color: #374151;
+  color: hsl(var(--foreground));
+  font-size: var(--font-size-sm);
 }
 
 .password-input {
   width: 100%;
   padding: 0.75rem;
-  border: 2px solid #e5e7eb;
+  border: 1px solid hsl(var(--input));
   border-radius: 8px;
   font-size: 1rem;
-  transition: border-color 0.2s;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  transition: border-color 0.2s, box-shadow 0.2s;
+  box-sizing: border-box;
 }
 
 .password-input:focus {
   outline: none;
-  border-color: #667eea;
+  border-color: hsl(var(--ring));
+  box-shadow: 0 0 0 2px hsl(var(--ring) / 0.2);
 }
 
 .input-hint {
   margin-top: 0.5rem;
-  color: #6b7280;
+  color: hsl(var(--muted-foreground));
   font-size: 0.85rem;
 }
 
@@ -2224,7 +2244,7 @@ const deployPublicKey = async (nodeName: string) => {
 .setting-label {
   display: block;
   font-weight: 600;
-  color: #374151;
+  color: hsl(var(--foreground));
   margin-bottom: 0.75rem;
   font-size: 0.95rem;
 }
@@ -2239,7 +2259,7 @@ const deployPublicKey = async (nodeName: string) => {
   flex: 1;
   height: 6px;
   border-radius: 3px;
-  background: #e5e7eb;
+  background: hsl(var(--border));
   outline: none;
   -webkit-appearance: none;
 }
@@ -2250,7 +2270,7 @@ const deployPublicKey = async (nodeName: string) => {
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: #667eea;
+  background: hsl(var(--primary));
   cursor: pointer;
 }
 
@@ -2258,7 +2278,7 @@ const deployPublicKey = async (nodeName: string) => {
   width: 18px;
   height: 18px;
   border-radius: 50%;
-  background: #667eea;
+  background: hsl(var(--primary));
   cursor: pointer;
   border: none;
 }
@@ -2267,7 +2287,7 @@ const deployPublicKey = async (nodeName: string) => {
   min-width: 50px;
   text-align: right;
   font-weight: 600;
-  color: #667eea;
+  color: hsl(var(--primary));
 }
 
 .theme-grid {
@@ -2277,7 +2297,7 @@ const deployPublicKey = async (nodeName: string) => {
 }
 
 .theme-card {
-  border: 2px solid #e5e7eb;
+  border: 2px solid hsl(var(--border));
   border-radius: 8px;
   overflow: hidden;
   cursor: pointer;
@@ -2285,14 +2305,14 @@ const deployPublicKey = async (nodeName: string) => {
 }
 
 .theme-card:hover {
-  border-color: #667eea;
+  border-color: hsl(var(--primary));
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
+  box-shadow: 0 4px 12px hsl(var(--primary) / 0.15);
 }
 
 .theme-card.active {
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+  border-color: hsl(var(--primary));
+  box-shadow: 0 0 0 3px hsl(var(--primary) / 0.2);
 }
 
 .theme-preview {
@@ -2311,81 +2331,73 @@ const deployPublicKey = async (nodeName: string) => {
 .cursor-btn {
   flex: 1;
   padding: 0.75rem;
-  border: 2px solid #e5e7eb;
+  border: 2px solid hsl(var(--border));
   border-radius: 8px;
-  background: white;
+  background: hsl(var(--card));
   cursor: pointer;
   font-weight: 600;
-  color: #374151;
+  color: hsl(var(--foreground));
   transition: all 0.2s;
   text-transform: capitalize;
 }
 
 .cursor-btn:hover {
-  border-color: #667eea;
-  background: #f0f9ff;
+  border-color: hsl(var(--primary));
+  background: hsl(var(--accent));
 }
 
 .cursor-btn.active {
-  border-color: #667eea;
-  background: #667eea;
-  color: white;
+  border-color: hsl(var(--primary));
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
 }
 
-.btn-primary {
-  background: #fff;
-  color: #1e293b;
-  border: 1px solid #e2e8f0;
-  padding: 7px 16px;
-  border-radius: 10px;
-  cursor: pointer;
-  font-weight: 600;
-  font-size: 0.875rem;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-  transition: all 0.15s;
-}
-.btn-primary:hover { background: #f1f5f9; }
 .btn-primary.btn-large { padding: 9px 20px; font-size: 0.95rem; }
 
 .btn-secondary {
-  background: #fff;
-  color: #1e293b;
-  border: 1px solid #e2e8f0;
+  background: hsl(var(--card));
+  color: hsl(var(--foreground));
+  border: 1px solid hsl(var(--border));
   padding: 7px 16px;
   border-radius: 10px;
   cursor: pointer;
   font-weight: 500;
   font-size: 0.875rem;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  box-shadow: var(--shadow-sm);
   transition: all 0.15s;
 }
-.btn-secondary:hover { background: #f1f5f9; }
+.btn-secondary:hover { background: hsl(var(--accent)); }
 
-.btn-small { padding: 5px 12px; font-size: 0.82rem; }
+.btn-small {
+  padding: 5px 12px;
+  font-size: 0.82rem;
+  border-radius: 8px;
+}
 
 .btn-danger {
-  background: #fff;
-  color: #ef4444;
-  border: 1px solid rgba(239,68,68,0.3);
-  border-radius: 10px;
+  background: hsl(var(--card));
+  color: hsl(var(--destructive));
+  border: 1px solid hsl(var(--destructive) / 0.3);
+  border-radius: 8px;
   padding: 7px 16px;
   cursor: pointer;
   font-weight: 500;
   font-size: 0.875rem;
   transition: all 0.15s;
 }
-.btn-danger:hover { background: #fef2f2; }
+.btn-danger:hover { background: hsl(var(--destructive) / 0.06); }
 
 .loading {
   text-align: center;
   padding: 2rem;
-  color: #6b7280;
+  color: hsl(var(--muted-foreground));
 }
 
 .error-message {
   padding: 1rem;
-  background: #fee2e2;
-  color: #991b1b;
+  background: hsl(var(--destructive) / 0.1);
+  color: hsl(var(--destructive));
+  border: 1px solid hsl(var(--destructive) / 0.3);
   border-radius: 8px;
   margin-bottom: 1rem;
 }

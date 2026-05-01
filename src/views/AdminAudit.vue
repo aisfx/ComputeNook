@@ -1319,19 +1319,7 @@ onMounted(() => {
   text-decoration: underline;
 }
 
-.btn-primary {
-  background: #fff;
-  color: #1e293b;
-  border: 1px solid #e2e8f0;
-  padding: 7px 16px;
-  border-radius: 10px;
-  cursor: pointer;
-  font-weight: 600;
-  font-size: 0.875rem;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-  transition: all 0.15s;
-}
-.btn-primary:hover { background: #f1f5f9; }
+
 
 .btn-secondary {
   background: #fff;

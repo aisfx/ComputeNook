@@ -108,6 +108,7 @@ import { useRouter } from 'vue-router'
 import axios from 'axios'
 import QRCode from 'qrcode'
 import '@/api/index'
+import dialog from '../utils/dialog'
 
 const router = useRouter()
 
@@ -202,8 +203,8 @@ onMounted(() => {
 })
 const copySecret = () => {
   navigator.clipboard?.writeText(secret.value)
-    .then(() => alert('密钥已复制'))
-    .catch(() => alert(secret.value))
+    .then(() => dialog.success('密钥已复制'))
+    .catch(() => dialog.info(secret.value, '密钥'))
 }
 
 const handleConfirm = async () => {
@@ -278,9 +279,7 @@ const goLogin = () => router.push('/login')
 .code-input:focus { border-color: hsl(var(--ring)); box-shadow: 0 0 0 2px hsl(var(--ring) / 0.2); }
 
 /* 按钮 */
-.btn-primary { width: 100%; padding: 10px; background: hsl(var(--primary)); color: hsl(var(--primary-foreground)); border: none; border-radius: 8px; font-size: 0.9rem; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: opacity 0.15s; margin-bottom: 0.5rem; }
-.btn-primary:hover:not(:disabled) { opacity: 0.9; }
-.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-primary { width: 100%; margin-bottom: 0.5rem; }
 .btn-back { width: 100%; padding: 8px; background: none; border: 1px solid hsl(var(--border)); border-radius: 8px; font-size: 0.875rem; color: hsl(var(--muted-foreground)); cursor: pointer; transition: background 0.15s; }
 .btn-back:hover { background: hsl(var(--accent)); }
 
