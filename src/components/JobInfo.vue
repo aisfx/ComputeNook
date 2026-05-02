@@ -109,10 +109,18 @@
         />
       </div>
       <div class="filter-right">
-        <div class="view-switch">
-          <button :class="['vs-btn', { active: viewMode === 'my' }]" @click="viewMode = 'my'; pagination.page = 1; loadJobs()">我的作业</button>
+        <div class="view-switch" v-if="isAdmin()">
+          <button :class="['vs-btn', { active: viewMode === 'my' }]" @click="viewMode = 'my'; userFilter = ''; pagination.page = 1; loadJobs()">我的作业</button>
           <button :class="['vs-btn', { active: viewMode === 'all' }]" @click="viewMode = 'all'; pagination.page = 1; loadJobs()">所有作业</button>
         </div>
+        <input
+          v-if="viewMode === 'all' && isAdmin()"
+          v-model="userFilter"
+          class="filter-sel"
+          placeholder="按用户名筛选..."
+          style="width:130px"
+          @input="pagination.page = 1; loadJobs()"
+        />
         <select v-model="statusFilter" class="filter-sel" @change="pagination.page = 1">
           <option value="">全部状态</option>
           <option value="RUNNING">运行中</option>
@@ -218,6 +226,7 @@ const viewMode = ref<'my' | 'all'>('my')
 const statusFilter = ref('')
 const partitionFilter = ref('')
 const searchText = ref('')
+const userFilter = ref('')
 const partitions = ref<string[]>([])
 const currentUserInfo = ref<any>(null)
 const currentUser = computed(() => currentUserInfo.value?.username || '')
@@ -354,6 +363,7 @@ const loadJobs = async () => {
     if (!token) throw new Error('请先登录')
     let url = `${getApiBase()}/api/jobs?page=${pagination.value.page}&page_size=${pagination.value.pageSize}`
     if (viewMode.value === 'my') url += `&user=${encodeURIComponent(currentUser.value)}`
+    else if (viewMode.value === 'all' && userFilter.value.trim()) url += `&user=${encodeURIComponent(userFilter.value.trim())}`
     const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
     if (!res.ok) { allJobs.value = []; updateSummary(); return }
     const result = await res.json()
