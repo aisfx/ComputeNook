@@ -413,11 +413,18 @@
                 <span class="connection-status" :class="tab.status">{{ tab.status }}</span>
               </div>
               <div class="terminal-actions">
-                <button class="btn-small btn-secondary" @click="toggleFullscreen" :title="isFullscreen ? '退出全屏' : '全屏'">
-                  {{ isFullscreen ? '🗗' : '🗖' }}
+                <button class="term-btn" @click="toggleFullscreen" :title="isFullscreen ? '退出全屏' : '全屏'">
+                  <svg v-if="!isFullscreen" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+                  <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="10" y1="14" x2="3" y2="21"/><line x1="21" y1="3" x2="14" y2="10"/></svg>
                 </button>
-                <button class="btn-small btn-secondary" @click="clearTab(tab.id)">清屏</button>
-                <button class="btn-small btn-danger" @click="disconnectTab(tab.id)">断开连接</button>
+                <button class="term-btn" @click="clearTab(tab.id)" title="清屏">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+                  <span>清屏</span>
+                </button>
+                <button class="term-btn term-btn-danger" @click="disconnectTab(tab.id)" title="断开连接">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                  <span>断开</span>
+                </button>
               </div>
             </div>
             <div class="terminal-content">
@@ -1724,71 +1731,77 @@ const deployPublicKey = async (nodeName: string) => {
 .tab-bar {
   display: flex;
   align-items: center;
-  background: #1a1a2e;
+  background: #16161e;
   border-radius: 8px 8px 0 0;
-  padding: 0 4px;
+  padding: 0 6px;
   gap: 2px;
   flex-shrink: 0;
   overflow-x: auto;
   scrollbar-width: none;
+  border-bottom: 1px solid #2a2a3a;
 }
 .tab-bar::-webkit-scrollbar { display: none; }
 
 .shell-tab {
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 6px 10px;
+  gap: 6px;
+  padding: 7px 12px;
   border-radius: 6px 6px 0 0;
   cursor: pointer;
-  font-size: 0.82rem;
-  color: #9ca3af;
+  font-size: 0.8rem;
+  color: #6b7280;
   white-space: nowrap;
   transition: background 0.15s, color 0.15s;
   user-select: none;
-  margin-top: 4px;
+  margin-top: 5px;
+  border: 1px solid transparent;
+  border-bottom: none;
 }
-.shell-tab:hover { background: #2d2d44; color: #e5e7eb; }
-.shell-tab.active { background: #1e1e1e; color: #fff; }
+.shell-tab:hover { background: #1e1e2e; color: #c4c4d4; }
+.shell-tab.active {
+  background: #1e1e2e;
+  color: #e2e2f0;
+  border-color: #2a2a3a;
+  border-bottom-color: #1e1e2e;
+}
 
-.tab-dot { font-size: 0.6rem; }
+.tab-dot { font-size: 0.55rem; }
 .dot-connected { color: #10b981; }
-.dot-disconnected { color: #6b7280; }
+.dot-disconnected { color: #4b5563; }
 
 .tab-label { max-width: 100px; overflow: hidden; text-overflow: ellipsis; }
 
 .tab-close {
-  background: none; border: none; color: #6b7280;
-  cursor: pointer; font-size: 1rem; line-height: 1;
-  padding: 0 2px; border-radius: 3px;
+  background: none; border: none; color: #4b5563;
+  cursor: pointer; font-size: 0.9rem; line-height: 1;
+  padding: 1px 3px; border-radius: 3px;
   transition: color 0.15s, background 0.15s;
+  display: flex; align-items: center;
 }
-.tab-close:hover { color: #ef4444; background: rgba(239,68,68,0.1); }
+.tab-close:hover { color: #ef4444; background: rgba(239,68,68,0.12); }
 
 .tab-new {
-  background: none; border: none; color: #6b7280;
-  cursor: pointer; font-size: 1.1rem; padding: 4px 8px;
-  border-radius: 6px; margin-left: 2px; margin-top: 4px;
+  background: none; border: none; color: #4b5563;
+  cursor: pointer; font-size: 1rem; padding: 4px 8px;
+  border-radius: 5px; margin-left: 2px; margin-top: 4px;
   transition: color 0.15s, background 0.15s;
 }
-.tab-new:hover { color: #fff; background: #2d2d44; }
+.tab-new:hover { color: #a5b4fc; background: rgba(165,180,252,0.1); }
 
 .terminal-area.fullscreen {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  top: 0; left: 0; right: 0; bottom: 0;
   z-index: 1000;
-  background: #1e1e1e;
+  background: #1e1e2e;
 }
 
 .terminal-container {
   flex: 1;
   display: flex;
   flex-direction: column;
-  background: #1e1e1e;
-  border-radius: 8px;
+  background: #1e1e2e;
+  border-radius: 0 0 8px 8px;
   overflow: hidden;
 }
 
@@ -1796,49 +1809,67 @@ const deployPublicKey = async (nodeName: string) => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1rem;
-  background: #2d2d2d;
-  border-bottom: 1px solid #404040;
+  padding: 8px 14px;
+  background: #1e1e2e;
+  border-bottom: 1px solid #2a2a3a;
 }
 
 .terminal-info {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 10px;
 }
 
 .terminal-title {
+  font-size: 0.85rem;
   font-weight: 600;
-  color: #ffffff;
+  color: #c4c4d4;
 }
 
 .connection-status {
-  padding: 0.25rem 0.75rem;
-  border-radius: 12px;
-  font-size: 0.85rem;
+  padding: 2px 10px;
+  border-radius: 20px;
+  font-size: 0.75rem;
   font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
 .connection-status.connected {
-  background: #d1fae5;
-  color: #065f46;
+  background: rgba(16,185,129,0.15);
+  color: #34d399;
+  border: 1px solid rgba(16,185,129,0.25);
 }
 
 .connection-status.connecting {
-  background: #fef3c7;
-  color: #92400e;
+  background: rgba(251,191,36,0.12);
+  color: #fbbf24;
+  border: 1px solid rgba(251,191,36,0.2);
 }
 
 .connection-status.disconnected,
 .connection-status.error {
-  background: #fee2e2;
-  color: #991b1b;
+  background: rgba(239,68,68,0.12);
+  color: #f87171;
+  border: 1px solid rgba(239,68,68,0.2);
 }
 
 .terminal-actions {
   display: flex;
-  gap: 0.5rem;
+  gap: 6px;
+  align-items: center;
 }
+
+/* terminal header 내의 深色按钮 */
+.term-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 10px; border-radius: 6px;
+  background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+  color: #a1a1b5; font-size: 0.78rem; font-weight: 500;
+  cursor: pointer; transition: all 0.15s; white-space: nowrap;
+}
+.term-btn:hover { background: rgba(255,255,255,0.12); color: #e2e2f0; border-color: rgba(255,255,255,0.18); }
+.term-btn-danger { color: #f87171; border-color: rgba(248,113,113,0.25); background: rgba(248,113,113,0.08); }
+.term-btn-danger:hover { background: rgba(248,113,113,0.18); color: #fca5a5; }
 
 .terminal-content {
   flex: 1;
@@ -1849,7 +1880,7 @@ const deployPublicKey = async (nodeName: string) => {
 
 .xterm-container {
   flex: 1;
-  padding: 0.5rem;
+  padding: 4px 6px;
 }
 
 .connection-prompt {
