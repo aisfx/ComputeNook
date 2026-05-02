@@ -222,6 +222,7 @@ import NetworkTopology from './NetworkTopology.vue'
 import AIAssistant from '../components/AIAssistant.vue'
 import AlertNotification from '../components/AlertNotification.vue'
 import { getUser, logout, setupAxiosInterceptors, isAdmin as checkAdmin } from '../utils/auth'
+import { dialog } from '../utils/dialog'
 
 const router = useRouter()
 const currentView = ref('dashboard')
@@ -256,6 +257,7 @@ const cycleTheme = () => {
   const idx = THEMES.indexOf(theme.value)
   theme.value = THEMES[(idx + 1) % THEMES.length]
   localStorage.setItem('theme', theme.value)
+  document.documentElement.setAttribute('data-theme', theme.value)
 }
 
 const handleOpenDirectory = (path: string) => {
@@ -322,7 +324,7 @@ const currentTitle = computed(() => {
 })
 
 const handleLogout = async () => {
-  if (confirm('确定要退出登录吗？')) {
+  if (await dialog.confirm('确定要退出登录吗？', { title: '退出登录' })) {
     await logout()
     router.push('/login')
   }
@@ -361,6 +363,7 @@ onMounted(() => {
   isAdmin.value = checkAdmin()
   const saved = localStorage.getItem('theme') as 'light' | 'dark' | 'ocean' | null
   if (saved && ['light', 'dark', 'ocean'].includes(saved)) theme.value = saved as 'light' | 'dark' | 'ocean'
+  document.documentElement.setAttribute('data-theme', theme.value)
 })
 </script>
 

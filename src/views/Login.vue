@@ -177,6 +177,7 @@ const cycleTheme = () => {
   const idx = THEMES_LOGIN.indexOf(theme.value)
   theme.value = THEMES_LOGIN[(idx + 1) % THEMES_LOGIN.length]
   localStorage.setItem('theme', theme.value)
+  document.documentElement.setAttribute('data-theme', theme.value)
 }
 
 const getBaseUrl = () => {
@@ -266,6 +267,7 @@ const goToSetup = () => {
 onMounted(() => {
   const saved = localStorage.getItem('theme') as 'light' | 'dark' | 'ocean' | null
   theme.value = (saved && ['light', 'dark', 'ocean'].includes(saved)) ? saved as 'light' | 'dark' | 'ocean' : 'dark'
+  document.documentElement.setAttribute('data-theme', theme.value)
 })
 </script>
 

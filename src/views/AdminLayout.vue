@@ -187,8 +187,8 @@
             <span class="status-dot"></span>
             <span>集群在线</span>
           </div>
-          <button class="icon-btn" @click="toggleTheme" :title="theme === 'dark' ? '切换亮色' : '切换暗色'">
-            <span>{{ theme === 'dark' ? '☀️' : '🌙' }}</span>
+          <button class="icon-btn" @click="toggleTheme" :title="themeLabel">
+            <span>{{ themeIcon }}</span>
           </button>
           <button class="btn-back" @click="goHome" title="返回主界面">← 返回主界面</button>
           <button class="icon-btn danger" @click="handleLogout" title="退出">
@@ -239,6 +239,7 @@ import CustomDashboard from './CustomDashboard.vue'
 import AIDiagnostics from './AIDiagnostics.vue'
 import AdminDashboard from '../components/AdminDashboard.vue'
 import { getUser, logout, setupAxiosInterceptors, isAdmin as checkAdmin } from '../utils/auth'
+import { dialog } from '../utils/dialog'
 
 const router = useRouter()
 const adminTab = ref('dashboard')
@@ -246,7 +247,13 @@ const monitoringTab = ref('cluster')
 const groupExpanded = reactive({ user: true, account: false, resource: false, monitoring: true, infra: true })
 const sidebarCollapsed = ref(false)
 const currentUser = ref<any>(null)
-const theme = ref<'light' | 'dark'>('light')
+const theme = ref<'light' | 'dark' | 'ocean'>('light')
+
+const THEMES: Array<'light' | 'dark' | 'ocean'> = ['light', 'dark', 'ocean']
+const THEME_ICONS: Record<string, string> = { light: '🌙', dark: '🌊', ocean: '☀️' }
+const THEME_LABELS: Record<string, string> = { light: '切换暗色', dark: '切换海洋', ocean: '切换亮色' }
+const themeIcon = computed(() => THEME_ICONS[theme.value])
+const themeLabel = computed(() => THEME_LABELS[theme.value])
 
 const currentTitle = computed(() => {
   const map: Record<string, string> = {
@@ -275,14 +282,16 @@ const userInitial = computed(() => {
 })
 
 const toggleTheme = () => {
-  theme.value = theme.value === 'light' ? 'dark' : 'light'
+  const idx = THEMES.indexOf(theme.value)
+  theme.value = THEMES[(idx + 1) % THEMES.length]
   localStorage.setItem('theme', theme.value)
+  document.documentElement.setAttribute('data-theme', theme.value)
 }
 
 const goHome = () => router.push('/dashboard')
 
-const handleLogout = () => {
-  if (confirm('确定要退出登录吗？')) {
+const handleLogout = async () => {
+  if (await dialog.confirm('确定要退出登录吗？', { title: '退出登录' })) {
     logout()
     router.push('/login')
   }
@@ -295,8 +304,9 @@ onMounted(() => {
     router.push('/dashboard')
     return
   }
-  const saved = localStorage.getItem('theme') as 'light' | 'dark' | null
-  if (saved) theme.value = saved
+  const saved = localStorage.getItem('theme') as 'light' | 'dark' | 'ocean' | null
+  if (saved && ['light', 'dark', 'ocean'].includes(saved)) theme.value = saved as 'light' | 'dark' | 'ocean'
+  document.documentElement.setAttribute('data-theme', theme.value)
 })
 </script>
 

@@ -79,42 +79,37 @@ table tbody tr:last-child td {
   border-bottom: none !important;
 }
 
-/* ===== 全局覆盖：按钮（修复各页面硬编码按钮） ===== */
-/* btn-primary 硬编码覆盖 */
-.admin-users .btn-primary,
-.admin-groups .btn-primary,
-.admin-qos .btn-primary,
-.admin-hours .btn-primary,
-.admin-quota .btn-primary,
-.admin-audit .btn-primary,
-.admin-slurm-accounts .btn-primary,
-.admin-slurm-users .btn-primary,
-.admin-associations .btn-primary,
-.job-management .btn-primary,
-.reports .btn-primary,
-.profile .btn-primary {
+/* ===== 全局覆盖：按钮 ===== */
+/* btn-primary — 全局统一，Teleport 弹窗也能生效 */
+.btn-primary {
   background: hsl(var(--primary)) !important;
   color: hsl(var(--primary-foreground)) !important;
   border-color: hsl(var(--primary)) !important;
+  border-radius: var(--radius-md) !important;
 }
+.btn-primary:hover:not(:disabled) {
+  background: hsl(var(--primary) / 0.88) !important;
+  border-color: hsl(var(--primary) / 0.88) !important;
+}
+.btn-primary:disabled { opacity: 0.45 !important; cursor: not-allowed !important; }
 
-/* btn-secondary 硬编码覆盖 */
-.admin-users .btn-secondary,
-.admin-groups .btn-secondary,
-.admin-qos .btn-secondary,
-.admin-hours .btn-secondary,
-.admin-quota .btn-secondary,
-.admin-audit .btn-secondary,
-.admin-slurm-accounts .btn-secondary,
-.admin-slurm-users .btn-secondary,
-.admin-associations .btn-secondary,
-.job-management .btn-secondary,
-.reports .btn-secondary,
-.profile .btn-secondary {
+/* btn-secondary — 全局统一 */
+.btn-secondary {
   background: hsl(var(--card)) !important;
   color: hsl(var(--foreground)) !important;
   border-color: hsl(var(--border)) !important;
+  border-radius: var(--radius-md) !important;
 }
+.btn-secondary:hover:not(:disabled) { background: hsl(var(--accent)) !important; }
+
+/* btn-outline — 全局统一 */
+.btn-outline {
+  background: transparent !important;
+  color: hsl(var(--foreground)) !important;
+  border-color: hsl(var(--border)) !important;
+  border-radius: var(--radius-md) !important;
+}
+.btn-outline:hover:not(:disabled) { background: hsl(var(--accent)) !important; }
 
 /* ===== 全局覆盖：Dropdown ===== */
 .btn-action-toggle {
