@@ -2,7 +2,10 @@
   <div class="reports-page">
     <!-- 顶部筛选栏 -->
     <div class="filter-bar">
-      <span class="page-title">📊 报表中心</span>
+      <div class="page-title-wrap">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        <span class="page-title">报表中心</span>
+      </div>
       <div class="filter-bar-right">
         <div class="filter-item">
           <label>开始日期</label>
@@ -19,37 +22,51 @@
             <option v-for="p in partitions" :key="p" :value="p">{{ p }}</option>
           </select>
         </div>
-        <span v-if="dateError" class="date-error">⚠ {{ dateError }}</span>
+        <span v-if="dateError" class="date-error">{{ dateError }}</span>
         <button class="btn-primary" @click="loadAll" :disabled="loading || !!dateError">
-          {{ loading ? '查询中...' : '🔍 查询' }}
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          {{ loading ? '查询中...' : '查询' }}
         </button>
         <button class="btn-secondary" @click="exportExcel" :disabled="!hasAnyData">
-          📥 导出 Excel
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          导出 Excel
         </button>
       </div>
     </div>
 
     <div v-if="loading" class="state-card">
-      <div class="spinner"></div><span>加载中...</span>
+      <div class="spinner"></div>
+      <span>加载中...</span>
     </div>
-    <div v-else-if="globalError" class="state-card error-state">⚠ {{ globalError }}</div>
+    <div v-else-if="globalError" class="state-card error-state">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      {{ globalError }}
+    </div>
 
-    <!-- 图表区域：queried 后始终渲染，用 v-show 控制可见性保证 ref 有效 -->
     <template v-if="queried">
       <!-- 作业趋势折线图 -->
       <div class="card chart-card">
-        <div class="card-title">每月各队列作业数趋势</div>
+        <div class="card-title">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          每月各队列作业数趋势
+        </div>
         <div ref="lineChartRef" style="width:100%;height:300px"></div>
       </div>
 
       <!-- 作业规模 + 核时柱状图 -->
       <div class="chart-row">
         <div class="card chart-card">
-          <div class="card-title">作业规模分布</div>
+          <div class="card-title">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="18" y="3" width="4" height="18"/><rect x="10" y="8" width="4" height="13"/><rect x="2" y="13" width="4" height="8"/></svg>
+            作业规模分布
+          </div>
           <div ref="scaleChartRef" style="width:100%;height:280px"></div>
         </div>
         <div class="card chart-card">
-          <div class="card-title">GPU / CPU 核时用量</div>
+          <div class="card-title">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12l4 6-10 13L2 9z"/></svg>
+            GPU / CPU 核时用量
+          </div>
           <div ref="usageChartRef" style="width:100%;height:280px"></div>
         </div>
       </div>
@@ -57,31 +74,44 @@
       <!-- 计费核时 + 配额使用进度 -->
       <div class="chart-row">
         <div class="card chart-card">
-          <div class="card-title">计费核时使用比例</div>
+          <div class="card-title">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            计费核时使用比例
+          </div>
           <div ref="billingChartRef" style="width:100%;height:280px"></div>
         </div>
         <div class="card chart-card">
-          <div class="card-title">配额使用率 <span class="account-tag" v-if="quotaStats?.account">{{ quotaStats.account }}</span></div>
+          <div class="card-title">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+            配额使用率
+            <span class="account-tag" v-if="quotaStats?.account">{{ quotaStats.account }}</span>
+          </div>
           <div ref="quotaChartRef" style="width:100%;height:280px"></div>
         </div>
       </div>
 
       <!-- 存储用量柱状图 -->
       <div class="card" v-show="storageStats && storageStats.length > 0">
-        <div class="card-title">存储配额使用情况</div>
+        <div class="card-title">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+          存储配额使用情况
+        </div>
         <div ref="storageChartRef" :style="{ width:'100%', height: storageChartHeight + 'px' }"></div>
       </div>
 
       <!-- QoS 计费核时使用量 -->
       <div class="card chart-card">
-        <div class="card-title">QoS 计费核时使用量</div>
+        <div class="card-title">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          QoS 计费核时使用量
+        </div>
         <div ref="qosChartRef" style="width:100%;height:280px"></div>
       </div>
     </template>
 
     <div v-else-if="!loading" class="state-card">
-      <div class="empty-icon">📊</div>
-      <p>暂无数据</p>
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:#d1d5db"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+      <p>选择时间范围后点击查询</p>
     </div>
   </div>
 </template>
@@ -494,60 +524,82 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.reports-page { display: flex; flex-direction: column; gap: 1rem; padding: 1rem 1.25rem; box-sizing: border-box; }
+.reports-page { display: flex; flex-direction: column; gap: 1rem; }
 
+/* ── 筛选栏 ── */
 .filter-bar {
   display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem;
-  background: hsl(var(--card)); border: 1px solid hsl(var(--border)); border-radius: 10px; padding: 0.75rem 1.25rem;
+  background: hsl(var(--card)); border: 1px solid hsl(var(--border)); border-radius: 10px;
+  padding: 0.875rem 1.25rem;
 }
-.page-title { font-size: 1.1rem; font-weight: 700; color: hsl(var(--foreground)); }
-.filter-bar-right { display: flex; align-items: flex-end; gap: 0.75rem; flex-wrap: wrap; }
-.filter-item { display: flex; flex-direction: column; gap: 0.25rem; }
-.filter-item label { font-size: 0.72rem; font-weight: 600; color: hsl(var(--muted-foreground)); text-transform: uppercase; letter-spacing: 0.04em; }
+.page-title-wrap {
+  display: flex; align-items: center; gap: 8px;
+  color: hsl(var(--foreground));
+}
+.page-title { font-size: 1rem; font-weight: 700; color: hsl(var(--foreground)); }
+.filter-bar-right { display: flex; align-items: flex-end; gap: 0.6rem; flex-wrap: wrap; }
+.filter-item { display: flex; flex-direction: column; gap: 0.2rem; }
+.filter-item label {
+  font-size: 0.7rem; font-weight: 600; color: hsl(var(--muted-foreground));
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
 .filter-item select, .filter-item input[type="date"] {
-  padding: 0.45rem 0.7rem; border: 1px solid hsl(var(--border)); border-radius: 7px;
-  font-size: 0.85rem; background: hsl(var(--background)); color: hsl(var(--foreground)); outline: none;
+  padding: 0.4rem 0.65rem; border: 1px solid hsl(var(--border)); border-radius: 7px;
+  font-size: 0.82rem; background: hsl(var(--background)); color: hsl(var(--foreground)); outline: none;
+  transition: border-color 0.15s;
 }
-.filter-item select:focus, .filter-item input[type="date"]:focus { border-color: hsl(var(--foreground) / 0.4); }
-.date-error { font-size: 0.8rem; color: #f5222d; align-self: center; }
+.filter-item select:focus, .filter-item input[type="date"]:focus {
+  border-color: hsl(var(--ring));
+}
+.date-error { font-size: 0.78rem; color: hsl(var(--destructive)); align-self: center; }
 
 .btn-primary, .btn-secondary {
-  padding: 7px 16px; border-radius: 7px; font-size: 0.85rem; font-weight: 600;
-  cursor: pointer; border: 1px solid hsl(var(--border)); white-space: nowrap; align-self: flex-end;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 0.42rem 0.9rem; border-radius: 7px; font-size: 0.82rem; font-weight: 600;
+  cursor: pointer; border: 1px solid hsl(var(--border)); white-space: nowrap;
+  align-self: flex-end; transition: all 0.15s;
 }
-.btn-primary { background: hsl(var(--foreground)); color: hsl(var(--background)); border-color: hsl(var(--foreground)); }
+.btn-primary {
+  background: hsl(var(--foreground)); color: hsl(var(--background));
+  border-color: hsl(var(--foreground));
+}
 .btn-primary:hover:not(:disabled) { opacity: 0.85; }
 .btn-secondary { background: hsl(var(--card)); color: hsl(var(--foreground)); }
 .btn-secondary:hover:not(:disabled) { background: hsl(var(--accent)); }
 .btn-primary:disabled, .btn-secondary:disabled { opacity: 0.4; cursor: not-allowed; }
 
+/* ── 状态卡片 ── */
 .state-card {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 0.75rem; padding: 3rem; color: hsl(var(--muted-foreground)); text-align: center;
+  gap: 0.75rem; padding: 3.5rem; color: hsl(var(--muted-foreground)); text-align: center;
   background: hsl(var(--card)); border: 1px solid hsl(var(--border)); border-radius: 10px;
 }
-.error-state { color: #f5222d; }
-.empty-icon { font-size: 2.5rem; }
-.spinner { width: 26px; height: 26px; border: 3px solid hsl(var(--border)); border-top-color: hsl(var(--foreground)); border-radius: 50%; animation: spin 0.7s linear infinite; }
+.state-card p { margin: 0; font-size: 0.88rem; }
+.error-state { color: hsl(var(--destructive)); }
+.spinner {
+  width: 26px; height: 26px;
+  border: 3px solid hsl(var(--border)); border-top-color: hsl(var(--foreground));
+  border-radius: 50%; animation: spin 0.7s linear infinite;
+}
 @keyframes spin { to { transform: rotate(360deg); } }
 
-.card { background: hsl(var(--card)); border: 1px solid hsl(var(--border)); border-radius: 10px; padding: 1.25rem 1.5rem; }
-.card-title { font-size: 0.9rem; font-weight: 700; color: hsl(var(--foreground)); margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
-.account-tag { font-size: 0.75rem; font-weight: 500; color: hsl(var(--muted-foreground)); background: hsl(var(--muted)); padding: 2px 8px; border-radius: 10px; }
+/* ── 图表卡片 ── */
+.card {
+  background: hsl(var(--card)); border: 1px solid hsl(var(--border));
+  border-radius: 10px; padding: 1.25rem 1.5rem;
+}
+.card-title {
+  display: flex; align-items: center; gap: 7px;
+  font-size: 0.88rem; font-weight: 600; color: hsl(var(--foreground));
+  margin-bottom: 1rem;
+}
+.account-tag {
+  font-size: 0.72rem; font-weight: 500; color: hsl(var(--muted-foreground));
+  background: hsl(var(--muted)); padding: 2px 8px; border-radius: 10px;
+}
 
 .chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-@media (max-width: 900px) { .chart-row { grid-template-columns: 1fr; } }
-
 .chart-card { min-height: 300px; }
-.chart-container { width: 100%; height: 260px; }
 
-.progress-card { display: flex; flex-direction: column; gap: 0.75rem; }
-.progress-info { display: flex; justify-content: space-between; font-size: 0.875rem; color: hsl(var(--foreground)); }
-.progress-bar-wrap { width: 100%; height: 10px; background: hsl(var(--muted)); border-radius: 5px; overflow: hidden; }
-.progress-bar-fill { height: 100%; border-radius: 5px; transition: width 0.4s ease; }
-.status-badge { display: inline-block; padding: 3px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; width: fit-content; }
-.no-limit-info { color: hsl(var(--muted-foreground)); font-size: 0.875rem; }
-.quota-message { font-size: 0.8rem; color: hsl(var(--muted-foreground)); }
-
-.empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2rem; color: hsl(var(--muted-foreground)); gap: 0.5rem; }
+@media (max-width: 900px) { .chart-row { grid-template-columns: 1fr; } }
 </style>

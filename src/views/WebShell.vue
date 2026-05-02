@@ -340,20 +340,19 @@
           </div>
         </div>
 
-        <!-- 隧道就绪提示条已移至顶部 -->
         <div class="hosts-list" v-if="!sidebarCollapsed">
           <div v-if="loading" class="loading-small">加载中...</div>
           <div v-else-if="nodes.length === 0" class="empty-state">
             <p>暂无可用主机</p>
           </div>
-          <div 
+          <div
             v-else
-            v-for="node in nodes" 
+            v-for="node in nodes"
             :key="node.name"
             class="host-item"
-            :class="{ 
-              active: currentNode?.name === node.name,
-              disabled: !node.enabled 
+            :class="{
+              active: activeTab?.node?.name === node.name,
+              disabled: !node.enabled
             }"
             @click="node.enabled && selectNode(node)"
           >
@@ -362,8 +361,8 @@
               <div class="host-name">{{ node.name }}</div>
               <div class="host-address">{{ node.host }}</div>
             </div>
-            <div class="host-status" :class="{ connected: currentNode?.name === node.name && connected }">
-              <span v-if="currentNode?.name === node.name && connected">●</span>
+            <div class="host-status" :class="{ connected: tabs.some(t => t.node?.name === node.name && t.connected) }">
+              <span v-if="tabs.some(t => t.node?.name === node.name && t.connected)">●</span>
             </div>
             <button
               class="btn-tunnel"
@@ -383,26 +382,51 @@
 
       <!-- 右侧终端区域 -->
       <div class="terminal-area" :class="{ fullscreen: isFullscreen }">
-        <div v-if="connected" class="terminal-container">
-          <div class="terminal-header">
-            <div class="terminal-info">
-              <span class="terminal-title">{{ currentNode?.name }} - {{ currentNode?.host }}</span>
-              <span class="connection-status" :class="connectionStatus">{{ connectionStatus }}</span>
-            </div>
-            <div class="terminal-actions">
-              <button class="btn-small btn-secondary" @click="toggleFullscreen" :title="isFullscreen ? '退出全屏' : '全屏'">
-                {{ isFullscreen ? '🗗' : '🗖' }}
-              </button>
-              <button class="btn-small btn-secondary" @click="clearTerminal">清屏</button>
-              <button class="btn-small btn-danger" @click="disconnect">断开连接</button>
-            </div>
+
+        <!-- Tab 栏 -->
+        <div class="tab-bar" v-if="tabs.length > 0">
+          <div
+            v-for="tab in tabs"
+            :key="tab.id"
+            class="shell-tab"
+            :class="{ active: tab.id === activeTabId }"
+            @click="switchTab(tab.id)"
+          >
+            <span class="tab-dot" :class="tab.connected ? 'dot-connected' : 'dot-disconnected'">●</span>
+            <span class="tab-label">{{ tab.node?.name || '连接中' }}</span>
+            <button class="tab-close" @click.stop="closeTab(tab.id)" title="关闭">×</button>
           </div>
-          <div class="terminal-content">
-            <div ref="terminalContainer" class="xterm-container"></div>
-          </div>
+          <button class="tab-new" @click="newTab" title="新建终端">＋</button>
         </div>
 
-        <!-- 未连接时的提示 -->
+        <!-- 每个 tab 的终端容器，用 v-show 保持 xterm DOM 存活 -->
+        <template v-if="tabs.length > 0">
+          <div
+            v-for="tab in tabs"
+            :key="tab.id"
+            v-show="tab.id === activeTabId"
+            class="terminal-container"
+          >
+            <div class="terminal-header">
+              <div class="terminal-info">
+                <span class="terminal-title">{{ tab.node?.name }} - {{ tab.node?.host }}</span>
+                <span class="connection-status" :class="tab.status">{{ tab.status }}</span>
+              </div>
+              <div class="terminal-actions">
+                <button class="btn-small btn-secondary" @click="toggleFullscreen" :title="isFullscreen ? '退出全屏' : '全屏'">
+                  {{ isFullscreen ? '🗗' : '🗖' }}
+                </button>
+                <button class="btn-small btn-secondary" @click="clearTab(tab.id)">清屏</button>
+                <button class="btn-small btn-danger" @click="disconnectTab(tab.id)">断开连接</button>
+              </div>
+            </div>
+            <div class="terminal-content">
+              <div :ref="el => setTabTerminalRef(tab.id, el)" class="xterm-container"></div>
+            </div>
+          </div>
+        </template>
+
+        <!-- 无 tab 时的提示 -->
         <div v-else class="connection-prompt">
           <div class="prompt-content">
             <div class="prompt-icon">🖥️</div>
@@ -424,6 +448,95 @@ import { WebLinksAddon } from 'xterm-addon-web-links'
 import 'xterm/css/xterm.css'
 import notification from '../utils/notification'
 import { getApiBase, getWsBase } from '../utils/auth'
+
+// ── Tab 多终端 ──────────────────────────────────────────────
+interface ShellTab {
+  id: number
+  node: any
+  websocket: WebSocket | null
+  terminal: Terminal | null
+  fitAddon: FitAddon | null
+  connected: boolean
+  status: string
+  pendingCmd: string
+}
+
+let tabIdSeq = 0
+const tabs = ref<ShellTab[]>([])
+const activeTabId = ref<number>(-1)
+const tabTerminalRefs = new Map<number, HTMLElement>()
+
+const activeTab = computed(() => tabs.value.find(t => t.id === activeTabId.value) ?? null)
+
+// 用于 :ref 动态绑定每个 tab 的 xterm 容器
+const setTabTerminalRef = (id: number, el: any) => {
+  if (el) tabTerminalRefs.set(id, el as HTMLElement)
+  else tabTerminalRefs.delete(id)
+}
+
+const createTab = (node: any, pendingCmd = ''): ShellTab => {
+  const tab: ShellTab = {
+    id: ++tabIdSeq,
+    node,
+    websocket: null,
+    terminal: null,
+    fitAddon: null,
+    connected: false,
+    status: 'connecting',
+    pendingCmd,
+  }
+  tabs.value.push(tab)
+  activeTabId.value = tab.id
+  return tab
+}
+
+const switchTab = (id: number) => {
+  activeTabId.value = id
+  nextTick(() => {
+    const tab = tabs.value.find(t => t.id === id)
+    if (tab?.fitAddon) tab.fitAddon.fit()
+  })
+}
+
+const newTab = () => {
+  // 打开认证选择器，连接后会创建新 tab
+  if (!selectedNode.value && nodes.value.length > 0) selectedNode.value = nodes.value[0]
+  showAuthSelector.value = true
+}
+
+const closeTab = (id: number) => {
+  const tab = tabs.value.find(t => t.id === id)
+  if (!tab) return
+  tab.websocket?.close()
+  tab.terminal?.dispose()
+  tabTerminalRefs.delete(id)
+  tabs.value = tabs.value.filter(t => t.id !== id)
+  if (activeTabId.value === id) {
+    activeTabId.value = tabs.value[tabs.value.length - 1]?.id ?? -1
+  }
+}
+
+const clearTab = (id: number) => {
+  tabs.value.find(t => t.id === id)?.terminal?.clear()
+}
+
+const disconnectTab = (id: number) => {
+  const tab = tabs.value.find(t => t.id === id)
+  if (!tab) return
+  tab.websocket?.close()
+  tab.terminal?.dispose()
+  tab.terminal = null
+  tab.websocket = null
+  tab.connected = false
+  tab.status = 'disconnected'
+  isFullscreen.value = false
+  sidebarCollapsed.value = false
+}
+
+// 兼容旧代码引用
+const connected = computed(() => activeTab.value?.connected ?? false)
+const connectionStatus = computed(() => activeTab.value?.status ?? 'disconnected')
+const currentNode = computed(() => activeTab.value?.node ?? null)
 
 // 响应式数据
 const showNodeSelector = ref(false)
@@ -457,14 +570,12 @@ const generatedPubKey = ref('')
 const showSettings = ref(false)
 const loading = ref(false)
 const error = ref('')
-const connected = ref(false)
-const connectionStatus = ref('disconnected')
+// connected / connectionStatus / currentNode 已改为 computed，见上方
 const sidebarCollapsed = ref(false)
 const isFullscreen = ref(false)
 
 const nodes = ref<any[]>([])
 const selectedNode = ref<any>(null)
-const currentNode = ref<any>(null)
 const currentUsername = ref('')
 const hasPrivateKey = ref(false)
 const sshPassword = ref('')
@@ -615,7 +726,7 @@ const themes = [
 
 const cursorStyles = ['block', 'underline', 'bar']
 
-// 终端相关
+// 终端相关（多 tab 后不再使用单例，保留 pendingInitCommand 供 autoConnect 用）
 const terminalContainer = ref<HTMLElement>()
 const passwordInput = ref<HTMLInputElement>()
 let terminal: Terminal | null = null
@@ -658,14 +769,11 @@ onMounted(async () => {
 
 // 清理
 onBeforeUnmount(() => {
-  if (terminal) {
-    terminal.dispose()
-    terminal = null
-  }
-  if (websocket) {
-    websocket.close()
-    websocket = null
-  }
+  tabs.value.forEach(tab => {
+    tab.websocket?.close()
+    tab.terminal?.dispose()
+  })
+  tabs.value = []
   if (sshTunnelHeartbeat) clearInterval(sshTunnelHeartbeat)
   window.removeEventListener('resize', handleResize)
 })
@@ -700,46 +808,27 @@ const selectCursorStyle = (style: string) => {
   applyTerminalSettings()
 }
 
-// 应用终端设置
+// 应用终端设置（作用于所有 tab）
 const applyTerminalSettings = () => {
-  if (!terminal) return
-  
   const theme = themes.find(t => t.name === terminalSettings.value.theme)
-  if (theme) {
-    terminal.options.theme = {
-      background: theme.background,
-      foreground: theme.foreground,
-      cursor: theme.cursor,
-      selectionBackground: 'rgba(255, 255, 255, 0.3)',
-      black: theme.black,
-      red: theme.red,
-      green: theme.green,
-      yellow: theme.yellow,
-      blue: theme.blue,
-      magenta: theme.magenta,
-      cyan: theme.cyan,
-      white: theme.white,
-      brightBlack: theme.brightBlack,
-      brightRed: theme.brightRed,
-      brightGreen: theme.brightGreen,
-      brightYellow: theme.brightYellow,
-      brightBlue: theme.brightBlue,
-      brightMagenta: theme.brightMagenta,
-      brightCyan: theme.brightCyan,
-      brightWhite: theme.brightWhite
+  tabs.value.forEach(tab => {
+    if (!tab.terminal) return
+    if (theme) {
+      tab.terminal.options.theme = {
+        background: theme.background, foreground: theme.foreground, cursor: theme.cursor,
+        selectionBackground: 'rgba(255, 255, 255, 0.3)',
+        black: theme.black, red: theme.red, green: theme.green, yellow: theme.yellow,
+        blue: theme.blue, magenta: theme.magenta, cyan: theme.cyan, white: theme.white,
+        brightBlack: theme.brightBlack, brightRed: theme.brightRed, brightGreen: theme.brightGreen,
+        brightYellow: theme.brightYellow, brightBlue: theme.brightBlue, brightMagenta: theme.brightMagenta,
+        brightCyan: theme.brightCyan, brightWhite: theme.brightWhite,
+      }
     }
-  }
-  
-  terminal.options.fontSize = terminalSettings.value.fontSize
-  terminal.options.cursorStyle = terminalSettings.value.cursorStyle as any
-  terminal.options.cursorBlink = terminalSettings.value.cursorBlink
-  
-  // 重新适配大小
-  if (fitAddon) {
-    fitAddon.fit()
-  }
-  
-  // 保存设置
+    tab.terminal.options.fontSize = terminalSettings.value.fontSize
+    tab.terminal.options.cursorStyle = terminalSettings.value.cursorStyle as any
+    tab.terminal.options.cursorBlink = terminalSettings.value.cursorBlink
+    tab.fitAddon?.fit()
+  })
   saveSettings()
 }
 
@@ -1060,14 +1149,12 @@ const confirmMFAAndConnect = () => {
   pendingPassword.value = ''
   connectToNode(node, pwd, code)
 }
-// 连接到节点
+// 连接到节点（创建新 tab）
 const connectToNode = async (node: any, password: string = '', mfaCode: string = '') => {
-  // 确保用户信息已加载
   if (!currentUsername.value || currentUsername.value === 'unknown') {
     await loadCurrentUser()
   }
 
-  // 检查是否需要 MFA（mode=false 时直接跳过，不发请求）
   if (!mfaCode) {
     const status = await loadMFAStatus()
     if (status && status.mode !== 'false' && status.enabled && status.confirmed) {
@@ -1079,286 +1166,180 @@ const connectToNode = async (node: any, password: string = '', mfaCode: string =
     }
   }
 
-  currentNode.value = node
-  connectionStatus.value = 'connecting'
+  const tab = createTab(node, pendingInitCommand.value)
+  pendingInitCommand.value = ''
 
   try {
-    // 建立WebSocket连接
     const token = localStorage.getItem('token') || sessionStorage.getItem('token')
-    if (!token) {
-      notification.error('请先登录系统')
-      return
-    }
+    if (!token) { notification.error('请先登录系统'); return }
 
     let wsUrl = `${getWsBase()}/api/webshell/connect?node=${node.name}&token=${encodeURIComponent(token)}`
+    if (password) wsUrl += `&password=${encodeURIComponent(password)}`
+    if (mfaCode)  wsUrl += `&mfaCode=${encodeURIComponent(mfaCode)}`
 
-    if (password) {
-      wsUrl += `&password=${encodeURIComponent(password)}`
-    }
-    if (mfaCode) {
-      wsUrl += `&mfaCode=${encodeURIComponent(mfaCode)}`
-    }
-    
-    console.log('Connecting to WebSocket with username:', currentUsername.value)
-    
-    websocket = new WebSocket(wsUrl)
-    
-    websocket.onopen = () => {
-      connectionStatus.value = 'connected'
-      connected.value = true
-      // 取消登录提示
-      // notification.success(`已连接到 ${node.name}`)
-      
-      // 初始化终端
+    const ws = new WebSocket(wsUrl)
+    tab.websocket = ws
+
+    ws.onopen = () => {
+      tab.status = 'connected'
+      tab.connected = true
       nextTick(() => {
-        initTerminal()
-        // 如果有待发送的初始命令（如进入容器），延迟发送等终端就绪
-        if (pendingInitCommand.value) {
-          const cmd = pendingInitCommand.value
-          pendingInitCommand.value = ''
+        initTabTerminal(tab)
+        if (tab.pendingCmd) {
+          const cmd = tab.pendingCmd
+          tab.pendingCmd = ''
           setTimeout(() => {
-            if (websocket && websocket.readyState === WebSocket.OPEN) {
-              websocket.send(JSON.stringify({ type: 'input', data: cmd }))
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'input', data: cmd }))
             }
           }, 800)
         }
       })
     }
-    
-    websocket.onmessage = (event) => {
+
+    ws.onmessage = (event) => {
       const message = JSON.parse(event.data)
-      handleWebSocketMessage(message)
+      handleTabMessage(tab, message)
     }
-    
-    websocket.onclose = () => {
-      connectionStatus.value = 'disconnected'
-      connected.value = false
-      isFullscreen.value = false
-      sidebarCollapsed.value = false
-      if (terminal) {
-        terminal.dispose()
-        terminal = null
-      }
-      websocket = null
+
+    ws.onclose = () => {
+      tab.status = 'disconnected'
+      tab.connected = false
+      tab.terminal?.dispose()
+      tab.terminal = null
+      tab.websocket = null
       window.removeEventListener('resize', handleResize)
     }
-    
-    websocket.onerror = (error) => {
-      connectionStatus.value = 'error'
+
+    ws.onerror = () => {
+      tab.status = 'error'
       notification.error('连接错误')
-      console.error('WebSocket error:', error)
-      websocket = null
+      tab.websocket = null
     }
-    
   } catch (err: any) {
-    connectionStatus.value = 'error'
+    tab.status = 'error'
     notification.error('连接失败: ' + err.message)
   }
 }
 
-// 初始化终�?
-const initTerminal = () => {
-  if (!terminalContainer.value) return
-  
-  // 获取当前主题
+// 初始化指定 tab 的终端
+const initTabTerminal = (tab: ShellTab) => {
+  const container = tabTerminalRefs.get(tab.id)
+  if (!container) return
+
   const theme = themes.find(t => t.name === terminalSettings.value.theme) || themes[0]
-  
-  // 创建终端实例
-  terminal = new Terminal({
+  const term = new Terminal({
     cursorBlink: terminalSettings.value.cursorBlink,
     cursorStyle: terminalSettings.value.cursorStyle as any,
     fontSize: terminalSettings.value.fontSize,
     fontFamily: 'Consolas, "Courier New", monospace',
     theme: {
-      background: theme.background,
-      foreground: theme.foreground,
-      cursor: theme.cursor,
+      background: theme.background, foreground: theme.foreground, cursor: theme.cursor,
       selectionBackground: 'rgba(255, 255, 255, 0.3)',
-      black: theme.black,
-      red: theme.red,
-      green: theme.green,
-      yellow: theme.yellow,
-      blue: theme.blue,
-      magenta: theme.magenta,
-      cyan: theme.cyan,
-      white: theme.white,
-      brightBlack: theme.brightBlack,
-      brightRed: theme.brightRed,
-      brightGreen: theme.brightGreen,
-      brightYellow: theme.brightYellow,
-      brightBlue: theme.brightBlue,
-      brightMagenta: theme.brightMagenta,
-      brightCyan: theme.brightCyan,
-      brightWhite: theme.brightWhite
+      black: theme.black, red: theme.red, green: theme.green, yellow: theme.yellow,
+      blue: theme.blue, magenta: theme.magenta, cyan: theme.cyan, white: theme.white,
+      brightBlack: theme.brightBlack, brightRed: theme.brightRed, brightGreen: theme.brightGreen,
+      brightYellow: theme.brightYellow, brightBlue: theme.brightBlue, brightMagenta: theme.brightMagenta,
+      brightCyan: theme.brightCyan, brightWhite: theme.brightWhite,
     },
-    allowProposedApi: true
+    allowProposedApi: true,
   })
-  
-  // 添加插件
-  fitAddon = new FitAddon()
-  terminal.loadAddon(fitAddon)
-  terminal.loadAddon(new WebLinksAddon())
-  
-  // 清空容器，防止重连时残留旧 xterm DOM
-  terminalContainer.value.innerHTML = ''
 
-  // 挂载到容器
-  terminal.open(terminalContainer.value)
-  
-  // 自适应大小
-  fitAddon.fit()
-  
-  // 监听窗口大小变化
+  const fa = new FitAddon()
+  term.loadAddon(fa)
+  term.loadAddon(new WebLinksAddon())
+  container.innerHTML = ''
+  term.open(container)
+  fa.fit()
+
+  tab.terminal = term
+  tab.fitAddon = fa
+
   window.addEventListener('resize', handleResize)
-  
-  // 监听终端输入
-  terminal.onData((data) => {
-    if (websocket && websocket.readyState === WebSocket.OPEN) {
-      websocket.send(JSON.stringify({
-        type: 'input',
-        data: data
-      }))
+
+  term.onData((data) => {
+    if (tab.websocket?.readyState === WebSocket.OPEN) {
+      tab.websocket.send(JSON.stringify({ type: 'input', data }))
     }
   })
-  
-  // 发送终端大�?
-  if (websocket && websocket.readyState === WebSocket.OPEN) {
-    websocket.send(JSON.stringify({
-      type: 'resize',
-      data: {
-        rows: terminal.rows,
-        cols: terminal.cols
-      }
-    }))
+
+  if (tab.websocket?.readyState === WebSocket.OPEN) {
+    tab.websocket.send(JSON.stringify({ type: 'resize', data: { rows: term.rows, cols: term.cols } }))
   }
+}
+
+// 兼容旧名称（handleResize 里用到）
+const initTerminal = () => {
+  const tab = activeTab.value
+  if (tab) initTabTerminal(tab)
 }
 
 // 处理窗口大小变化
 const handleResize = () => {
-  if (fitAddon && terminal) {
-    fitAddon.fit()
-    
-    // 通知服务器终端大小变�?
-    if (websocket && websocket.readyState === WebSocket.OPEN) {
-      websocket.send(JSON.stringify({
-        type: 'resize',
-        data: {
-          rows: terminal.rows,
-          cols: terminal.cols
-        }
-      }))
+  tabs.value.forEach(tab => {
+    if (tab.fitAddon && tab.terminal) {
+      tab.fitAddon.fit()
+      if (tab.websocket?.readyState === WebSocket.OPEN) {
+        tab.websocket.send(JSON.stringify({ type: 'resize', data: { rows: tab.terminal.rows, cols: tab.terminal.cols } }))
+      }
     }
-  }
+  })
 }
 
-// 处理WebSocket消息
-const handleWebSocketMessage = (message: any) => {
-  console.log('WebSocket message received:', message)
-  
+// 处理指定 tab 的 WebSocket 消息
+const handleTabMessage = (tab: ShellTab, message: any) => {
   switch (message.type) {
     case 'output':
-      // 将输出写入终�?
-      if (terminal && message.data) {
-        terminal.write(message.data)
-      }
+      if (tab.terminal && message.data) tab.terminal.write(message.data)
       break
-      
     case 'connected':
-      connectionStatus.value = 'connected'
-      connected.value = true
-      
-      // 如果服务器返回了用户名，使用服务器返回的用户�?
-      if (message.data && message.data.username) {
-        currentUsername.value = message.data.username
-        console.log('Username updated from server:', currentUsername.value)
-      }
-      
-      if (message.data && message.data.auth_method) {
-        // 取消认证方式提示
-        // const authMethod = message.data.auth_method === 'private_key' ? '私钥' : '密码'
-        // notification.success(`已连�?(认证方式: ${authMethod})`)
-      }
+      tab.status = 'connected'
+      tab.connected = true
+      if (message.data?.username) currentUsername.value = message.data.username
       break
-      
     case 'auth_required':
       notification.warning('需要密码认证，请输入SSH密码')
       showPasswordInput.value = true
       nextTick(() => { passwordInput.value?.focus() })
       break
-      
     case 'error':
-      // 如果是 SSH 认证失败，自动提示用密码重试
       if (typeof message.data === 'string' &&
           (message.data.includes('unable to authenticate') ||
            message.data.includes('no supported methods') ||
            message.data.includes('handshake failed'))) {
         notification.warning('密钥认证失败，请使用密码连接')
-        connectionStatus.value = 'disconnected'
-        connected.value = false
-        // 自动弹出密码输入框
+        tab.status = 'disconnected'
+        tab.connected = false
         showPasswordInput.value = true
         nextTick(() => { passwordInput.value?.focus() })
       } else {
         notification.error(message.data)
-        connectionStatus.value = 'error'
+        tab.status = 'error'
       }
       break
   }
 }
 
-// 清屏
-const clearTerminal = () => {
-  if (terminal) {
-    terminal.clear()
-  }
+// 兼容旧 handleWebSocketMessage 引用
+const handleWebSocketMessage = (message: any) => {
+  const tab = activeTab.value
+  if (tab) handleTabMessage(tab, message)
 }
 
-// 断开连接
-const disconnect = () => {
-  if (websocket) {
-    websocket.close()
-    websocket = null
-  }
-  
-  if (terminal) {
-    terminal.dispose()
-    terminal = null
-  }
-  
-  window.removeEventListener('resize', handleResize)
-  
-  connected.value = false
-  connectionStatus.value = 'disconnected'
-  currentNode.value = null
-  isFullscreen.value = false        // 退出全屏，避免断开后页面空�?
-  sidebarCollapsed.value = false    // 恢复侧边�?
-}
-
+    case 'connected':
 // 切换全屏
 const toggleFullscreen = () => {
   isFullscreen.value = !isFullscreen.value
-  
-  // 全屏时自动折叠侧边栏
-  if (isFullscreen.value) {
-    sidebarCollapsed.value = true
-  }
-  
-  // 延迟调整终端大小以适应新布局
+  if (isFullscreen.value) sidebarCollapsed.value = true
   setTimeout(() => {
-    if (fitAddon && terminal) {
-      fitAddon.fit()
-      
-      // 通知服务器终端大小变�?
-      if (websocket && websocket.readyState === WebSocket.OPEN) {
-        websocket.send(JSON.stringify({
-          type: 'resize',
-          data: {
-            rows: terminal.rows,
-            cols: terminal.cols
-          }
-        }))
+    tabs.value.forEach(tab => {
+      if (tab.fitAddon && tab.terminal) {
+        tab.fitAddon.fit()
+        if (tab.websocket?.readyState === WebSocket.OPEN) {
+          tab.websocket.send(JSON.stringify({ type: 'resize', data: { rows: tab.terminal.rows, cols: tab.terminal.cols } }))
+        }
       }
-    }
+    })
   }, 100)
 }
 
@@ -1739,6 +1720,59 @@ const deployPublicKey = async (nodeName: string) => {
   overflow: hidden;
   transition: all 0.3s ease;
 }
+
+/* Tab 栏 */
+.tab-bar {
+  display: flex;
+  align-items: center;
+  background: #1a1a2e;
+  border-radius: 8px 8px 0 0;
+  padding: 0 4px;
+  gap: 2px;
+  flex-shrink: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tab-bar::-webkit-scrollbar { display: none; }
+
+.shell-tab {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 10px;
+  border-radius: 6px 6px 0 0;
+  cursor: pointer;
+  font-size: 0.82rem;
+  color: #9ca3af;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+  user-select: none;
+  margin-top: 4px;
+}
+.shell-tab:hover { background: #2d2d44; color: #e5e7eb; }
+.shell-tab.active { background: #1e1e1e; color: #fff; }
+
+.tab-dot { font-size: 0.6rem; }
+.dot-connected { color: #10b981; }
+.dot-disconnected { color: #6b7280; }
+
+.tab-label { max-width: 100px; overflow: hidden; text-overflow: ellipsis; }
+
+.tab-close {
+  background: none; border: none; color: #6b7280;
+  cursor: pointer; font-size: 1rem; line-height: 1;
+  padding: 0 2px; border-radius: 3px;
+  transition: color 0.15s, background 0.15s;
+}
+.tab-close:hover { color: #ef4444; background: rgba(239,68,68,0.1); }
+
+.tab-new {
+  background: none; border: none; color: #6b7280;
+  cursor: pointer; font-size: 1.1rem; padding: 4px 8px;
+  border-radius: 6px; margin-left: 2px; margin-top: 4px;
+  transition: color 0.15s, background 0.15s;
+}
+.tab-new:hover { color: #fff; background: #2d2d44; }
 
 .terminal-area.fullscreen {
   position: fixed;

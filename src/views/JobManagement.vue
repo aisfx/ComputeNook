@@ -153,8 +153,6 @@ const handleExecContainer = (payload: { node: string; jobId: number; initCommand
   display: flex;
   width: 100%;
   height: 100%;
-  padding: 1.25rem;
-  box-sizing: border-box;
   gap: 1rem;
   overflow: hidden;
 }
@@ -162,7 +160,7 @@ const handleExecContainer = (payload: { node: string; jobId: number; initCommand
 .job-list-pane {
   flex: 1;
   min-width: 0;
-  overflow: hidden;
+  overflow-y: auto;
 }
 
 .submit-pane {

@@ -60,6 +60,13 @@ pre {
   overflow-x: auto;
 }
 
+/* script-preview 不受全局 pre 样式影响 */
+pre.script-preview {
+  background-color: #1e293b;
+  padding: 10px 12px;
+  font-size: 0.78rem;
+}
+
 pre code { padding: 0; background: none; }
 
 img { max-width: 100%; height: auto; display: block; }

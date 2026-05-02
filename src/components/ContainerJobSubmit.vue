@@ -131,7 +131,7 @@
     <!-- 生成的脚本预览 -->
     <div class="form-group">
       <label>生成脚本预览</label>
-      <pre class="script-preview">{{ generatedScript }}</pre>
+      <div class="script-preview">{{ generatedScript }}</div>
     </div>
 
     <div class="form-actions">
@@ -491,7 +491,7 @@ onMounted(() => {
 }
 
 .script-preview {
-  background: #1e293b;
+  background: #1e293b !important;
   color: #e2e8f0;
   padding: 10px 12px;
   border-radius: 8px;
@@ -502,6 +502,10 @@ onMounted(() => {
   max-height: 200px;
   overflow-y: auto;
   font-family: 'Courier New', monospace;
+  box-shadow: none !important;
+  position: relative;
+  isolation: isolate;
+  white-space: pre;
 }
 
 .form-actions {

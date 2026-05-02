@@ -3,6 +3,7 @@
 /* Light Theme (default) */
 :root,
 [data-theme="light"] {
+  --theme-name: "light";
   --background: 0 0% 100%;
   --foreground: 222.2 84% 4.9%;
 
@@ -68,6 +69,7 @@
 
 /* Dark Theme */
 [data-theme="dark"] {
+  --theme-name: "dark";
   --background: 224 71% 4%;
   --foreground: 213 31% 91%;
 
@@ -127,6 +129,71 @@
   --color-border: hsl(216 34% 17%);
   --color-border-dark: hsl(216 34% 22%);
   --color-white: hsl(224 71% 4%);
+}
+
+/* Ocean Theme — 深海蓝绿 */
+[data-theme="ocean"] {
+  --theme-name: "ocean";
+
+  --background: 200 40% 8%;
+  --foreground: 195 60% 92%;
+
+  --card: 200 38% 11%;
+  --card-foreground: 195 60% 92%;
+
+  --popover: 200 38% 11%;
+  --popover-foreground: 195 60% 92%;
+
+  --primary: 185 80% 50%;
+  --primary-foreground: 200 40% 8%;
+
+  --secondary: 200 35% 16%;
+  --secondary-foreground: 195 60% 92%;
+
+  --muted: 200 35% 14%;
+  --muted-foreground: 195 30% 58%;
+
+  --accent: 200 35% 18%;
+  --accent-foreground: 195 60% 92%;
+
+  --destructive: 0 65% 48%;
+  --destructive-foreground: 0 0% 98%;
+
+  --border: 200 30% 18%;
+  --input: 200 30% 18%;
+  --ring: 185 80% 50%;
+
+  --sidebar-bg: 200 42% 6%;
+  --sidebar-border: 200 30% 14%;
+  --sidebar-accent: 200 35% 16%;
+  --sidebar-accent-foreground: 195 60% 92%;
+  --sidebar-foreground: 195 50% 82%;
+  --sidebar-primary: 185 80% 50%;
+  --sidebar-primary-foreground: 200 40% 8%;
+
+  --success: 160 70% 42%;
+  --success-foreground: 160 80% 10%;
+  --warning: 38 92% 50%;
+  --warning-foreground: 48 96% 89%;
+
+  /* Legacy compat */
+  --color-primary: hsl(185 80% 50%);
+  --color-primary-dark: hsl(185 80% 40%);
+  --color-success: hsl(160 70% 42%);
+  --color-success-dark: hsl(160 70% 32%);
+  --color-warning: hsl(38 92% 50%);
+  --color-warning-dark: hsl(38 92% 40%);
+  --color-error: hsl(0 65% 48%);
+  --color-error-dark: hsl(0 65% 38%);
+  --color-bg: hsl(200 40% 8%);
+  --color-bg-dark: hsl(200 35% 14%);
+  --color-bg-darker: hsl(200 30% 18%);
+  --color-text: hsl(195 60% 92%);
+  --color-text-light: hsl(195 30% 58%);
+  --color-text-lighter: hsl(195 20% 45%);
+  --color-border: hsl(200 30% 18%);
+  --color-border-dark: hsl(200 30% 24%);
+  --color-white: hsl(200 40% 8%);
 }
 
 /* ===== 通用变量 ===== */

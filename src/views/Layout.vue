@@ -23,7 +23,9 @@
             @click="currentView = 'dashboard'"
             :title="sidebarCollapsed ? '仪表盘' : ''"
           >
-            <span class="nav-item-icon">🏠</span>
+            <span class="nav-item-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+            </span>
             <span class="nav-item-label">仪表盘</span>
           </a>
 
@@ -33,7 +35,9 @@
             @click="currentView = 'jobs'"
             :title="sidebarCollapsed ? '作业管理' : ''"
           >
-            <span class="nav-item-icon">⚙️</span>
+            <span class="nav-item-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            </span>
             <span class="nav-item-label">作业管理</span>
           </a>
 
@@ -42,7 +46,9 @@
             @click="currentView = 'shell'"
             :title="sidebarCollapsed ? 'Web Shell' : ''"
           >
-            <span class="nav-item-icon">🖥️</span>
+            <span class="nav-item-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+            </span>
             <span class="nav-item-label">Web Shell</span>
           </a>
 
@@ -51,7 +57,9 @@
             @click="currentView = 'desktop'"
             :title="sidebarCollapsed ? '远程桌面' : ''"
           >
-            <span class="nav-item-icon">🖱️</span>
+            <span class="nav-item-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+            </span>
             <span class="nav-item-label">远程桌面</span>
           </a>
 
@@ -61,7 +69,9 @@
             @click="currentView = 'files'"
             :title="sidebarCollapsed ? '文件管理' : ''"
           >
-            <span class="nav-item-icon">📁</span>
+            <span class="nav-item-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            </span>
             <span class="nav-item-label">文件管理</span>
           </a>
 
@@ -71,7 +81,9 @@
             @click="currentView = 'registry'"
             :title="sidebarCollapsed ? '镜像仓库' : ''"
           >
-            <span class="nav-item-icon">🐳</span>
+            <span class="nav-item-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+            </span>
             <span class="nav-item-label">镜像仓库</span>
           </a>
 
@@ -81,7 +93,9 @@
             @click="currentView = 'reports'"
             :title="sidebarCollapsed ? '报表中心' : ''"
           >
-            <span class="nav-item-icon">📈</span>
+            <span class="nav-item-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+            </span>
             <span class="nav-item-label">报表中心</span>
           </a>
         </div>
@@ -114,8 +128,8 @@
             <span>集群在线</span>
           </div>
           <!-- Theme toggle -->
-          <button class="icon-btn" @click="toggleTheme" :title="theme === 'dark' ? '切换亮色' : '切换暗色'">
-            <span>{{ theme === 'dark' ? '☀️' : '🌙' }}</span>
+          <button class="icon-btn theme-cycle-btn" @click="cycleTheme" :title="themeLabel">
+            <span>{{ themeIcon }}</span>
           </button>
           <!-- 报警铃铛 -->
           <AlertNotification :show-bell="true" />
@@ -211,7 +225,7 @@ const sidebarCollapsed = ref(false)
 const currentUser = ref<any>(null)
 const isAdmin = ref(false)
 const fileManagerRef = ref<any>(null)
-const theme = ref<'light' | 'dark'>('light')
+const theme = ref<'light' | 'dark' | 'ocean'>('light')
 
 provide('jobManagementTab', jobManagementTab)
 
@@ -220,8 +234,16 @@ const userInitial = computed(() => {
   return name.charAt(0).toUpperCase()
 })
 
-const toggleTheme = () => {
-  theme.value = theme.value === 'light' ? 'dark' : 'light'
+const THEMES: Array<'light' | 'dark' | 'ocean'> = ['light', 'dark', 'ocean']
+const THEME_ICONS: Record<string, string> = { light: '🌙', dark: '🌊', ocean: '☀️' }
+const THEME_LABELS: Record<string, string> = { light: '切换暗色', dark: '切换海洋', ocean: '切换亮色' }
+
+const themeIcon = computed(() => THEME_ICONS[theme.value])
+const themeLabel = computed(() => THEME_LABELS[theme.value])
+
+const cycleTheme = () => {
+  const idx = THEMES.indexOf(theme.value)
+  theme.value = THEMES[(idx + 1) % THEMES.length]
   localStorage.setItem('theme', theme.value)
 }
 
@@ -326,8 +348,8 @@ onMounted(() => {
   setupAxiosInterceptors()
   currentUser.value = getUser()
   isAdmin.value = checkAdmin()
-  const saved = localStorage.getItem('theme') as 'light' | 'dark' | null
-  if (saved) theme.value = saved
+  const saved = localStorage.getItem('theme') as 'light' | 'dark' | 'ocean' | null
+  if (saved && ['light', 'dark', 'ocean'].includes(saved)) theme.value = saved as 'light' | 'dark' | 'ocean'
 })
 </script>
 
@@ -451,15 +473,19 @@ onMounted(() => {
 }
 
 .nav-item.active {
-  background: hsl(var(--sidebar-primary));
-  color: hsl(var(--sidebar-primary-foreground));
+  background: hsl(var(--sidebar-accent));
+  color: hsl(var(--sidebar-foreground));
+  font-weight: 600;
+  box-shadow: inset 3px 0 0 hsl(262 83% 58%);
 }
 
 .nav-item-icon {
-  font-size: 14px;
   width: 18px;
   text-align: center;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .nav-item-label { flex: 1; }

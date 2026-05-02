@@ -1321,6 +1321,21 @@ onMounted(() => {
 
 
 
+.btn-primary {
+  background: #667eea;
+  color: #fff;
+  border: 1px solid #667eea;
+  padding: 7px 16px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 0.875rem;
+  box-shadow: 0 1px 3px rgba(102,126,234,0.3);
+  transition: all 0.15s;
+}
+.btn-primary:hover:not(:disabled) { background: #5a6fd6; border-color: #5a6fd6; }
+.btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
+
 .btn-secondary {
   background: #fff;
   color: #1e293b;
@@ -1334,6 +1349,7 @@ onMounted(() => {
   transition: all 0.15s;
 }
 .btn-secondary:hover { background: #f1f5f9; }
+.btn-secondary:disabled { opacity: 0.6; cursor: not-allowed; }
 
 .empty-state {
   text-align: center;

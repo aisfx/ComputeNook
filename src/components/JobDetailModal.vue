@@ -272,16 +272,17 @@ const execIntoContainer = () => {
     alert('无法获取作业运行节点')
     return
   }
-  // pyxis 实例名格式：pyxis_<jobid>.<stepid>
-  // enroot list 在登录节点上即可查到，enroot start 直接进入
   const jobId = props.job.id
+  // 直接 SSH 到计算节点后，在节点上找到 pyxis 容器实例并进入
+  // 不使用 srun（会重新申请资源导致卡住），而是直接在节点上执行 enroot start
   const initCommand =
-    `INSTANCE=$(enroot list 2>/dev/null | grep "^pyxis_${jobId}\\." | head -1); ` +
-    `if [ -n "$INSTANCE" ]; then ` +
-    `echo "进入容器: $INSTANCE"; ` +
-    `enroot start "$INSTANCE"; ` +
-    `else ` +
-    `echo "未找到容器实例 pyxis_${jobId}.* ，请确认作业正在运行中"; ` +
+    `echo "→ 正在查找作业 ${jobId} 的容器实例..."\n` +
+    `INSTANCE=$(enroot list 2>/dev/null | grep "^pyxis_${jobId}\\." | head -1)\n` +
+    `if [ -n "$INSTANCE" ]; then\n` +
+    `  echo "进入容器: $INSTANCE"\n` +
+    `  enroot start -r "$INSTANCE"\n` +
+    `else\n` +
+    `  echo "未找到容器实例 pyxis_${jobId}.* ，请确认作业正在运行中"\n` +
     `fi\n`
   emit('exec-container', {
     node,

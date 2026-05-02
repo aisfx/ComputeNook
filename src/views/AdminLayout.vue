@@ -22,7 +22,9 @@
             @click="adminTab = 'dashboard'"
             :title="sidebarCollapsed ? '总览' : ''"
           >
-            <span class="nav-item-icon">📊</span>
+            <span class="nav-item-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+            </span>
             <span class="nav-item-label">总览</span>
           </a>
 
@@ -32,9 +34,13 @@
             @click="groupExpanded.user = !groupExpanded.user"
             :title="sidebarCollapsed ? '用户管理' : ''"
           >
-            <span class="nav-item-icon">👥</span>
+            <span class="nav-item-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            </span>
             <span class="nav-item-label">用户管理</span>
-            <span class="nav-item-chevron" v-if="!sidebarCollapsed">{{ groupExpanded.user ? '▾' : '▸' }}</span>
+            <span class="nav-item-chevron" v-if="!sidebarCollapsed">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline :points="groupExpanded.user ? '18 15 12 9 6 15' : '6 9 12 15 18 9'"/></svg>
+            </span>
           </a>
           <div v-if="groupExpanded.user && !sidebarCollapsed" class="nav-sub">
             <a :class="['nav-sub-item', { active: adminTab === 'users' }]" @click.stop="adminTab = 'users'">用户</a>
@@ -47,9 +53,13 @@
             @click="groupExpanded.account = !groupExpanded.account"
             :title="sidebarCollapsed ? '账户管理' : ''"
           >
-            <span class="nav-item-icon">🗂️</span>
+            <span class="nav-item-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="12" x2="16" y2="12"/></svg>
+            </span>
             <span class="nav-item-label">账户管理</span>
-            <span class="nav-item-chevron" v-if="!sidebarCollapsed">{{ groupExpanded.account ? '▾' : '▸' }}</span>
+            <span class="nav-item-chevron" v-if="!sidebarCollapsed">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline :points="groupExpanded.account ? '18 15 12 9 6 15' : '6 9 12 15 18 9'"/></svg>
+            </span>
           </a>
           <div v-if="groupExpanded.account && !sidebarCollapsed" class="nav-sub">
             <a :class="['nav-sub-item', { active: adminTab === 'slurm-accounts' }]" @click.stop="adminTab = 'slurm-accounts'">Slurm账户</a>
@@ -62,9 +72,13 @@
             @click="groupExpanded.resource = !groupExpanded.resource"
             :title="sidebarCollapsed ? '资源管理' : ''"
           >
-            <span class="nav-item-icon">⚡</span>
+            <span class="nav-item-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            </span>
             <span class="nav-item-label">资源管理</span>
-            <span class="nav-item-chevron" v-if="!sidebarCollapsed">{{ groupExpanded.resource ? '▾' : '▸' }}</span>
+            <span class="nav-item-chevron" v-if="!sidebarCollapsed">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline :points="groupExpanded.resource ? '18 15 12 9 6 15' : '6 9 12 15 18 9'"/></svg>
+            </span>
           </a>
           <div v-if="groupExpanded.resource && !sidebarCollapsed" class="nav-sub">
             <a :class="['nav-sub-item', { active: adminTab === 'associations' }]" @click.stop="adminTab = 'associations'">资源绑定</a>
@@ -79,9 +93,13 @@
             @click="groupExpanded.monitoring = !groupExpanded.monitoring"
             :title="sidebarCollapsed ? '集群监控' : ''"
           >
-            <span class="nav-item-icon">📈</span>
+            <span class="nav-item-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            </span>
             <span class="nav-item-label">集群监控</span>
-            <span class="nav-item-chevron" v-if="!sidebarCollapsed">{{ groupExpanded.monitoring ? '▾' : '▸' }}</span>
+            <span class="nav-item-chevron" v-if="!sidebarCollapsed">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline :points="groupExpanded.monitoring ? '18 15 12 9 6 15' : '6 9 12 15 18 9'"/></svg>
+            </span>
           </a>
           <div v-if="groupExpanded.monitoring && !sidebarCollapsed" class="nav-sub">
             <a :class="['nav-sub-item', { active: adminTab === 'monitoring' && monitoringTab === 'cluster' }]" @click.stop="adminTab = 'monitoring'; monitoringTab = 'cluster'">集群状态</a>
@@ -95,9 +113,13 @@
             @click="groupExpanded.infra = !groupExpanded.infra"
             :title="sidebarCollapsed ? '基础设施' : ''"
           >
-            <span class="nav-item-icon">🗄️</span>
+            <span class="nav-item-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+            </span>
             <span class="nav-item-label">基础设施</span>
-            <span class="nav-item-chevron" v-if="!sidebarCollapsed">{{ groupExpanded.infra ? '▾' : '▸' }}</span>
+            <span class="nav-item-chevron" v-if="!sidebarCollapsed">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline :points="groupExpanded.infra ? '18 15 12 9 6 15' : '6 9 12 15 18 9'"/></svg>
+            </span>
           </a>
           <div v-if="groupExpanded.infra && !sidebarCollapsed" class="nav-sub">
             <a :class="['nav-sub-item', { active: adminTab === 'rack' }]" @click.stop="adminTab = 'rack'">机柜管理</a>
@@ -111,7 +133,9 @@
             @click="adminTab = 'ai-diagnostics'"
             :title="sidebarCollapsed ? 'AI 诊断' : ''"
           >
-            <span class="nav-item-icon">🤖</span>
+            <span class="nav-item-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+            </span>
             <span class="nav-item-label">AI 诊断</span>
           </a>
 
@@ -121,7 +145,9 @@
             @click="adminTab = 'audit'"
             :title="sidebarCollapsed ? '数据审计' : ''"
           >
-            <span class="nav-item-icon">📋</span>
+            <span class="nav-item-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+            </span>
             <span class="nav-item-label">数据审计</span>
           </a>
         </div>
@@ -369,11 +395,16 @@ onMounted(() => {
   overflow: hidden;
 }
 .nav-item:hover { background: hsl(var(--sidebar-accent)); color: hsl(var(--sidebar-accent-foreground)); }
-.nav-item.active { background: hsl(var(--sidebar-primary)); color: hsl(var(--sidebar-primary-foreground)); }
+.nav-item.active {
+  background: hsl(var(--sidebar-accent));
+  color: hsl(var(--sidebar-foreground));
+  font-weight: 600;
+  box-shadow: inset 3px 0 0 hsl(262 83% 58%);
+}
 
-.nav-item-icon { font-size: 14px; width: 18px; text-align: center; flex-shrink: 0; }
+.nav-item-icon { width: 18px; text-align: center; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
 .nav-item-label { flex: 1; }
-.nav-item-chevron { font-size: 10px; color: hsl(var(--muted-foreground)); }
+.nav-item-chevron { display: flex; align-items: center; color: hsl(var(--muted-foreground)); }
 
 .nav-sub { margin: 2px 8px 4px 28px; }
 
@@ -397,7 +428,16 @@ onMounted(() => {
   margin: 1px 0;
 }
 .nav-sub-item:hover { background: hsl(var(--sidebar-accent)); color: hsl(var(--sidebar-accent-foreground)); }
-.nav-sub-item.active { color: hsl(var(--sidebar-foreground)); font-weight: 500; }
+.nav-sub-item.active {
+  background: hsl(214 100% 97%);
+  color: hsl(221 83% 53%);
+  font-weight: 500;
+}
+
+[data-theme="dark"] .nav-sub-item.active {
+  background: hsl(214 60% 20%);
+  color: hsl(214 100% 75%);
+}
 
 .sidebar-footer {
   padding: 12px;

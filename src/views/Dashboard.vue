@@ -1,45 +1,165 @@
 <template>
   <div class="dashboard">
+    <!-- 顶部标题栏 -->
+    <div class="dash-header">
+      <div class="dash-title-row">
+        <span class="dash-online-dot"></span>
+        <h2 class="dash-title">集群总览</h2>
+        <span class="dash-cluster-tag">Slurm</span>
+        <span class="dash-update-time">最后更新 {{ lastUpdateTime }}</span>
+      </div>
+      <button class="btn-refresh" @click="refreshAll" :disabled="jobStatsLoading">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+        刷新
+      </button>
+    </div>
+
     <!-- 统计卡片 -->
     <div class="stats-grid">
+      <!-- 节点 -->
       <div class="stat-card">
-        <div class="stat-icon-wrap" style="background: linear-gradient(135deg,#667eea,#764ba2)">
-          <span>🖥️</span>
+        <div class="stat-card-left">
+          <div class="stat-icon-wrap stat-icon-blue">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          </div>
+          <div class="stat-content">
+            <div class="stat-label">节点</div>
+            <div class="stat-value-row">
+              <span class="stat-value">{{ stats.nodesOnline }}</span>
+              <span class="stat-sep">/</span>
+              <span class="stat-total">{{ stats.nodes }}</span>
+            </div>
+            <div class="stat-detail">可用 / 总数</div>
+          </div>
         </div>
-        <div class="stat-content">
-          <div class="stat-label">计算节点</div>
-          <div class="stat-value">{{ stats.nodes }}</div>
-          <div class="stat-detail">在线: {{ stats.nodesOnline }}</div>
+        <div class="stat-ring-wrap">
+          <svg width="64" height="64" viewBox="0 0 64 64">
+            <circle cx="32" cy="32" r="26" fill="none" stroke="#e5e7eb" stroke-width="5"/>
+            <circle cx="32" cy="32" r="26" fill="none" stroke="#3b82f6" stroke-width="5"
+              :stroke-dasharray="`${stats.nodes > 0 ? (stats.nodesOnline/stats.nodes)*163.4 : 0} 163.4`"
+              stroke-dashoffset="0" transform="rotate(-90 32 32)" stroke-linecap="round"/>
+            <text x="32" y="37" text-anchor="middle" style="font-size:11px;font-weight:700;fill:#1f2937">
+              {{ stats.nodes > 0 ? Math.round(stats.nodesOnline/stats.nodes*100) : 0 }}%
+            </text>
+          </svg>
         </div>
       </div>
+
+      <!-- CPU -->
       <div class="stat-card">
-        <div class="stat-icon-wrap" style="background: linear-gradient(135deg,#f093fb,#f5576c)">
-          <span>⚙️</span>
+        <div class="stat-card-left">
+          <div class="stat-icon-wrap stat-icon-green">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg>
+          </div>
+          <div class="stat-content">
+            <div class="stat-label">CPU</div>
+            <div class="stat-value-row">
+              <span class="stat-value">{{ stats.cpuUsage }}</span>
+              <span class="stat-sep">/</span>
+              <span class="stat-total">{{ stats.cpuCores }}</span>
+            </div>
+            <div class="stat-detail">已分配 / 总核数</div>
+          </div>
         </div>
-        <div class="stat-content">
-          <div class="stat-label">CPU 核心</div>
-          <div class="stat-value">{{ stats.cpuCores }}</div>
-          <div class="stat-detail">使用率: {{ stats.cpuUsage }}%</div>
+        <div class="stat-ring-wrap">
+          <svg width="64" height="64" viewBox="0 0 64 64">
+            <circle cx="32" cy="32" r="26" fill="none" stroke="#e5e7eb" stroke-width="5"/>
+            <circle cx="32" cy="32" r="26" fill="none" stroke="#10b981" stroke-width="5"
+              :stroke-dasharray="`${stats.cpuCores > 0 ? (stats.cpuUsage/stats.cpuCores)*163.4 : 0} 163.4`"
+              stroke-dashoffset="0" transform="rotate(-90 32 32)" stroke-linecap="round"/>
+            <text x="32" y="37" text-anchor="middle" style="font-size:11px;font-weight:700;fill:#1f2937">
+              {{ stats.cpuCores > 0 ? Math.round(stats.cpuUsage/stats.cpuCores*100) : 0 }}%
+            </text>
+          </svg>
         </div>
       </div>
+
+      <!-- GPU -->
       <div class="stat-card">
-        <div class="stat-icon-wrap" style="background: linear-gradient(135deg,#4facfe,#00f2fe)">
-          <span>🎮</span>
+        <div class="stat-card-left">
+          <div class="stat-icon-wrap stat-icon-purple">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12l4 6-10 13L2 9z"/><path d="M11 3L8 9l4 13 4-13-3-6"/><line x1="2" y1="9" x2="22" y2="9"/></svg>
+          </div>
+          <div class="stat-content">
+            <div class="stat-label">GPU</div>
+            <div class="stat-value-row">
+              <span class="stat-value">{{ stats.gpuInUse }}</span>
+              <span class="stat-sep">/</span>
+              <span class="stat-total">{{ stats.gpuCards }}</span>
+            </div>
+            <div class="stat-detail">已使用 / 总卡数</div>
+          </div>
         </div>
-        <div class="stat-content">
-          <div class="stat-label">GPU 卡数</div>
-          <div class="stat-value">{{ stats.gpuCards }}</div>
-          <div class="stat-detail">使用中: {{ stats.gpuInUse }}</div>
+        <div class="stat-ring-wrap">
+          <svg width="64" height="64" viewBox="0 0 64 64">
+            <circle cx="32" cy="32" r="26" fill="none" stroke="#e5e7eb" stroke-width="5"/>
+            <circle cx="32" cy="32" r="26" fill="none" stroke="#8b5cf6" stroke-width="5"
+              :stroke-dasharray="`${stats.gpuCards > 0 ? (stats.gpuInUse/stats.gpuCards)*163.4 : 0} 163.4`"
+              stroke-dashoffset="0" transform="rotate(-90 32 32)" stroke-linecap="round"/>
+            <text x="32" y="37" text-anchor="middle" style="font-size:11px;font-weight:700;fill:#1f2937">
+              {{ stats.gpuCards > 0 ? Math.round(stats.gpuInUse/stats.gpuCards*100) : 0 }}%
+            </text>
+          </svg>
         </div>
       </div>
+
+      <!-- 内存 -->
       <div class="stat-card">
-        <div class="stat-icon-wrap" style="background: linear-gradient(135deg,#43e97b,#38f9d7)">
-          <span>💾</span>
+        <div class="stat-card-left">
+          <div class="stat-icon-wrap stat-icon-cyan">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+          </div>
+          <div class="stat-content">
+            <div class="stat-label">内存</div>
+            <div class="stat-value-row">
+              <span class="stat-value">{{ formatMemory(stats.memory - stats.memoryFree) }}</span>
+              <span class="stat-sep">/</span>
+              <span class="stat-total">{{ formatMemory(stats.memory) }}</span>
+            </div>
+            <div class="stat-detail">已使用 / 总量</div>
+          </div>
         </div>
-        <div class="stat-content">
-          <div class="stat-label">内存总量</div>
-          <div class="stat-value">{{ formatMemory(stats.memory) }}</div>
-          <div class="stat-detail">可用: {{ formatMemory(stats.memoryFree) }}</div>
+        <div class="stat-ring-wrap">
+          <svg width="64" height="64" viewBox="0 0 64 64">
+            <circle cx="32" cy="32" r="26" fill="none" stroke="#e5e7eb" stroke-width="5"/>
+            <circle cx="32" cy="32" r="26" fill="none" stroke="#06b6d4" stroke-width="5"
+              :stroke-dasharray="`${stats.memory > 0 ? ((stats.memory-stats.memoryFree)/stats.memory)*163.4 : 0} 163.4`"
+              stroke-dashoffset="0" transform="rotate(-90 32 32)" stroke-linecap="round"/>
+            <text x="32" y="37" text-anchor="middle" style="font-size:11px;font-weight:700;fill:#1f2937">
+              {{ stats.memory > 0 ? Math.round((stats.memory-stats.memoryFree)/stats.memory*100) : 0 }}%
+            </text>
+          </svg>
+        </div>
+      </div>
+
+      <!-- 运行作业 -->
+      <div class="stat-card">
+        <div class="stat-card-left">
+          <div class="stat-icon-wrap stat-icon-orange">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          </div>
+          <div class="stat-content">
+            <div class="stat-label">运行作业</div>
+            <div class="stat-value-row">
+              <span class="stat-value">{{ jobStats.running }}</span>
+            </div>
+            <div class="stat-detail-tags">
+              <span class="tag-pending">等待{{ jobStats.pending }}</span>
+              <span class="tag-done">完成{{ jobStats.completed }}</span>
+            </div>
+          </div>
+        </div>
+        <div class="stat-sparkline">
+          <svg width="80" height="40" viewBox="0 0 80 40">
+            <defs>
+              <linearGradient id="sparkGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#f97316" stop-opacity="0.15"/>
+                <stop offset="100%" stop-color="#f97316" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+            <polygon points="0,35 20,28 40,20 60,15 80,10 80,40 0,40" fill="url(#sparkGrad)"/>
+            <polyline points="0,35 20,28 40,20 60,15 80,10" fill="none" stroke="#f97316" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
         </div>
       </div>
     </div>
@@ -49,13 +169,20 @@
       <!-- 作业统计 -->
       <div class="card chart-card">
         <div class="chart-card-header">
-          <h3>📊 作业统计</h3>
+          <h3>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px;margin-right:5px"><rect x="18" y="3" width="4" height="18"/><rect x="10" y="8" width="4" height="13"/><rect x="2" y="13" width="4" height="8"/></svg>
+            作业统计
+          </h3>
           <button class="btn-link-sm" @click="showJobHistory = true">历史记录 →</button>
         </div>
         <div class="chart-body">
           <div class="donut-wrap">
             <svg viewBox="0 0 200 200" class="donut-svg">
               <circle cx="100" cy="100" r="70" fill="none" stroke="#f3f4f6" stroke-width="32"/>
+              <!-- 无数据时显示占位弧 -->
+              <circle v-if="jobStatsTotal === 0" cx="100" cy="100" r="70" fill="none"
+                stroke="#e5e7eb" stroke-width="32" stroke-dasharray="440" stroke-dashoffset="0"
+                transform="rotate(-90 100 100)"/>
               <circle v-if="jobStats.completed > 0" cx="100" cy="100" r="70" fill="none"
                 stroke="#10b981" stroke-width="32"
                 :stroke-dasharray="`${jobStatsPercentages.completed * 4.4} 440`"
@@ -108,7 +235,10 @@
       <!-- 账户资源配额 -->
       <div class="card chart-card">
         <div class="chart-card-header">
-          <h3>🔑 账户配额</h3>
+          <h3>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px;margin-right:5px"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            账户配额
+          </h3>
           <select v-if="accountQuotaList.length > 1" v-model="selectedAccountIdx" class="quota-select">
             <option v-for="(a, i) in accountQuotaList" :key="i" :value="i">{{ a.account }}</option>
           </select>
@@ -151,15 +281,18 @@
           </div>
         </div>
         <div v-else class="chart-empty">
-          <div class="empty-icon">🔑</div>
-          <div>暂无账户配额</div>
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+          <div style="color:#9ca3af;font-size:0.85rem">暂无账户配额</div>
         </div>
       </div>
 
       <!-- 机时信息 -->
       <div class="card chart-card">
         <div class="chart-card-header">
-          <h3>⏱️ 机时信息</h3>
+          <h3>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px;margin-right:5px"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            机时信息
+          </h3>
           <button class="btn-link-sm" @click="showBillingHistory = true" v-if="machineTime.hasLimit">消费记录 →</button>
         </div>
         <div class="chart-body" v-if="machineTime.hasLimit">
@@ -169,7 +302,7 @@
               <circle cx="100" cy="100" r="70" fill="none"
                 :stroke="machineTime.usageRate > 90 ? '#ef4444' : machineTime.usageRate > 70 ? '#f59e0b' : '#667eea'"
                 stroke-width="32"
-                :stroke-dasharray="`${machineTime.usageRate * 4.4} 440`"
+                :stroke-dasharray="`${Math.max(machineTime.usageRate, machineTime.usageRate > 0 ? 0.5 : 0) * 4.4} 440`"
                 stroke-dashoffset="0"
                 transform="rotate(-90 100 100)"/>
               <text x="100" y="93" text-anchor="middle" class="donut-num">{{ machineTime.usageRate < 0.01 && machineTime.usageRate > 0 ? '<0.01' : machineTime.usageRate }}%</text>
@@ -193,15 +326,18 @@
           </div>
         </div>
         <div v-else class="chart-empty">
-          <div class="empty-icon">⏱️</div>
-          <div>暂无机时配额</div>
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <div style="color:#9ca3af;font-size:0.85rem">暂无机时配额</div>
         </div>
       </div>
 
       <!-- 存储配额 -->
       <div class="card chart-card">
         <div class="chart-card-header">
-          <h3>🗄️ 存储配额</h3>
+          <h3>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px;margin-right:5px"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+            存储配额
+          </h3>
         </div>
         <div class="chart-body">
           <div class="donut-wrap">
@@ -210,7 +346,7 @@
               <circle cx="100" cy="100" r="70" fill="none"
                 :stroke="storageQuota.capacity.percentage > 90 ? '#ef4444' : storageQuota.capacity.percentage > 80 ? '#f59e0b' : '#667eea'"
                 stroke-width="32"
-                :stroke-dasharray="`${storageQuota.capacity.percentage * 4.4} 440`"
+                :stroke-dasharray="`${Math.max(storageQuota.capacity.percentage, storageQuota.capacity.percentage > 0 ? 1 : 0) * 4.4} 440`"
                 stroke-dashoffset="0"
                 transform="rotate(-90 100 100)"/>
               <text x="100" y="93" text-anchor="middle" class="donut-num">{{ storageQuota.capacity.percentage }}%</text>
@@ -239,7 +375,10 @@
     <!-- 正在运行的作业 -->
     <div class="card">
       <div class="running-jobs-header">
-        <h3>▶️ 正在运行的作业</h3>
+        <h3>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;vertical-align:-2px;margin-right:6px"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          正在运行的作业
+        </h3>
         <div class="running-jobs-meta">
           <span class="running-count">{{ runningJobs.length }} 个运行中</span>
           <button class="btn-link-sm" @click="loadJobStats" :disabled="jobStatsLoading">
@@ -283,34 +422,43 @@
 
     <!-- 节点状态 -->
     <div class="card">
-      <h3>🖥️ 节点状态</h3>
-      <table class="nodes-table">
-        <thead>
-          <tr>
-            <th>节点名称</th><th>状态</th><th>CPU 使用率</th><th>内存使用率</th><th>GPU</th><th>运行作业</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="node in nodes" :key="node.name">
-            <td><code>{{ node.name }}</code></td>
-            <td><span :class="['status', `status-${node.status}`]">{{ node.statusText }}</span></td>
-            <td>
-              <div class="progress-bar">
-                <div class="progress-fill" :style="{ width: node.cpuUsage + '%' }"></div>
-                <span class="progress-text">{{ node.cpuUsage }}%</span>
-              </div>
-            </td>
-            <td>
-              <div class="progress-bar">
-                <div class="progress-fill" :style="{ width: node.memUsage + '%' }"></div>
-                <span class="progress-text">{{ node.memUsage }}%</span>
-              </div>
-            </td>
-            <td>{{ node.gpu }}</td>
-            <td>{{ node.jobs }}</td>
-          </tr>
-        </tbody>
-      </table>
+      <div class="section-header">
+        <div class="section-title-row">
+          <span class="section-dot"></span>
+          <h3>节点状态</h3>
+          <span class="section-badge">{{ nodes.length }} 个节点</span>
+        </div>
+      </div>
+      <div class="nodes-grid">
+        <div v-for="node in nodes" :key="node.name" class="node-card">
+          <div class="node-card-header">
+            <span class="node-name">{{ node.name }}</span>
+            <span :class="['node-status-dot', `dot-${node.status}`]"></span>
+          </div>
+          <div class="node-metric">
+            <div class="node-metric-row">
+              <span class="node-metric-label">CPU</span>
+              <span class="node-metric-val">{{ node.cpuUsage }}%</span>
+            </div>
+            <div class="node-bar"><div class="node-bar-fill node-bar-cpu" :style="{ width: node.cpuUsage + '%' }"></div></div>
+          </div>
+          <div class="node-metric">
+            <div class="node-metric-row">
+              <span class="node-metric-label">MEM</span>
+              <span class="node-metric-val">{{ node.memUsage }}%</span>
+            </div>
+            <div class="node-bar"><div class="node-bar-fill node-bar-mem" :style="{ width: node.memUsage + '%' }"></div></div>
+          </div>
+          <div class="node-metric">
+            <div class="node-metric-row">
+              <span class="node-metric-label">作业数</span>
+              <span class="node-metric-val">{{ node.jobs }}</span>
+            </div>
+          </div>
+          <div class="node-status-label" :class="`status-label-${node.status}`">{{ node.statusText }}</div>
+        </div>
+        <div v-if="nodes.length === 0" class="nodes-empty">暂无节点数据</div>
+      </div>
     </div>
 
     <!-- 作业历史记录弹窗 -->
@@ -480,6 +628,13 @@ const currentUser = ref<any>(null)
 const myResources = ref<any>({ associations: [], qos_limits: [] })
 const resourcesLoading = ref(false)
 const selectedAccountIdx = ref(0)
+const lastUpdateTime = ref('')
+
+const refreshAll = async () => {
+  await Promise.all([loadDashboardStats(), loadNodes(), loadJobStats()])
+  const now = new Date()
+  lastUpdateTime.value = now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+}
 
 // 账户资源配额列表（association + qos_limits 合并）
 const accountQuotaList = computed(() => {
@@ -949,93 +1104,154 @@ onMounted(() => {
   const now = new Date()
   billingEndDate.value = now.toISOString().split('T')[0]
   billingStartDate.value = now.toISOString().split('T')[0]
+  lastUpdateTime.value = now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
   loadDashboardStats()
   loadNodes()
   loadJobStats()
   loadMyResources()
-  setInterval(() => { loadDashboardStats(); loadNodes(); loadJobStats() }, 30000)
+  setInterval(() => {
+    loadDashboardStats(); loadNodes(); loadJobStats()
+    lastUpdateTime.value = new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+  }, 30000)
 })
 </script>
 
 <style scoped>
 .dashboard { display: flex; flex-direction: column; gap: 1.5rem; }
 
-/* 统计卡片 */
-.stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.25rem; }
+/* ── 顶部标题栏 ── */
+.dash-header { display: flex; align-items: center; justify-content: space-between; }
+.dash-title-row { display: flex; align-items: center; gap: 10px; }
+.dash-online-dot { width: 8px; height: 8px; border-radius: 50%; background: #10b981; animation: pulse 2s infinite; flex-shrink: 0; }
+.dash-title { margin: 0; font-size: 1.1rem; font-weight: 700; color: #1f2937; }
+.dash-cluster-tag { font-size: 0.72rem; font-weight: 600; background: #dbeafe; color: #1d4ed8; padding: 2px 8px; border-radius: 20px; }
+.dash-update-time { font-size: 0.78rem; color: #9ca3af; }
+.btn-refresh {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 14px; border: 1px solid #e5e7eb; background: white;
+  border-radius: 8px; font-size: 0.82rem; color: #374151; cursor: pointer;
+  transition: all 0.15s;
+}
+.btn-refresh:hover { background: #f9fafb; border-color: #d1d5db; }
+.btn-refresh:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── 统计卡片 ── */
+.stats-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 1rem; }
 .stat-card {
-  background: white; border-radius: 14px; padding: 1.25rem 1.5rem;
-  display: flex; align-items: center; gap: 1.25rem;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.06); transition: transform 0.2s, box-shadow 0.2s;
+  background: white; border-radius: 12px; padding: 1.1rem 1.25rem;
+  display: flex; align-items: center; justify-content: space-between;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06); border: 1px solid #e5e7eb !important;
+  border-top: 1px solid #e5e7eb !important;
+  transition: transform 0.2s, box-shadow 0.2s;
+  position: relative;
 }
-.stat-card:hover { transform: translateY(-3px); box-shadow: 0 6px 20px rgba(0,0,0,0.1); }
+/* 强制覆盖任何彩色顶部线 */
+.stat-card::before {
+  display: none !important;
+  content: none !important;
+}
+.stat-card:hover { transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.1); }
+.stat-card-left { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; }
 .stat-icon-wrap {
-  width: 52px; height: 52px; border-radius: 14px;
-  display: flex; align-items: center; justify-content: center; font-size: 1.6rem; flex-shrink: 0;
+  width: 44px; height: 44px; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
-.stat-label { font-size: 0.82rem; color: #9ca3af; margin-bottom: 4px; }
-.stat-value { font-size: 1.8rem; font-weight: 700; color: #1f2937; line-height: 1; margin-bottom: 4px; }
-.stat-detail { font-size: 0.8rem; color: #6b7280; }
+.stat-icon-wrap.stat-icon-blue   { background: #dbeafe !important; color: #2563eb !important; }
+.stat-icon-wrap.stat-icon-green  { background: #dcfce7 !important; color: #16a34a !important; }
+.stat-icon-wrap.stat-icon-purple { background: #ede9fe !important; color: #7c3aed !important; }
+.stat-icon-wrap.stat-icon-cyan   { background: #cffafe !important; color: #0891b2 !important; }
+.stat-icon-wrap.stat-icon-orange { background: #ffedd5 !important; color: #ea580c !important; }
+.stat-content { min-width: 0; }
+.stat-label { font-size: 0.75rem; color: #9ca3af; margin-bottom: 2px; font-weight: 500; }
+.stat-value-row { display: flex; align-items: baseline; gap: 3px; }
+.stat-value { font-size: 1.6rem; font-weight: 700; color: #1f2937; line-height: 1; }
+.stat-sep { font-size: 1rem; color: #d1d5db; }
+.stat-total { font-size: 1rem; color: #9ca3af; font-weight: 500; }
+.stat-detail { font-size: 0.72rem; color: #9ca3af; margin-top: 2px; }
+.stat-detail-tags { display: flex; gap: 6px; margin-top: 4px; }
+.tag-pending { font-size: 0.7rem; background: #fef9c3; color: #a16207; padding: 1px 6px; border-radius: 4px; font-weight: 500; }
+.tag-done    { font-size: 0.7rem; background: #dcfce7; color: #15803d; padding: 1px 6px; border-radius: 4px; font-weight: 500; }
+.stat-ring-wrap { flex-shrink: 0; }
+.stat-sparkline { flex-shrink: 0; opacity: 0.7; }
 
-/* 图表行 */
-.charts-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.25rem; }
+/* ── 图表行 ── */
+.charts-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
 .chart-card { display: flex; flex-direction: column; }
-.chart-card-header {
-  display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;
-}
-.chart-card-header h3 { margin: 0; font-size: 1rem; font-weight: 600; color: #374151; }
-.btn-link-sm {
-  background: none; border: none; color: #667eea; font-size: 0.82rem;
-  cursor: pointer; padding: 0; font-weight: 500;
-}
+.chart-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+.chart-card-header h3 { margin: 0; font-size: 0.9rem; font-weight: 600; color: #374151; display: flex; align-items: center; }
+.btn-link-sm { background: none; border: none; color: #667eea; font-size: 0.78rem; cursor: pointer; padding: 0; font-weight: 500; white-space: nowrap; }
 .btn-link-sm:hover { text-decoration: underline; }
-
-.quota-select {
-  padding: 2px 6px;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  font-size: 0.78rem;
-  color: #374151;
-  background: #f9fafb;
-  cursor: pointer;
-}
-
-.chart-body { display: flex; align-items: center; gap: 1.5rem; }
+.quota-select { padding: 2px 6px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.75rem; color: #374151; background: #f9fafb; cursor: pointer; }
+.chart-body { display: flex; align-items: center; gap: 0.75rem; min-width: 0; overflow: hidden; }
 .donut-wrap { flex-shrink: 0; }
-.donut-svg { width: 160px; height: 160px; }
-.donut-num { font-size: 2rem; font-weight: 700; fill: #1f2937; }
-.donut-lbl { font-size: 0.85rem; fill: #9ca3af; }
-
-.legend-list { display: flex; flex-direction: column; gap: 0.6rem; flex: 1; }
-.legend-row { display: flex; align-items: center; gap: 0.6rem; cursor: default; }
+.donut-svg { width: 110px; height: 110px; }
+.donut-num { font-size: 1.8rem !important; font-weight: 700 !important; fill: #1f2937 !important; }
+.donut-lbl { font-size: 0.8rem !important; fill: #9ca3af !important; }
+.legend-list { display: flex; flex-direction: column; gap: 0.4rem; flex: 1; min-width: 0; overflow: hidden; }
+.legend-row { display: flex; align-items: center; gap: 0.4rem; min-width: 0; }
 .legend-row:hover .leg-label { color: #374151; }
-.dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-.leg-label { font-size: 0.85rem; color: #6b7280; flex: 1; }
-.leg-val { font-size: 0.9rem; font-weight: 600; color: #374151; }
-.legend-row-full { padding-top: 0.5rem; border-top: 1px solid #f3f4f6; }
-.leg-small { font-size: 0.8rem; color: #9ca3af; }
+.dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.leg-label { font-size: 0.78rem; color: #6b7280; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.leg-val { font-size: 0.82rem; font-weight: 600; color: #374151; white-space: nowrap; flex-shrink: 0; }
+.legend-row-full { padding-top: 0.4rem; border-top: 1px solid #f3f4f6; }
+.leg-small { font-size: 0.72rem; color: #9ca3af; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+.chart-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 110px; color: #9ca3af; gap: 0.5rem; }
+.empty-icon { font-size: 1.8rem; opacity: 0.4; }
 
-.chart-empty {
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  height: 160px; color: #9ca3af; gap: 0.5rem;
+/* ── 卡片通用 ── */
+.card { background: white; border-radius: 12px; padding: 1.25rem 1.5rem; box-shadow: 0 1px 4px rgba(0,0,0,0.06); border: 1px solid #f0f0f0; }
+.card h3 { margin: 0 0 1rem 0; font-size: 0.9rem; font-weight: 600; color: #374151; }
+
+/* ── 正在运行的作业 ── */
+.running-jobs-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+.running-jobs-header h3 { margin: 0; font-size: 0.9rem; font-weight: 600; color: #374151; display: flex; align-items: center; }
+.running-jobs-meta { display: flex; align-items: center; gap: 1rem; }
+.running-count { font-size: 0.75rem; font-weight: 600; color: #3b82f6; background: #dbeafe; padding: 2px 10px; border-radius: 20px; }
+.running-empty { text-align: center; padding: 2rem; color: #9ca3af; font-size: 0.88rem; }
+.running-job-row { transition: background 0.15s; }
+.running-job-row:hover td { background: #f0f4ff !important; }
+.elapsed-badge { background: #dbeafe; color: #1e40af; padding: 2px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 600; font-family: monospace; }
+
+/* ── 节点状态 ── */
+.section-header { margin-bottom: 1rem; }
+.section-title-row { display: flex; align-items: center; gap: 0.5rem; }
+.section-title-row h3 { margin: 0; font-size: 0.9rem; font-weight: 600; color: #374151; }
+.section-dot { width: 8px; height: 8px; border-radius: 50%; background: #10b981; flex-shrink: 0; animation: pulse 2s infinite; }
+.section-badge { font-size: 0.72rem; background: #f3f4f6; color: #6b7280; padding: 2px 8px; border-radius: 20px; font-weight: 500; }
+.nodes-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 0.75rem; }
+.node-card {
+  background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px;
+  padding: 0.875rem; display: flex; flex-direction: column; gap: 0.45rem;
+  transition: box-shadow 0.15s, border-color 0.15s;
 }
-.empty-icon { font-size: 2rem; opacity: 0.4; }
+.node-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); border-color: #d1d5db; }
+.node-card-header { display: flex; justify-content: space-between; align-items: center; }
+.node-name { font-size: 0.8rem; font-weight: 600; color: #374151; font-family: monospace; }
+.node-status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.dot-online  { background: #10b981; box-shadow: 0 0 0 2px #d1fae5; }
+.dot-idle    { background: #3b82f6; box-shadow: 0 0 0 2px #dbeafe; }
+.dot-offline { background: #ef4444; box-shadow: 0 0 0 2px #fee2e2; }
+.node-metric { display: flex; flex-direction: column; gap: 3px; }
+.node-metric-row { display: flex; justify-content: space-between; align-items: center; }
+.node-metric-label { font-size: 0.68rem; color: #9ca3af; font-weight: 500; }
+.node-metric-val { font-size: 0.75rem; font-weight: 600; color: #374151; }
+.node-bar { height: 4px; background: #e5e7eb; border-radius: 2px; overflow: hidden; }
+.node-bar-fill { height: 100%; border-radius: 2px; transition: width 0.3s; }
+.node-bar-cpu { background: linear-gradient(90deg, #3b82f6, #6366f1); }
+.node-bar-mem { background: linear-gradient(90deg, #10b981, #06b6d4); }
+.node-status-label { font-size: 0.68rem; font-weight: 600; padding: 2px 6px; border-radius: 4px; text-align: center; margin-top: 2px; }
+.status-label-online  { background: #d1fae5; color: #065f46; }
+.status-label-idle    { background: #dbeafe; color: #1e40af; }
+.status-label-offline { background: #fee2e2; color: #991b1b; }
+.nodes-empty { grid-column: 1/-1; text-align: center; padding: 2rem; color: #9ca3af; font-size: 0.88rem; }
 
-/* 节点表格 */
-.card { background: white; border-radius: 14px; padding: 1.5rem; box-shadow: 0 2px 10px rgba(0,0,0,0.06); }
-.card h3 { margin: 0 0 1rem 0; font-size: 1rem; font-weight: 600; color: #374151; }
+/* ── 表格 ── */
 .nodes-table { width: 100%; border-collapse: collapse; }
-.nodes-table th { background: #f9fafb; padding: 0.75rem 1rem; text-align: left; font-size: 0.82rem; font-weight: 600; color: #6b7280; border-bottom: 2px solid #e5e7eb; }
-.nodes-table td { padding: 0.75rem 1rem; border-bottom: 1px solid #f3f4f6; font-size: 0.88rem; }
+.nodes-table th { background: #f9fafb; padding: 0.65rem 1rem; text-align: left; font-size: 0.78rem; font-weight: 600; color: #6b7280; border-bottom: 2px solid #e5e7eb; }
+.nodes-table td { padding: 0.65rem 1rem; border-bottom: 1px solid #f3f4f6; font-size: 0.85rem; }
 .nodes-table tbody tr:hover { background: #fafafa; }
-.status { padding: 2px 10px; border-radius: 20px; font-size: 0.78rem; font-weight: 600; }
-.status-online { background: #d1fae5; color: #065f46; }
-.status-idle { background: #dbeafe; color: #1e40af; }
-.status-offline { background: #fee2e2; color: #991b1b; }
-.progress-bar { position: relative; width: 100%; height: 20px; background: #e5e7eb; border-radius: 10px; overflow: hidden; }
-.progress-fill { height: 100%; background: linear-gradient(90deg,#667eea,#764ba2); transition: width 0.3s; }
-.progress-text { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); font-size: 0.72rem; font-weight: 600; color: #374151; }
 
-/* 弹窗 */
+/* ── 弹窗 ── */
 .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: flex; align-items: center; justify-content: center; z-index: 1000; }
 .modal { background: white; border-radius: 16px; width: 92%; max-height: 88vh; display: flex; flex-direction: column; overflow: hidden; }
 .modal-lg { max-width: 900px; }
@@ -1055,38 +1271,31 @@ onMounted(() => {
 .btn-detail:hover { background: #e5e7eb; }
 .clickable-row { cursor: pointer; }
 .clickable-row:hover td { background: #f0f4ff !important; }
-
-.data-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
-.data-table th { background: #f9fafb; padding: 0.65rem 0.9rem; text-align: left; font-size: 0.8rem; font-weight: 600; color: #6b7280; border-bottom: 2px solid #e5e7eb; }
+.data-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.data-table th { background: #f9fafb; padding: 0.65rem 0.9rem; text-align: left; font-size: 0.78rem; font-weight: 600; color: #6b7280; border-bottom: 2px solid #e5e7eb; }
 .data-table td { padding: 0.65rem 0.9rem; border-bottom: 1px solid #f3f4f6; }
 .data-table tbody tr:hover { background: #fafafa; }
 .empty-cell { text-align: center; padding: 2rem; color: #9ca3af; }
-
-.state-badge { padding: 2px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; }
-.state-running { background: #dcfce7; color: #15803d; }
-.state-pending { background: #fef9c3; color: #a16207; }
+.state-badge { padding: 2px 10px; border-radius: 20px; font-size: 0.72rem; font-weight: 600; }
+.state-running   { background: #dcfce7; color: #15803d; }
+.state-pending   { background: #fef9c3; color: #a16207; }
 .state-completed { background: #dbeafe; color: #1d4ed8; }
-.state-failed { background: #fee2e2; color: #b91c1c; }
+.state-failed    { background: #fee2e2; color: #b91c1c; }
 .state-cancelled { background: #f1f5f9; color: #64748b; }
-.user-tag { font-size: 0.82rem; color: #6b7280; font-family: monospace; }
+.user-tag { font-size: 0.8rem; color: #6b7280; font-family: monospace; }
 
-/* 机时消费汇总 */
+/* ── 机时消费汇总 ── */
 .billing-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.25rem; }
 .bs-item { background: #f9fafb; border-radius: 10px; padding: 1rem; text-align: center; }
-.bs-label { font-size: 0.78rem; color: #9ca3af; margin-bottom: 0.4rem; }
-.bs-val { font-size: 1.3rem; font-weight: 700; color: #1f2937; }
+.bs-label { font-size: 0.75rem; color: #9ca3af; margin-bottom: 0.4rem; }
+.bs-val { font-size: 1.2rem; font-weight: 700; color: #1f2937; }
 
+/* ── 动画 ── */
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+/* ── 响应式 ── */
+@media (max-width: 1400px) { .stats-grid { grid-template-columns: repeat(3, 1fr); } }
 @media (max-width: 1200px) { .stats-grid { grid-template-columns: repeat(2, 1fr); } .charts-row { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 900px) { .charts-row { grid-template-columns: 1fr; } }
-@media (max-width: 600px) { .stats-grid { grid-template-columns: 1fr; } .billing-summary { grid-template-columns: repeat(2, 1fr); } }
-
-/* 正在运行的作业 */
-.running-jobs-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
-.running-jobs-header h3 { margin: 0; font-size: 1rem; font-weight: 600; color: #374151; }
-.running-jobs-meta { display: flex; align-items: center; gap: 1rem; }
-.running-count { font-size: 0.82rem; font-weight: 600; color: #3b82f6; background: #dbeafe; padding: 2px 10px; border-radius: 20px; }
-.running-empty { text-align: center; padding: 2rem; color: #9ca3af; font-size: 0.9rem; }
-.running-job-row { transition: background 0.15s; }
-.running-job-row:hover td { background: #f0f4ff !important; }
-.elapsed-badge { background: #dbeafe; color: #1e40af; padding: 2px 8px; border-radius: 6px; font-size: 0.78rem; font-weight: 600; font-family: monospace; }
+@media (max-width: 900px)  { .charts-row { grid-template-columns: 1fr; } }
+@media (max-width: 600px)  { .stats-grid { grid-template-columns: 1fr; } .billing-summary { grid-template-columns: repeat(2, 1fr); } }
 </style>
