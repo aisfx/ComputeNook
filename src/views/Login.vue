@@ -2,7 +2,28 @@
   <div class="login-root" :data-theme="theme">
     <div class="login-left">
       <div class="login-brand">
-        <div class="brand-logo"><span>⚡</span></div>
+        <div class="brand-logo">
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <!-- 房子 -->
+            <path d="M3 10.5L12 3l9 7.5V21a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V10.5z" fill="white" opacity="0.15"/>
+            <path d="M3 10.5L12 3l9 7.5" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M4 10.5V21h16V10.5" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            <!-- CPU 芯片 左 -->
+            <rect x="6.5" y="13" width="4" height="4" rx="0.6" stroke="white" stroke-width="1.4"/>
+            <line x1="7.5" y1="13" x2="7.5" y2="11.8" stroke="white" stroke-width="0.9" stroke-linecap="round"/>
+            <line x1="9.5" y1="13" x2="9.5" y2="11.8" stroke="white" stroke-width="0.9" stroke-linecap="round"/>
+            <line x1="6.5" y1="14.5" x2="5.3" y2="14.5" stroke="white" stroke-width="0.9" stroke-linecap="round"/>
+            <line x1="6.5" y1="15.5" x2="5.3" y2="15.5" stroke="white" stroke-width="0.9" stroke-linecap="round"/>
+            <!-- GPU 芯片 右 -->
+            <rect x="13.5" y="13" width="4" height="4" rx="0.6" stroke="white" stroke-width="1.4"/>
+            <line x1="14.5" y1="13" x2="14.5" y2="11.8" stroke="white" stroke-width="0.9" stroke-linecap="round"/>
+            <line x1="16.5" y1="13" x2="16.5" y2="11.8" stroke="white" stroke-width="0.9" stroke-linecap="round"/>
+            <line x1="17.5" y1="14.5" x2="18.7" y2="14.5" stroke="white" stroke-width="0.9" stroke-linecap="round"/>
+            <line x1="17.5" y1="15.5" x2="18.7" y2="15.5" stroke="white" stroke-width="0.9" stroke-linecap="round"/>
+            <!-- 调度连线 -->
+            <line x1="10.5" y1="15" x2="13.5" y2="15" stroke="white" stroke-width="1" stroke-linecap="round" stroke-dasharray="1 1"/>
+          </svg>
+        </div>
         <h1>算力小筑</h1>
         <p class="brand-tagline">算力触手可及</p>
         <p class="brand-desc">不大，但够用。<br/>一个人也能管好一整个集群。</p>

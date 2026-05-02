@@ -4,7 +4,18 @@
     <aside class="sidebar" :class="{ collapsed: sidebarCollapsed }">
       <div class="sidebar-header">
         <div class="sidebar-logo" @click="goHome">
-          <div class="logo-icon">⚡</div>
+          <div class="logo-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M3 10.5L12 3l9 7.5V21a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V10.5z" fill="currentColor" opacity="0.2"/>
+              <path d="M3 10.5L12 3l9 7.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M4 10.5V21h16V10.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              <rect x="7.5" y="13.5" width="3.5" height="3.5" rx="0.5" stroke="currentColor" stroke-width="1.3"/>
+              <rect x="13" y="13.5" width="3.5" height="3.5" rx="0.5" stroke="currentColor" stroke-width="1.3"/>
+              <line x1="9.25" y1="13.5" x2="9.25" y2="12" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
+              <line x1="14.75" y1="13.5" x2="14.75" y2="12" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
+              <line x1="9.25" y1="12" x2="14.75" y2="12" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
+            </svg>
+          </div>
           <span class="logo-text">算力小筑</span>
         </div>
         <button class="sidebar-collapse-btn" @click="sidebarCollapsed = !sidebarCollapsed">
