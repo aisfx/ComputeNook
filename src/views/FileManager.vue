@@ -61,7 +61,7 @@
     </div>
 
     <!-- 文件列表 -->
-    <div class="fm-body">
+    <div class="fm-body" @click="selectedPaths.clear(); selectedPaths = new Set(selectedPaths)">
       <div v-if="loading" class="fm-loading">
         <div class="fm-spinner"></div>
         <span>加载中...</span>
@@ -73,85 +73,165 @@
           <p>此目录为空</p>
         </div>
 
-        <table v-else class="fm-table">
-          <thead>
-            <tr>
-              <th class="col-icon"></th>
-              <th class="col-name">名称</th>
-              <th class="col-size">大小</th>
-              <th class="col-time">修改时间</th>
-              <th class="col-perm">权限</th>
-              <th class="col-ops">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="file in sortedFiles"
-              :key="file.path"
-              @dblclick="handleDoubleClick(file)"
-              class="fm-row"
-            >
-              <td class="col-icon">
-                <div :class="['fm-icon', file.is_dir ? 'fm-icon-dir' : `fm-icon-${getFileType(file.name)}`]">
-                  <component :is="file.is_dir ? IconFolder : getFileIconComp(file.name)" />
-                </div>
-              </td>
-              <td class="col-name">
-                <span :class="['fm-name', { 'fm-name-dir': file.is_dir }]">{{ file.name }}</span>
-              </td>
-              <td class="col-size">{{ file.is_dir ? '—' : formatSize(file.size) }}</td>
-              <td class="col-time">{{ formatTime(file.mod_time) }}</td>
-              <td class="col-perm"><code class="fm-perm">{{ file.permissions }}</code></td>
-              <td class="col-ops">
-                <div class="fm-dropdown">
-                  <button class="fm-op-toggle" :data-ops="file.path" @click.stop="openOps = openOps === file.path ? null : file.path">
-                    操作 ▾
-                  </button>
-                  <Teleport to="body">
-                    <div
-                      v-if="openOps === file.path"
-                      class="fm-dropdown-menu"
-                      :style="getDropdownStyle(file.path)"
-                      @click.stop
-                    >
-                      <button v-if="file.is_dir" class="fm-dropdown-item" @click="openDirectory(file); openOps = null">
-                        <svg viewBox="0 0 24 24"><path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10z"/></svg>
-                        打开
-                      </button>
-                      <button v-if="!file.is_dir" class="fm-dropdown-item" @click="viewFile(file); openOps = null">
-                        <svg viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
-                        查看
-                      </button>
-                      <button v-if="!file.is_dir" class="fm-dropdown-item" @click="downloadFile(file); openOps = null">
-                        <svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
-                        下载
-                      </button>
-                      <button v-if="!file.is_dir" class="fm-dropdown-item" @click="editFile(file); openOps = null">
-                        <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
-                        编辑
-                      </button>
-                      <button class="fm-dropdown-item" @click="compressDownload(file); openOps = null">
-                        <svg viewBox="0 0 24 24"><path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-4 6h-3v3h-2v-3H8v-2h3V7h2v3h3v2z"/></svg>
-                        压缩下载
-                      </button>
-                      <button class="fm-dropdown-item" @click="renameFile(file); openOps = null">
-                        <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
-                        重命名
-                      </button>
-                      <div class="fm-dropdown-divider"></div>
-                      <button class="fm-dropdown-item fm-dropdown-danger" @click="deleteFile(file); openOps = null">
-                        <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
-                        删除
-                      </button>
-                    </div>
-                  </Teleport>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+        <template v-else>
+          <!-- 多选操作栏 -->
+          <div v-if="selectedPaths.size > 0" class="fm-selection-bar" @click.stop>
+            <span class="fm-sel-count">已选 {{ selectedPaths.size }} 项</span>
+            <button class="fm-btn fm-btn-secondary fm-btn-sm" @click="batchCompressDownload">
+              <svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+              压缩下载
+            </button>
+            <button class="fm-btn fm-btn-danger-sm fm-btn-sm" @click="batchDelete">
+              <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+              批量删除
+            </button>
+            <button class="fm-btn fm-btn-secondary fm-btn-sm" @click="selectedPaths = new Set()">
+              取消选择
+            </button>
+          </div>
+
+          <table class="fm-table" @click.stop>
+            <thead>
+              <tr>
+                <th class="col-check">
+                  <input type="checkbox" class="fm-checkbox"
+                    :checked="selectedPaths.size === sortedFiles.length && sortedFiles.length > 0"
+                    :indeterminate="selectedPaths.size > 0 && selectedPaths.size < sortedFiles.length"
+                    @change="toggleSelectAll"
+                  />
+                </th>
+                <th class="col-icon"></th>
+                <th class="col-name">名称</th>
+                <th class="col-size">大小</th>
+                <th class="col-time">修改时间</th>
+                <th class="col-perm">权限</th>
+                <th class="col-ops">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="file in sortedFiles"
+                :key="file.path"
+                @dblclick="handleDoubleClick(file)"
+                @click.stop="toggleSelect(file, $event)"
+                :class="['fm-row', { 'fm-row-selected': selectedPaths.has(file.path) }]"
+              >
+                <td class="col-check" @click.stop>
+                  <input type="checkbox" class="fm-checkbox"
+                    :checked="selectedPaths.has(file.path)"
+                    @change="toggleSelect(file, $event)"
+                  />
+                </td>
+                <td class="col-icon">
+                  <div :class="['fm-icon', file.is_dir ? 'fm-icon-dir' : `fm-icon-${getFileType(file.name)}`]">
+                    <component :is="file.is_dir ? IconFolder : getFileIconComp(file.name)" />
+                  </div>
+                </td>
+                <td class="col-name">
+                  <span :class="['fm-name', { 'fm-name-dir': file.is_dir }]">{{ file.name }}</span>
+                </td>
+                <td class="col-size">{{ file.is_dir ? '—' : formatSize(file.size) }}</td>
+                <td class="col-time">{{ formatTime(file.mod_time) }}</td>
+                <td class="col-perm"><code class="fm-perm">{{ file.permissions }}</code></td>
+                <td class="col-ops" @click.stop>
+                  <div class="fm-dropdown">
+                    <button class="fm-op-toggle" :data-ops="file.path" @click.stop="openOps = openOps === file.path ? null : file.path">
+                      操作 ▾
+                    </button>
+                    <Teleport to="body">
+                      <div
+                        v-if="openOps === file.path"
+                        class="fm-dropdown-menu"
+                        :style="getDropdownStyle(file.path)"
+                        @click.stop
+                      >
+                        <button v-if="file.is_dir" class="fm-dropdown-item" @click="openDirectory(file); openOps = null">
+                          <svg viewBox="0 0 24 24"><path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 12H4V8h16v10z"/></svg>
+                          打开
+                        </button>
+                        <button v-if="!file.is_dir" class="fm-dropdown-item" @click="viewFile(file); openOps = null">
+                          <svg viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
+                          查看
+                        </button>
+                        <button v-if="!file.is_dir" class="fm-dropdown-item" @click="downloadFile(file); openOps = null">
+                          <svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+                          下载
+                        </button>
+                        <button v-if="!file.is_dir" class="fm-dropdown-item" @click="editFile(file); openOps = null">
+                          <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                          编辑
+                        </button>
+                        <button class="fm-dropdown-item" @click="compressDownload(file); openOps = null">
+                          <svg viewBox="0 0 24 24"><path d="M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-4 6h-3v3h-2v-3H8v-2h3V7h2v3h3v2z"/></svg>
+                          压缩下载
+                        </button>
+                        <button class="fm-dropdown-item" @click="renameFile(file); openOps = null">
+                          <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                          重命名
+                        </button>
+                        <div class="fm-dropdown-divider"></div>
+                        <button class="fm-dropdown-item fm-dropdown-danger" @click="deleteFile(file); openOps = null">
+                          <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+                          删除
+                        </button>
+                      </div>
+                    </Teleport>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </template>
       </template>
     </div>
+
+    <!-- 输入弹窗 -->
+    <Teleport to="body">
+      <div v-if="inputDialog.visible" class="fm-modal-overlay" @click.self="inputDialog.visible = false">
+        <div class="fm-dialog" @click.stop>
+          <div class="fm-dialog-header">
+            <span>{{ inputDialog.title }}</span>
+            <button class="fm-modal-close" @click="inputDialog.visible = false">
+              <svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+            </button>
+          </div>
+          <div class="fm-dialog-body">
+            <label class="fm-dialog-label">{{ inputDialog.label }}</label>
+            <input
+              ref="dialogInput"
+              v-model="inputDialog.value"
+              class="fm-dialog-input"
+              :placeholder="inputDialog.placeholder"
+              @keyup.enter="inputDialog.onConfirm(inputDialog.value)"
+              @keyup.esc="inputDialog.visible = false"
+              spellcheck="false"
+            />
+          </div>
+          <div class="fm-dialog-footer">
+            <button class="fm-btn fm-btn-secondary" @click="inputDialog.visible = false">取消</button>
+            <button class="fm-btn fm-btn-confirm" @click="inputDialog.onConfirm(inputDialog.value)" :disabled="!inputDialog.value.trim()">确定</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- 确认弹窗 -->
+    <Teleport to="body">
+      <div v-if="confirmDialog.visible" class="fm-modal-overlay" @click.self="confirmDialog.visible = false">
+        <div class="fm-dialog" @click.stop>
+          <div class="fm-dialog-header">
+            <span>{{ confirmDialog.title }}</span>
+          </div>
+          <div class="fm-dialog-body">
+            <p class="fm-dialog-msg">{{ confirmDialog.message }}</p>
+          </div>
+          <div class="fm-dialog-footer">
+            <button class="fm-btn fm-btn-secondary" @click="confirmDialog.visible = false">取消</button>
+            <button class="fm-btn fm-btn-danger" @click="confirmDialog.onConfirm()">确定删除</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
 
     <!-- 文件查看/编辑弹窗 -->
     <Teleport to="body">
@@ -195,7 +275,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, defineComponent, h } from 'vue'
+import { ref, computed, onMounted, onUnmounted, defineComponent, h, watch } from 'vue'
 import { getUser } from '../utils/auth'
 import notification from '../utils/notification'
 import { fileManagerApi } from '../config/api'
@@ -249,6 +329,99 @@ const fileContent = ref('')
 const openOps = ref<string | null>(null)
 const isEditing = ref(false)
 const saving = ref(false)
+const dialogInput = ref<HTMLInputElement | null>(null)
+
+// 多选
+let selectedPaths = ref<Set<string>>(new Set())
+
+const toggleSelect = (file: any, e: Event) => {
+  const newSet = new Set(selectedPaths.value)
+  if (newSet.has(file.path)) newSet.delete(file.path)
+  else newSet.add(file.path)
+  selectedPaths.value = newSet
+}
+
+const toggleSelectAll = () => {
+  if (selectedPaths.value.size === sortedFiles.value.length) {
+    selectedPaths.value = new Set()
+  } else {
+    selectedPaths.value = new Set(sortedFiles.value.map((f: any) => f.path))
+  }
+}
+
+const batchCompressDownload = () => {
+  const paths = [...selectedPaths.value]
+  if (!paths.length) return
+  const params = paths.map(p => `path=${encodeURIComponent(p)}`).join('&')
+  const url = `${fileManagerApi.compress()}?${params}&token=${token()}`
+  const a = document.createElement('a')
+  a.href = url; a.download = 'batch.zip'; a.style.display = 'none'
+  document.body.appendChild(a); a.click(); document.body.removeChild(a)
+  notification.success(`开始压缩下载 ${paths.length} 个文件`)
+}
+
+const batchDelete = async () => {
+  const paths = [...selectedPaths.value]
+  if (!paths.length) return
+  const names = sortedFiles.value
+    .filter((f: any) => paths.includes(f.path))
+    .map((f: any) => f.name)
+  if (!await showConfirmDialog('批量删除', `确定删除选中的 ${paths.length} 个文件/文件夹？此操作不可恢复！`)) return
+  let failed = 0
+  for (const path of paths) {
+    try {
+      const res = await fetch(`${fileManagerApi.delete()}?path=${encodeURIComponent(path)}`, {
+        method: 'DELETE', headers: { Authorization: `Bearer ${token()}` }
+      })
+      if (!res.ok) failed++
+    } catch { failed++ }
+  }
+  selectedPaths.value = new Set()
+  if (failed === 0) notification.success(`已删除 ${paths.length} 个文件`)
+  else notification.error(`${paths.length - failed} 个成功，${failed} 个失败`)
+  await loadDirectory()
+}
+
+// 输入弹窗
+const inputDialog = ref({
+  visible: false, title: '', label: '', placeholder: '', value: '',
+  onConfirm: (_v: string) => {}
+})
+
+// 确认弹窗
+const confirmDialog = ref({
+  visible: false, title: '', message: '',
+  onConfirm: () => {}
+})
+
+const showInputDialog = (title: string, label: string, defaultVal = '', placeholder = '') =>
+  new Promise<string | null>(resolve => {
+    inputDialog.value = {
+      visible: true, title, label, placeholder, value: defaultVal,
+      onConfirm: (v: string) => {
+        if (!v.trim()) return
+        inputDialog.value.visible = false
+        resolve(v.trim())
+      }
+    }
+    // 自动聚焦
+    setTimeout(() => dialogInput.value?.focus(), 50)
+    // 监听关闭（取消）
+    const stop = watch(() => inputDialog.value.visible, (v) => {
+      if (!v) { stop(); resolve(null) }
+    })
+  })
+
+const showConfirmDialog = (title: string, message: string) =>
+  new Promise<boolean>(resolve => {
+    confirmDialog.value = {
+      visible: true, title, message,
+      onConfirm: () => { confirmDialog.value.visible = false; resolve(true) }
+    }
+    const stop = watch(() => confirmDialog.value.visible, (v) => {
+      if (!v) { stop(); resolve(false) }
+    })
+  })
 
 // 计算下拉菜单的绝对定位位置
 const getDropdownStyle = (filePath: string) => {
@@ -318,6 +491,7 @@ const token = () => localStorage.getItem('token') || sessionStorage.getItem('tok
 
 const loadDirectory = async () => {
   loading.value = true
+  selectedPaths.value = new Set()
   try {
     const res = await fetch(`${fileManagerApi.list()}?path=${encodeURIComponent(currentPath.value)}`, {
       headers: { Authorization: `Bearer ${token()}` }
@@ -390,7 +564,7 @@ const downloadFile = (file: any) => {
 }
 
 const deleteFile = async (file: any) => {
-  if (!confirm(`确定删除 "${file.name}"？此操作不可恢复！`)) return
+  if (!await showConfirmDialog('确认删除', `确定删除 "${file.name}"？此操作不可恢复！`)) return
   try {
     const res = await fetch(`${fileManagerApi.delete()}?path=${encodeURIComponent(file.path)}`, {
       method: 'DELETE', headers: { Authorization: `Bearer ${token()}` }
@@ -401,7 +575,7 @@ const deleteFile = async (file: any) => {
 }
 
 const renameFile = async (file: any) => {
-  const newName = prompt(`重命名 "${file.name}"`, file.name)
+  const newName = await showInputDialog(`重命名`, '新名称', file.name, file.name)
   if (!newName || newName === file.name) return
   try {
     const parts = file.path.split('/'); parts[parts.length - 1] = newName
@@ -416,7 +590,8 @@ const renameFile = async (file: any) => {
 }
 
 const showCreateFolderDialog = async () => {
-  const name = prompt('新建文件夹名称：'); if (!name) return
+  const name = await showInputDialog('新建文件夹', '文件夹名称', '', '请输入文件夹名称')
+  if (!name) return
   try {
     const res = await fetch(fileManagerApi.mkdir(), {
       method: 'POST',
@@ -429,7 +604,8 @@ const showCreateFolderDialog = async () => {
 }
 
 const showCreateFileDialog = async () => {
-  const name = prompt('新建文件名称：'); if (!name) return
+  const name = await showInputDialog('新建文件', '文件名称', '', '请输入文件名称')
+  if (!name) return
   try {
     const res = await fetch(fileManagerApi.write(), {
       method: 'POST',
@@ -442,7 +618,7 @@ const showCreateFileDialog = async () => {
 }
 
 // 通过 hpcc:// 拉起客户端挂载 WebDAV 为本地盘符/挂载点
-const launchMount = () => {
+const launchMount = async () => {
   const t = localStorage.getItem('token') || sessionStorage.getItem('token') || ''
   if (!t) { notification.error('请先登录'); return }
   // 根据系统给出默认挂载点提示
@@ -451,7 +627,12 @@ const launchMount = () => {
   if (ua.includes('Windows')) defaultMount = 'Z:'
   else if (ua.includes('Mac')) defaultMount = '/Volumes/HPC'
 
-  const mountPoint = prompt(`挂载点（Windows: Z:，macOS: /Volumes/HPC，Linux: /mnt/hpc）`, defaultMount)
+  const mountPoint = await showInputDialog(
+    '挂载到本地',
+    `挂载点（Windows: Z:，macOS: /Volumes/HPC，Linux: /mnt/hpc）`,
+    defaultMount,
+    defaultMount
+  )
   if (mountPoint === null) return // 用户取消
 
   const uri = `hpcc://mount?server=${encodeURIComponent(location.origin)}&token=${encodeURIComponent(t)}&mountpoint=${encodeURIComponent(mountPoint)}&port=18080`
@@ -754,4 +935,73 @@ onUnmounted(() => { document.removeEventListener('click', handleGlobalClick) })
   display: flex; justify-content: flex-end; gap: 0.75rem;
   padding: 1rem 1.25rem; border-top: 1px solid hsl(var(--border));
 }
+
+/* ── 输入/确认弹窗 ── */
+.fm-dialog {
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: 12px;
+  width: 100%; max-width: 420px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.2);
+  overflow: hidden;
+}
+.fm-dialog-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0.9rem 1.25rem; border-bottom: 1px solid hsl(var(--border));
+  font-size: 0.95rem; font-weight: 600; color: hsl(var(--foreground));
+}
+.fm-dialog-body { padding: 1.25rem; }
+.fm-dialog-label {
+  display: block; font-size: 0.82rem; font-weight: 500;
+  color: hsl(var(--muted-foreground)); margin-bottom: 0.5rem;
+}
+.fm-dialog-input {
+  width: 100%; padding: 0.55rem 0.75rem; box-sizing: border-box;
+  border: 1.5px solid hsl(var(--border)); border-radius: 8px;
+  background: hsl(var(--background)); color: hsl(var(--foreground));
+  font-size: 0.875rem; outline: none; transition: border-color 0.15s;
+}
+.fm-dialog-input:focus { border-color: hsl(var(--ring)); }
+.fm-dialog-msg { margin: 0; font-size: 0.875rem; color: hsl(var(--foreground)); line-height: 1.6; }
+.fm-dialog-footer {
+  display: flex; justify-content: flex-end; gap: 0.75rem;
+  padding: 0.9rem 1.25rem; border-top: 1px solid hsl(var(--border));
+}
+.fm-btn-confirm {
+  background: hsl(var(--primary)); color: hsl(var(--primary-foreground));
+  border: none; padding: 0.45rem 1.1rem; border-radius: 7px;
+  font-size: 0.82rem; font-weight: 600; cursor: pointer; transition: opacity 0.15s;
+}
+.fm-btn-confirm:hover:not(:disabled) { opacity: 0.88; }
+.fm-btn-confirm:disabled { opacity: 0.4; cursor: not-allowed; }
+.fm-btn-danger {
+  background: hsl(var(--destructive)); color: hsl(var(--destructive-foreground));
+  border: none; padding: 0.45rem 1.1rem; border-radius: 7px;
+  font-size: 0.82rem; font-weight: 600; cursor: pointer; transition: opacity 0.15s;
+}
+.fm-btn-danger:hover { opacity: 0.88; }
+
+/* ── 多选 ── */
+.col-check { width: 36px; }
+.fm-checkbox { width: 15px; height: 15px; cursor: pointer; accent-color: hsl(var(--primary)); }
+.fm-row-selected { background: hsl(var(--primary) / 0.07) !important; }
+.fm-row-selected:hover { background: hsl(var(--primary) / 0.12) !important; }
+
+.fm-selection-bar {
+  display: flex; align-items: center; gap: 0.75rem;
+  padding: 0.6rem 1rem; margin-bottom: 0.75rem;
+  background: hsl(var(--primary) / 0.08);
+  border: 1px solid hsl(var(--primary) / 0.2);
+  border-radius: 8px;
+}
+.fm-sel-count { font-size: 0.82rem; font-weight: 600; color: hsl(var(--primary)); flex: 1; }
+.fm-btn-sm { padding: 0.3rem 0.75rem; font-size: 0.78rem; }
+.fm-btn-danger-sm {
+  background: hsl(var(--destructive) / 0.1); color: hsl(var(--destructive));
+  border: 1px solid hsl(var(--destructive) / 0.3);
+  border-radius: 7px; font-weight: 600; cursor: pointer; transition: all 0.15s;
+  display: inline-flex; align-items: center; gap: 0.4rem; white-space: nowrap;
+}
+.fm-btn-danger-sm svg { width: 14px; height: 14px; fill: currentColor; }
+.fm-btn-danger-sm:hover { background: hsl(var(--destructive)); color: #fff; }
 </style>

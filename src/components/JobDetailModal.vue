@@ -257,6 +257,7 @@ import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/compon
 import { CanvasRenderer } from 'echarts/renderers'
 import { fileManagerApi } from '../config/api'
 import { getToken, getApiBase } from '../utils/auth'
+import { dialog } from '../utils/dialog'
 
 echarts.use([LineChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer])
 
@@ -269,7 +270,7 @@ const execIntoContainer = () => {
   // 取第一个节点名（计算节点）
   const node = (props.job.nodeNames && props.job.nodeNames[0]) || props.job.nodes
   if (!node) {
-    alert('无法获取作业运行节点')
+    dialog.warning('无法获取作业运行节点')
     return
   }
   const jobId = props.job.id

@@ -65,6 +65,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import axios from 'axios'
+import { dialog } from '../utils/dialog'
 
 defineEmits(['go-desktop'])
 
@@ -100,20 +101,19 @@ const downloadAndActivate = async (item: typeof platforms[0]) => {
       validateStatus: () => true,
     })
     if (res.status === 404) {
-      alert('客户端文件尚未生成，请联系管理员运行 npm run release 编译客户端\n默认输出目录：/opt/hpc-platform/clients')
+      dialog.alert('客户端文件尚未生成，请联系管理员运行 npm run release 编译客户端\n默认输出目录：/opt/hpc-platform/clients', { title: '文件不存在', type: 'warning' })
       return
     }
     if (res.status === 401) {
-      alert('登录已过期，请重新登录')
+      await dialog.alert('登录已过期，请重新登录', { title: '登录过期', type: 'error' })
       window.location.href = '/'
       return
     }
     if (res.status !== 200) {
-      // 尝试读取 blob 中的错误信息
       const text = await res.data.text()
       let msg = '下载失败'
       try { msg = JSON.parse(text).error || msg } catch { /* ignore */ }
-      alert(msg)
+      dialog.alert(msg, { title: '下载失败', type: 'error' })
       return
     }
     const url = URL.createObjectURL(res.data)
@@ -129,7 +129,7 @@ const downloadAndActivate = async (item: typeof platforms[0]) => {
     step.value = 1
 
   } catch (e: any) {
-    alert('下载失败: ' + (e.message || '网络错误'))
+    dialog.error('下载失败: ' + (e.message || '网络错误'))
   } finally {
     downloading.value = ''
   }

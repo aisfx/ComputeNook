@@ -623,6 +623,7 @@ import { getUser, getApiBase } from '../utils/auth'
 import axios from 'axios'
 import { usageAPI } from '../api'
 import JobDetailModal from '../components/JobDetailModal.vue'
+import { dialog } from '../utils/dialog'
 
 const currentUser = ref<any>(null)
 const myResources = ref<any>({ associations: [], qos_limits: [] })
@@ -761,7 +762,7 @@ const cancelJob = async (jobId: any) => {
     await loadJobStats()
   } catch (e: any) {
     console.error('cancelJob error:', e)
-    window.alert(e.message || '取消作业失败')
+    dialog.error(e.message || '取消作业失败')
   }
 }
 
@@ -780,7 +781,7 @@ const resumeJob = async (jobId: any) => {
     await loadJobStats()
   } catch (e: any) {
     console.error('resumeJob error:', e)
-    window.alert(e.message || '恢复作业失败')
+    dialog.error(e.message || '恢复作业失败')
   }
 }
 
@@ -799,7 +800,7 @@ const suspendJob = async (jobId: any) => {
     await loadJobStats()
   } catch (e: any) {
     console.error('suspendJob error:', e)
-    window.alert(e.message || '暂停作业失败')
+    dialog.error(e.message || '暂停作业失败')
   }
 }
 

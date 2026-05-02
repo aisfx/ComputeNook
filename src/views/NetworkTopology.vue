@@ -78,6 +78,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { getApiBase } from '../utils/auth'
+import { dialog } from '../utils/dialog'
 
 interface TopoNode {
   id: string; label: string; type: string; model: string; ip: string
@@ -223,15 +224,19 @@ function onNodeClick(n: TopoNode) {
 }
 
 function removeEdge(id: string) {
-  if (!confirm('删除该连线？')) return
-  edges.value = edges.value.filter(e => e.id !== id)
-  save()
+  dialog.confirm('删除该连线？', { title: '确认删除', danger: true }).then(ok => {
+    if (!ok) return
+    edges.value = edges.value.filter(e => e.id !== id)
+    save()
+  })
 }
 
 function clearLinks() {
-  if (!confirm('清空所有连线？')) return
-  edges.value = []
-  save()
+  dialog.confirm('清空所有连线？', { title: '确认清空', danger: true }).then(ok => {
+    if (!ok) return
+    edges.value = []
+    save()
+  })
 }
 
 function startDrag(e: MouseEvent, n: TopoNode) {

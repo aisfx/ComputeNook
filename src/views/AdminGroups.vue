@@ -90,6 +90,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { groupAPI } from '../api'
+import { dialog } from '../utils/dialog'
 
 const groups = ref<any[]>([])
 const loading = ref(false)
@@ -156,36 +157,27 @@ const saveGroup = async () => {
     if (showAddModal.value) {
       // 创建用户组
       await groupAPI.createGroup(formData.value)
-      
-      // 直接添加到本地列表
       groups.value.push({ ...formData.value })
-      
-      alert('用户组创建成功！')
+      dialog.success('用户组创建成功')
     } else {
       // 更新用户组
       await groupAPI.updateGroup(formData.value.gid, formData.value)
-      
-      // 直接更新本地列表中的用户组
       const index = groups.value.findIndex(g => g.gid === formData.value.gid)
-      if (index !== -1) {
-        groups.value[index] = { ...formData.value }
-      }
-      
-      alert('用户组更新成功！')
+      if (index !== -1) groups.value[index] = { ...formData.value }
+      dialog.success('用户组更新成功')
     }
-    
     closeModals()
   } catch (err: any) {
     error.value = err.response?.data?.error || '保存失败'
-    alert(error.value)
+    dialog.error(error.value)
   } finally {
     saving.value = false
   }
 }
 
 // 确认删除
-const confirmDelete = (group: any) => {
-  if (confirm(`确定要删除用户组 ${group.groupName} 吗？此操作不可恢复！`)) {
+const confirmDelete = async (group: any) => {
+  if (await dialog.confirmDelete(group.groupName, '用户组')) {
     deleteGroup(group.gid)
   }
 }
@@ -194,13 +186,10 @@ const confirmDelete = (group: any) => {
 const deleteGroup = async (gid: number) => {
   try {
     await groupAPI.deleteGroup(gid)
-    
-    // 直接从本地列表中移除
     groups.value = groups.value.filter(g => g.gid !== gid)
-    
-    alert('用户组删除成功！')
+    dialog.success('用户组删除成功')
   } catch (err: any) {
-    alert(err.response?.data?.error || '删除失败')
+    dialog.error(err.response?.data?.error || '删除失败')
   }
 }
 

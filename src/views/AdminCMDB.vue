@@ -200,6 +200,7 @@
 import { ref, computed, onMounted } from 'vue'
 import axios from 'axios'
 import notification from '../utils/notification'
+import { dialog } from '../utils/dialog'
 
 const ROLES = ['登录节点', '计算节点', 'GPU节点', '存储节点', '管理节点', '监控节点', '网络设备', '其他']
 
@@ -307,7 +308,7 @@ async function saveHost() {
 }
 
 async function confirmDelete(h: any) {
-  if (!confirm(`确定删除主机 ${h.hostname}？`)) return
+  if (!await dialog.confirmDelete(h.hostname, '主机')) return
   try {
     await axios.delete(`/cmdb/hosts/${h.id}`)
     notification.success('已删除')
@@ -347,7 +348,7 @@ async function syncToRack() {
     notification.error('没有填写机柜信息的主机，请先在主机记录中填写机柜编号和机柜位置')
     return
   }
-  if (!confirm(`将把 ${withRack.length} 台有机柜信息的主机同步到机柜图，已存在的设备会更新，确认继续？`)) return
+  if (!await dialog.confirm(`将把 ${withRack.length} 台有机柜信息的主机同步到机柜图，已存在的设备会更新，确认继续？`, { title: '同步到机柜图' })) return
 
   syncing.value = true
   try {

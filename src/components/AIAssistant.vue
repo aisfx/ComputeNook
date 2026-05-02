@@ -98,6 +98,7 @@
 import { ref, nextTick } from 'vue'
 import axios from 'axios'
 import { getUser, getToken } from '../utils/auth'
+import { dialog } from '../utils/dialog'
 
 // 带 token 的 axios 实例，确保 fetchContext 里的请求都携带认证
 const authAxios = axios.create()
@@ -280,7 +281,7 @@ const fetchContext = async (intent: Intent): Promise<string> => {
 - 错误文件: ${j.standard_error||'-'}`
     }
     if (intent.type === 'cancel_job' && intent.jobId) {
-      if (!window.confirm(`确认取消作业 ${intent.jobId}？`)) return `【用户取消了操作】`
+      if (!await dialog.confirm(`确认取消作业 ${intent.jobId}？`, { title: '取消作业', danger: true })) return `【用户取消了操作】`
       await del(`/jobs/${intent.jobId}`)
       return `【作业 ${intent.jobId} 已成功取消】`
     }
@@ -308,7 +309,7 @@ ${jobs.slice(0,10).map((j:any)=>`  · ${j.job_id} ${j.name} ${j.state} CPU:${(j.
     }
     if (intent.type === 'submit_job' && intent.jobScript) {
       const script = intent.jobScript
-      if (!window.confirm(`AI 助手将帮你提交以下作业脚本，确认提交？\n\n${script.split('\n').slice(0, 10).join('\n')}`)) return '【用户取消了提交】'
+      if (!await dialog.confirm(`AI 助手将帮你提交以下作业脚本，确认提交？\n\n${script.split('\n').slice(0, 10).join('\n')}`, { title: '确认提交作业' })) return '【用户取消了提交】'
       // 从脚本中解析 #SBATCH 参数
       const getSbatch = (flags: string[]) => {
         for (const flag of flags) {

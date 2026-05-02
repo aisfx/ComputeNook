@@ -166,6 +166,7 @@
 import { ref, reactive, onMounted, onUnmounted, watch } from 'vue'
 import axios from 'axios'
 import { userAPI, mfaAPI } from '../api'
+import { dialog } from '../utils/dialog'
 
 // 从运行时配置读取家目录基础路径
 const getHomeBasePath = () => {
@@ -227,13 +228,13 @@ const loadMFAStatus = async () => {
 }
 
 const resetMFA = async (user: any) => {
-  if (!confirm(`确定要重置 ${user.username} 的 MFA 绑定吗？该用户下次登录需重新绑定。`)) return
+  if (!await dialog.confirm(`确定要重置 ${user.username} 的 MFA 绑定吗？该用户下次登录需重新绑定。`, { title: '重置 MFA' })) return
   try {
     await mfaAPI.adminReset(user.username)
     delete mfaStatus.value[user.username]
-    alert('MFA 已重置')
+    dialog.success('MFA 已重置')
   } catch (err: any) {
-    alert(err.response?.data?.error || '重置失败')
+    dialog.error(err.response?.data?.error || '重置失败')
   }
 }
 
@@ -283,21 +284,17 @@ const saveUser = async () => {
         return
       }
       await userAPI.createUser(formData.value)
-      alert('用户创建成功！')
-      // 重新从服务器加载
+      dialog.success('用户创建成功')
       await loadUsers()
     } else {
-      // 更新用户
       await userAPI.updateUser(formData.value.username, formData.value)
-      alert('用户更新成功！')
-      // 重新从服务器加载，确保数据同步
+      dialog.success('用户更新成功')
       await loadUsers()
     }
-    
     closeModals()
   } catch (err: any) {
     error.value = err.response?.data?.error || '保存失败'
-    alert(error.value)
+    dialog.error(error.value)
   } finally {
     saving.value = false
   }
@@ -313,40 +310,34 @@ const showResetPasswordModal = (user: any) => {
 // 重置密码
 const resetPassword = async () => {
   if (!newPassword.value || newPassword.value.length < 6) {
-    alert('密码至少需要6个字符')
+    dialog.warning('密码至少需要6个字符')
     return
   }
-
   saving.value = true
   try {
     await userAPI.resetPassword(selectedUser.value.username, newPassword.value)
-    alert('密码重置成功！')
+    dialog.success('密码重置成功')
     showPasswordModal.value = false
   } catch (err: any) {
-    alert(err.response?.data?.error || '重置密码失败')
+    dialog.error(err.response?.data?.error || '重置密码失败')
   } finally {
     saving.value = false
   }
 }
 
-// 确认删除
-const confirmDelete = (user: any) => {
-  if (confirm(`确定要删除用户 ${user.username} 吗？此操作不可恢复！`)) {
+const confirmDelete = async (user: any) => {
+  if (await dialog.confirmDelete(user.username, '用户')) {
     deleteUser(user.username)
   }
 }
 
-// 删除用户
 const deleteUser = async (username: string) => {
   try {
     await userAPI.deleteUser(username)
-    
-    // 直接从本地列表中移除
     users.value = users.value.filter(u => u.username !== username)
-    
-    alert('用户删除成功！')
+    dialog.success('用户删除成功')
   } catch (err: any) {
-    alert(err.response?.data?.error || '删除失败')
+    dialog.error(err.response?.data?.error || '删除失败')
   }
 }
 
@@ -370,35 +361,27 @@ const closeModals = () => {
   }
 }
 
-// 切换用户禁用状态
 const toggleUserStatus = async (user: any) => {
   const action = user.disabled ? '启用' : '禁用'
-  if (!confirm(`确定要${action}用户 ${user.username} 吗？`)) {
-    return
-  }
-
+  if (!await dialog.confirm(`确定要${action}用户 ${user.username} 吗？`, { title: `${action}用户` })) return
   try {
     await userAPI.setUserDisabled(user.username, !user.disabled)
     user.disabled = !user.disabled
-    alert(`用户${action}成功！`)
+    dialog.success(`用户${action}成功`)
   } catch (err: any) {
-    alert(err.response?.data?.error || `${action}失败`)
+    dialog.error(err.response?.data?.error || `${action}失败`)
   }
 }
 
-// 切换强制修改密码状态
 const togglePasswordMustChange = async (user: any) => {
   const action = user.passwordMustChange ? '取消强制修改密码' : '设置强制修改密码'
-  if (!confirm(`确定要为用户 ${user.username} ${action}吗？`)) {
-    return
-  }
-
+  if (!await dialog.confirm(`确定要为用户 ${user.username} ${action}吗？`, { title: action })) return
   try {
     await userAPI.setPasswordMustChange(user.username, !user.passwordMustChange)
     user.passwordMustChange = !user.passwordMustChange
-    alert(`${action}成功！`)
+    dialog.success(`${action}成功`)
   } catch (err: any) {
-    alert(err.response?.data?.error || `操作失败`)
+    dialog.error(err.response?.data?.error || '操作失败')
   }
 }
 

@@ -61,6 +61,34 @@
         </div>
       </div>
     </Transition>
+
+    <!-- Prompt 输入对话框 -->
+    <Transition name="dialog-fade">
+      <div v-if="promptState" class="dialog-backdrop" @click.self="resolvePrompt(null)">
+        <div class="dialog dialog--confirm prompt-dialog" role="dialog" aria-modal="true">
+          <div class="dialog-icon-wrap">
+            <span class="dialog-icon" aria-hidden="true"><component :is="iconMap['confirm']" /></span>
+          </div>
+          <div class="dialog-content">
+            <h3 class="dialog-title">{{ promptState.title }}</h3>
+            <p v-if="promptState.message" class="dialog-message">{{ promptState.message }}</p>
+            <input
+              ref="promptInputRef"
+              v-model="promptState.value"
+              class="prompt-input"
+              :placeholder="promptState.placeholder"
+              @keyup.enter="submitPrompt"
+              @keyup.esc="resolvePrompt(null)"
+              spellcheck="false"
+            />
+          </div>
+          <div class="dialog-actions">
+            <button class="dialog-btn dialog-btn--cancel" @click="resolvePrompt(null)">取消</button>
+            <button class="dialog-btn dialog-btn--confirm" @click="submitPrompt" :disabled="!promptState.value.trim()">确定</button>
+          </div>
+        </div>
+      </div>
+    </Transition>
   </Teleport>
 </template>
 
@@ -138,6 +166,45 @@ const onBackdropClick = () => {
   if (dialog.value?.showCancel !== false) resolveDialog(false)
 }
 
+// ── Prompt ──
+interface PromptState {
+  title: string
+  message?: string
+  placeholder: string
+  value: string
+}
+
+const promptState = ref<PromptState | null>(null)
+const promptInputRef = ref<HTMLInputElement | null>(null)
+let promptResolve: ((v: string | null) => void) | null = null
+
+const showPrompt = (title: string, options?: { message?: string; placeholder?: string; defaultValue?: string }): Promise<string | null> => {
+  return new Promise(resolve => {
+    promptState.value = {
+      title,
+      message: options?.message,
+      placeholder: options?.placeholder || '',
+      value: options?.defaultValue || '',
+    }
+    promptResolve = resolve
+    nextTick(() => {
+      promptInputRef.value?.focus()
+      promptInputRef.value?.select()
+    })
+  })
+}
+
+const resolvePrompt = (value: string | null) => {
+  promptState.value = null
+  promptResolve?.(value)
+  promptResolve = null
+}
+
+const submitPrompt = () => {
+  if (!promptState.value?.value.trim()) return
+  resolvePrompt(promptState.value.value.trim())
+}
+
 // ── 公开 API ──
 defineExpose({
   // Toast
@@ -150,6 +217,9 @@ defineExpose({
     showDialog({ type: 'confirm', title: options?.title || '确认操作', message, showCancel: true, ...options }),
   alert: (message: string, options?: Partial<DialogOptions>) =>
     showDialog({ type: options?.type || 'info', title: options?.title || '提示', message, showCancel: false, ...options }),
+  // Prompt
+  prompt: (title: string, options?: { message?: string; placeholder?: string; defaultValue?: string }) =>
+    showPrompt(title, options),
 })
 </script>
 
@@ -380,4 +450,22 @@ defineExpose({
 .dialog-fade-leave-to     { opacity: 0; }
 .dialog-fade-enter-from .dialog { transform: scale(0.88) translateY(16px); }
 .dialog-fade-leave-to .dialog   { transform: scale(0.95); }
+
+/* Prompt input */
+.prompt-dialog { text-align: left; }
+.prompt-dialog .dialog-content { width: 100%; text-align: left; }
+.prompt-input {
+  width: 100%;
+  margin-top: 12px;
+  padding: 9px 12px;
+  border: 1.5px solid hsl(var(--border));
+  border-radius: 8px;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-size: 0.875rem;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.15s;
+}
+.prompt-input:focus { border-color: hsl(var(--ring)); }
 </style>

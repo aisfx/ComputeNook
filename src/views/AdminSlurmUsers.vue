@@ -104,6 +104,7 @@
 import { ref, onMounted, watch } from 'vue'
 import { slurmUserAPI, slurmAccountAPI, userAPI } from '../api'
 import { showSuccess, showError } from '../utils/notification'
+import { dialog } from '../utils/dialog'
 
 const users = ref<any[]>([])
 const slurmAccounts = ref<any[]>([])
@@ -232,8 +233,8 @@ const saveUser = async () => {
   }
 }
 
-const confirmDelete = (user: any) => {
-  if (confirm(`确定要删除用户 ${user.name} 吗？此操作不可恢复！`)) {
+const confirmDelete = async (user: any) => {
+  if (await dialog.confirmDelete(user.name, 'Slurm用户')) {
     deleteUser(user.name)
   }
 }

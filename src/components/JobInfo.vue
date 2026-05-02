@@ -210,6 +210,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { getUser, getApiBase, isAdmin } from '../utils/auth'
 import notification from '../utils/notification'
+import { dialog } from '../utils/dialog'
 
 const emit = defineEmits(['view-detail', 'open-directory', 'submit-job'])
 
@@ -293,7 +294,7 @@ const updateSummary = () => {
 const canControlJob = (job: any) => currentUserInfo.value?.isAdmin || job.user === currentUser.value
 
 const cancelJob = async (job: any) => {
-  if (!confirm(`确定要取消作业 ${job.id} - ${job.name} 吗？`)) return
+  if (!await dialog.confirm(`确定要取消作业 ${job.id} - ${job.name} 吗？`, { title: '取消作业', danger: true })) return
   try {
     const token = localStorage.getItem('token') || sessionStorage.getItem('token')
     const res = await fetch(`${getApiBase()}/api/jobs/${job.id}`, {
@@ -308,7 +309,7 @@ const cancelJob = async (job: any) => {
 const batchAction = async (action: string) => {
   if (selectedIds.value.length === 0) return
   const labels: Record<string, string> = { restart: '重启', suspend: '挂起', resume: '恢复', cancel: '停止' }
-  if (!confirm(`确定要${labels[action]}选中的 ${selectedIds.value.length} 个作业吗？`)) return
+  if (!await dialog.confirm(`确定要${labels[action]}选中的 ${selectedIds.value.length} 个作业吗？`, { title: '批量操作' })) return
   notification.success(`已发送${labels[action]}指令`)
   selectedIds.value = []
 }

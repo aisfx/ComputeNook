@@ -120,7 +120,7 @@ python /workspace/train.py</pre>
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { getApiBase } from '../utils/auth'
-import notification from '../utils/notification'
+import { dialog } from '../utils/dialog'
 
 const projects = ref<any[]>([])
 const selectedProject = ref('')
@@ -163,7 +163,7 @@ const loadProjects = async () => {
     const data = await res.json()
     projects.value = data.data || []
   } catch (e: any) {
-    notification.error('加载项目失败: ' + e.message)
+    dialog.error('加载项目失败: ' + e.message)
   } finally {
     loadingProjects.value = false
   }
@@ -194,7 +194,7 @@ const selectProject = async (project: any) => {
     }))
     repos.value = list
   } catch (e: any) {
-    notification.error('加载镜像失败: ' + e.message)
+    dialog.error('加载镜像失败: ' + e.message)
   } finally {
     loadingRepos.value = false
   }
@@ -213,12 +213,12 @@ const formatTime = (t: string) => {
 const copyPullCmd = (repoName: string) => {
   const addr = `${harborHost.value}/${selectedProject.value}/${shortRepoName(repoName)}:latest`
   navigator.clipboard.writeText(addr)
-  notification.success('镜像地址已复制')
+  dialog.success('镜像地址已复制')
 }
 
 const confirmDelete = async (repo: any) => {
   const name = shortRepoName(repo.name)
-  if (!confirm(`确定删除镜像 ${name} 吗？此操作不可恢复。`)) return
+  if (!await dialog.confirmDelete(name, '镜像')) return
   try {
     const res = await fetch(
       `${getApiBase()}/api/registry/projects/${selectedProject.value}/repositories/${encodeURIComponent(name)}`,
@@ -226,10 +226,10 @@ const confirmDelete = async (repo: any) => {
     )
     const data = await res.json()
     if (!res.ok) throw new Error(data.error || '删除失败')
-    notification.success('删除成功')
+    dialog.success('删除成功')
     selectProject(selectedProjectMeta.value)
   } catch (e: any) {
-    notification.error(e.message)
+    dialog.error(e.message)
   }
 }
 

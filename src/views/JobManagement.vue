@@ -69,6 +69,7 @@ import JobSubmit from '../components/JobSubmit.vue'
 import JobTemplates from '../components/JobTemplates.vue'
 import JobDetailModal from '../components/JobDetailModal.vue'
 import { getApiBase } from '../utils/auth'
+import { dialog } from '../utils/dialog'
 
 const emit = defineEmits(['open-directory', 'go-registry', 'exec-container'])
 inject('jobManagementTab', ref('info'))
@@ -112,7 +113,7 @@ const handleJobSubmitted = () => {
 }
 
 const handleCancel = async (jobId: string | number) => {
-  if (!confirm(`确定要取消作业 ${jobId} 吗？`)) return
+  if (!await dialog.confirm(`确定要取消作业 ${jobId} 吗？`, { title: '取消作业', danger: true })) return
   try {
     const res = await fetch(`${getApiBase()}/api/jobs/${jobId}`, {
       method: 'DELETE',
@@ -120,13 +121,13 @@ const handleCancel = async (jobId: string | number) => {
     })
     const data = await res.json()
     if (!res.ok) throw new Error(data.error || '取消失败')
-    alert(`作业 ${jobId} 已取消`)
+    dialog.success(`作业 ${jobId} 已取消`)
     selectedJob.value = null
-  } catch (e: any) { alert(`取消失败: ${e.message}`) }
+  } catch (e: any) { dialog.error(`取消失败: ${e.message}`) }
 }
 
 const handlePause = async (jobId: string | number) => {
-  if (!confirm(`确定要暂停作业 ${jobId} 吗？`)) return
+  if (!await dialog.confirm(`确定要暂停作业 ${jobId} 吗？`, { title: '暂停作业' })) return
   try {
     const res = await fetch(`${getApiBase()}/api/jobs/${jobId}/suspend`, {
       method: 'POST',
@@ -134,9 +135,9 @@ const handlePause = async (jobId: string | number) => {
     })
     const data = await res.json()
     if (!res.ok) throw new Error(data.error || '暂停失败')
-    alert(`作业 ${jobId} 已暂停`)
+    dialog.success(`作业 ${jobId} 已暂停`)
     selectedJob.value = null
-  } catch (e: any) { alert(`暂停失败: ${e.message}`) }
+  } catch (e: any) { dialog.error(`暂停失败: ${e.message}`) }
 }
 
 const handleOpenDirectory = (path: string) => { emit('open-directory', path) }

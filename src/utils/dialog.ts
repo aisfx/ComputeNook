@@ -80,6 +80,10 @@ export const dialog = {
   alert(message: string, options?: { title?: string; type?: 'success' | 'error' | 'warning' | 'info' }): Promise<boolean> {
     return getProvider().alert(message, options)
   },
+  /** 输入弹框，返回 Promise<string | null>，取消返回 null */
+  prompt(title: string, options?: { message?: string; placeholder?: string; defaultValue?: string }): Promise<string | null> {
+    return getProvider().prompt(title, options)
+  },
 }
 
 export default dialog

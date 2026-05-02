@@ -527,6 +527,7 @@ import axios from 'axios'
 import AdminAssociations from './AdminAssociations.vue'
 import AdminSlurmAccounts from './AdminSlurmAccounts.vue'
 import AdminDashboard from '../components/AdminDashboard.vue'
+import { dialog } from '../utils/dialog'
 
 const API_BASE_URL = ''
 
@@ -578,7 +579,7 @@ const loadUsers = async () => {
     users.value = response.data.data || []
   } catch (error) {
     console.error('Failed to load users:', error)
-    alert('加载用户列表失败')
+    dialog.error('加载用户列表失败')
   } finally {
     loading.value = false
   }
@@ -625,7 +626,7 @@ const loadGroups = async () => {
     groups.value = response.data.data || []
   } catch (error) {
     console.error('Failed to load groups:', error)
-    alert('加载用户组列表失败')
+    dialog.error('加载用户组列表失败')
   } finally {
     loading.value = false
   }
@@ -657,7 +658,7 @@ const loadQosList = async () => {
     qosList.value = response.data.data || []
   } catch (error) {
     console.error('Failed to load QoS list:', error)
-    alert('加载 QoS 列表失败')
+    dialog.error('加载 QoS 列表失败')
   } finally {
     loading.value = false
   }
@@ -758,40 +759,35 @@ const toggleLock = async (user: any) => {
     const endpoint = user.locked ? 'unlock' : 'lock'
     await axios.post(`${API_BASE_URL}/users/${user.username}/${endpoint}`)
     user.locked = !user.locked
-    alert(`用户 ${user.username} 已${user.locked ? '锁定' : '解锁'}`)
+    dialog.success(`用户 ${user.username} 已${user.locked ? '锁定' : '解锁'}`)
   } catch (error) {
     console.error('Failed to toggle lock:', error)
-    alert('操作失败')
+    dialog.error('操作失败')
   }
 }
 
 const resetPassword = async (user: any) => {
-  const newPassword = prompt(`重置用户 ${user.username} 的密码 (至少8位):`)
-  if (newPassword && newPassword.length >= 8) {
-    try {
-      await axios.post(`${API_BASE_URL}/users/${user.username}/reset-password`, {
-        newPassword
-      })
-      alert(`用户 ${user.username} 密码已重置`)
-    } catch (error) {
-      console.error('Failed to reset password:', error)
-      alert('密码重置失败')
-    }
-  } else if (newPassword) {
-    alert('密码长度至少为8位')
+  const newPassword = await dialog.prompt(`重置用户 ${user.username} 的密码`, { placeholder: '至少8位' })
+  if (!newPassword) return
+  if (newPassword.length < 8) { dialog.warning('密码长度至少为8位'); return }
+  try {
+    await axios.post(`${API_BASE_URL}/users/${user.username}/reset-password`, { newPassword })
+    dialog.success(`用户 ${user.username} 密码已重置`)
+  } catch (error) {
+    console.error('Failed to reset password:', error)
+    dialog.error('密码重置失败')
   }
 }
 
 const deleteUser = async (username: string) => {
-  if (confirm('确定要删除此用户吗？')) {
-    try {
-      await axios.delete(`${API_BASE_URL}/users/${username}`)
-      await loadUsers()
-      alert('用户已删除')
-    } catch (error) {
-      console.error('Failed to delete user:', error)
-      alert('删除失败')
-    }
+  if (!await dialog.confirmDelete(username, '用户')) return
+  try {
+    await axios.delete(`${API_BASE_URL}/users/${username}`)
+    await loadUsers()
+    dialog.success('用户已删除')
+  } catch (error) {
+    console.error('Failed to delete user:', error)
+    dialog.error('删除失败')
   }
 }
 
@@ -799,30 +795,18 @@ const saveUser = async () => {
   try {
     if (editingUser.value) {
       await axios.put(`${API_BASE_URL}/users/${editingUser.value.username}`, userForm.value)
-      alert('用户信息已更新')
+      dialog.success('用户信息已更新')
     } else {
       await axios.post(`${API_BASE_URL}/users`, userForm.value)
-      alert('用户已添加')
+      dialog.success('用户已添加')
     }
     showAddUserModal.value = false
     editingUser.value = null
     await loadUsers()
-    
-    // 重置表单
-    userForm.value = {
-      username: '',
-      uid: 1005,
-      gid: 1005,
-      cnName: '',
-      phone: '',
-      shell: '/bin/bash',
-      homeDir: '',
-      password: '',
-      locked: false
-    }
+    userForm.value = { username: '', uid: 1005, gid: 1005, cnName: '', phone: '', shell: '/bin/bash', homeDir: '', password: '', locked: false }
   } catch (error) {
     console.error('Failed to save user:', error)
-    alert('保存失败')
+    dialog.error('保存失败')
   }
 }
 
@@ -837,15 +821,14 @@ const manageGroupMembers = (group: any) => {
 }
 
 const deleteGroup = async (groupName: string) => {
-  if (confirm('确定要删除此用户组吗？')) {
-    try {
-      await axios.delete(`${API_BASE_URL}/groups/${groupName}`)
-      await loadGroups()
-      alert('用户组已删除')
-    } catch (error) {
-      console.error('Failed to delete group:', error)
-      alert('删除失败')
-    }
+  if (!await dialog.confirmDelete(groupName, '用户组')) return
+  try {
+    await axios.delete(`${API_BASE_URL}/groups/${groupName}`)
+    await loadGroups()
+    dialog.success('用户组已删除')
+  } catch (error) {
+    console.error('Failed to delete group:', error)
+    dialog.error('删除失败')
   }
 }
 
@@ -853,24 +836,18 @@ const saveGroup = async () => {
   try {
     if (editingGroup.value) {
       await axios.put(`${API_BASE_URL}/groups/${editingGroup.value.groupName}`, groupForm.value)
-      alert('用户组信息已更新')
+      dialog.success('用户组信息已更新')
     } else {
       await axios.post(`${API_BASE_URL}/groups`, groupForm.value)
-      alert('用户组已添加')
+      dialog.success('用户组已添加')
     }
     showAddGroupModal.value = false
     editingGroup.value = null
     await loadGroups()
-    
-    // 重置表单
-    groupForm.value = {
-      groupName: '',
-      gid: 2005,
-      members: []
-    }
+    groupForm.value = { groupName: '', gid: 2005, members: [] }
   } catch (error) {
     console.error('Failed to save group:', error)
-    alert('保存失败')
+    dialog.error('保存失败')
   }
 }
 
@@ -882,12 +859,12 @@ const removeMember = (username: string) => {
 }
 
 const editQos = (qos: any) => {
-  alert(`编辑 QoS: ${qos.name}`)
+  dialog.info(`编辑 QoS: ${qos.name}`)
 }
 
-const deleteQos = (id: number) => {
-  if (confirm('确定要删除此 QoS 配置吗？')) {
-    alert('QoS 已删除')
+const deleteQos = async (id: number) => {
+  if (await dialog.confirm('确定要删除此 QoS 配置吗？', { title: '删除 QoS', danger: true })) {
+    dialog.success('QoS 已删除')
   }
 }
 
@@ -904,15 +881,15 @@ const getAlertIcon = (severity: string) => {
 }
 
 const acknowledgeAlert = (id: number) => {
-  alert('告警已确认')
+  dialog.success('告警已确认')
 }
 
 const silenceAlert = (id: number) => {
-  alert('告警已静默')
+  dialog.success('告警已静默')
 }
 
 const refreshMetrics = () => {
-  alert('监控数据已刷新')
+  dialog.success('监控数据已刷新')
 }
 
 const searchAuditLogs = () => {

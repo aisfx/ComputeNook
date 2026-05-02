@@ -184,6 +184,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick, computed } from 'vue'
 import { getApiBase } from '../utils/auth'
+import { dialog } from '../utils/dialog'
 
 const containerH = ref(600)
 const racks = ref<any[]>([])
@@ -299,9 +300,11 @@ const endCable = (e: MouseEvent, rackId: string, devId: string, portId: string) 
 }
 
 const removeCable = (id: string) => {
-  if (!confirm('删除该连线？')) return
-  cables.value = cables.value.filter(c => c.id !== id)
-  saveCables()
+  dialog.confirm('删除该连线？', { title: '确认删除', danger: true }).then(ok => {
+    if (!ok) return
+    cables.value = cables.value.filter(c => c.id !== id)
+    saveCables()
+  })
 }
 const updateSvgSize = () => nextTick(() => {
   if (rackListRef.value) { svgWidth.value = rackListRef.value.scrollWidth+100; svgHeight.value = rackListRef.value.scrollHeight+100 }
@@ -432,7 +435,7 @@ const saveRack = async () => {
 }
 
 const deleteRack = async (id: string) => {
-  if (!confirm('确认删除该机柜？')) return
+  if (!await dialog.confirm('确认删除该机柜？', { title: '删除机柜', danger: true })) return
   try {
     const res = await fetch(`${getApiBase()}/api/monitoring/rack/${id}`, { method:'DELETE', headers:{ Authorization:`Bearer ${token()}` } })
     if (!res.ok) throw new Error((await res.json()).error||'删除失败')
@@ -442,7 +445,7 @@ const deleteRack = async (id: string) => {
 }
 
 const autoGenRacks = async () => {
-  if (!confirm('自动生成将覆盖现有机柜布局，确认继续？')) return
+  if (!await dialog.confirm('自动生成将覆盖现有机柜布局，确认继续？', { title: '自动生成机柜' })) return
   rackLoading.value = true; rackError.value = ''
   try {
     const res = await fetch(`${getApiBase()}/api/monitoring/rack/auto`, { method:'POST', headers:{ Authorization:`Bearer ${token()}` } })
@@ -485,7 +488,7 @@ const saveDevice = async () => {
 }
 
 const removeDevice = async () => {
-  if (!confirm('确认删除该设备？')) return
+  if (!await dialog.confirm('确认删除该设备？', { title: '删除设备', danger: true })) return
   const rack = racks.value.find((r:any) => r.id===editingRackId.value)
   if (!rack) return
   const devices = (rack.devices||[]).filter((d:any) => d.id!==editingDevice.value.id)

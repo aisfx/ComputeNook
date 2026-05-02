@@ -274,6 +274,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { getApiBase } from '../utils/auth'
+import { dialog } from '../utils/dialog'
 
 const emit = defineEmits(['use-template'])
 const token = () => localStorage.getItem('token') || sessionStorage.getItem('token')
@@ -710,7 +711,7 @@ NCORE = 4
 
 const useTemplate = (template: any) => {
   emit('use-template', template)
-  alert(`已选择模板: ${template.name}\n请前往"提交作业"页面查看`)
+  dialog.success(`已选择模板: ${template.name}，请前往"提交作业"页面查看`)
 }
 
 const viewConfig = (template: any) => {
@@ -734,12 +735,12 @@ const saveEdit = async () => {
     if (!res.ok) throw new Error('保存失败')
     await loadTemplatesFromAPI()
     showEditModal.value = false
-  } catch (e: any) { alert(e.message) }
+  } catch (e: any) { dialog.error(e.message) }
 }
 
 const saveCreate = async () => {
   if (!createForm.value.name.trim() || !createForm.value.appType.trim()) {
-    alert('请填写模板名称和应用类型')
+    dialog.warning('请填写模板名称和应用类型')
     return
   }
   try {
@@ -752,11 +753,11 @@ const saveCreate = async () => {
     await loadTemplatesFromAPI()
     createForm.value = defaultCreateForm()
     showCreateModal.value = false
-  } catch (e: any) { alert(e.message) }
+  } catch (e: any) { dialog.error(e.message) }
 }
 
 const deleteTemplate = async (id: number) => {
-  if (!confirm('确定要删除此模板吗？')) return
+  if (!await dialog.confirm('确定要删除此模板吗？', { title: '删除模板', danger: true })) return
   try {
     const res = await fetch(`${getApiBase()}/api/app-templates/${id}`, {
       method: 'DELETE',
@@ -764,7 +765,7 @@ const deleteTemplate = async (id: number) => {
     })
     if (!res.ok) throw new Error('删除失败')
     await loadTemplatesFromAPI()
-  } catch (e: any) { alert(e.message) }
+  } catch (e: any) { dialog.error(e.message) }
 }
 
 const downloadConfig = () => {
@@ -781,7 +782,7 @@ const downloadConfig = () => {
 
 const copyConfig = () => {
   navigator.clipboard.writeText(currentConfigContent.value)
-  alert('配置已复制到剪贴板')
+  dialog.success('配置已复制到剪贴板')
 }
 </script>
 

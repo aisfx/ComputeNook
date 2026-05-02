@@ -72,5 +72,9 @@ export const dialog = {
     alert(message, options) {
         return getProvider().alert(message, options);
     },
+    /** 输入弹框，返回 Promise<string | null>，取消返回 null */
+    prompt(title, options) {
+        return getProvider().prompt(title, options);
+    },
 };
 export default dialog;

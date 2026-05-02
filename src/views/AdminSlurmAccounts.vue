@@ -90,6 +90,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { slurmAccountAPI, groupAPI } from '../api'
 import { showSuccess, showError } from '../utils/notification'
+import { dialog } from '../utils/dialog'
 
 const accounts = ref<any[]>([])
 const ldapGroups = ref<any[]>([])
@@ -193,8 +194,8 @@ const saveAccount = async () => {
   }
 }
 
-const confirmDelete = (account: any) => {
-  if (confirm(`确定要删除账户 ${account.name} 吗？此操作不可恢复！`)) {
+const confirmDelete = async (account: any) => {
+  if (await dialog.confirmDelete(account.name, 'Slurm账户')) {
     deleteAccount(account.name)
   }
 }

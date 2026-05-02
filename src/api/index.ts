@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { dialog } from '../utils/dialog'
 
 // 运行时动态获取 API 地址
 // 生产环境 window.__CONFIG__.apiUrl 为空字符串，走同域相对路径由 nginx 代理
@@ -41,7 +42,7 @@ axios.interceptors.response.use(
       
       // 演示只读模式
       if (status === 403 && data.code === 'DEMO_READONLY') {
-        alert('演示模式：用户信息不允许修改')
+        dialog.warning('演示模式：用户信息不允许修改')
         return Promise.reject(error)
       }
 
@@ -54,7 +55,7 @@ axios.interceptors.response.use(
         sessionStorage.removeItem('user')
         
         // 显示提示信息
-        alert('您的账户已被管理员禁用，请联系管理员。')
+        dialog.error('您的账户已被管理员禁用，请联系管理员。')
         
         // 跳转到登录页
         window.location.href = '/login'
