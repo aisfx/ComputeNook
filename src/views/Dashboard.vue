@@ -1168,9 +1168,9 @@ onMounted(() => {
 .stat-sep { font-size: 1rem; color: #d1d5db; }
 .stat-total { font-size: 1rem; color: #9ca3af; font-weight: 500; }
 .stat-detail { font-size: 0.72rem; color: #9ca3af; margin-top: 2px; }
-.stat-detail-tags { display: flex; gap: 6px; margin-top: 4px; }
-.tag-pending { font-size: 0.7rem; background: #fef9c3; color: #a16207; padding: 1px 6px; border-radius: 4px; font-weight: 500; }
-.tag-done    { font-size: 0.7rem; background: #dcfce7; color: #15803d; padding: 1px 6px; border-radius: 4px; font-weight: 500; }
+.stat-detail-tags { display: flex; gap: 5px; margin-top: 4px; flex-wrap: nowrap; }
+.tag-pending { font-size: 0.7rem; background: #fef9c3; color: #a16207; padding: 1px 6px; border-radius: 4px; font-weight: 500; white-space: nowrap; }
+.tag-done    { font-size: 0.7rem; background: #dcfce7; color: #15803d; padding: 1px 6px; border-radius: 4px; font-weight: 500; white-space: nowrap; }
 .stat-ring-wrap { flex-shrink: 0; }
 .stat-sparkline { flex-shrink: 0; opacity: 0.7; }
 
