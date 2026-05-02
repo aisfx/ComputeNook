@@ -3,25 +3,15 @@
     <div class="login-left">
       <div class="login-brand">
         <div class="brand-logo">
-          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <!-- 房子 -->
+          <svg width="44" height="44" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M3 10.5L12 3l9 7.5V21a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V10.5z" fill="white" opacity="0.15"/>
-            <path d="M3 10.5L12 3l9 7.5" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M4 10.5V21h16V10.5" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-            <!-- CPU 芯片 左 -->
-            <rect x="6.5" y="13" width="4" height="4" rx="0.6" stroke="white" stroke-width="1.4"/>
-            <line x1="7.5" y1="13" x2="7.5" y2="11.8" stroke="white" stroke-width="0.9" stroke-linecap="round"/>
-            <line x1="9.5" y1="13" x2="9.5" y2="11.8" stroke="white" stroke-width="0.9" stroke-linecap="round"/>
-            <line x1="6.5" y1="14.5" x2="5.3" y2="14.5" stroke="white" stroke-width="0.9" stroke-linecap="round"/>
-            <line x1="6.5" y1="15.5" x2="5.3" y2="15.5" stroke="white" stroke-width="0.9" stroke-linecap="round"/>
-            <!-- GPU 芯片 右 -->
-            <rect x="13.5" y="13" width="4" height="4" rx="0.6" stroke="white" stroke-width="1.4"/>
-            <line x1="14.5" y1="13" x2="14.5" y2="11.8" stroke="white" stroke-width="0.9" stroke-linecap="round"/>
-            <line x1="16.5" y1="13" x2="16.5" y2="11.8" stroke="white" stroke-width="0.9" stroke-linecap="round"/>
-            <line x1="17.5" y1="14.5" x2="18.7" y2="14.5" stroke="white" stroke-width="0.9" stroke-linecap="round"/>
-            <line x1="17.5" y1="15.5" x2="18.7" y2="15.5" stroke="white" stroke-width="0.9" stroke-linecap="round"/>
-            <!-- 调度连线 -->
-            <line x1="10.5" y1="15" x2="13.5" y2="15" stroke="white" stroke-width="1" stroke-linecap="round" stroke-dasharray="1 1"/>
+            <path d="M3 10.5L12 3l9 7.5" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M4 10.5V21h16V10.5" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <rect x="7.5" y="12.5" width="9" height="7" rx="1" stroke="white" stroke-width="1.5" fill="white" fill-opacity="0.1"/>
+            <rect x="10" y="14.5" width="4" height="3" rx="0.5" fill="white"/>
+            <line x1="9.5" y1="12.5" x2="9.5" y2="11.2" stroke="white" stroke-width="1.2" stroke-linecap="round"/>
+            <line x1="12" y1="12.5" x2="12" y2="11.2" stroke="white" stroke-width="1.2" stroke-linecap="round"/>
+            <line x1="14.5" y1="12.5" x2="14.5" y2="11.2" stroke="white" stroke-width="1.2" stroke-linecap="round"/>
           </svg>
         </div>
         <h1>算力小筑</h1>
@@ -311,12 +301,22 @@ onMounted(() => {
 .login-brand { position: relative; z-index: 1; max-width: 380px; width: 100%; text-align: center; }
 
 .brand-logo {
-  width: 68px; height: 68px; background: rgba(255,255,255,0.1); border-radius: 18px;
+  width: 80px; height: 80px;
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  border-radius: 22px;
   display: flex; align-items: center; justify-content: center; font-size: 2rem;
-  margin: 0 auto 1.25rem; border: 1px solid rgba(255,255,255,0.15); backdrop-filter: blur(8px);
+  margin: 0 auto 1.25rem;
+  border: none;
+  box-shadow: 0 8px 24px rgba(99, 102, 241, 0.45);
 }
-[data-theme="light"] .brand-logo { background: rgba(255,255,255,0.7); border-color: rgba(0,0,0,0.1); }
-[data-theme="ocean"] .brand-logo { background: rgba(0,200,200,0.12); border-color: rgba(0,200,200,0.22); }
+[data-theme="light"] .brand-logo {
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  box-shadow: 0 8px 24px rgba(99, 102, 241, 0.35);
+}
+[data-theme="ocean"] .brand-logo {
+  background: linear-gradient(135deg, #0891b2 0%, #6366f1 100%);
+  box-shadow: 0 8px 24px rgba(8, 145, 178, 0.4);
+}
 
 .login-brand h1 { font-size: 1.875rem; font-weight: 700; margin: 0 0 0.375rem; color: #fff; letter-spacing: 0.02em; }
 [data-theme="light"] .login-brand h1 { color: #1e2a45; }

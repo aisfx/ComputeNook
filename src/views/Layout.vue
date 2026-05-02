@@ -6,15 +6,15 @@
       <div class="sidebar-header">
         <div class="sidebar-logo" @click="currentView = 'dashboard'">
           <div class="logo-icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M3 10.5L12 3l9 7.5V21a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V10.5z" fill="currentColor" opacity="0.2"/>
-              <path d="M3 10.5L12 3l9 7.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-              <path d="M4 10.5V21h16V10.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-              <rect x="7.5" y="13.5" width="3.5" height="3.5" rx="0.5" stroke="currentColor" stroke-width="1.3"/>
-              <rect x="13" y="13.5" width="3.5" height="3.5" rx="0.5" stroke="currentColor" stroke-width="1.3"/>
-              <line x1="9.25" y1="13.5" x2="9.25" y2="12" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
-              <line x1="14.75" y1="13.5" x2="14.75" y2="12" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
-              <line x1="9.25" y1="12" x2="14.75" y2="12" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M3 10.5L12 3l9 7.5V21a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V10.5z" fill="white" opacity="0.15"/>
+              <path d="M3 10.5L12 3l9 7.5" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M4 10.5V21h16V10.5" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              <rect x="7.5" y="12.5" width="9" height="7" rx="1" stroke="white" stroke-width="1.5" fill="white" fill-opacity="0.1"/>
+              <rect x="10" y="14.5" width="4" height="3" rx="0.5" fill="white"/>
+              <line x1="9.5" y1="12.5" x2="9.5" y2="11.2" stroke="white" stroke-width="1.2" stroke-linecap="round"/>
+              <line x1="12" y1="12.5" x2="12" y2="11.2" stroke="white" stroke-width="1.2" stroke-linecap="round"/>
+              <line x1="14.5" y1="12.5" x2="14.5" y2="11.2" stroke="white" stroke-width="1.2" stroke-linecap="round"/>
             </svg>
           </div>
           <span class="logo-text">算力小筑</span>
@@ -411,16 +411,17 @@ onMounted(() => {
 }
 
 .logo-icon {
-  width: 28px;
-  height: 28px;
-  background: hsl(var(--sidebar-primary));
-  color: hsl(var(--sidebar-primary-foreground));
-  border-radius: 6px;
+  width: 36px;
+  height: 36px;
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  color: #ffffff;
+  border-radius: 9px;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 14px;
   flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.35);
 }
 
 .logo-text {
