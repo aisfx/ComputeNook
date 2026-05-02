@@ -1326,7 +1326,6 @@ const handleWebSocketMessage = (message: any) => {
   if (tab) handleTabMessage(tab, message)
 }
 
-    case 'connected':
 // 切换全屏
 const toggleFullscreen = () => {
   isFullscreen.value = !isFullscreen.value
