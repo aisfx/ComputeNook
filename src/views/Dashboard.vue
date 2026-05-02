@@ -150,7 +150,7 @@
           </div>
         </div>
         <div class="stat-sparkline">
-          <svg width="80" height="40" viewBox="0 0 80 40">
+          <svg width="60" height="36" viewBox="0 0 80 40">
             <defs>
               <linearGradient id="sparkGrad" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stop-color="#f97316" stop-opacity="0.15"/>
@@ -1172,7 +1172,7 @@ onMounted(() => {
 .tag-pending { font-size: 0.7rem; background: #fef9c3; color: #a16207; padding: 1px 6px; border-radius: 4px; font-weight: 500; white-space: nowrap; }
 .tag-done    { font-size: 0.7rem; background: #dcfce7; color: #15803d; padding: 1px 6px; border-radius: 4px; font-weight: 500; white-space: nowrap; }
 .stat-ring-wrap { flex-shrink: 0; }
-.stat-sparkline { flex-shrink: 0; opacity: 0.7; }
+.stat-sparkline { flex-shrink: 0; opacity: 0.85; overflow: hidden; border-radius: 6px; }
 
 /* ── 图表行 ── */
 .charts-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
