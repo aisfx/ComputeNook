@@ -311,6 +311,10 @@ func main() {
 			desktop.GET("/sessions/:id/logs", handlers.GetDesktopSessionLogs)
 			desktop.GET("/sessions/:id/script", handlers.GetDesktopScript)
 			desktop.GET("/resource-presets", handlers.GetDesktopResourcePresets)
+			// 应用管理
+			desktop.GET("/apps", handlers.GetDesktopApps)
+			desktop.POST("/apps", handlers.CreateDesktopApp)
+			desktop.DELETE("/apps/:id", handlers.DeleteDesktopApp)
 			// VNC WebSocket 代理：通过 SSH 隧道连接计算节点 VNC
 			desktop.GET("/sessions/:id/vnc-ws", handlers.VNCWebSocketProxy)
 			desktop.GET("/sessions/:id/xpra-ws", handlers.XpraWebSocketProxy)

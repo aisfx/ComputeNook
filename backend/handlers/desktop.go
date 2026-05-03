@@ -20,6 +20,7 @@ type DesktopSession struct {
 	Name        string `json:"name"`
 	Mode        string `json:"mode"`                 // "desktop" | "app"
 	AppCommand  string `json:"appCommand,omitempty"` // 应用模式下的启动命令
+	Modules     string `json:"modules,omitempty"`    // 预加载的 modules（空格分隔）
 	Address     string `json:"address"`
 	Username    string `json:"username"`
 	XpraPort    int    `json:"xpraPort,omitempty"`
@@ -227,6 +228,7 @@ func CreateDesktopSession(c *gin.Context) {
 		Name       string `json:"name" binding:"required"`
 		Mode       string `json:"mode"`       // "desktop" | "app"
 		AppCommand string `json:"appCommand"` // 应用模式启动命令
+		Modules    string `json:"modules"`    // 预加载 modules（空格分隔）
 		Type       string `json:"type"`
 		Resolution string `json:"resolution"`
 		Duration   int    `json:"duration"`
@@ -274,6 +276,7 @@ func CreateDesktopSession(c *gin.Context) {
 		Name:       req.Name,
 		Mode:       mode,
 		AppCommand: req.AppCommand,
+		Modules:    req.Modules,
 		Type:       req.Type,
 		Username:   username.(string),
 		Resolution: resolution,
@@ -564,6 +567,17 @@ func buildDesktopScript(session *DesktopSession) string {
 	b.WriteString("#!/bin/bash\n")
 	b.WriteString(fmt.Sprintf("export HOME=${HOME:-%s/%s}\n", homeBase, session.Username))
 	b.WriteString("export PATH=/opt/xpra/bin:/usr/bin:/usr/local/bin:/bin:/usr/sbin:/sbin:$PATH\n\n")
+
+	// ── module load（如果配置了 modules）──
+	if session.Modules != "" {
+		b.WriteString("# 加载 Environment Modules\n")
+		b.WriteString("if command -v module &>/dev/null || [ -f /etc/profile.d/modules.sh ]; then\n")
+		b.WriteString("  source /etc/profile.d/modules.sh 2>/dev/null || true\n")
+		for _, mod := range strings.Fields(session.Modules) {
+			b.WriteString(fmt.Sprintf("  module load %s 2>/dev/null || echo \"Warning: module load %s failed\"\n", mod, mod))
+		}
+		b.WriteString("fi\n\n")
+	}
 
 	// ── 以 SLURM_JOB_ID 命名的独立工作目录 ──
 	b.WriteString("JOB_ID=${SLURM_JOB_ID:-$$}\n")
@@ -1013,4 +1027,134 @@ func GetDesktopScript(c *gin.Context) {
 		"output":    fmt.Sprintf("%s/%s/.desktop/%d.out", homeBase, session.Username, id),
 		"error":     fmt.Sprintf("%s/%s/.desktop/%d.err", homeBase, session.Username, id),
 	})
+}
+
+// ─── 远程桌面应用管理 ───────────────────────────────────────────────────────
+
+const desktopAppsFile = "desktop_apps.json"
+
+// DesktopApp 管理员配置的可发布应用
+type DesktopApp struct {
+	ID      int    `json:"id"`
+	Name    string `json:"name"`
+	Icon    string `json:"icon"`
+	Cmd     string `json:"cmd"`
+	Modules string `json:"modules,omitempty"` // 逗号分隔的 module 列表
+	Desc    string `json:"desc,omitempty"`
+}
+
+var desktopAppsMu sync.Mutex
+
+func loadDesktopApps() ([]DesktopApp, error) {
+	desktopAppsMu.Lock()
+	defer desktopAppsMu.Unlock()
+	data, err := os.ReadFile(desktopAppsFile)
+	if os.IsNotExist(err) {
+		// 返回内置默认应用
+		return []DesktopApp{
+			{ID: 1, Name: "Terminal", Icon: "💻", Cmd: "xterm", Desc: "终端"},
+			{ID: 2, Name: "Firefox", Icon: "🦊", Cmd: "firefox", Desc: "浏览器"},
+			{ID: 3, Name: "VSCode", Icon: "📝", Cmd: "code", Desc: "代码编辑器"},
+			{ID: 4, Name: "MATLAB", Icon: "🔢", Cmd: "matlab -desktop", Desc: "数值计算"},
+			{ID: 5, Name: "ParaView", Icon: "📊", Cmd: "paraview", Desc: "可视化"},
+			{ID: 6, Name: "VMD", Icon: "🧬", Cmd: "vmd", Desc: "分子可视化"},
+		}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var apps []DesktopApp
+	if err := json.Unmarshal(data, &apps); err != nil {
+		return nil, err
+	}
+	return apps, nil
+}
+
+func saveDesktopApps(apps []DesktopApp) error {
+	desktopAppsMu.Lock()
+	defer desktopAppsMu.Unlock()
+	data, err := json.MarshalIndent(apps, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(desktopAppsFile, data, 0644)
+}
+
+// GetDesktopApps 获取应用列表（所有用户可访问）
+func GetDesktopApps(c *gin.Context) {
+	apps, err := loadDesktopApps()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": apps})
+}
+
+// CreateDesktopApp 新增应用（仅管理员）
+func CreateDesktopApp(c *gin.Context) {
+	isAdminVal, _ := c.Get("isAdmin")
+	isAdminUser, _ := isAdminVal.(bool)
+	if !isAdminUser {
+		c.JSON(http.StatusForbidden, gin.H{"error": "仅管理员可操作"})
+		return
+	}
+	var req DesktopApp
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if req.Name == "" || req.Cmd == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "名称和命令不能为空"})
+		return
+	}
+	apps, err := loadDesktopApps()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	maxID := 0
+	for _, a := range apps {
+		if a.ID > maxID {
+			maxID = a.ID
+		}
+	}
+	req.ID = maxID + 1
+	apps = append(apps, req)
+	if err := saveDesktopApps(apps); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"data": req})
+}
+
+// DeleteDesktopApp 删除应用（仅管理员）
+func DeleteDesktopApp(c *gin.Context) {
+	isAdminVal, _ := c.Get("isAdmin")
+	isAdminUser, _ := isAdminVal.(bool)
+	if !isAdminUser {
+		c.JSON(http.StatusForbidden, gin.H{"error": "仅管理员可操作"})
+		return
+	}
+	idStr := c.Param("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效 ID"})
+		return
+	}
+	apps, err := loadDesktopApps()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	newApps := make([]DesktopApp, 0, len(apps))
+	for _, a := range apps {
+		if a.ID != id {
+			newApps = append(newApps, a)
+		}
+	}
+	if err := saveDesktopApps(newApps); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "已删除"})
 }

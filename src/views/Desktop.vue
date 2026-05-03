@@ -129,17 +129,30 @@
 
             <!-- 应用模式：选择或输入应用 -->
             <div class="form-group" v-if="createForm.mode === 'app'">
-              <label>应用</label>
-              <div class="app-grid">
-                <div v-for="app in builtinApps" :key="app.cmd"
-                  :class="['app-card', { active: createForm.appCommand === app.cmd }]"
-                  @click="createForm.appCommand = app.cmd">
-                  <div class="app-icon">{{ app.icon }}</div>
+              <div class="app-label-row">
+                <label>应用</label>
+                <button v-if="isAdminUser" type="button" class="btn-manage-apps" @click="showManageApps = true">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+                  管理应用
+                </button>
+              </div>
+              <div class="app-grid" v-if="remoteApps.length > 0">
+                <div v-for="app in remoteApps" :key="app.id"
+                  :class="['app-card', { active: createForm.selectedAppId === app.id }]"
+                  @click="selectApp(app)">
+                  <div class="app-icon">{{ app.icon || '📦' }}</div>
                   <div class="app-name">{{ app.name }}</div>
+                  <div class="app-desc" v-if="app.desc">{{ app.desc }}</div>
                 </div>
               </div>
               <div class="custom-app-row">
                 <input v-model="createForm.appCommand" placeholder="或输入自定义命令，如 gedit、matlab..." class="custom-app-input" />
+              </div>
+              <!-- modules 加载 -->
+              <div class="modules-row" v-if="createForm.appCommand">
+                <label>加载 Modules（可选）</label>
+                <input v-model="createForm.modules" placeholder="如: matlab/R2024a gcc/12.3 cuda/12.0（空格分隔）" class="custom-app-input" />
+                <div class="modules-hint">启动前自动执行 <code>module load</code>，多个模块用空格分隔</div>
               </div>
             </div>
 
@@ -186,6 +199,65 @@
               <button type="submit" class="btn-primary" :disabled="submitting">{{ submitting ? '创建中...' : '创建' }}</button>
             </div>
           </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- 管理应用弹窗（仅管理员） -->
+    <div v-if="showManageApps" class="modal-overlay" @click.self="showManageApps = false">
+      <div class="modal-content" style="max-width:560px" @click.stop>
+        <div class="modal-header">
+          <h2>管理远程应用</h2>
+          <button @click="showManageApps = false" class="btn-close">✕</button>
+        </div>
+        <div class="modal-body">
+          <!-- 应用列表 -->
+          <table class="apps-table" v-if="remoteApps.length > 0">
+            <thead><tr><th>图标</th><th>名称</th><th>命令</th><th>Modules</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr v-for="app in remoteApps" :key="app.id">
+                <td>{{ app.icon || '📦' }}</td>
+                <td>{{ app.name }}</td>
+                <td><code>{{ app.cmd }}</code></td>
+                <td style="font-size:0.78rem;color:#6b7280">{{ app.modules || '-' }}</td>
+                <td>
+                  <button class="btn-action btn-delete" @click="deleteApp(app.id)">删除</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div v-else style="color:#9ca3af;text-align:center;padding:1rem">暂无应用</div>
+
+          <!-- 新增应用表单 -->
+          <div class="add-app-form">
+            <h4>添加应用</h4>
+            <div class="form-row">
+              <div class="form-group">
+                <label>名称 *</label>
+                <input v-model="newApp.name" placeholder="MATLAB" />
+              </div>
+              <div class="form-group">
+                <label>图标</label>
+                <input v-model="newApp.icon" placeholder="🔢" style="width:60px" />
+              </div>
+            </div>
+            <div class="form-group">
+              <label>启动命令 *</label>
+              <input v-model="newApp.cmd" placeholder="matlab -desktop" />
+            </div>
+            <div class="form-group">
+              <label>预加载 Modules（可选）</label>
+              <input v-model="newApp.modules" placeholder="matlab/R2024a cuda/12.0（空格分隔）" />
+              <div class="modules-hint">用户选择此应用时自动填入 modules</div>
+            </div>
+            <div class="form-group">
+              <label>描述</label>
+              <input v-model="newApp.desc" placeholder="数值计算软件" />
+            </div>
+            <div class="form-actions">
+              <button type="button" class="btn-primary" @click="addApp" :disabled="!newApp.name || !newApp.cmd">添加应用</button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -377,6 +449,9 @@ import { desktopAPI } from '../api/index'
 import XpraViewer from '../components/XpraViewer.vue'
 import { launchState, launchMinimized, startDesktopLaunch, clearLaunch } from '../utils/desktopLaunch'
 import dialog from '../utils/dialog'
+import { isAdmin } from '../utils/auth'
+
+const isAdminUser = isAdmin()
 
 const sessions = ref<any[]>([])
 const partitions = ref<any[]>([])
@@ -447,9 +522,44 @@ const builtinApps = [
   { name: 'VMD',      cmd: 'vmd',        icon: '🧬' },
 ]
 
+// 远程应用管理
+const remoteApps = ref<any[]>([])
+const showManageApps = ref(false)
+const newApp = ref({ name: '', icon: '', cmd: '', modules: '', desc: '' })
+
+const loadRemoteApps = async () => {
+  try {
+    const res = await axios.get('/desktop/apps')
+    remoteApps.value = res.data.data || []
+  } catch { remoteApps.value = builtinApps.map((a, i) => ({ id: i + 1, ...a, modules: '', desc: '' })) }
+}
+
+const selectApp = (app: any) => {
+  createForm.value.selectedAppId = app.id
+  createForm.value.appCommand = app.cmd
+  createForm.value.modules = app.modules || ''
+}
+
+const addApp = async () => {
+  try {
+    await axios.post('/desktop/apps', newApp.value)
+    newApp.value = { name: '', icon: '', cmd: '', modules: '', desc: '' }
+    await loadRemoteApps()
+  } catch (e: any) { alert(e.response?.data?.error || '添加失败') }
+}
+
+const deleteApp = async (id: number) => {
+  if (!confirm('确定删除此应用？')) return
+  try {
+    await axios.delete(`/desktop/apps/${id}`)
+    await loadRemoteApps()
+  } catch (e: any) { alert(e.response?.data?.error || '删除失败') }
+}
+
 const createForm = ref({
   name: '', mode: 'desktop', desktopEnv: 'xfce4', appCommand: '',
   partition: '', duration: 4, presetIndex: 1, gpus: 0,
+  selectedAppId: 0, modules: '',
 })
 
 const statusLabel = (s: string) => ({ stopped: '未启动', pending: '排队中', running: '运行中', failed: '失败' }[s] || s)
@@ -490,6 +600,7 @@ const loadResourcePresets = async () => {
 
 onMounted(() => {
   loadSessions()
+  loadRemoteApps()
   // 如果有进行中的启动，恢复显示
   if (launchState.value?.status === 'ready') {
     selectedSession.value = launchState.value.session
@@ -523,6 +634,7 @@ const createDesktop = async () => {
       mode: createForm.value.mode,
       type: createForm.value.desktopEnv,
       appCommand: createForm.value.mode === 'app' ? createForm.value.appCommand : '',
+      modules: createForm.value.mode === 'app' ? createForm.value.modules : '',
       resolution: 'auto',
       duration: createForm.value.duration,
       cpus: preset?.cpus,
@@ -532,7 +644,7 @@ const createDesktop = async () => {
     })
     sessions.value.unshift(data)
     showCreateModal.value = false
-    createForm.value = { name: '', mode: 'desktop', desktopEnv: 'xfce4', appCommand: '', partition: partitions.value[0]?.name || '', duration: 4, presetIndex: 1, gpus: 0 }
+    createForm.value = { name: '', mode: 'desktop', desktopEnv: 'xfce4', appCommand: '', partition: partitions.value[0]?.name || '', duration: 4, presetIndex: 1, gpus: 0, selectedAppId: 0, modules: '' }
   } catch (e: any) { dialog.error('创建失败: ' + (e.response?.data?.error || e.message)) }
   finally { submitting.value = false }
 }
@@ -1084,24 +1196,42 @@ const copyScript = () => {
 .env-option input { accent-color: #6366f1; }
 
 /* ── 应用网格 ── */
+.app-label-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem; }
+.btn-manage-apps {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 500;
+  background: hsl(var(--muted)); border: 1px solid hsl(var(--border));
+  color: hsl(var(--muted-foreground)); cursor: pointer; transition: all 0.15s;
+}
+.btn-manage-apps:hover { background: hsl(var(--accent)); color: hsl(var(--foreground)); }
 .app-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 0.6rem; margin-bottom: 0.75rem; }
 .app-card {
-  border: 2px solid #e2e8f0; border-radius: 12px;
+  border: 2px solid hsl(var(--border)); border-radius: 12px;
   padding: 0.65rem 0.4rem; cursor: pointer; text-align: center;
-  transition: all 0.15s; background: #f8fafc;
+  transition: all 0.15s; background: hsl(var(--muted));
 }
-.app-card:hover { border-color: #a5b4fc; background: #f5f3ff; transform: translateY(-1px); }
-.app-card.active { border-color: #6366f1; background: #ede9fe; box-shadow: 0 0 0 3px rgba(99,102,241,0.1); }
+.app-card:hover { border-color: #a5b4fc; background: hsl(var(--accent)); transform: translateY(-1px); }
+.app-card.active { border-color: #6366f1; background: hsl(var(--accent)); box-shadow: 0 0 0 3px rgba(99,102,241,0.1); }
 .app-icon { font-size: 1.6rem; margin-bottom: 0.25rem; }
-.app-name { font-size: 0.7rem; font-weight: 600; color: #374151; }
+.app-name { font-size: 0.7rem; font-weight: 600; color: hsl(var(--foreground)); }
+.app-desc { font-size: 0.65rem; color: hsl(var(--muted-foreground)); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .custom-app-row { margin-top: 0.25rem; }
 .custom-app-input {
   width: 100%; padding: 0.6rem 0.9rem;
-  border: 1.5px solid #e2e8f0; border-radius: 10px;
+  border: 1.5px solid hsl(var(--border)); border-radius: 10px;
   font-size: 0.9rem; box-sizing: border-box;
-  background: #f8fafc; outline: none; transition: all 0.15s;
+  background: hsl(var(--background)); color: hsl(var(--foreground)); outline: none; transition: all 0.15s;
 }
-.custom-app-input:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,0.12); background: #fff; }
+.custom-app-input:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,0.12); }
+.modules-row { margin-top: 0.75rem; display: flex; flex-direction: column; gap: 0.35rem; }
+.modules-row label { font-size: 0.8rem; font-weight: 500; color: hsl(var(--foreground)); }
+.modules-hint { font-size: 0.72rem; color: hsl(var(--muted-foreground)); }
+.modules-hint code { background: hsl(var(--muted)); padding: 1px 5px; border-radius: 3px; font-size: 0.7rem; }
+.apps-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-bottom: 1.5rem; }
+.apps-table th { background: hsl(var(--muted)); padding: 0.5rem 0.75rem; text-align: left; font-size: 0.75rem; font-weight: 600; color: hsl(var(--muted-foreground)); border-bottom: 1px solid hsl(var(--border)); }
+.apps-table td { padding: 0.5rem 0.75rem; border-bottom: 1px solid hsl(var(--border)); color: hsl(var(--foreground)); }
+.add-app-form { border-top: 1px solid hsl(var(--border)); padding-top: 1rem; }
+.add-app-form h4 { font-size: 0.88rem; font-weight: 600; color: hsl(var(--foreground)); margin: 0 0 0.75rem; }
 
 /* ── Xpra iframe ── */
 .xpra-frame { flex: 1; width: 100%; height: 100%; border: none; background: #000; }
