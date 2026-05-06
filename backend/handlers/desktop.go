@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"hpc-backend/logger"
 	"hpc-backend/slurm"
 
 	"github.com/gin-gonic/gin"
@@ -334,14 +335,8 @@ func StartDesktopSession(c *gin.Context) {
 		}
 	}
 
-	// 限制：每个用户同时只能有一个运行中或排队中的会话
-	for _, s := range sessions {
-		if s.Username == username.(string) && s.ID != id &&
-			(s.Status == "running" || s.Status == "pending") {
-			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("已有会话「%s」正在%s，请先停止后再启动新会话", s.Name, map[string]string{"running": "运行中", "pending": "排队中"}[s.Status])})
-			return
-		}
-	}
+	// 允许多个会话同时运行（包括 pending 和 running 状态）
+	// 不再限制同时启动多个会话
 
 	script := buildDesktopScript(session)
 
@@ -480,6 +475,7 @@ func StopDesktopSession(c *gin.Context) {
 				username, _ := c.Get("username")
 				client, err := GetSlurmClientForUser(username.(string))
 				if err == nil {
+					logger.Info("User %s manually stopping desktop session %d (job %d)", username, id, sessions[i].SlurmJobID)
 					_ = client.CancelJob(sessions[i].SlurmJobID)
 				}
 			}
@@ -568,13 +564,16 @@ func buildDesktopScript(session *DesktopSession) string {
 	b.WriteString(fmt.Sprintf("export HOME=${HOME:-%s/%s}\n", homeBase, session.Username))
 	b.WriteString("export PATH=/opt/xpra/bin:/usr/bin:/usr/local/bin:/bin:/usr/sbin:/sbin:$PATH\n\n")
 
-	// ── module load（如果配置了 modules）──
-	if session.Modules != "" {
+	// ── module load（仅当用户明确配置了 modules 时才加载）──
+	if session.Modules != "" && strings.TrimSpace(session.Modules) != "" {
 		b.WriteString("# 加载 Environment Modules\n")
 		b.WriteString("if command -v module &>/dev/null || [ -f /etc/profile.d/modules.sh ]; then\n")
 		b.WriteString("  source /etc/profile.d/modules.sh 2>/dev/null || true\n")
 		for _, mod := range strings.Fields(session.Modules) {
-			b.WriteString(fmt.Sprintf("  module load %s 2>/dev/null || echo \"Warning: module load %s failed\"\n", mod, mod))
+			mod = strings.TrimSpace(mod)
+			if mod != "" {
+				b.WriteString(fmt.Sprintf("  module load %s 2>/dev/null || echo \"Warning: module load %s failed\"\n", mod, mod))
+			}
 		}
 		b.WriteString("fi\n\n")
 	}
@@ -582,7 +581,15 @@ func buildDesktopScript(session *DesktopSession) string {
 	// ── 以 SLURM_JOB_ID 命名的独立工作目录 ──
 	b.WriteString("JOB_ID=${SLURM_JOB_ID:-$$}\n")
 	b.WriteString(fmt.Sprintf("XPRA_JOB_DIR=\"$HOME/.xpra/job-${JOB_ID}\"\n"))
-	b.WriteString(fmt.Sprintf("mkdir -p \"$XPRA_JOB_DIR\" %s\n\n", statusDir))
+	
+	// ── 清理旧的 xpra 作业目录（保留最近5个）──
+	b.WriteString("# 清理旧的 xpra 作业目录，避免占用过多磁盘空间\n")
+	b.WriteString("if [ -d \"$HOME/.xpra\" ]; then\n")
+	b.WriteString("  ls -dt \"$HOME/.xpra/job-\"* 2>/dev/null | tail -n +6 | xargs rm -rf 2>/dev/null || true\n")
+	b.WriteString("fi\n\n")
+	
+	b.WriteString("mkdir -p \"$XPRA_JOB_DIR\"\n")
+	b.WriteString(fmt.Sprintf("mkdir -p \"%s\"\n\n", statusDir))
 
 	// trap: cleanup on job exit (scancel/timeout/EXIT)
 	// 注意：不在 trap 里 scancel，让 Slurm 按时间限制自然结束，支持客户端重连
@@ -652,6 +659,9 @@ func buildDesktopScript(session *DesktopSession) string {
 	logFile := "\"$XPRA_JOB_DIR/xpra.log\""
 	socketDir := "\"$XPRA_JOB_DIR\""
 
+	b.WriteString("echo '[DEBUG] Starting xpra...'\n")
+	b.WriteString("echo \"[DEBUG] Display: :${DISPLAY_NUM}, WS Port: ${WS_PORT}, TCP Port: ${TCP_PORT}\"\n")
+
 	if mode == "app" {
 		b.WriteString(fmt.Sprintf(
 			"xpra start :${DISPLAY_NUM} \\\n"+
@@ -663,8 +673,7 @@ func buildDesktopScript(session *DesktopSession) string {
 				"  --start-child=\"%s\" \\\n"+
 				"  --exit-with-children=no \\\n"+
 				"  --daemon=no \\\n"+
-				"  --resize-display=%s \\\n"+
-				"  &\n\n",
+				"  --resize-display=%s &\n\n",
 			socketDir, logFile, appCmd, resolution,
 		))
 	} else {
@@ -687,27 +696,54 @@ func buildDesktopScript(session *DesktopSession) string {
 				"  --start-child=%s \\\n"+
 				"  --exit-with-children=no \\\n"+
 				"  --daemon=no \\\n"+
-				"  --resize-display=%s \\\n"+
-				"  &\n\n",
+				"  --resize-display=%s &\n\n",
 			socketDir, logFile, startCmd, resolution,
 		))
 	}
 
-	b.WriteString("XPRA_PID=$!\n\n")
+	b.WriteString("XPRA_PID=$!\n")
+	b.WriteString("echo \"[DEBUG] Xpra started with PID: $XPRA_PID\"\n\n")
+
+	b.WriteString("# 等待 xpra 进程启动\n")
+	b.WriteString("sleep 3\n")
+	b.WriteString("if ! kill -0 $XPRA_PID 2>/dev/null; then\n")
+	b.WriteString("  echo '[ERROR] Xpra process died immediately after start'\n")
+	b.WriteString(fmt.Sprintf("  echo 'status=failed' >> %s\n  exit 1\nfi\n", statusFile))
+	b.WriteString("echo '[DEBUG] Xpra process is running'\n\n")
 
 	// ── 等待端口就绪（最多 90 秒）──
+	b.WriteString("echo '[DEBUG] Waiting for ports to be ready...'\n")
 	b.WriteString("for i in $(seq 1 90); do\n")
 	b.WriteString("  ss -tlnp 2>/dev/null | grep -q \":${WS_PORT}[^0-9]\" && \\\n")
 	b.WriteString("  ss -tlnp 2>/dev/null | grep -q \":${TCP_PORT}[^0-9]\" && break\n")
+	b.WriteString("  [ $((i % 10)) -eq 0 ] && echo \"[DEBUG] Still waiting for ports... ($i/90)\"\n")
 	b.WriteString("  sleep 1\ndone\n\n")
 	b.WriteString("if ! ss -tlnp 2>/dev/null | grep -q \":${WS_PORT}[^0-9]\"; then\n")
+	b.WriteString("  echo '[ERROR] WebSocket port not ready after 90 seconds'\n")
+	b.WriteString("  echo '[DEBUG] Checking xpra process...'\n")
+	b.WriteString("  ps aux | grep xpra | grep -v grep\n")
+	b.WriteString("  echo '[DEBUG] Checking ports...'\n")
+	b.WriteString("  ss -tlnp | grep -E ':(14[5-9][0-9]{2})'\n")
 	b.WriteString(fmt.Sprintf("  echo 'status=failed' >> %s\n  exit 1\nfi\n\n", statusFile))
+	b.WriteString("echo '[DEBUG] Ports are ready!'\n")
 	b.WriteString(fmt.Sprintf("echo 'status=running' >> %s\n\n", statusFile))
 
-	// ── 保持运行：xpra 退出或超时则结束作业 ──
+	// ── 保持运行：监控 xpra 进程或超时 ──
 	b.WriteString(fmt.Sprintf("END_TIME=$(($(date +%%s) + %d))\n", durationSec))
+	b.WriteString("echo '[DEBUG] Entering monitoring loop...'\n")
 	b.WriteString("while [ $(date +%s) -lt $END_TIME ]; do\n")
-	b.WriteString("  kill -0 $XPRA_PID 2>/dev/null || break\n  sleep 30\ndone\n\n")
+	b.WriteString("  # 检查 xpra 进程是否还在运行\n")
+	b.WriteString("  if ! kill -0 $XPRA_PID 2>/dev/null; then\n")
+	b.WriteString("    echo '[ERROR] Xpra process has stopped unexpectedly'\n")
+	b.WriteString("    echo '[DEBUG] Checking xpra log for errors...'\n")
+	b.WriteString("    tail -20 \"$XPRA_JOB_DIR/xpra.log\" 2>/dev/null || echo 'No xpra log found'\n")
+	b.WriteString("    break\n")
+	b.WriteString("  fi\n")
+	b.WriteString("  sleep 30\n")
+	b.WriteString("done\n\n")
+	b.WriteString("echo '[DEBUG] Monitoring loop ended, cleaning up...'\n")
+	b.WriteString("# 清理\n")
+	b.WriteString("kill $XPRA_PID 2>/dev/null || true\n")
 	b.WriteString("xpra stop :${DISPLAY_NUM} 2>/dev/null || true\n")
 	b.WriteString(fmt.Sprintf("echo 'status=stopped' >> %s\n", statusFile))
 
@@ -750,17 +786,38 @@ func pollDesktopJob(sessionID int, jobID int64, username string) {
 
 		job, err := client.GetJob(jobID)
 		if err != nil {
+			// 查询失败，继续重试（可能是网络抖动）
 			continue
 		}
 
 		state := strings.ToUpper(strings.TrimSpace(job.GetJobState()))
-		if state == "FAILED" || state == "CANCELLED" || state == "TIMEOUT" || state == "COMPLETED" {
-			// 检查状态文件，判断是 failed 还是 stopped
-			data, _ := os.ReadFile(statusFile)
-			if strings.Contains(string(data), "status=failed") {
-				setStatus("failed")
+		
+		// 作业异常结束：区分是启动失败还是正常停止
+		if state == "FAILED" || state == "CANCELLED" || state == "TIMEOUT" || state == "COMPLETED" || state == "NODE_FAIL" || state == "PREEMPTED" {
+			logger.Info("Desktop session %d: job %d ended with state %s during startup phase", sessionID, jobID, state)
+			// 检查状态文件，判断是否曾经启动成功
+			data, ferr := os.ReadFile(statusFile)
+			if ferr == nil {
+				content := string(data)
+				logger.Info("Desktop session %d: status file content: %s", sessionID, content)
+				// 如果状态文件显示曾经 running 或 stopped，说明作业正常执行过
+				if strings.Contains(content, "status=running") || strings.Contains(content, "status=stopped") {
+					logger.Info("Desktop session %d: job was running before, marking as stopped", sessionID)
+					setStatus("stopped")
+					return
+				}
+				// 如果明确标记 failed
+				if strings.Contains(content, "status=failed") {
+					setStatus("failed")
+					return
+				}
+			}
+			// 状态文件不存在或没有 running 标记，说明作业启动失败
+			// 但如果是 CANCELLED 或 COMPLETED，可能是用户主动取消，标记为 stopped
+			if state == "CANCELLED" || state == "COMPLETED" {
+				setStatus("stopped")
 			} else {
-				setStatus("failed") // 还没到 running 就结束了，算失败
+				setStatus("failed")
 			}
 			return
 		}
@@ -780,7 +837,8 @@ func pollDesktopJob(sessionID int, jobID int64, username string) {
 					j2, err2 := client.GetJob(jobID)
 					if err2 == nil {
 						s2 := strings.ToUpper(strings.TrimSpace(j2.GetJobState()))
-						if s2 == "FAILED" || s2 == "CANCELLED" || s2 == "TIMEOUT" || s2 == "COMPLETED" {
+						if s2 == "FAILED" || s2 == "CANCELLED" || s2 == "TIMEOUT" || s2 == "COMPLETED" || s2 == "NODE_FAIL" {
+							// 作业在启动过程中异常结束
 							setStatus("failed")
 							return
 						}
@@ -824,6 +882,7 @@ func pollDesktopJob(sessionID int, jobID int64, username string) {
 			}
 
 			if !vncReady {
+				// 超时未就绪，标记失败
 				setStatus("failed")
 				return
 			}
@@ -853,6 +912,7 @@ func pollDesktopJob(sessionID int, jobID int64, username string) {
 	}
 
 	if !running {
+		// 超时未启动，标记失败
 		setStatus("failed")
 		return
 	}
@@ -869,11 +929,20 @@ func pollDesktopJob(sessionID int, jobID int64, username string) {
 			if failCount >= 3 {
 				// 查不到作业，尝试从状态文件判断
 				data, ferr := os.ReadFile(statusFile)
-				if ferr == nil && strings.Contains(string(data), "status=stopped") {
-					setStatus("stopped")
-				} else {
-					setStatus("stopped") // 默认标记 stopped，不标 failed
+				if ferr == nil {
+					content := string(data)
+					if strings.Contains(content, "status=stopped") {
+						setStatus("stopped")
+						return
+					}
+					// 如果状态文件显示 running，说明作业可能被外部取消
+					if strings.Contains(content, "status=running") {
+						setStatus("stopped")
+						return
+					}
 				}
+				// 默认标记 stopped（作业消失，可能是正常结束或被取消）
+				setStatus("stopped")
 				return
 			}
 			continue
@@ -883,22 +952,30 @@ func pollDesktopJob(sessionID int, jobID int64, username string) {
 		state := strings.ToUpper(strings.TrimSpace(job.GetJobState()))
 		switch {
 		case state == "FAILED" || state == "TIMEOUT" || state == "NODE_FAIL" || state == "PREEMPTED":
+			// 异常结束，标记失败
 			setStatus("failed")
 			return
-		case state == "CANCELLED" || state == "COMPLETED":
+		case state == "CANCELLED":
+			// 用户主动取消，标记 stopped
+			setStatus("stopped")
+			return
+		case state == "COMPLETED":
+			// 正常完成，标记 stopped
 			setStatus("stopped")
 			return
 		case strings.HasPrefix(state, "RUNNING"):
 			// 继续监控，同时检查状态文件是否有 stopped 标记
 			data, ferr := os.ReadFile(statusFile)
 			if ferr == nil && strings.Contains(string(data), "status=stopped") {
-				// job 脚本自己写了 stopped，取消 job
-				_ = client.CancelJob(jobID)
+				// job 脚本自己写了 stopped，说明正在正常退出，不需要 scancel
+				logger.Info("Desktop session %d: script wrote status=stopped, job %d will exit naturally", sessionID, jobID)
 				setStatus("stopped")
 				return
 			}
 		case state == "COMPLETING":
-			// 正在收尾
+			// 正在收尾，继续等待
+		default:
+			// 其他未知状态，继续监控
 		}
 	}
 }
@@ -1157,4 +1234,94 @@ func DeleteDesktopApp(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "已删除"})
+}
+
+// POST /api/desktop/cleanup - 清理用户的旧文件释放磁盘空间
+func CleanupUserSpace(c *gin.Context) {
+	username, _ := c.Get("username")
+	
+	homeBase := os.Getenv("HOME_BASE_PATH")
+	if homeBase == "" {
+		homeBase = "/home"
+	}
+	userHome := fmt.Sprintf("%s/%s", homeBase, username.(string))
+	
+	cleaned := struct {
+		XpraDirs   int `json:"xpraDirs"`
+		LogFiles   int `json:"logFiles"`
+		TotalBytes int64 `json:"totalBytes"`
+	}{}
+	
+	// 1. 清理旧的 xpra 作业目录（保留最近3个）
+	xpraDir := fmt.Sprintf("%s/.xpra", userHome)
+	if info, err := os.Stat(xpraDir); err == nil && info.IsDir() {
+		entries, _ := os.ReadDir(xpraDir)
+		var jobDirs []os.DirEntry
+		for _, e := range entries {
+			if e.IsDir() && strings.HasPrefix(e.Name(), "job-") {
+				jobDirs = append(jobDirs, e)
+			}
+		}
+		// 按修改时间排序（需要获取详细信息）
+		if len(jobDirs) > 3 {
+			for i := 3; i < len(jobDirs); i++ {
+				dirPath := fmt.Sprintf("%s/%s", xpraDir, jobDirs[i].Name())
+				if size := getDirSize(dirPath); size > 0 {
+					cleaned.TotalBytes += size
+				}
+				os.RemoveAll(dirPath)
+				cleaned.XpraDirs++
+			}
+		}
+	}
+	
+	// 2. 清理旧的桌面日志文件（保留最近10个）
+	desktopDir := fmt.Sprintf("%s/.desktop", userHome)
+	if info, err := os.Stat(desktopDir); err == nil && info.IsDir() {
+		for _, ext := range []string{".out", ".err", ".status"} {
+			entries, _ := os.ReadDir(desktopDir)
+			var files []string
+			for _, e := range entries {
+				if !e.IsDir() && strings.HasSuffix(e.Name(), ext) {
+					files = append(files, e.Name())
+				}
+			}
+			if len(files) > 10 {
+				for i := 10; i < len(files); i++ {
+					filePath := fmt.Sprintf("%s/%s", desktopDir, files[i])
+					if info, err := os.Stat(filePath); err == nil {
+						cleaned.TotalBytes += info.Size()
+					}
+					os.Remove(filePath)
+					cleaned.LogFiles++
+				}
+			}
+		}
+	}
+	
+	c.JSON(http.StatusOK, gin.H{
+		"message": "清理完成",
+		"cleaned": cleaned,
+	})
+}
+
+// 辅助函数：计算目录大小
+func getDirSize(path string) int64 {
+	var size int64
+	filepath := path
+	entries, err := os.ReadDir(filepath)
+	if err != nil {
+		return 0
+	}
+	for _, e := range entries {
+		fullPath := fmt.Sprintf("%s/%s", filepath, e.Name())
+		if e.IsDir() {
+			size += getDirSize(fullPath)
+		} else {
+			if info, err := os.Stat(fullPath); err == nil {
+				size += info.Size()
+			}
+		}
+	}
+	return size
 }

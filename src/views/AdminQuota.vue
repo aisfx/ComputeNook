@@ -64,6 +64,7 @@
             <th>硬限制</th>
             <th>使用率</th>
             <th>已用文件数</th>
+            <th>文件数使用率</th>
             <th>文件硬限</th>
             <th>操作</th>
           </tr>
@@ -93,10 +94,29 @@
                   {{ usagePct(item) }}%
                 </span>
               </div>
+              <span v-else-if="item.quotas?.[0]?.block_used_kb" class="no-limit-text">
+                {{ formatSize(item.quotas[0].block_used_kb) }} (无限制)
+              </span>
+              <span v-else-if="item.error" class="error-text" :title="item.error">
+                ⚠️ 查询失败
+              </span>
               <span v-else class="no-data">未设置</span>
             </td>
-            <td>{{ item.quotas?.[0]?.inode_used?.toLocaleString() || '-' }}</td>
-            <td>{{ item.quotas?.[0]?.inode_hard ? item.quotas[0].inode_hard.toLocaleString() : '无限制' }}</td>
+            <td>{{ item.quotas?.[0]?.inode_used ? formatInode(item.quotas[0].inode_used) : '-' }}</td>
+            <td>
+              <div v-if="item.quotas?.[0]?.inode_hard" class="usage-cell">
+                <div class="prog-bg">
+                  <div class="prog-fill" :style="{ width: inodeUsagePct(item) + '%' }"
+                    :class="inodeUsagePct(item) >= 90 ? 'fill-crit' : inodeUsagePct(item) >= 75 ? 'fill-warn' : 'fill-ok'">
+                  </div>
+                </div>
+                <span class="pct-text" :class="inodeUsagePct(item) >= 90 ? 'text-crit' : inodeUsagePct(item) >= 75 ? 'text-warn' : ''">
+                  {{ inodeUsagePct(item) }}%
+                </span>
+              </div>
+              <span v-else class="no-data">未设置</span>
+            </td>
+            <td>{{ item.quotas?.[0]?.inode_hard ? formatInode(item.quotas[0].inode_hard) : '无限制' }}</td>
             <td>
               <button class="btn-link" @click="openSet(item.username, item.quotas?.[0])">⚙️ 设置</button>
             </td>
@@ -189,12 +209,25 @@ const usagePct = (item: any) => {
   return Math.min(100, Math.round((q.block_used_kb / q.block_hard_kb) * 100))
 }
 
+const inodeUsagePct = (item: any) => {
+  const q = item.quotas?.[0]
+  if (!q || !q.inode_hard) return 0
+  return Math.min(100, Math.round((q.inode_used / q.inode_hard) * 100))
+}
+
 const formatSize = (kb: number) => {
   if (!kb) return '0'
   if (kb >= 1024 * 1024 * 1024) return (kb / 1024 / 1024 / 1024).toFixed(1) + ' TB'
   if (kb >= 1024 * 1024) return (kb / 1024 / 1024).toFixed(1) + ' GB'
   if (kb >= 1024) return (kb / 1024).toFixed(1) + ' MB'
   return kb + ' KB'
+}
+
+const formatInode = (count: number) => {
+  if (!count) return '0'
+  if (count >= 1000000) return (count / 1000000).toFixed(1) + 'M'
+  if (count >= 1000) return (count / 1000).toFixed(1) + 'K'
+  return count.toString()
 }
 
 const filtered = computed(() => {
@@ -246,6 +279,10 @@ function openSet(username = '', quota?: any) {
 function applyPreset(gb: number) {
   form.value.blockHardGB = gb
   form.value.blockSoftGB = Math.round(gb * 0.9)
+  // 根据空间大小自动设置文件数配额（每 GB 约 10000 个文件）
+  const estimatedFiles = gb * 10000
+  form.value.inodeHard = estimatedFiles
+  form.value.inodeSoft = Math.round(estimatedFiles * 0.9)
 }
 
 async function submitQuota() {
@@ -257,10 +294,10 @@ async function submitQuota() {
   try {
     await axios.post('/files/quota', {
       username: form.value.username,
-      block_hard_kb: form.value.blockHardGB * 1024 * 1024,
-      block_soft_kb: form.value.blockSoftGB * 1024 * 1024,
-      inode_hard: form.value.inodeHard,
-      inode_soft: form.value.inodeSoft,
+      block_hard_kb: Number(form.value.blockHardGB) * 1024 * 1024,
+      block_soft_kb: Number(form.value.blockSoftGB) * 1024 * 1024,
+      inode_hard: Number(form.value.inodeHard) || 0,
+      inode_soft: Number(form.value.inodeSoft) || 0,
     })
     notification.success(`用户 ${form.value.username} 配额设置成功`)
     showModal.value = false
@@ -361,6 +398,8 @@ onMounted(loadAll)
   padding: 1px 7px; border-radius: 999px; font-weight: 600;
 }
 .no-data { color: hsl(var(--muted-foreground)); }
+.no-limit-text { color: #6366f1; font-size: 0.82rem; font-weight: 600; }
+.error-text { color: #ef4444; font-size: 0.82rem; font-weight: 600; cursor: help; }
 
 .usage-cell { display: flex; align-items: center; gap: 8px; }
 .prog-bg { flex: 1; height: 6px; background: hsl(var(--border)); border-radius: 999px; overflow: hidden; min-width: 80px; }

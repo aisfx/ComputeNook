@@ -297,6 +297,7 @@ func execSetQuota(req SetQuotaRequest, mountpoint string) error {
 	switch fsType {
 	case "lustre":
 		args := []string{"setquota", "-u", req.Username}
+		// 块配额
 		if req.BlockSoftKB > 0 {
 			args = append(args, "--block-softlimit", fmt.Sprintf("%dk", req.BlockSoftKB))
 		}
@@ -305,8 +306,11 @@ func execSetQuota(req SetQuotaRequest, mountpoint string) error {
 		} else {
 			args = append(args, "--block-hardlimit", "0")
 		}
+		// 文件数配额（inode）- 始终设置，0 表示无限制
 		if req.InodeSoft > 0 {
 			args = append(args, "--inode-softlimit", fmt.Sprintf("%d", req.InodeSoft))
+		} else {
+			args = append(args, "--inode-softlimit", "0")
 		}
 		if req.InodeHard > 0 {
 			args = append(args, "--inode-hardlimit", fmt.Sprintf("%d", req.InodeHard))
@@ -321,11 +325,22 @@ func execSetQuota(req SetQuotaRequest, mountpoint string) error {
 			fmt.Sprintf("%d", req.InodeSoft), fmt.Sprintf("%d", req.InodeHard),
 			mountpoint)
 	case "xfs":
-		// xfs_quota -x -c 需要分多个 -c 参数，limit 命令格式：
 		// xfs_quota -x -c "limit -u bsoft=Xk bhard=Xk isoft=X ihard=X username" mountpoint
+		// 注意：XFS 配额必须同时设置块和 inode 限制
+		// 块配额（空间）- 使用 KB 单位
+		bsoft := req.BlockSoftKB
+		bhard := req.BlockHardKB
+		
+		// 文件数配额（inode）
+		isoft := req.InodeSoft
+		ihard := req.InodeHard
+		
+		// 构建完整的 limit 命令
 		limitStr := fmt.Sprintf("limit -u bsoft=%dk bhard=%dk isoft=%d ihard=%d %s",
-			req.BlockSoftKB, req.BlockHardKB, req.InodeSoft, req.InodeHard, req.Username)
+			bsoft, bhard, isoft, ihard, req.Username)
+		
 		cmd = exec.Command("xfs_quota", "-x", "-c", limitStr, mountpoint)
+		logger.Info("XFS quota command: xfs_quota -x -c \"%s\" %s", limitStr, mountpoint)
 	default:
 		return fmt.Errorf("无法确定文件系统类型 (detected=%s)，请设置 QUOTA_FS_TYPE 环境变量 (lustre / nfs / xfs)", fsType)
 	}
@@ -513,10 +528,10 @@ func queryXFSQuota(username, mountpoint string) ([]QuotaInfo, error) {
 			Filesystem: mountpoint, Type: "xfs",
 			BlockUsed: parseXFSSize(fields[1]), BlockSoft: parseXFSSize(fields[2]), BlockHard: parseXFSSize(fields[3]),
 		}
-		if len(fields) >= 9 {
-			q.InodeUsed = parseInt64(fields[5])
-			q.InodeSoft = parseXFSSize(fields[6])
-			q.InodeHard = parseXFSSize(fields[7])
+		if len(fields) >= 10 {
+			q.InodeUsed = parseInodeCount(fields[6])
+			q.InodeSoft = parseInodeCount(fields[7])
+			q.InodeHard = parseInodeCount(fields[8])
 		}
 		results = append(results, q)
 	}
@@ -540,6 +555,28 @@ func parseXFSSize(s string) int64 {
 		multiplier = 1024
 		s = s[:len(s)-1]
 	} else if strings.HasSuffix(s, "K") {
+		multiplier = 1
+		s = s[:len(s)-1]
+	}
+	v, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return 0
+	}
+	return int64(v * float64(multiplier))
+}
+
+func parseInodeCount(s string) int64 {
+	s = strings.TrimSuffix(s, "*")
+	if s == "-" || s == "0" || s == "" {
+		return 0
+	}
+	s = strings.ToUpper(s)
+	var multiplier int64 = 1
+	if strings.HasSuffix(s, "M") {
+		multiplier = 1000000
+		s = s[:len(s)-1]
+	} else if strings.HasSuffix(s, "K") {
+		multiplier = 1000
 		s = s[:len(s)-1]
 	}
 	v, err := strconv.ParseFloat(s, 64)
