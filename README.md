@@ -376,9 +376,9 @@ systemctl enable --now hpc-backend
 
 ### 赞助单位
 
-| 单位 | 贡献 |
-|---|---|
-| 天津市天河计算机技术有限公司 | 技术支持  |
+| 单位 | 贡献 | 网站 |
+|---|---|---|
+| 天津市天河计算机技术有限公司 | 技术支持 | [tianhe-tech.com](https://www.tianhe-tech.com/) |
 
 ### 个人贡献者 / 赞助者
 
