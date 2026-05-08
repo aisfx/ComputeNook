@@ -1,19 +1,19 @@
 [Unit]
-Description=HPC Platform Backend Service
+Description=算力小筑 Backend Service
 After=network.target
 Wants=network.target
 
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/opt/hpc-platform
-EnvironmentFile=-/opt/hpc-platform/.env
-ExecStart=/opt/hpc-platform/hpc-backend
+WorkingDirectory=/opt/computenook
+EnvironmentFile=-/opt/computenook/.env
+ExecStart=/opt/computenook/computenook
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=hpc-backend
+SyslogIdentifier=computenook
 
 [Install]
 WantedBy=multi-user.target

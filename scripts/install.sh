@@ -1,6 +1,6 @@
 #!/bin/bash
-# HPC Platform 安装脚本
-# 将服务安装到 /opt/hpc-platform 并注册 systemd 服务
+# 算力小筑 安装脚本
+# 将服务安装到 /opt/computenook 并注册 systemd 服务
 #
 # 用法:
 #   ./install.sh              # 安装
@@ -8,8 +8,8 @@
 
 set -e
 
-INSTALL_DIR="/opt/hpc-platform"
-SERVICE="hpc-backend"
+INSTALL_DIR="/opt/computenook"
+SERVICE="computenook"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # ── 颜色输出 ──────────────────────────────────────────────
@@ -23,7 +23,7 @@ error() { echo -e "${RED}[ERROR]${NC} $*"; exit 1; }
 
 # ── 卸载 ──────────────────────────────────────────────────
 if [ "$1" = "--uninstall" ]; then
-  info "开始卸载 HPC Platform..."
+  info "开始卸载 算力小筑..."
   if systemctl is-active --quiet "$SERVICE" 2>/dev/null; then
     systemctl stop "$SERVICE"
     info "已停止 $SERVICE"
@@ -39,7 +39,7 @@ if [ "$1" = "--uninstall" ]; then
 fi
 
 # ── 检查必要文件 ──────────────────────────────────────────
-[ -f "$SCRIPT_DIR/hpc-backend" ] || error "找不到 hpc-backend，请在解压目录中运行此脚本"
+[ -f "$SCRIPT_DIR/computenook" ] || error "找不到 computenook，请在解压目录中运行此脚本"
 [ -d "$SCRIPT_DIR/static" ]      || error "找不到 static/ 目录"
 
 # ── 停止旧服务 ────────────────────────────────────────────
@@ -53,8 +53,8 @@ info "创建安装目录 $INSTALL_DIR..."
 mkdir -p "$INSTALL_DIR"
 
 info "复制程序文件..."
-cp -f "$SCRIPT_DIR/hpc-backend" "$INSTALL_DIR/hpc-backend"
-chmod +x "$INSTALL_DIR/hpc-backend"
+cp -f "$SCRIPT_DIR/computenook" "$INSTALL_DIR/computenook"
+chmod +x "$INSTALL_DIR/computenook"
 
 info "复制前端静态文件..."
 rm -rf "$INSTALL_DIR/static"
@@ -74,8 +74,8 @@ if [ -f "$SCRIPT_DIR/nginx.conf" ]; then
   if command -v nginx &>/dev/null; then
     NGINX_CONF_DIR="/etc/nginx/conf.d"
     mkdir -p "$NGINX_CONF_DIR"
-    cp "$SCRIPT_DIR/nginx.conf" "$NGINX_CONF_DIR/hpc-platform.conf"
-    nginx -t && systemctl reload nginx || warn "nginx 配置检查失败，请手动检查 /etc/nginx/conf.d/hpc-platform.conf"
+    cp "$SCRIPT_DIR/nginx.conf" "$NGINX_CONF_DIR/computenook.conf"
+    nginx -t && systemctl reload nginx || warn "nginx 配置检查失败，请手动检查 /etc/nginx/conf.d/computenook.conf"
     info "nginx 配置已安装"
   else
     warn "未检测到 nginx，跳过。配置文件已放在 $SCRIPT_DIR/nginx.conf，请手动安装"
@@ -85,23 +85,23 @@ fi
 # ── 安装 systemd 服务 ─────────────────────────────────────
 info "安装 systemd 服务..."
 
-cat > /etc/systemd/system/hpc-backend.service << 'EOF'
+cat > /etc/systemd/system/computenook.service << 'EOF'
 [Unit]
-Description=HPC Platform Backend Service
+Description=算力小筑 Backend Service
 After=network.target
 Wants=network.target
 
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/opt/hpc-platform
-EnvironmentFile=-/opt/hpc-platform/.env
-ExecStart=/opt/hpc-platform/hpc-backend
+WorkingDirectory=/opt/computenook
+EnvironmentFile=-/opt/computenook/.env
+ExecStart=/opt/computenook/computenook
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=hpc-backend
+SyslogIdentifier=computenook
 
 [Install]
 WantedBy=multi-user.target
@@ -127,9 +127,9 @@ echo "  安装目录: $INSTALL_DIR"
 echo "  服务端口: $(grep SERVER_PORT $INSTALL_DIR/.env | cut -d= -f2) (默认 8080)"
 echo ""
 echo "  常用命令:"
-echo "    systemctl status  hpc-backend"
-echo "    systemctl restart hpc-backend"
-echo "    journalctl -u hpc-backend -f"
+echo "    systemctl status  computenook"
+echo "    systemctl restart computenook"
+echo "    journalctl -u computenook -f"
 echo ""
 echo "  卸载:"
 echo "    sudo $0 --uninstall"
