@@ -240,7 +240,7 @@ xfs_quota -x -c "state" /home
 若后端非 root 运行：
 
 ```bash
-# /etc/sudoers.d/hpc-backend
+# /etc/sudoers.d/computenook
 hpc-user ALL=(ALL) NOPASSWD: /usr/sbin/xfs_quota
 ```
 
@@ -315,7 +315,7 @@ After=network.target
 Type=simple
 User=root
 WorkingDirectory=/opt/computenook
-ExecStart=/opt/computenook/hpc-backend
+ExecStart=/opt/computenook/computenook
 EnvironmentFile=/opt/computenook/.env
 Restart=always
 RestartSec=5
@@ -326,7 +326,7 @@ WantedBy=multi-user.target
 
 ```bash
 systemctl daemon-reload
-systemctl enable --now hpc-backend
+systemctl enable --now computenook
 ```
 
 ---
@@ -384,7 +384,7 @@ systemctl enable --now hpc-backend
 
 | 昵称 | 贡献 |
 |---|---|
-| 张小东  | 设备&技术支持 |
+| 张小冬  | 设备&技术支持 |
 
 > 如果本项目对你有帮助，欢迎 Star ⭐ 或通过 [Issues](../../issues) 反馈问题。
 

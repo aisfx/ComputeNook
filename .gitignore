@@ -23,3 +23,9 @@ backend/tools/rdp-tunnel/go.sum
 # 编译产物
 src/**/*.vue.js
 src/**/*.ts.js
+
+# Kiro IDE
+.kiro/
+
+# SSH Keys
+backend/keys/
