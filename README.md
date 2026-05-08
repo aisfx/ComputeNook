@@ -218,7 +218,7 @@ MFA_ISSUER=算力小筑
 ### 其他
 
 ```env
-LOG_FILE=./logs/slurm-web.log
+LOG_FILE=./logs/compute-nook.log
 JWT_EXPIRE_HOURS=8
 DEMO_READONLY=false   # true 时禁止修改用户信息，适合演示环境
 DEV_MODE=false        # true 时跳过 LDAP，使用虚拟用户
@@ -275,7 +275,7 @@ server {
     server_name your-domain.com;
 
     location / {
-        root /opt/hpc-platform/dist;
+        root /opt/computenook/dist;
         try_files $uri $uri/ /index.html;
     }
 
@@ -314,9 +314,9 @@ After=network.target
 [Service]
 Type=simple
 User=root
-WorkingDirectory=/opt/hpc-platform
-ExecStart=/opt/hpc-platform/hpc-backend
-EnvironmentFile=/opt/hpc-platform/.env
+WorkingDirectory=/opt/computenook
+ExecStart=/opt/computenook/hpc-backend
+EnvironmentFile=/opt/computenook/.env
 Restart=always
 RestartSec=5
 
@@ -331,10 +331,76 @@ systemctl enable --now hpc-backend
 
 ---
 
+## 已知问题
+
+| # | 模块 | 描述 | 状态 |
+|---|---|---|---|
+| 1 | 远程桌面 | Xpra HTML5 客户端在部分 Chromium 版本下剪贴板同步失效 | 待修复 |
+| 2 | 文件管理 | 大文件（>2GB）上传进度条在 Safari 下不更新 | 待修复 |
+| 3 | Web Shell | 高并发连接时偶发 WebSocket 握手超时（需调大 nginx `proxy_read_timeout`） | 已知限制 |
+| 4 | 存储配额 | Lustre 配额读取依赖 `lctl`，非 root 用户需额外 sudo 配置 | 已知限制 |
+| 5 | AI 助手 | RAG 检索使用内存 2-gram 索引，重启后需重新加载知识库 | 规划中 |
+| 6 | 报表 | 导出 Excel 时超过 10 万行数据可能导致浏览器内存溢出 | 规划中 |
+| 7 | 客户端 | Windows 建立隧道第一次可以打开，第二次异常，需手动杀掉客户端进程才能继续运行 | 待修复 |
+| 8 | 客户端 | macOS、Ubuntu 客户端暂未测试 | 需资源 |
+| 9 | 资源不足 | 需要赞助资源以做更多测试 | 需资源 |
+| 10 | 作业提交 | 模板功能暂未完整测试 | 需资源 |
+| 11 | 集群监控 | 监控面板存在逻辑 bug，需实际集群环境验证 | 待测试 |
+| 12 | 网络拓扑 | 拓扑图渲染逻辑存在 bug，需实际环境测试 | 待测试 |
+| 13 | 主机资产 | 资产数据展示逻辑存在 bug，需实际环境验证 | 待测试 |
+
+
+---
+
+## 参与共建
+
+**算力小筑**欢迎所有志同道合的伙伴加入，一起把它做得更好。
+
+我们需要：
+
+- **前端工程师** — Vue 3 / TypeScript，有 HPC 或科研工具使用经验更佳
+- **后端工程师** — Go，熟悉 Slurm / Linux 系统管理 / 容器技术
+- **系统架构师** — 有大规模集群或云原生架构经验
+- **科研用户** — 计算化学、生物信息、AI/ML、CFD、物理模拟等领域，提需求、测功能、写文档都算贡献
+- **运维 / DevOps** — 帮助完善部署方案、CI/CD、监控告警
+
+无论是提 Issue、提 PR、完善文档，还是分享你的使用场景，都是对项目的贡献。
+
+> 有意向请加 QQ 群 `2168069924`，或直接开 [Issue](../../issues) / 提 [PR](../../pulls)。
+
+---
+
+## 感谢
+
+感谢以下单位和个人对本项目的支持与赞助：
+
+### 赞助单位
+
+| 单位 | 贡献 |
+|---|---|
+| 天津市天河计算机技术有限公司 | 技术支持  |
+
+### 个人贡献者 / 赞助者
+
+| 昵称 | 贡献 |
+|---|---|
+| xxxx | 资金赞助 |
+
+> 如果本项目对你有帮助，欢迎 Star ⭐ 或通过 [Issues](../../issues) 反馈问题。
+
+---
+
 ## 联系
 
 | | |
 |---|---|
 | 对接人 | sunfx |
-| QQ | 598824458 |
-| 邮箱 | 59882445@qq.com |
+| QQ群 | 2168069924 |
+| QQ  | 598824458 |
+
+
+---
+
+## 开源协议
+
+本项目基于 [MIT License](./LICENSE) 开源，欢迎自由使用、修改和分发。
