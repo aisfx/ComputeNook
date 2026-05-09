@@ -5,10 +5,15 @@
         <h3>远程会话</h3>
         <span class="page-subtitle">管理远程桌面与应用会话</span>
       </div>
-      <button class="btn-new-session" @click="openCreateModal">
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1v12M1 7h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-        新建会话
-      </button>
+      <div style="display: flex; gap: 0.5rem;">
+        <button class="btn-secondary" @click="cleanupSpace" title="清理旧文件释放磁盘空间">
+          🧹 清理空间
+        </button>
+        <button class="btn-new-session" @click="openCreateModal">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1v12M1 7h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          新建会话
+        </button>
+      </div>
     </div>
 
     <div class="card table-card">
@@ -312,7 +317,12 @@
             <h4>会话启动失败</h4>
             <div v-if="launchState?.errorMessage" class="error-message">{{ launchState.errorMessage }}</div>
             <div class="log-panel">
+              <div class="log-header">
+                <span>错误日志</span>
+                <button class="btn-text" @click="viewScript(launchState?.sessionId)">查看脚本</button>
+              </div>
               <div class="log-body">
+                <div v-if="!launchState?.logLines || launchState.logLines.length === 0" class="log-empty">无日志输出</div>
                 <div v-for="(line, i) in launchState?.logLines || []" :key="i" class="log-line">{{ line }}</div>
               </div>
             </div>
@@ -834,10 +844,42 @@ const previewScript = async (session: any) => {
   } catch (e: any) { dialog.error('获取脚本失败: ' + (e.response?.data?.error || e.message)) }
 }
 
+const viewScript = async (sessionId?: number) => {
+  if (!sessionId) return
+  try {
+    const res = await axios.get(`/desktop/sessions/${sessionId}/script`)
+    scriptInfo.value = res.data
+    showScriptModal.value = true
+  } catch (e: any) { dialog.error('获取脚本失败: ' + (e.response?.data?.error || e.message)) }
+}
+
 const copyScript = () => {
   navigator.clipboard.writeText(scriptInfo.value.script)
   dialog.success('已复制')
 }
+
+const cleanupSpace = async () => {
+  const ok = await dialog.confirm(
+    '将清理旧的 xpra 目录和日志文件以释放磁盘空间。\n保留最近的文件，删除较旧的文件。\n\n确定继续？',
+    { title: '清理磁盘空间' }
+  )
+  if (!ok) return
+  
+  try {
+    const res = await axios.post('/desktop/cleanup')
+    const cleaned = res.data.cleaned
+    const sizeMB = (cleaned.totalBytes / 1024 / 1024).toFixed(2)
+    dialog.success(
+      `清理完成！\n` +
+      `删除 ${cleaned.xpraDirs} 个旧目录\n` +
+      `删除 ${cleaned.logFiles} 个日志文件\n` +
+      `释放 ${sizeMB} MB 空间`
+    )
+  } catch (e: any) {
+    dialog.error('清理失败: ' + (e.response?.data?.error || e.message))
+  }
+}
+
 </script>
 
 
@@ -1096,6 +1138,10 @@ const copyScript = () => {
   transition: all 0.15s;
 }
 .log-tab.active { background: #6366f1; color: #fff; border-color: #6366f1; }
+.log-header { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0; margin-bottom: 0.5rem; }
+.log-header span { font-size: 0.85rem; font-weight: 600; color: #64748b; }
+.btn-text { background: none; border: none; color: #6366f1; font-size: 0.8rem; cursor: pointer; padding: 4px 8px; border-radius: 4px; }
+.btn-text:hover { background: #f1f5f9; }
 .log-body { height: 160px; overflow-y: auto; background: #0f172a; padding: 0.75rem 1rem; font-family: monospace; font-size: 0.8rem; }
 .log-empty { color: #475569; font-style: italic; }
 .log-line { color: #cbd5e1; line-height: 1.6; white-space: pre-wrap; word-break: break-all; }

@@ -365,7 +365,8 @@
               <span class="leg-val">{{ storageQuota.capacity.total }}</span>
             </div>
             <div class="legend-row-full">
-              <span class="leg-small">文件数: {{ storageQuota.files.used.toLocaleString() }} / {{ storageQuota.files.total.toLocaleString() }} ({{ storageQuota.files.percentage }}%)</span>
+              <span class="leg-small" v-if="storageQuota.files.noLimit">文件数: {{ storageQuota.files.used.toLocaleString() }} (未设置配额)</span>
+              <span class="leg-small" v-else>文件数: {{ storageQuota.files.used.toLocaleString() }} / {{ storageQuota.files.total.toLocaleString() }} ({{ storageQuota.files.percentage }}%)</span>
             </div>
           </div>
         </div>
@@ -968,7 +969,7 @@ const nodes = ref<any[]>([])
 const machineTime = ref({ totalQuota: 0, used: 0, remaining: 0, usageRate: 0, hasLimit: false })
 const storageQuota = ref({
   capacity: { used: '-', total: '-', percentage: 0 },
-  files: { used: 0, total: 0, percentage: 0 }
+  files: { used: 0, total: 0, percentage: 0, noLimit: false }
 })
 
 const jobStatsTotal = computed(() => jobStats.value.running + jobStats.value.pending + jobStats.value.completed + jobStats.value.failed)
@@ -1094,7 +1095,12 @@ const loadMyResources = async () => {
       const inodeHard: number = q.inode_hard || 0
       storageQuota.value = {
         capacity: { used: fmtKB(usedKB), total: hardKB > 0 ? fmtKB(hardKB) : '无限制', percentage: pct },
-        files: { used: inodeUsed, total: inodeHard, percentage: inodeHard > 0 ? Math.min(100, Math.round(inodeUsed / inodeHard * 100)) : 0 }
+        files: { 
+          used: inodeUsed, 
+          total: inodeHard > 0 ? inodeHard : 0, 
+          percentage: inodeHard > 0 ? Math.min(100, Math.round(inodeUsed / inodeHard * 100)) : 0,
+          noLimit: inodeHard === 0
+        }
       }
     }
   } catch (_) { /* 配额接口失败不影响其他数据 */ }

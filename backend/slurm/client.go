@@ -19,20 +19,28 @@ type Client struct {
 	username   string // 当前用户名，用于动态生成token
 }
 
+// defaultSlurmAPIVersion 返回默认 Slurm API 版本，优先读取环境变量
+func defaultSlurmAPIVersion() string {
+	if v := os.Getenv("SLURM_API_VERSION"); v != "" {
+		return v
+	}
+	return "v0.0.43" // 内置兜底版本，建议在 .env 中明确配置
+}
+
+// defaultSlurmBaseURL 返回 Slurm REST URL，优先读取环境变量
+func defaultSlurmBaseURL() string {
+	if u := os.Getenv("SLURM_REST_URL"); u != "" {
+		return u
+	}
+	return "http://localhost:6820" // 默认 slurmrestd 端口
+}
+
 // NewClient 创建新的 Slurm 客户端（使用默认token）
 func NewClient() (*Client, error) {
-	baseURL := os.Getenv("SLURM_REST_URL")
-	if baseURL == "" {
-		baseURL = "http://localhost:6820" // 默认 slurmrestd 端口
-	}
-
+	baseURL := defaultSlurmBaseURL()
 	token := os.Getenv("SLURM_REST_TOKEN")
 	// Token 可以为空，某些配置下不需要认证
-
-	apiVersion := os.Getenv("SLURM_API_VERSION")
-	if apiVersion == "" {
-		apiVersion = "v0.0.40" // 默认版本
-	}
+	apiVersion := defaultSlurmAPIVersion()
 
 	return &Client{
 		baseURL:    baseURL,
@@ -46,15 +54,8 @@ func NewClient() (*Client, error) {
 
 // NewClientForUser 为指定用户创建 Slurm 客户端（动态生成token）
 func NewClientForUser(username string) (*Client, error) {
-	baseURL := os.Getenv("SLURM_REST_URL")
-	if baseURL == "" {
-		baseURL = "http://localhost:6820"
-	}
-
-	apiVersion := os.Getenv("SLURM_API_VERSION")
-	if apiVersion == "" {
-		apiVersion = "v0.0.40"
-	}
+	baseURL := defaultSlurmBaseURL()
+	apiVersion := defaultSlurmAPIVersion()
 
 	// 获取用户的token（动态生成）
 	token, err := GetSlurmTokenForUser(username)
@@ -94,14 +95,6 @@ func (c *Client) doRequest(method, path string, body interface{}) ([]byte, error
 	req.Header.Set("Content-Type", "application/json")
 	if c.token != "" {
 		req.Header.Set("X-SLURM-USER-TOKEN", c.token)
-		// 添加调试日志
-		if c.username != "" {
-			fmt.Printf("[DEBUG] Slurm API Request for user: %s\n", c.username)
-		}
-		fmt.Printf("[DEBUG] Token length: %d bytes\n", len(c.token))
-		fmt.Printf("[DEBUG] Token (first 50): %s...\n", c.token[:min(50, len(c.token))])
-		fmt.Printf("[DEBUG] Token (last 50): ...%s\n", c.token[max(0, len(c.token)-50):])
-		fmt.Printf("[DEBUG] Request: %s %s\n", method, url)
 	}
 
 	resp, err := c.httpClient.Do(req)

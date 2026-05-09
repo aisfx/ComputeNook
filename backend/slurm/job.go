@@ -541,14 +541,7 @@ func (c *Client) SubmitJob(params JobSubmitParams) (int64, error) {
 		"tasks":     1, // 默认1个任务
 	}
 	
-	// 用户名（必需），account 不设置让 Slurm 使用用户默认账户
-	if params.Username != "" {
-		job["user_name"] = params.Username
-		logger.Info("✓ User: %s", params.Username)
-	} else {
-		logger.Error("✗ Username is empty!")
-	}
-	
+	// 用户名 - v0.0.43不支持user_name字段，通过environment传递
 	// 工作目录（必需）
 	if params.WorkDir != "" {
 		job["current_working_directory"] = params.WorkDir
@@ -557,17 +550,16 @@ func (c *Client) SubmitJob(params JobSubmitParams) (int64, error) {
 		logger.Error("✗ Working directory is empty!")
 	}
 	
-	// environment - 在job对象内部，使用LDAP用户名
+	// environment - Slurm API v0.0.43要求数组格式 ["KEY=VALUE", ...]
+	envVars := []string{}
 	if params.Username != "" {
-		job["environment"] = map[string]string{
-			"USER": params.Username,
-		}
+		envVars = append(envVars, fmt.Sprintf("USER=%s", params.Username))
 		logger.Info("✓ USER environment variable: %s", params.Username)
 	} else {
-		job["environment"] = map[string]string{
-			"USER": "${USER}",
-		}
-		logger.Info("⚠ USER environment variable: ${USER} (using default)")
+		logger.Info("⚠ USER environment variable: not set")
+	}
+	if len(envVars) > 0 {
+		job["environment"] = envVars
 	}
 	
 	// 资源配置

@@ -285,6 +285,21 @@ code {
   font-size: 0.8em;
 }
 
+/* ===== SVG 圆环文字颜色（跟随主题）===== */
+.stat-ring-wrap text,
+.donut-svg text {
+  fill: hsl(var(--foreground)) !important;
+}
+/* 副标签用 muted 色 */
+.donut-svg .donut-lbl {
+  fill: hsl(var(--muted-foreground)) !important;
+}
+/* 圆环背景轨道跟随主题 */
+.stat-ring-wrap circle:first-child,
+.donut-svg circle:first-child {
+  stroke: hsl(var(--border)) !important;
+}
+
 /* script-preview 不受全局 pre 样式影响 */
 .script-preview {
   background: #1e293b !important;
@@ -446,4 +461,62 @@ code {
 .form-hint, .form-group small {
   color: hsl(var(--muted-foreground)) !important;
   font-size: 0.75rem;
+}
+
+/* ===== 移动端全局响应式 ===== */
+@media (max-width: 767px) {
+  /* 统计卡片网格：手机单列 */
+  .stats-grid {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 10px !important;
+  }
+
+  /* 图表行：手机单列 */
+  .charts-row {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  /* 页面头部 */
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  /* 表格横向滚动 */
+  .card, .data-table-wrap {
+    overflow-x: auto;
+  }
+
+  /* 减小卡片内边距 */
+  .card {
+    padding: 14px !important;
+  }
+
+  /* 隐藏部分表格列（通过 .hide-mobile 类） */
+  .hide-mobile { display: none !important; }
+
+  /* 弹窗全屏 */
+  .modal, .modal-content {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    height: 100vh !important;
+    max-height: 100vh !important;
+  }
+  .modal-overlay {
+    align-items: flex-end !important;
+  }
+}
+
+/* 平板适配 */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  .charts-row {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
 }

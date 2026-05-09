@@ -311,6 +311,7 @@ func main() {
 			desktop.GET("/sessions/:id/logs", handlers.GetDesktopSessionLogs)
 			desktop.GET("/sessions/:id/script", handlers.GetDesktopScript)
 			desktop.GET("/resource-presets", handlers.GetDesktopResourcePresets)
+			desktop.POST("/cleanup", handlers.CleanupUserSpace)
 			// 应用管理
 			desktop.GET("/apps", handlers.GetDesktopApps)
 			desktop.POST("/apps", handlers.CreateDesktopApp)

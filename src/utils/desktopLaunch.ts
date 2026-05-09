@@ -97,6 +97,23 @@ function startPollStatus(id: number) {
         clearInterval(pollTimer)
         clearInterval(logTimer)
         launchState.value.status = 'failed'
+        // 失败时获取错误日志
+        try {
+          const errRes = await axios.get(`/desktop/sessions/${id}/logs`, { params: { type: 'err', lines: 100 } })
+          if (errRes.data.exists && launchState.value) {
+            launchState.value.logType = 'err'
+            launchState.value.logLines = errRes.data.lines.filter((l: string) => l !== '')
+            if (launchState.value.logLines.length > 0) {
+              launchState.value.errorMessage = '任务执行失败，请查看错误日志'
+            } else {
+              launchState.value.errorMessage = '任务启动失败，未找到错误日志'
+            }
+          }
+        } catch {
+          if (launchState.value) {
+            launchState.value.errorMessage = '任务启动失败'
+          }
+        }
       } else if (s.status === 'pending') {
         launchState.value.progress = 30
       } else {

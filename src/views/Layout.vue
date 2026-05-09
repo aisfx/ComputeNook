@@ -1,10 +1,13 @@
 <template>
   <div class="app-shell" :data-theme="theme">
+    <!-- 移动端遮罩 -->
+    <div class="sidebar-overlay" :class="{ active: mobileMenuOpen }" @click="mobileMenuOpen = false"></div>
+
     <!-- Sidebar -->
-    <aside class="sidebar" :class="{ collapsed: sidebarCollapsed }">
+    <aside class="sidebar" :class="{ collapsed: sidebarCollapsed, 'mobile-open': mobileMenuOpen }">
       <!-- Logo -->
       <div class="sidebar-header">
-        <div class="sidebar-logo" @click="currentView = 'dashboard'">
+        <div class="sidebar-logo" @click="currentView = 'dashboard'; mobileMenuOpen = false">
           <div class="logo-icon">
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M3 10.5L12 3l9 7.5V21a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V10.5z" fill="white" opacity="0.15"/>
@@ -31,7 +34,7 @@
           <!-- 仪表盘 -->
           <a
             :class="['nav-item', { active: currentView === 'dashboard' }]"
-            @click="currentView = 'dashboard'"
+            @click="navigate('dashboard')"
             :title="sidebarCollapsed ? '仪表盘' : ''"
           >
             <span class="nav-item-icon">
@@ -43,7 +46,7 @@
           <!-- 作业管理 -->
           <a
             :class="['nav-item', { active: currentView === 'jobs' }]"
-            @click="currentView = 'jobs'"
+            @click="navigate('jobs')"
             :title="sidebarCollapsed ? '作业管理' : ''"
           >
             <span class="nav-item-icon">
@@ -54,7 +57,7 @@
 
           <a
             :class="['nav-item', { active: currentView === 'shell' }]"
-            @click="currentView = 'shell'"
+            @click="navigate('shell')"
             :title="sidebarCollapsed ? 'Web Shell' : ''"
           >
             <span class="nav-item-icon">
@@ -65,7 +68,7 @@
 
           <a
             :class="['nav-item', { active: currentView === 'desktop' }]"
-            @click="currentView = 'desktop'"
+            @click="navigate('desktop')"
             :title="sidebarCollapsed ? '远程桌面' : ''"
           >
             <span class="nav-item-icon">
@@ -77,7 +80,7 @@
           <!-- 文件管理 -->
           <a
             :class="['nav-item', { active: currentView === 'files' }]"
-            @click="currentView = 'files'"
+            @click="navigate('files')"
             :title="sidebarCollapsed ? '文件管理' : ''"
           >
             <span class="nav-item-icon">
@@ -89,7 +92,7 @@
           <!-- 镜像仓库 -->
           <a
             :class="['nav-item', { active: currentView === 'registry' }]"
-            @click="currentView = 'registry'"
+            @click="navigate('registry')"
             :title="sidebarCollapsed ? '镜像仓库' : ''"
           >
             <span class="nav-item-icon">
@@ -101,7 +104,7 @@
           <!-- 报表中心 -->
           <a
             :class="['nav-item', { active: currentView === 'reports' }]"
-            @click="currentView = 'reports'"
+            @click="navigate('reports')"
             :title="sidebarCollapsed ? '报表中心' : ''"
           >
             <span class="nav-item-icon">
@@ -131,12 +134,18 @@
       <!-- Top bar -->
       <header class="topbar">
         <div class="topbar-left">
+          <!-- 移动端汉堡菜单 -->
+          <button class="mobile-menu-btn" @click="mobileMenuOpen = !mobileMenuOpen" aria-label="菜单">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
+            </svg>
+          </button>
           <h1 class="page-title">{{ currentTitle }}</h1>
         </div>
         <div class="topbar-right">
           <div class="status-badge">
             <span class="status-dot"></span>
-            <span>集群在线</span>
+            <span class="status-text">集群在线</span>
           </div>
           <!-- Theme toggle -->
           <button class="icon-btn theme-cycle-btn" @click="cycleTheme" :title="themeLabel">
@@ -144,8 +153,8 @@
           </button>
           <!-- 报警铃铛 -->
           <AlertNotification :show-bell="true" />
-          <button v-if="isAdmin" class="btn-admin" @click="goToAdmin" title="管理后台">⚙️ 管理后台</button>
-          <button class="btn-admin" @click="currentView = 'download'" title="下载客户端" style="background:#10b981">⬇️ 客户端</button>
+          <button v-if="isAdmin" class="btn-admin" @click="goToAdmin" title="管理后台">⚙️ <span class="btn-text">管理后台</span></button>
+          <button class="btn-admin btn-download" @click="navigate('download')" title="下载客户端">⬇️ <span class="btn-text">客户端</span></button>
           <button class="icon-btn" @click="goToProfile" title="个人信息">
             <span>👤</span>
           </button>
@@ -234,12 +243,19 @@ const monitoringTab = ref('cluster')
 const adminTab = ref('users')
 const adminExpanded = ref(false)
 const sidebarCollapsed = ref(false)
+const mobileMenuOpen = ref(false)
 const currentUser = ref<any>(null)
 const isAdmin = ref(false)
 const fileManagerRef = ref<any>(null)
 const theme = ref<'light' | 'dark' | 'ocean'>('light')
 
 provide('jobManagementTab', jobManagementTab)
+
+// 导航并关闭移动端菜单
+const navigate = (view: string) => {
+  currentView.value = view
+  mobileMenuOpen.value = false
+}
 
 const userInitial = computed(() => {
   const name = currentUser.value?.cnName || currentUser.value?.username || '?'
@@ -377,6 +393,34 @@ onMounted(() => {
   overflow: hidden;
 }
 
+/* ===== 移动端遮罩 ===== */
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 199;
+  backdrop-filter: blur(2px);
+}
+.sidebar-overlay.active { display: block; }
+
+/* ===== 移动端汉堡按钮 ===== */
+.mobile-menu-btn {
+  display: none;
+  width: 34px;
+  height: 34px;
+  border: none;
+  background: none;
+  border-radius: 6px;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  color: hsl(var(--foreground));
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+.mobile-menu-btn:hover { background: hsl(var(--accent)); }
+
 /* ===== Sidebar ===== */
 .sidebar {
   width: 220px;
@@ -385,8 +429,9 @@ onMounted(() => {
   border-right: 1px solid hsl(var(--sidebar-border));
   display: flex;
   flex-direction: column;
-  transition: width 0.2s ease, min-width 0.2s ease;
+  transition: width 0.2s ease, min-width 0.2s ease, transform 0.25s ease;
   overflow: hidden;
+  z-index: 200;
 }
 
 .sidebar.collapsed {
@@ -505,38 +550,6 @@ onMounted(() => {
 
 .nav-item-label { flex: 1; }
 
-.nav-item-chevron {
-  font-size: 10px;
-  color: hsl(var(--muted-foreground));
-}
-
-/* Sub nav */
-.nav-sub {
-  margin: 1px 6px 2px 26px;
-}
-
-.nav-sub-group {
-  padding: 4px 8px 2px;
-  font-size: 0.7rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: hsl(var(--muted-foreground));
-}
-
-.nav-sub-item {
-  display: block;
-  padding: 5px 10px;
-  border-radius: 5px;
-  font-size: 0.82rem;
-  color: hsl(var(--muted-foreground));
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-  margin: 1px 0;
-}
-.nav-sub-item:hover { background: hsl(var(--sidebar-accent)); color: hsl(var(--sidebar-accent-foreground)); }
-.nav-sub-item.active { color: hsl(var(--sidebar-foreground)); font-weight: 500; }
-
 /* Footer */
 .sidebar-footer {
   padding: 12px;
@@ -598,15 +611,15 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 24px;
+  padding: 0 16px;
   flex-shrink: 0;
-  gap: 16px;
+  gap: 8px;
 }
 
 .topbar-left {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 10px;
   min-width: 0;
 }
 
@@ -615,31 +628,14 @@ onMounted(() => {
   font-weight: 600;
   color: hsl(var(--foreground));
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-
-.page-tabs {
-  display: flex;
-  gap: 4px;
-}
-
-.page-tab {
-  padding: 5px 12px;
-  border: none;
-  background: none;
-  border-radius: 6px;
-  font-size: 0.8rem;
-  font-weight: 500;
-  color: hsl(var(--muted-foreground));
-  cursor: pointer;
-  transition: all 0.15s;
-}
-.page-tab:hover { background: hsl(var(--accent)); color: hsl(var(--accent-foreground)); }
-.page-tab.active { background: hsl(var(--secondary)); color: hsl(var(--secondary-foreground)); font-weight: 600; }
 
 .topbar-right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex-shrink: 0;
 }
 
@@ -660,6 +656,7 @@ onMounted(() => {
   border-radius: 50%;
   background: hsl(var(--success));
   animation: pulse 2s infinite;
+  flex-shrink: 0;
 }
 
 @keyframes pulse {
@@ -685,7 +682,7 @@ onMounted(() => {
 .icon-btn.danger:hover { background: hsl(var(--destructive) / 0.1); color: hsl(var(--destructive)); }
 
 .btn-admin {
-  padding: 5px 12px;
+  padding: 5px 10px;
   border: 1px solid hsl(var(--sidebar-primary) / 0.4);
   background: hsl(var(--sidebar-primary) / 0.08);
   border-radius: 6px;
@@ -695,8 +692,17 @@ onMounted(() => {
   cursor: pointer;
   transition: all 0.15s;
   white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 .btn-admin:hover { background: hsl(var(--sidebar-primary) / 0.15); }
+.btn-download {
+  border-color: hsl(142 71% 45% / 0.4);
+  background: hsl(142 71% 45% / 0.08);
+  color: hsl(var(--success));
+}
+.btn-download:hover { background: hsl(142 71% 45% / 0.15); }
 
 /* Content */
 .content-area {
@@ -742,4 +748,46 @@ onMounted(() => {
 }
 
 .sidebar.collapsed .sidebar-collapse-btn { margin: 0 auto; }
+
+/* ===== 移动端响应式 ===== */
+@media (max-width: 767px) {
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    transform: translateX(-100%);
+    width: 240px !important;
+    min-width: 240px !important;
+  }
+
+  .sidebar.mobile-open {
+    transform: translateX(0);
+  }
+
+  /* 移动端不显示折叠按钮 */
+  .sidebar-collapse-btn { display: none; }
+
+  /* 移动端显示汉堡按钮 */
+  .mobile-menu-btn { display: flex; }
+
+  /* 移动端隐藏部分顶栏元素 */
+  .status-badge .status-text { display: none; }
+  .btn-admin .btn-text { display: none; }
+  .btn-admin { padding: 5px 8px; }
+
+  .topbar { padding: 0 12px; }
+  .content-area { padding: 16px 12px; }
+}
+
+/* 平板适配 */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .sidebar {
+    width: 180px;
+    min-width: 180px;
+  }
+  .btn-admin .btn-text { display: none; }
+  .btn-admin { padding: 5px 8px; }
+  .status-badge { display: none; }
+}
 </style>
