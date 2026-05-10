@@ -14,156 +14,6 @@
       </button>
     </div>
 
-    <!-- 统计卡片 -->
-    <div class="stats-grid">
-      <!-- 节点 -->
-      <div class="stat-card">
-        <div class="stat-card-left">
-          <div class="stat-icon-wrap stat-icon-blue">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-          </div>
-          <div class="stat-content">
-            <div class="stat-label">节点</div>
-            <div class="stat-value-row">
-              <span class="stat-value">{{ stats.nodesOnline }}</span>
-              <span class="stat-sep">/</span>
-              <span class="stat-total">{{ stats.nodes }}</span>
-            </div>
-            <div class="stat-detail">可用 / 总数</div>
-          </div>
-        </div>
-        <div class="stat-ring-wrap">
-          <svg width="64" height="64" viewBox="0 0 64 64">
-            <circle cx="32" cy="32" r="26" fill="none" stroke="#e5e7eb" stroke-width="5"/>
-            <circle cx="32" cy="32" r="26" fill="none" stroke="#3b82f6" stroke-width="5"
-              :stroke-dasharray="`${stats.nodes > 0 ? (stats.nodesOnline/stats.nodes)*163.4 : 0} 163.4`"
-              stroke-dashoffset="0" transform="rotate(-90 32 32)" stroke-linecap="round"/>
-            <text x="32" y="37" text-anchor="middle" style="font-size:11px;font-weight:700;fill:#1f2937">
-              {{ stats.nodes > 0 ? Math.round(stats.nodesOnline/stats.nodes*100) : 0 }}%
-            </text>
-          </svg>
-        </div>
-      </div>
-
-      <!-- CPU -->
-      <div class="stat-card">
-        <div class="stat-card-left">
-          <div class="stat-icon-wrap stat-icon-green">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg>
-          </div>
-          <div class="stat-content">
-            <div class="stat-label">CPU</div>
-            <div class="stat-value-row">
-              <span class="stat-value">{{ stats.cpuUsage }}</span>
-              <span class="stat-sep">/</span>
-              <span class="stat-total">{{ stats.cpuCores }}</span>
-            </div>
-            <div class="stat-detail">已分配 / 总核数</div>
-          </div>
-        </div>
-        <div class="stat-ring-wrap">
-          <svg width="64" height="64" viewBox="0 0 64 64">
-            <circle cx="32" cy="32" r="26" fill="none" stroke="#e5e7eb" stroke-width="5"/>
-            <circle cx="32" cy="32" r="26" fill="none" stroke="#10b981" stroke-width="5"
-              :stroke-dasharray="`${stats.cpuCores > 0 ? (stats.cpuUsage/stats.cpuCores)*163.4 : 0} 163.4`"
-              stroke-dashoffset="0" transform="rotate(-90 32 32)" stroke-linecap="round"/>
-            <text x="32" y="37" text-anchor="middle" style="font-size:11px;font-weight:700;fill:#1f2937">
-              {{ stats.cpuCores > 0 ? Math.round(stats.cpuUsage/stats.cpuCores*100) : 0 }}%
-            </text>
-          </svg>
-        </div>
-      </div>
-
-      <!-- GPU -->
-      <div class="stat-card">
-        <div class="stat-card-left">
-          <div class="stat-icon-wrap stat-icon-purple">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12l4 6-10 13L2 9z"/><path d="M11 3L8 9l4 13 4-13-3-6"/><line x1="2" y1="9" x2="22" y2="9"/></svg>
-          </div>
-          <div class="stat-content">
-            <div class="stat-label">GPU</div>
-            <div class="stat-value-row">
-              <span class="stat-value">{{ stats.gpuInUse }}</span>
-              <span class="stat-sep">/</span>
-              <span class="stat-total">{{ stats.gpuCards }}</span>
-            </div>
-            <div class="stat-detail">已使用 / 总卡数</div>
-          </div>
-        </div>
-        <div class="stat-ring-wrap">
-          <svg width="64" height="64" viewBox="0 0 64 64">
-            <circle cx="32" cy="32" r="26" fill="none" stroke="#e5e7eb" stroke-width="5"/>
-            <circle cx="32" cy="32" r="26" fill="none" stroke="#8b5cf6" stroke-width="5"
-              :stroke-dasharray="`${stats.gpuCards > 0 ? (stats.gpuInUse/stats.gpuCards)*163.4 : 0} 163.4`"
-              stroke-dashoffset="0" transform="rotate(-90 32 32)" stroke-linecap="round"/>
-            <text x="32" y="37" text-anchor="middle" style="font-size:11px;font-weight:700;fill:#1f2937">
-              {{ stats.gpuCards > 0 ? Math.round(stats.gpuInUse/stats.gpuCards*100) : 0 }}%
-            </text>
-          </svg>
-        </div>
-      </div>
-
-      <!-- 内存 -->
-      <div class="stat-card">
-        <div class="stat-card-left">
-          <div class="stat-icon-wrap stat-icon-cyan">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
-          </div>
-          <div class="stat-content">
-            <div class="stat-label">内存</div>
-            <div class="stat-value-row">
-              <span class="stat-value">{{ formatMemory(stats.memory - stats.memoryFree) }}</span>
-              <span class="stat-sep">/</span>
-              <span class="stat-total">{{ formatMemory(stats.memory) }}</span>
-            </div>
-            <div class="stat-detail">已使用 / 总量</div>
-          </div>
-        </div>
-        <div class="stat-ring-wrap">
-          <svg width="64" height="64" viewBox="0 0 64 64">
-            <circle cx="32" cy="32" r="26" fill="none" stroke="#e5e7eb" stroke-width="5"/>
-            <circle cx="32" cy="32" r="26" fill="none" stroke="#06b6d4" stroke-width="5"
-              :stroke-dasharray="`${stats.memory > 0 ? ((stats.memory-stats.memoryFree)/stats.memory)*163.4 : 0} 163.4`"
-              stroke-dashoffset="0" transform="rotate(-90 32 32)" stroke-linecap="round"/>
-            <text x="32" y="37" text-anchor="middle" style="font-size:11px;font-weight:700;fill:#1f2937">
-              {{ stats.memory > 0 ? Math.round((stats.memory-stats.memoryFree)/stats.memory*100) : 0 }}%
-            </text>
-          </svg>
-        </div>
-      </div>
-
-      <!-- 运行作业 -->
-      <div class="stat-card">
-        <div class="stat-card-left">
-          <div class="stat-icon-wrap stat-icon-orange">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-          </div>
-          <div class="stat-content">
-            <div class="stat-label">运行作业</div>
-            <div class="stat-value-row">
-              <span class="stat-value">{{ jobStats.running }}</span>
-            </div>
-            <div class="stat-detail-tags">
-              <span class="tag-pending">等待{{ jobStats.pending }}</span>
-              <span class="tag-done">完成{{ jobStats.completed }}</span>
-            </div>
-          </div>
-        </div>
-        <div class="stat-sparkline">
-          <svg width="60" height="36" viewBox="0 0 80 40">
-            <defs>
-              <linearGradient id="sparkGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stop-color="#f97316" stop-opacity="0.15"/>
-                <stop offset="100%" stop-color="#f97316" stop-opacity="0"/>
-              </linearGradient>
-            </defs>
-            <polygon points="0,35 20,28 40,20 60,15 80,10 80,40 0,40" fill="url(#sparkGrad)"/>
-            <polyline points="0,35 20,28 40,20 60,15 80,10" fill="none" stroke="#f97316" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        </div>
-      </div>
-    </div>
-
     <!-- 三图表行 -->
     <div class="charts-row">
       <!-- 作业统计 -->
@@ -369,6 +219,156 @@
               <span class="leg-small" v-else>文件数: {{ storageQuota.files.used.toLocaleString() }} / {{ storageQuota.files.total.toLocaleString() }} ({{ storageQuota.files.percentage }}%)</span>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 统计卡片 -->
+    <div class="stats-grid">
+      <!-- 节点 -->
+      <div class="stat-card">
+        <div class="stat-card-left">
+          <div class="stat-icon-wrap stat-icon-blue">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          </div>
+          <div class="stat-content">
+            <div class="stat-label">节点</div>
+            <div class="stat-value-row">
+              <span class="stat-value">{{ stats.nodesOnline }}</span>
+              <span class="stat-sep">/</span>
+              <span class="stat-total">{{ stats.nodes }}</span>
+            </div>
+            <div class="stat-detail">可用 / 总数</div>
+          </div>
+        </div>
+        <div class="stat-ring-wrap">
+          <svg width="64" height="64" viewBox="0 0 64 64">
+            <circle cx="32" cy="32" r="26" fill="none" stroke="#e5e7eb" stroke-width="5"/>
+            <circle cx="32" cy="32" r="26" fill="none" stroke="#3b82f6" stroke-width="5"
+              :stroke-dasharray="`${stats.nodes > 0 ? (stats.nodesOnline/stats.nodes)*163.4 : 0} 163.4`"
+              stroke-dashoffset="0" transform="rotate(-90 32 32)" stroke-linecap="round"/>
+            <text x="32" y="37" text-anchor="middle" style="font-size:11px;font-weight:700;fill:#1f2937">
+              {{ stats.nodes > 0 ? Math.round(stats.nodesOnline/stats.nodes*100) : 0 }}%
+            </text>
+          </svg>
+        </div>
+      </div>
+
+      <!-- CPU -->
+      <div class="stat-card">
+        <div class="stat-card-left">
+          <div class="stat-icon-wrap stat-icon-green">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg>
+          </div>
+          <div class="stat-content">
+            <div class="stat-label">CPU</div>
+            <div class="stat-value-row">
+              <span class="stat-value">{{ stats.cpuUsage }}</span>
+              <span class="stat-sep">/</span>
+              <span class="stat-total">{{ stats.cpuCores }}</span>
+            </div>
+            <div class="stat-detail">已分配 / 总核数</div>
+          </div>
+        </div>
+        <div class="stat-ring-wrap">
+          <svg width="64" height="64" viewBox="0 0 64 64">
+            <circle cx="32" cy="32" r="26" fill="none" stroke="#e5e7eb" stroke-width="5"/>
+            <circle cx="32" cy="32" r="26" fill="none" stroke="#10b981" stroke-width="5"
+              :stroke-dasharray="`${stats.cpuCores > 0 ? (stats.cpuUsage/stats.cpuCores)*163.4 : 0} 163.4`"
+              stroke-dashoffset="0" transform="rotate(-90 32 32)" stroke-linecap="round"/>
+            <text x="32" y="37" text-anchor="middle" style="font-size:11px;font-weight:700;fill:#1f2937">
+              {{ stats.cpuCores > 0 ? Math.round(stats.cpuUsage/stats.cpuCores*100) : 0 }}%
+            </text>
+          </svg>
+        </div>
+      </div>
+
+      <!-- GPU -->
+      <div class="stat-card">
+        <div class="stat-card-left">
+          <div class="stat-icon-wrap stat-icon-purple">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12l4 6-10 13L2 9z"/><path d="M11 3L8 9l4 13 4-13-3-6"/><line x1="2" y1="9" x2="22" y2="9"/></svg>
+          </div>
+          <div class="stat-content">
+            <div class="stat-label">GPU</div>
+            <div class="stat-value-row">
+              <span class="stat-value">{{ stats.gpuInUse }}</span>
+              <span class="stat-sep">/</span>
+              <span class="stat-total">{{ stats.gpuCards }}</span>
+            </div>
+            <div class="stat-detail">已使用 / 总卡数</div>
+          </div>
+        </div>
+        <div class="stat-ring-wrap">
+          <svg width="64" height="64" viewBox="0 0 64 64">
+            <circle cx="32" cy="32" r="26" fill="none" stroke="#e5e7eb" stroke-width="5"/>
+            <circle cx="32" cy="32" r="26" fill="none" stroke="#8b5cf6" stroke-width="5"
+              :stroke-dasharray="`${stats.gpuCards > 0 ? (stats.gpuInUse/stats.gpuCards)*163.4 : 0} 163.4`"
+              stroke-dashoffset="0" transform="rotate(-90 32 32)" stroke-linecap="round"/>
+            <text x="32" y="37" text-anchor="middle" style="font-size:11px;font-weight:700;fill:#1f2937">
+              {{ stats.gpuCards > 0 ? Math.round(stats.gpuInUse/stats.gpuCards*100) : 0 }}%
+            </text>
+          </svg>
+        </div>
+      </div>
+
+      <!-- 内存 -->
+      <div class="stat-card">
+        <div class="stat-card-left">
+          <div class="stat-icon-wrap stat-icon-cyan">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+          </div>
+          <div class="stat-content">
+            <div class="stat-label">内存</div>
+            <div class="stat-value-row">
+              <span class="stat-value">{{ formatMemory(stats.memory - stats.memoryFree) }}</span>
+              <span class="stat-sep">/</span>
+              <span class="stat-total">{{ formatMemory(stats.memory) }}</span>
+            </div>
+            <div class="stat-detail">已使用 / 总量</div>
+          </div>
+        </div>
+        <div class="stat-ring-wrap">
+          <svg width="64" height="64" viewBox="0 0 64 64">
+            <circle cx="32" cy="32" r="26" fill="none" stroke="#e5e7eb" stroke-width="5"/>
+            <circle cx="32" cy="32" r="26" fill="none" stroke="#06b6d4" stroke-width="5"
+              :stroke-dasharray="`${stats.memory > 0 ? ((stats.memory-stats.memoryFree)/stats.memory)*163.4 : 0} 163.4`"
+              stroke-dashoffset="0" transform="rotate(-90 32 32)" stroke-linecap="round"/>
+            <text x="32" y="37" text-anchor="middle" style="font-size:11px;font-weight:700;fill:#1f2937">
+              {{ stats.memory > 0 ? Math.round((stats.memory-stats.memoryFree)/stats.memory*100) : 0 }}%
+            </text>
+          </svg>
+        </div>
+      </div>
+
+      <!-- 运行作业 -->
+      <div class="stat-card">
+        <div class="stat-card-left">
+          <div class="stat-icon-wrap stat-icon-orange">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          </div>
+          <div class="stat-content">
+            <div class="stat-label">运行作业</div>
+            <div class="stat-value-row">
+              <span class="stat-value">{{ jobStats.running }}</span>
+            </div>
+            <div class="stat-detail-tags">
+              <span class="tag-pending">等待{{ jobStats.pending }}</span>
+              <span class="tag-done">完成{{ jobStats.completed }}</span>
+            </div>
+          </div>
+        </div>
+        <div class="stat-sparkline">
+          <svg width="60" height="36" viewBox="0 0 80 40">
+            <defs>
+              <linearGradient id="sparkGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#f97316" stop-opacity="0.15"/>
+                <stop offset="100%" stop-color="#f97316" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+            <polygon points="0,35 20,28 40,20 60,15 80,10 80,40 0,40" fill="url(#sparkGrad)"/>
+            <polyline points="0,35 20,28 40,20 60,15 80,10" fill="none" stroke="#f97316" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
         </div>
       </div>
     </div>
