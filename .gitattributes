@@ -1,0 +1,21 @@
+# 默认所有文本文件使用 LF
+* text=auto eol=lf
+
+# Shell 脚本强制 LF
+*.sh text eol=lf
+
+# Go 源码
+*.go text eol=lf
+
+# 前端
+*.ts  text eol=lf
+*.vue text eol=lf
+*.js  text eol=lf
+*.css text eol=lf
+*.json text eol=lf
+
+# 二进制文件不转换
+*.exe binary
+*.png binary
+*.jpg binary
+*.ico binary

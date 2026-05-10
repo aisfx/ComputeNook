@@ -6,29 +6,49 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
+const (
+	levelDebug = iota
+	levelInfo
+	levelWarn
+	levelError
+)
+
 var (
-	debugEnabled = true
-	fileLogger   *log.Logger
-	logFile      *os.File
+	minLevel   = levelInfo
+	fileLogger *log.Logger
+	logFile    *os.File
 )
 
 func init() {
-	if os.Getenv("DEBUG") == "false" {
-		debugEnabled = false
+	// Support both LOG_LEVEL and legacy DEBUG=false
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("LOG_LEVEL"))) {
+	case "debug":
+		minLevel = levelDebug
+	case "warn", "warning":
+		minLevel = levelWarn
+	case "error":
+		minLevel = levelError
+	default:
+		minLevel = levelInfo
 	}
+	// Legacy: DEBUG=false suppresses debug output
+	if os.Getenv("DEBUG") == "false" && minLevel < levelInfo {
+		minLevel = levelInfo
+	}
+
 	initFileLogger()
 }
 
 func initFileLogger() {
 	logPath := os.Getenv("LOG_FILE")
 	if logPath == "" {
-		logPath = "slurm-web.log"
+		logPath = "logs/compute-nook.log"
 	}
 
-	// 确保日志目录存在
 	if dir := filepath.Dir(logPath); dir != "." && dir != "" {
 		_ = os.MkdirAll(dir, 0755)
 	}
@@ -40,15 +60,13 @@ func initFileLogger() {
 	}
 	logFile = f
 
-	// 同时写文件和 stdout
 	multi := io.MultiWriter(os.Stdout, f)
 	log.SetOutput(multi)
-	log.SetFlags(0) // 关闭默认前缀，由我们自己加时间戳
-
+	log.SetFlags(0)
 	fileLogger = log.New(multi, "", 0)
 }
 
-// Close 关闭日志文件（程序退出时调用）
+// Close closes the log file (call on program exit)
 func Close() {
 	if logFile != nil {
 		_ = logFile.Close()
@@ -59,30 +77,35 @@ func timestamp() string {
 	return time.Now().Format("2006-01-02 15:04:05")
 }
 
-func write(level, format string, v ...interface{}) {
+func write(label, format string, v ...interface{}) {
 	msg := fmt.Sprintf(format, v...)
-	line := fmt.Sprintf("%s [%s] %s", timestamp(), level, msg)
-	log.Println(line)
+	log.Printf("%s [%s] %s", timestamp(), label, msg)
 }
 
-// Debug 输出调试日志
+// Debug logs at DEBUG level
 func Debug(format string, v ...interface{}) {
-	if debugEnabled {
+	if minLevel <= levelDebug {
 		write("DEBUG", format, v...)
 	}
 }
 
-// Info 输出信息日志
+// Info logs at INFO level
 func Info(format string, v ...interface{}) {
-	write("INFO", format, v...)
+	if minLevel <= levelInfo {
+		write("INFO", format, v...)
+	}
 }
 
-// Warn 输出警告日志
+// Warn logs at WARN level
 func Warn(format string, v ...interface{}) {
-	write("WARN", format, v...)
+	if minLevel <= levelWarn {
+		write("WARN", format, v...)
+	}
 }
 
-// Error 输出错误日志
+// Error logs at ERROR level
 func Error(format string, v ...interface{}) {
-	write("ERROR", format, v...)
+	if minLevel <= levelError {
+		write("ERROR", format, v...)
+	}
 }

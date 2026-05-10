@@ -7,7 +7,7 @@
  *   npm run release -- --arch=arm   # ARM (linux/arm64)
  *
  * 产物:
- *   release/hpc-platform-v0.1-linux-amd64.zip
+ *   release/computenook.zip
  *
  * zip 内部结构:
  *   hpc-platform-v0.1/
@@ -45,9 +45,9 @@ if (!target) {
 const VERSION = 'v0.1'
 const ROOT = path.resolve(__dirname, '..')
 const RELEASE_DIR = path.join(ROOT, 'release')
-const PKG_NAME = `hpc-platform-${VERSION}-${target.label}`
+const PKG_NAME = `computenook-${VERSION}-${target.label}`
 const STAGE_DIR = path.join(RELEASE_DIR, PKG_NAME)
-const ZIP_PATH = path.join(RELEASE_DIR, `${PKG_NAME}.zip`)
+const ZIP_PATH = path.join(RELEASE_DIR, 'computenook.zip')
 
 // ── 工具函数 ──────────────────────────────────────────────
 function run(cmd, cwd = ROOT, env = {}) {
@@ -92,8 +92,8 @@ function zipDir(sourceDir, zipPath, innerFolder) {
   run('npm run build')
 
   // 3. 构建后端
-  console.log('\n🔧 构建后端 (hpc-backend)...')
-  const backendOut = path.join(STAGE_DIR, 'hpc-backend')
+  console.log('\n🔧 构建后端 (computenook)...')
+  const backendOut = path.join(STAGE_DIR, 'computenook')
   run(
     `go build -o "${backendOut}" .`,
     path.join(ROOT, 'backend'),
@@ -174,8 +174,23 @@ function zipDir(sourceDir, zipPath, innerFolder) {
 
   // 5. 复制配置文件
   console.log('\n⚙️  复制配置文件...')
-  const rootEnv = path.join(ROOT, '.env')
-  if (fs.existsSync(rootEnv)) fs.copyFileSync(rootEnv, path.join(STAGE_DIR, '.env.example'))
+  const envExampleSrc = path.join(ROOT, '.env.example')
+  const envSrc = path.join(ROOT, '.env')
+  const writeCleaned = (src, dest) => {
+    let content = fs.readFileSync(src, 'utf8')
+    if (content.charCodeAt(0) === 0xFEFF) content = content.slice(1)
+    content = content.replace(/\r\n/g, '\n')
+    fs.writeFileSync(dest, content, { encoding: 'utf8' })
+  }
+  if (fs.existsSync(envExampleSrc)) {
+    writeCleaned(envExampleSrc, path.join(STAGE_DIR, '.env.example'))
+    console.log('   → .env.example copied')
+  } else if (fs.existsSync(envSrc)) {
+    writeCleaned(envSrc, path.join(STAGE_DIR, '.env.example'))
+    console.log('   → .env copied as .env.example')
+  } else {
+    console.warn('   ⚠ .env.example not found, skipping')
+  }
 
   // 复制 app-templates.toml
   const appTemplatesSrc = path.join(ROOT, 'backend', 'app-templates.toml')
@@ -186,13 +201,21 @@ function zipDir(sourceDir, zipPath, innerFolder) {
     console.warn('   ⚠ app-templates.toml not found, skipping')
   }
 
-  // 6. 复制 install.sh 和 nginx.conf
+  // 6. 复制安装脚本
   console.log('\n📝 复制安装脚本...')
-  const installSrc = path.join(ROOT, 'scripts', 'install.sh')
-  if (fs.existsSync(installSrc)) {
-    fs.copyFileSync(installSrc, path.join(STAGE_DIR, 'install.sh'))
-    fs.chmodSync(path.join(STAGE_DIR, 'install.sh'), 0o755)
+  const copyScript = (name) => {
+    const src = path.join(ROOT, 'scripts', name)
+    if (!fs.existsSync(src)) return
+    let content = fs.readFileSync(src, 'utf8')
+    if (content.charCodeAt(0) === 0xFEFF) content = content.slice(1)
+    content = content.replace(/\r\n/g, '\n')
+    const dest = path.join(STAGE_DIR, name)
+    fs.writeFileSync(dest, content, { encoding: 'utf8', flag: 'w' })
+    fs.chmodSync(dest, 0o755)
+    console.log(`   → ${name} copied`)
   }
+  copyScript('install.sh')
+  copyScript('init_ldap.sh')
   const nginxSrc = path.join(ROOT, 'scripts', 'nginx.conf')
   if (fs.existsSync(nginxSrc)) fs.copyFileSync(nginxSrc, path.join(STAGE_DIR, 'nginx.conf'))
 
