@@ -3,7 +3,10 @@ package handlers
 import (
 	"net/http"
 	"strings"
+	"time"
+	
 	"github.com/gin-gonic/gin"
+	"hpc-backend/cache"
 	"hpc-backend/slurm"
 	"hpc-backend/logger"
 )
@@ -46,6 +49,20 @@ func GetDashboardStats(c *gin.Context) {
 	}
 	
 	isAdmin, _ := c.Get("isAdmin")
+	
+	// 尝试从缓存获取（管理员才缓存全局统计）
+	if isAdmin.(bool) {
+		cacheKey := cache.DashboardStatsKey()
+		var stats DashboardStats
+		mgr := cache.NewManager()
+		
+		if err := mgr.Get(cacheKey, &stats); err == nil {
+			c.Header("X-Cache", "HIT")
+			c.JSON(http.StatusOK, stats)
+			return
+		}
+		c.Header("X-Cache", "MISS")
+	}
 	
 	// 创建 Slurm 客户端（使用当前用户的JWT token）
 	client, err := GetSlurmClientForUser(username.(string))
@@ -96,6 +113,10 @@ func GetDashboardStats(c *gin.Context) {
 			AllocatedGPUs: clusterStats.AllocatedGPUs,
 			IdleGPUs:      clusterStats.IdleGPUs,
 		}
+		
+		// 缓存30秒
+		mgr := cache.NewManager()
+		mgr.Set(cache.DashboardStatsKey(), stats, 30*time.Second)
 	} else {
 		// 普通用户：获取用户可用的资源（通过关联和QoS）
 		userStats, err := client.GetUserAvailableResources(username.(string))

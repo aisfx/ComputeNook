@@ -178,7 +178,7 @@
         <AITasks v-else-if="currentView === 'ai-tasks'" />
         <Reports v-else-if="currentView === 'reports'" />
         <Profile v-else-if="currentView === 'profile'" />
-        <Download v-else-if="currentView === 'download'" />
+        <Download v-else-if="currentView === 'download'" @go-desktop="navigate('desktop')" @go-files="navigate('files')" />
         <AdminUsers v-else-if="currentView === 'admin' && adminTab === 'users' && isAdmin" />
         <AdminGroups v-else-if="currentView === 'admin' && adminTab === 'groups' && isAdmin" />
         <AdminQoS v-else-if="currentView === 'admin' && adminTab === 'qos' && isAdmin" />

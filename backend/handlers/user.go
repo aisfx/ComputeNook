@@ -9,6 +9,7 @@ import (
 	"unicode"
 
 	"github.com/gin-gonic/gin"
+	"hpc-backend/cache"
 	"hpc-backend/ldap"
 	"hpc-backend/models"
 	"hpc-backend/slurm"
@@ -139,6 +140,19 @@ func GetUser(c *gin.Context) {
 		return
 	}
 
+	// 尝试从缓存获取
+	cacheKey := cache.UserKey(username)
+	var user models.User
+	mgr := cache.NewManager()
+	
+	if err := mgr.Get(cacheKey, &user); err == nil {
+		c.Header("X-Cache", "HIT")
+		c.JSON(http.StatusOK, gin.H{"data": user})
+		return
+	}
+
+	// 缓存未命中，查询LDAP
+	c.Header("X-Cache", "MISS")
 	client, err := ldap.NewClient()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -146,13 +160,16 @@ func GetUser(c *gin.Context) {
 	}
 	defer client.Close()
 
-	user, err := client.GetUser(username)
+	userPtr, err := client.GetUser(username)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"data": user})
+	// 写入缓存（5分钟TTL）
+	mgr.Set(cacheKey, userPtr, 5*time.Minute)
+
+	c.JSON(http.StatusOK, gin.H{"data": userPtr})
 }
 
 // CreateUser 创建用户

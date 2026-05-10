@@ -5,6 +5,18 @@
       <button class="btn-primary" @click="showCreateModal = true">+ 新建模板</button>
     </div>
 
+    <!-- 作业类型 Tab -->
+    <div class="job-type-tabs">
+      <button
+        :class="['job-type-tab', { active: selectedJobType === 'normal' }]"
+        @click="selectedJobType = 'normal'; selectedCategory = 'all'"
+      >⚙️ 普通作业</button>
+      <button
+        :class="['job-type-tab', { active: selectedJobType === 'container' }]"
+        @click="selectedJobType = 'container'; selectedCategory = 'all'"
+      >🐳 容器作业</button>
+    </div>
+
     <!-- 应用分类 -->
     <div class="app-categories">
       <button 
@@ -24,7 +36,11 @@
             <span class="app-icon">{{ template.icon }}</span>
             <h4>{{ template.name }}</h4>
           </div>
-          <span :class="['template-type', `type-${template.category}`]">{{ template.appType }}</span>
+          <div class="template-header-right">
+            <span v-if="template.isPublic" class="badge-public">🌐 公共</span>
+            <span v-else-if="template.owner" class="badge-owner">👤 {{ template.owner }}</span>
+            <span :class="['template-type', `type-${template.category}`]">{{ template.appType }}</span>
+          </div>
         </div>
         <p class="template-desc">{{ template.description }}</p>
         <div class="template-specs">
@@ -32,6 +48,9 @@
           <span>⚡ CPU: {{ template.cpus }}</span>
           <span v-if="template.gpus">🎮 GPU: {{ template.gpus }}</span>
           <span>⏱️ 时间: {{ template.time }}h</span>
+        </div>
+        <div v-if="template.jobType === 'container' && template.containerImage" class="template-image">
+          🐳 {{ template.containerImage }}
         </div>
         <div class="template-params">
           <div class="param-item" v-for="(value, key) in template.appParams" :key="key">
@@ -46,12 +65,18 @@
           <button class="btn-link" @click="viewConfig(template)">
             📄 查看配置
           </button>
-          <button class="btn-link" @click="editTemplate(template)">
-            ✏️ 编辑
-          </button>
-          <button class="btn-link danger" @click="deleteTemplate(template.id)">
-            🗑️ 删除
-          </button>
+          <template v-if="canEdit(template)">
+            <button class="btn-link" @click="editTemplate(template)">
+              ✏️ 编辑
+            </button>
+            <button v-if="currentUser.isAdmin" class="btn-link"
+              @click="togglePublic(template)">
+              {{ template.isPublic ? '🔒 取消公共' : '🌐 设为公共' }}
+            </button>
+            <button class="btn-link danger" @click="deleteTemplate(template.id)">
+              🗑️ 删除
+            </button>
+          </template>
         </div>
       </div>
     </div>
@@ -80,6 +105,13 @@
               </div>
               <div class="edit-row">
                 <div class="edit-field">
+                  <label>作业类型</label>
+                  <select v-model="createForm.jobType" class="edit-select">
+                    <option value="normal">⚙️ 普通作业</option>
+                    <option value="container">🐳 容器作业</option>
+                  </select>
+                </div>
+                <div class="edit-field">
                   <label>图标（emoji）</label>
                   <input v-model="createForm.icon" type="text" placeholder="🔬" maxlength="4" />
                 </div>
@@ -94,6 +126,11 @@
                     <option value="general">通用</option>
                   </select>
                 </div>
+              </div>
+              <!-- 容器镜像（仅容器作业显示） -->
+              <div v-if="createForm.jobType === 'container'" class="edit-field">
+                <label>容器镜像 *</label>
+                <input v-model="createForm.containerImage" type="text" placeholder="harbor.example.com/library/pytorch:latest" />
               </div>
               <div class="edit-field">
                 <label>描述</label>
@@ -279,6 +316,19 @@ import { dialog } from '../utils/dialog'
 const emit = defineEmits(['use-template'])
 const token = () => localStorage.getItem('token') || sessionStorage.getItem('token')
 
+// 当前用户信息
+const currentUser = ref({ username: '', isAdmin: false })
+const loadCurrentUser = () => {
+  try {
+    const raw = localStorage.getItem('user') || sessionStorage.getItem('user')
+    if (raw) Object.assign(currentUser.value, JSON.parse(raw))
+  } catch { /* ignore */ }
+}
+
+// 是否可以编辑/删除：自己的模板 或 管理员
+const canEdit = (template: any) =>
+  currentUser.value.isAdmin || template.owner === currentUser.value.username
+
 const scriptTypeOptions = {
   general: [
     { key: 'basic', label: '基础' },
@@ -446,6 +496,7 @@ const showConfigModal = ref(false)
 const showEditModal = ref(false)
 const editForm = ref<any>({})
 const selectedCategory = ref('all')
+const selectedJobType = ref('normal')
 const currentTemplate = ref<any>(null)
 const currentConfigFile = ref('submit.sh')
 
@@ -454,6 +505,7 @@ const defaultCreateForm = () => ({
   icon: '💻',
   category: 'general',
   appType: '',
+  jobType: 'normal',
   description: '',
   nodes: 1,
   cpus: 8,
@@ -464,6 +516,7 @@ const defaultCreateForm = () => ({
   executable: '',
   inputFile: '',
   moduleLoad: '',
+  containerImage: '',
   appParams: {},
   configTemplate: 'default',
   scriptType: 'basic',
@@ -496,13 +549,17 @@ const loadTemplatesFromAPI = async () => {
   } catch { /* ignore */ }
 }
 
-onMounted(loadTemplatesFromAPI)
+onMounted(() => {
+  loadCurrentUser()
+  loadTemplatesFromAPI()
+})
 
 const filteredTemplates = computed(() => {
-  if (selectedCategory.value === 'all') {
-    return templates.value
+  let list = templates.value.filter(t => (t.jobType || 'normal') === selectedJobType.value)
+  if (selectedCategory.value !== 'all') {
+    list = list.filter(t => t.category === selectedCategory.value)
   }
-  return templates.value.filter(t => t.category === selectedCategory.value)
+  return list
 })
 
 const configFiles = computed(() => {
@@ -768,6 +825,19 @@ const deleteTemplate = async (id: number) => {
   } catch (e: any) { dialog.error(e.message) }
 }
 
+const togglePublic = async (template: any) => {
+  const updated = { ...template, isPublic: !template.isPublic }
+  try {
+    const res = await fetch(`${getApiBase()}/api/app-templates/${template.id}`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(updated)
+    })
+    if (!res.ok) throw new Error('操作失败')
+    await loadTemplatesFromAPI()
+  } catch (e: any) { dialog.error(e.message) }
+}
+
 const downloadConfig = () => {
   const content = currentConfigContent.value
   const filename = currentConfigFile.value
@@ -858,6 +928,29 @@ const copyConfig = () => {
 
 .templates-header h3 { margin: 0; font-size: 0.95rem; font-weight: 600; }
 
+.job-type-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid hsl(var(--border));
+  padding-bottom: 0;
+}
+
+.job-type-tab {
+  padding: 6px 16px;
+  border: none;
+  background: transparent;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: all 0.15s;
+}
+.job-type-tab:hover { color: hsl(var(--foreground)); }
+.job-type-tab.active { color: hsl(var(--foreground)); border-bottom-color: hsl(var(--foreground)); }
+
 .app-categories {
   display: flex;
   gap: 6px;
@@ -906,6 +999,33 @@ const copyConfig = () => {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 6px;
+}
+
+.template-header-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.badge-public {
+  padding: 1px 7px;
+  background: rgba(34,197,94,0.12);
+  color: #16a34a;
+  border: 1px solid rgba(34,197,94,0.3);
+  border-radius: 10px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.badge-owner {
+  padding: 1px 7px;
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+  border-radius: 10px;
+  font-size: 0.68rem;
+  white-space: nowrap;
 }
 
 .template-title {
@@ -957,6 +1077,18 @@ const copyConfig = () => {
   gap: 5px;
   align-items: center;
   flex-wrap: wrap;
+}
+
+.template-image {
+  font-size: 0.72rem;
+  color: hsl(var(--muted-foreground));
+  background: hsl(var(--muted) / 0.5);
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>
 

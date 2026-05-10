@@ -30,6 +30,7 @@ type LoginRequest struct {
 	Password   string `json:"password" binding:"required"`
 	CaptchaID  string `json:"captchaId"`
 	CaptchaVal string `json:"captchaVal"`
+	RememberMe bool   `json:"rememberMe"` // 记住我选项
 }
 
 // LoginResponse 登录响应

@@ -619,14 +619,14 @@ onMounted(() => {
   listTimer = setInterval(() => {
     if (sessions.value.some((s: any) => s.status === 'pending' || s.status === 'running')) loadSessions()
   }, 8000)
-  // 浏览器关闭/刷新时通知 hpc-client 断开
-  window.addEventListener('beforeunload', notifyClientDisconnect)
+  // 使用 pagehide 事件代替 beforeunload（更可靠且不会有弃用警告）
+  window.addEventListener('pagehide', notifyClientDisconnect, { capture: true })
 })
 
 onUnmounted(() => {
   if (listTimer) clearInterval(listTimer)
   if (tunnelHeartbeat) clearInterval(tunnelHeartbeat)
-  window.removeEventListener('beforeunload', notifyClientDisconnect)
+  window.removeEventListener('pagehide', notifyClientDisconnect, { capture: true })
   // 注意：不清理 launchState，让轮询继续在后台运行
 })
 
@@ -744,18 +744,19 @@ const startTunnelHeartbeat = (localPort: number) => {
   tunnelHeartbeat = setInterval(async () => {
     if (tunnelStatus.value !== 'connected') { clearInterval(tunnelHeartbeat); return }
     try {
-      // 尝试连接本地端口，超时1秒认为断开
+      // 尝试连接本地端口，超时2秒认为断开
       const ws = new WebSocket(`ws://localhost:${localPort}/`)
       await new Promise<void>((resolve, reject) => {
-        const t = setTimeout(() => { ws.close(); reject() }, 1500)
+        const t = setTimeout(() => { ws.close(); reject() }, 2000)
         ws.onopen = () => { clearTimeout(t); ws.close(); resolve() }
         ws.onerror = () => { clearTimeout(t); reject() }
+        ws.onclose = () => { clearTimeout(t); reject() }
       })
     } catch {
       tunnelStatus.value = 'disconnected'
       clearInterval(tunnelHeartbeat)
     }
-  }, 8000)
+  }, 10000)
 }
 
 const launchTunnel = () => {
@@ -773,34 +774,33 @@ const launchTunnel = () => {
   triggerUri(uri)
   tunnelStatus.value = 'connecting'
   tunnelSessionId.value = sessionId
-  // 5秒后认为隧道已建立，开始心跳检测
+  // 增加延迟到8秒，给客户端更多时间建立隧道
   setTimeout(() => {
     if (tunnelStatus.value === 'connecting') {
       tunnelStatus.value = 'connected'
       startTunnelHeartbeat(localPort)
     }
-  }, 5000)
+  }, 8000)
 }
 
 // 浏览器退出时通知 hpc-client 断开
 const notifyClientDisconnect = () => {
   if (tunnelSessionId.value === null) return
   const token = localStorage.getItem('token') || sessionStorage.getItem('token') || ''
-  // 用 sendBeacon 保证页面关闭时也能发出（比 hpcc:// 协议可靠）
+  // 用 sendBeacon 保证页面关闭时也能发出
+  // sendBeacon 需要使用 Blob 或 FormData，并设置正确的 Content-Type
   const url = `/api/desktop/sessions/${tunnelSessionId.value}/client-exit`
-  navigator.sendBeacon(url, JSON.stringify({ token }))
-  // 同时触发 hpcc://exit 协议（hpc-client 也可以监听）
-  const uri = `hpcc://exit?server=${encodeURIComponent(location.origin)}&token=${encodeURIComponent(token)}&session=${tunnelSessionId.value}`
-  triggerUri(uri)
+  const blob = new Blob([JSON.stringify({ token })], { type: 'application/json' })
+  navigator.sendBeacon(url, blob)
+  
+  // 注意：不在这里触发 hpcc://exit，因为 pagehide 事件中无法触发自定义协议
+  // hpc-client 应该通过监听后端 API 或 WebSocket 断开来处理清理
 }
 
 const triggerUri = (uri: string) => {
-  const a = document.createElement('a')
-  a.href = uri
-  a.style.display = 'none'
-  document.body.appendChild(a)
-  a.click()
-  setTimeout(() => document.body.removeChild(a), 1000)
+  // 直接使用 window.location.href 触发自定义协议
+  // 注意：这只在用户手势（如点击）触发的函数中有效
+  window.location.href = uri
 }
 
 // 启动本地 Xpra 客户端连接到隧道本地端口（手动触发，隧道已就绪时用）
@@ -812,11 +812,26 @@ const launchXpraClient = () => {
   triggerUri(uri)
 }
 
+// 主动断开隧道（用户手势触发）
+const disconnectTunnel = () => {
+  if (tunnelSessionId.value === null) return
+  const token = localStorage.getItem('token') || sessionStorage.getItem('token') || ''
+  const uri = `hpcc://exit?server=${encodeURIComponent(location.origin)}&token=${encodeURIComponent(token)}&session=${tunnelSessionId.value}`
+  triggerUri(uri)
+  tunnelStatus.value = 'idle'
+  tunnelSessionId.value = null
+  if (tunnelHeartbeat) clearInterval(tunnelHeartbeat)
+}
+
 const stopSession = async () => {
   if (!selectedSession.value) return
   const ok = await dialog.confirm('确定停止此会话？', { title: '停止会话' })
   if (!ok) return
   try {
+    // 先断开客户端连接
+    if (tunnelStatus.value === 'connected' || tunnelStatus.value === 'disconnected') {
+      disconnectTunnel()
+    }
     await desktopAPI.stopSession(selectedSession.value.id)
     showStartModal.value = false
     clearLaunch()

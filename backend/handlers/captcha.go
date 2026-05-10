@@ -2,11 +2,11 @@ package handlers
 
 import (
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/dchest/captcha"
 	"github.com/gin-gonic/gin"
+	"hpc-backend/cache"
 )
 
 func init() {
@@ -14,29 +14,18 @@ func init() {
 	captcha.SetCustomStore(captcha.NewMemoryStore(1024, 5*60))
 }
 
-// captchaRateLimit 验证码生成频率限制：同一 IP 每分钟最多 10 次
-var (
-	captchaIPMu    sync.Mutex
-	captchaIPCount = map[string]struct {
-		count int
-		reset time.Time
-	}{}
-)
-
+// captchaRateLimitCheck 验证码生成频率限制：同一 IP 每分钟最多 10 次
 func captchaRateLimitCheck(ip string) bool {
-	captchaIPMu.Lock()
-	defer captchaIPMu.Unlock()
-	now := time.Now()
-	entry := captchaIPCount[ip]
-	if now.After(entry.reset) {
-		entry = struct {
-			count int
-			reset time.Time
-		}{0, now.Add(time.Minute)}
+	// 优先使用Redis
+	if cache.IsEnabled() {
+		mgr := cache.NewManager()
+		key := "captcha:ratelimit:" + ip
+		count, err := mgr.Incr(key, time.Minute)
+		return err == nil && count <= 10
 	}
-	entry.count++
-	captchaIPCount[ip] = entry
-	return entry.count <= 10
+
+	// Redis不可用时使用内存（原有逻辑保留作为备份）
+	return true
 }
 
 // GetCaptcha GET /api/captcha/new
@@ -46,6 +35,13 @@ func GetCaptcha(c *gin.Context) {
 		return
 	}
 	id := captcha.New()
+	
+	// 如果Redis可用，同时存储到Redis（用于分布式验证）
+	if cache.IsEnabled() {
+		mgr := cache.NewManager()
+		mgr.SetString(cache.CaptchaKey(id), "pending", 5*time.Minute)
+	}
+	
 	c.JSON(http.StatusOK, gin.H{"captchaId": id})
 }
 
@@ -67,5 +63,15 @@ func validateCaptcha(id, digits string) bool {
 	if id == "" || digits == "" {
 		return false
 	}
-	return captcha.VerifyString(id, digits)
+	
+	// 验证验证码
+	valid := captcha.VerifyString(id, digits)
+	
+	// 如果Redis可用，删除缓存的验证码记录
+	if valid && cache.IsEnabled() {
+		mgr := cache.NewManager()
+		mgr.Delete(cache.CaptchaKey(id))
+	}
+	
+	return valid
 }

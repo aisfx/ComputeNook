@@ -206,9 +206,10 @@ const startLockCountdown = (seconds: number) => {
 }
 
 const saveSession = (token: string, user: any) => {
-  const storage = rememberMe.value ? localStorage : sessionStorage
-  storage.setItem('token', token)
-  storage.setItem('user', JSON.stringify(user))
+  // 始终使用 localStorage 以支持多标签页共享会话
+  // "记住我"功能通过后端 token 过期时间控制
+  localStorage.setItem('token', token)
+  localStorage.setItem('user', JSON.stringify(user))
   axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
 }
 
@@ -220,6 +221,7 @@ const handleLogin = async () => {
     const data = await axios.post('/login', {
       username: form.value.username, password: form.value.password,
       captchaId: captchaId.value, captchaVal: captchaVal.value,
+      rememberMe: rememberMe.value, // 传递"记住我"选项给后端
     }).then(r => r.data)
     if (data.mfaRequired) {
       mfaTempToken.value = data.tempToken

@@ -996,7 +996,8 @@ const loadDashboardStats = async () => {
     if (!token) return
     const res = await fetch(`${getApiBase()}/api/dashboard/stats`, { headers: { Authorization: `Bearer ${token}` } })
     if (!res.ok) return
-    const { data } = await res.json()
+    const result = await res.json()
+    const data = result.data || result || {}
     stats.value = {
       nodes: data.total_nodes || 0, nodesOnline: data.online_nodes || 0,
       cpuCores: data.total_cpus || 0, cpuUsage: Math.round(data.cpu_usage_percent || 0),
@@ -1012,8 +1013,10 @@ const loadNodes = async () => {
     if (!token) return
     const res = await fetch(`${getApiBase()}/api/dashboard/nodes`, { headers: { Authorization: `Bearer ${token}` } })
     if (!res.ok) return
-    const { data } = await res.json()
-    nodes.value = (data || []).map((node: any) => {
+    const result = await res.json()
+    // 确保 data 是数组
+    const data = Array.isArray(result.data) ? result.data : (Array.isArray(result) ? result : [])
+    nodes.value = data.map((node: any) => {
       const state = (node.state || '').toUpperCase()
       let status = 'idle', statusText = '空闲'
       if (state === 'ALLOCATED' || state === 'MIXED') { status = 'online'; statusText = '在线' }

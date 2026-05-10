@@ -47,11 +47,17 @@ func issueFullJWT(username string) (string, *models.User, error) {
 }
 
 func signJWT(user *models.User) (string, error) {
-	// 从环境变量读取有效期，默认 4 小时（安全最佳实践）
-	expHours := 4
-	if v := os.Getenv("JWT_EXPIRE_HOURS"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 24 {
-			expHours = n
+	return signJWTWithExpiry(user, 0) // 使用默认过期时间
+}
+
+func signJWTWithExpiry(user *models.User, expHours int) (string, error) {
+	// 如果未指定过期时间，从环境变量读取，默认 4 小时
+	if expHours == 0 {
+		expHours = 4
+		if v := os.Getenv("JWT_EXPIRE_HOURS"); v != "" {
+			if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 720 { // 最长 30 天
+				expHours = n
+			}
 		}
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
@@ -154,11 +160,25 @@ func Login(c *gin.Context) {
 
 	resetLoginFailure(req.Username)
 	user.Password = ""
-	respondAfterPasswordOK(c, user)
+	
+	// 根据 rememberMe 参数决定 token 过期时间
+	if req.RememberMe {
+		// 记住我：30 天
+		respondAfterPasswordOKWithExpiry(c, user, 720) // 30 * 24 = 720 小时
+	} else {
+		// 不记住：8 小时
+		respondAfterPasswordOKWithExpiry(c, user, 8)
+	}
 }
 
 // respondAfterPasswordOK 密码验证通过后，根据 MFA 状态决定返回临时 token 还是正式 JWT
 func respondAfterPasswordOK(c *gin.Context, user *models.User) {
+	respondAfterPasswordOKWithExpiry(c, user, 0) // 使用默认过期时间
+}
+
+// respondAfterPasswordOKWithExpiry 密码验证通过后，根据 MFA 状态决定返回临时 token 还是正式 JWT
+// expHours: token 有效期（小时），0 表示使用默认值
+func respondAfterPasswordOKWithExpiry(c *gin.Context, user *models.User, expHours int) {
 	mode := GetMFAMode()
 
 	// global 模式：用户未完成 MFA 绑定时，仍需引导其完成绑定
@@ -192,7 +212,7 @@ func respondAfterPasswordOK(c *gin.Context, user *models.User) {
 	}
 
 	// 不需要 MFA，直接颁发正式 JWT
-	tokenStr, err := signJWT(user)
+	tokenStr, err := signJWTWithExpiry(user, expHours)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
 		return

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"sync"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"hpc-backend/models"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/websocket"
 )
 
@@ -163,6 +165,7 @@ var clientExitSignals = struct {
 
 // POST /api/desktop/sessions/:id/client-exit
 // 前端页面关闭时调用，通知 hpc-client 退出
+// 注意：此接口接受 body 中的 token，因为 sendBeacon 无法设置自定义 header
 func NotifyClientExit(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.Atoi(idStr)
@@ -170,6 +173,26 @@ func NotifyClientExit(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
+	
+	// 从请求体中获取 token 并验证
+	var body struct {
+		Token string `json:"token"`
+	}
+	if err := c.ShouldBindJSON(&body); err == nil && body.Token != "" {
+		// 简单验证 token 格式和签名
+		token, err := jwt.Parse(body.Token, func(token *jwt.Token) (interface{}, error) {
+			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, jwt.ErrSignatureInvalid
+			}
+			return []byte(os.Getenv("JWT_SECRET")), nil
+		})
+		if err != nil || !token.Valid {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token"})
+			return
+		}
+	}
+	// 如果没有 body token，这只是一个通知信号，不强制要求认证
+	
 	clientExitSignals.Lock()
 	clientExitSignals.m[id] = true
 	clientExitSignals.Unlock()

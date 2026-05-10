@@ -95,6 +95,54 @@
 
 ## 快速开始
 
+### 🎁 一键体验（Vagrant 单机环境）
+
+**最快的体验方式！** 我们提供了集成 Slurm + LDAP + 所有依赖的 Vagrant Box，拉起来就能用。
+
+#### 前置要求
+- [VirtualBox](https://www.virtualbox.org/wiki/Downloads) 或其他虚拟化软件
+- [Vagrant](https://www.vagrantup.com/downloads)
+
+#### 启动步骤
+
+**方式 1：使用 vagrant init**
+```bash
+vagrant init computenook/mn --box-version 1
+vagrant up
+```
+
+**方式 2：创建 Vagrantfile**
+```ruby
+Vagrant.configure("2") do |config|
+  config.vm.box = "computenook/mn"
+  config.vm.box_version = "1"
+  
+  # 可选：配置网络和资源
+  config.vm.network "forwarded_port", guest: 18080, host: 18080  # Web 界面
+  config.vm.provider "virtualbox" do |vb|
+    vb.memory = "4096"
+    vb.cpus = 2
+  end
+end
+```
+
+然后启动：
+```bash
+vagrant up
+```
+
+#### 访问系统
+
+虚拟机启动后，在浏览器访问：**http://localhost:18080**
+
+默认账号：
+- **管理员**：hpc-admin / hpc-admin
+- **普通用户**：test1 / test1
+
+> 💡 **提示**：Vagrant Box 已预装 Slurm、LDAP、Prometheus 等所有依赖，开箱即用！
+
+---
+
 ### 在线体验
 
 访问地址：http://202.189.51.151:18080/
@@ -102,6 +150,10 @@
 测试账号：
 - **普通用户**：test1 / test1
 - **管理员**：hpc-admin / hpc-admin
+
+---
+
+### 本地开发
 
 ### 前端
 
