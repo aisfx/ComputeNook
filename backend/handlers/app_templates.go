@@ -2,258 +2,136 @@ package handlers
 
 import (
 	"net/http"
-	"os"
-	"path/filepath"
 	"strconv"
-	"sync"
-	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/pelletier/go-toml/v2"
 	"hpc-backend/logger"
+	"hpc-backend/models"
 )
-
-// appTemplatesPath 返回 app-templates.toml 的绝对路径
-// 优先使用可执行文件同目录（生产部署），找不到则 fallback 到工作目录（开发模式）
-func appTemplatesPath() string {
-	// 1. 可执行文件同目录（生产：/opt/hpc-platform/app-templates.toml）
-	if exe, err := os.Executable(); err == nil {
-		p := filepath.Join(filepath.Dir(exe), "app-templates.toml")
-		if _, err := os.Stat(p); err == nil {
-			return p
-		}
-	}
-	// 2. 工作目录（开发模式：backend/app-templates.toml）
-	if wd, err := os.Getwd(); err == nil {
-		return filepath.Join(wd, "app-templates.toml")
-	}
-	return "app-templates.toml"
-}
-
-// AppTemplate 作业模板
-type AppTemplate struct {
-	ID            int               `toml:"id"             json:"id"`
-	Name          string            `toml:"name"           json:"name"`
-	Icon          string            `toml:"icon"           json:"icon"`
-	Category      string            `toml:"category"       json:"category"`
-	AppType       string            `toml:"app_type"       json:"appType"`
-	Description   string            `toml:"description"    json:"description"`
-	Nodes         int               `toml:"nodes"          json:"nodes"`
-	CPUs          int               `toml:"cpus"           json:"cpus"`
-	GPUs          int               `toml:"gpus"           json:"gpus"`
-	Memory        int               `toml:"memory"         json:"memory"`
-	Time          int               `toml:"time"           json:"time"`
-	Partition     string            `toml:"partition"      json:"partition"`
-	ModuleLoad    string            `toml:"module_load"    json:"moduleLoad"`
-	Executable    string            `toml:"executable"     json:"executable"`
-	InputFile     string            `toml:"input_file"     json:"inputFile"`
-	AppParams     map[string]string `toml:"app_params"     json:"appParams"`
-	ShowInQuick   bool              `toml:"show_in_quick"  json:"showInQuick"`
-}
-
-type appTemplatesDoc struct {
-	Templates []AppTemplate `toml:"template"`
-}
-
-var (
-	templatesMu   sync.RWMutex
-	templatesData []AppTemplate
-	templatesLoaded bool
-)
-
-func loadTemplates() ([]AppTemplate, error) {
-	p := appTemplatesPath()
-	logger.Info("loadTemplates: reading %s", p)
-	data, err := os.ReadFile(p)
-	if err != nil {
-		if os.IsNotExist(err) {
-			logger.Warn("loadTemplates: file not found: %s", p)
-			return []AppTemplate{}, nil
-		}
-		return nil, err
-	}
-	var f appTemplatesDoc
-	if err := toml.Unmarshal(data, &f); err != nil {
-		logger.Error("loadTemplates: parse error: %v", err)
-		return nil, err
-	}
-	logger.Info("loadTemplates: loaded %d templates", len(f.Templates))
-	return f.Templates, nil
-}
-
-func saveTemplates(templates []AppTemplate) error {
-	p := appTemplatesPath()
-	f := appTemplatesDoc{Templates: templates}
-	data, err := toml.Marshal(f)
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(p, data, 0644)
-}
-
-func getTemplates() []AppTemplate {
-	templatesMu.RLock()
-	if templatesLoaded {
-		t := make([]AppTemplate, len(templatesData))
-		copy(t, templatesData)
-		templatesMu.RUnlock()
-		return t
-	}
-	templatesMu.RUnlock()
-
-	templatesMu.Lock()
-	defer templatesMu.Unlock()
-	t, err := loadTemplates()
-	if err != nil {
-		logger.Error("loadTemplates: %v", err)
-		return []AppTemplate{}
-	}
-	templatesData = t
-	templatesLoaded = true
-	return t
-}
-
-func invalidateTemplatesCache() {
-	templatesMu.Lock()
-	templatesLoaded = false
-	templatesMu.Unlock()
-}
 
 // ListAppTemplates GET /api/app-templates
+// 普通用户：自己的 + 公共的；管理员：全部
 func ListAppTemplates(c *gin.Context) {
-	templates := getTemplates()
+	username := c.GetString("username")
+	isAdmin, _ := c.Get("isAdmin")
+
+	var templates []models.AppTemplate
+	var err error
+	if isAdmin.(bool) {
+		templates, err = models.GetAllAppTemplates()
+	} else {
+		templates, err = models.GetAppTemplatesForUser(username)
+	}
+	if err != nil {
+		logger.Error("Failed to get app templates: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "获取模板列表失败"})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"data": templates})
 }
 
 // CreateAppTemplate POST /api/app-templates
 func CreateAppTemplate(c *gin.Context) {
-	var tpl AppTemplate
+	username := c.GetString("username")
+	isAdmin, _ := c.Get("isAdmin")
+
+	var tpl models.AppTemplate
 	if err := c.ShouldBindJSON(&tpl); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误: " + err.Error()})
 		return
 	}
 
-	templatesMu.Lock()
-	defer templatesMu.Unlock()
+	// 强制设置 owner 为当前用户
+	tpl.Owner = username
+	// 只有管理员可以设置公共模板
+	if !isAdmin.(bool) {
+		tpl.IsPublic = false
+	}
 
-	templates, err := loadTemplates()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取模板文件失败"})
+	if err := models.CreateAppTemplate(&tpl); err != nil {
+		logger.Error("Failed to create app template: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建模板失败: " + err.Error()})
 		return
 	}
 
-	// 自动分配 ID
-	if tpl.ID == 0 {
-		maxID := 0
-		for _, t := range templates {
-			if t.ID > maxID {
-				maxID = t.ID
-			}
-		}
-		tpl.ID = maxID + 1
-	}
-	// 检查 ID 重复
-	for _, t := range templates {
-		if t.ID == tpl.ID {
-			tpl.ID = int(time.Now().UnixMilli() % 100000)
-			break
-		}
-	}
-
-	templates = append(templates, tpl)
-	if err := saveTemplates(templates); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存失败: " + err.Error()})
-		return
-	}
-	templatesLoaded = false
-	logger.Info("AppTemplate created: id=%d name=%s", tpl.ID, tpl.Name)
+	logger.Info("AppTemplate created: id=%d name=%s owner=%s", tpl.ID, tpl.Name, tpl.Owner)
 	c.JSON(http.StatusCreated, gin.H{"data": tpl})
 }
 
 // UpdateAppTemplate PUT /api/app-templates/:id
 func UpdateAppTemplate(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := strconv.Atoi(idStr)
+	username := c.GetString("username")
+	isAdmin, _ := c.Get("isAdmin")
+
+	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的模板ID"})
 		return
 	}
 
-	var tpl AppTemplate
+	existing, err := models.GetAppTemplateByID(id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "模板不存在"})
+		return
+	}
+
+	// 权限检查：只有 owner 本人或管理员可以修改
+	if !isAdmin.(bool) && existing.Owner != username {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权修改此模板"})
+		return
+	}
+
+	var tpl models.AppTemplate
 	if err := c.ShouldBindJSON(&tpl); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误: " + err.Error()})
 		return
 	}
 	tpl.ID = id
+	tpl.Owner = existing.Owner // owner 不可变
+	// 只有管理员可以切换 is_public
+	if !isAdmin.(bool) {
+		tpl.IsPublic = existing.IsPublic
+	}
 
-	templatesMu.Lock()
-	defer templatesMu.Unlock()
-
-	templates, err := loadTemplates()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取模板文件失败"})
+	if err := models.UpdateAppTemplate(&tpl); err != nil {
+		logger.Error("Failed to update app template: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "更新模板失败: " + err.Error()})
 		return
 	}
 
-	found := false
-	for i, t := range templates {
-		if t.ID == id {
-			templates[i] = tpl
-			found = true
-			break
-		}
-	}
-	if !found {
-		c.JSON(http.StatusNotFound, gin.H{"error": "模板不存在"})
-		return
-	}
-
-	if err := saveTemplates(templates); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存失败: " + err.Error()})
-		return
-	}
-	templatesLoaded = false
 	logger.Info("AppTemplate updated: id=%d name=%s", id, tpl.Name)
 	c.JSON(http.StatusOK, gin.H{"data": tpl})
 }
 
 // DeleteAppTemplate DELETE /api/app-templates/:id
 func DeleteAppTemplate(c *gin.Context) {
-	idStr := c.Param("id")
-	id, err := strconv.Atoi(idStr)
+	username := c.GetString("username")
+	isAdmin, _ := c.Get("isAdmin")
+
+	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的模板ID"})
 		return
 	}
 
-	templatesMu.Lock()
-	defer templatesMu.Unlock()
-
-	templates, err := loadTemplates()
+	existing, err := models.GetAppTemplateByID(id)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "读取模板文件失败"})
-		return
-	}
-
-	newTemplates := templates[:0]
-	found := false
-	for _, t := range templates {
-		if t.ID == id {
-			found = true
-			continue
-		}
-		newTemplates = append(newTemplates, t)
-	}
-	if !found {
 		c.JSON(http.StatusNotFound, gin.H{"error": "模板不存在"})
 		return
 	}
 
-	if err := saveTemplates(newTemplates); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "保存失败: " + err.Error()})
+	// 权限检查：只有 owner 本人或管理员可以删除
+	if !isAdmin.(bool) && existing.Owner != username {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权删除此模板"})
 		return
 	}
-	templatesLoaded = false
-	logger.Info("AppTemplate deleted: id=%d", id)
+
+	if err := models.DeleteAppTemplate(id); err != nil {
+		logger.Error("Failed to delete app template: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "删除模板失败: " + err.Error()})
+		return
+	}
+
+	logger.Info("AppTemplate deleted: id=%d by=%s", id, username)
 	c.JSON(http.StatusOK, gin.H{"message": "删除成功"})
 }

@@ -162,12 +162,12 @@
           <button v-if="job.status === 'SUSPENDED'" class="jd-btn-outline" @click="$emit('resume', job.id)">
             恢复作业
           </button>
-          <!-- 容器作业保存镜像 -->
-          <button v-if="job.status === 'RUNNING'" class="jd-btn-save-image" @click="showSaveImage = true">
+          <!-- 容器作业保存镜像（仅容器作业显示） -->
+          <button v-if="job.status === 'RUNNING' && job.isContainer" class="jd-btn-save-image" @click="showSaveImage = true">
             🐳 保存镜像
           </button>
-          <!-- 进入容器 -->
-          <button v-if="job.status === 'RUNNING'" class="jd-btn-exec" @click="execIntoContainer">
+          <!-- 进入容器（仅容器作业显示） -->
+          <button v-if="job.status === 'RUNNING' && job.isContainer" class="jd-btn-exec" @click="execIntoContainer">
             💻 进入容器
           </button>
           <button class="jd-btn-outline" @click="openLog">查看日志</button>

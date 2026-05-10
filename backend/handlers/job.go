@@ -210,20 +210,22 @@ func GetJobs(c *gin.Context) {
 			numNodes = len(strings.Split(job.Nodes, ","))
 		}
 		allJobs = append(allJobs, map[string]interface{}{
-			"job_id":      job.JobID,
-			"name":        job.Name,
-			"user_name":   job.GetUser(),
-			"account":     job.Account,
-			"partition":   job.Partition,
-			"job_state":   job.GetJobState(),
-			"nodes":       job.Nodes,
-			"num_nodes":   numNodes,
-			"cpus":        job.GetCPUs(),
-			"submit_time": job.GetSubmitTime(),
-			"start_time":  startT,
-			"end_time":    endT,
-			"run_time":    runTime,
-			"work_dir":    job.GetWorkingDirectory(),
+			"job_id":        job.JobID,
+			"name":          job.Name,
+			"user_name":     job.GetUser(),
+			"account":       job.Account,
+			"partition":     job.Partition,
+			"job_state":     job.GetJobState(),
+			"nodes":         job.Nodes,
+			"num_nodes":     numNodes,
+			"cpus":          job.GetCPUs(),
+			"submit_time":   job.GetSubmitTime(),
+			"start_time":    startT,
+			"end_time":      endT,
+			"run_time":      runTime,
+			"work_dir":      job.GetWorkingDirectory(),
+			"is_container":  job.IsContainerJob(),
+			"container_image": job.GetContainerImage(),
 		})
 	}
 	

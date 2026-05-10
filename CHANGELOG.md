@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Added
+- 数据库支持（SQLite 默认 / MySQL 可选），作业模板从 TOML 文件迁移至数据库存储，支持动态增删改查
+- 提供 `make migrate-templates` 迁移工具，将现有 `app-templates.toml` 导入数据库
+- Redis 缓存集成，提升高频查询性能；支持分布式锁，用于桌面会话创建等临界区保护
+- 容器作业智能识别：基于 `--container-image` 参数自动判断，作业详情页仅对容器作业显示「进入容器」和「保存镜像」按钮
+
 ## [0.3.0] - 2026-04-25
 
 ### Added

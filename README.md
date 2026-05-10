@@ -17,8 +17,8 @@
 - 提交**容器作业**（Pyxis/Enroot），挂载目录、工作目录默认指向用户家目录
 - 查看运行中/历史作业，支持取消、暂停、恢复
 - 作业详情：节点、资源、运行时长、实时监控进度条
-- 一键**进入运行中容器**（`srun --overlap --pty bash`），直接在 Web Shell 里操作
-- 一键**保存容器镜像**，异步推送到私有 Harbor 仓库
+- 一键**进入运行中容器**（`srun --overlap --pty bash`），直接在 Web Shell 里操作（仅容器作业显示）
+- 一键**保存容器镜像**，异步推送到私有 Harbor 仓库（仅容器作业显示）
 
 ### 💻 Web Shell
 - 浏览器内 SSH 终端，支持多节点切换
@@ -64,6 +64,8 @@
 | 调度 | Slurm REST API |
 | 容器 | Pyxis / Enroot |
 | 镜像仓库 | Harbor |
+| 数据库 | SQLite（默认）/ MySQL |
+| 缓存 | Redis（可选，高频查询加速 + 分布式锁） |
 | 监控 | Prometheus + node_exporter |
 | AI | 兼容 OpenAI API（DeepSeek / MiniMax / GPT 等） |
 | 知识库 | 本地 Markdown（Obsidian Vault 兼容）+ 内存 2-gram 索引 |
@@ -221,6 +223,31 @@ OBSIDIAN_VAULT_DIR=./knowledge/vault
 # false / optional / global
 MFA_ENABLED=false
 MFA_ISSUER=算力小筑
+```
+
+### 数据库
+
+```env
+# sqlite（默认，无需额外配置）或 mysql
+DB_TYPE=sqlite
+DB_PATH=./data/hpc_platform.db
+
+# MySQL 配置（DB_TYPE=mysql 时填写）
+DB_HOST=localhost
+DB_PORT=3306
+DB_USER=root
+DB_PASSWORD=your-password
+DB_NAME=hpc_platform
+```
+
+### Redis 缓存（可选）
+
+```env
+REDIS_ENABLE=true
+REDIS_ADDR=localhost:6379
+REDIS_PASSWORD=
+REDIS_DB=0
+REDIS_POOL_SIZE=50
 ```
 
 ### 其他

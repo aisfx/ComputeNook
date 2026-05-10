@@ -8,9 +8,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	"hpc-backend/cache"
 	"hpc-backend/handlers"
 	"hpc-backend/logger"
 	"hpc-backend/middleware"
+	"hpc-backend/models"
 )
 
 func main() {
@@ -31,8 +33,29 @@ func main() {
 		}
 	}
 
-	// 程序退出时关闭日志文件
+	// 程序退出时关闭日志文件和数据库连接
 	defer logger.Close()
+	defer models.CloseDatabase()
+
+	// 初始化数据库
+	if err := models.InitDatabase(); err != nil {
+		log.Fatalf("Failed to initialize database: %v", err)
+	}
+
+	// 初始化Redis缓存
+	if os.Getenv("REDIS_ENABLE") == "true" {
+		if err := cache.InitRedis(); err != nil {
+			log.Printf("Warning: Redis connection failed: %v (continuing without cache)", err)
+			logger.Warn("Redis connection failed: %v (continuing without cache)", err)
+		} else {
+			log.Println("Redis connected successfully")
+			logger.Info("Redis connected: %s", os.Getenv("REDIS_ADDR"))
+			defer cache.Close()
+		}
+	} else {
+		log.Println("Redis cache disabled")
+		logger.Info("Redis cache disabled")
+	}
 
 	logger.Info("========================================")
 	logger.Info("HPC Backend Starting")
@@ -379,8 +402,17 @@ func main() {
 			monitoring.GET("/prom-alerts", handlers.GetPromAlerts)
 			monitoring.GET("/prom-targets", handlers.GetPromTargets)
 			monitoring.GET("/prom-rules", handlers.GetPromRules)
-		monitoring.GET("/promql", handlers.PromQueryInstant)
-		monitoring.GET("/promql/range", handlers.PromQueryRange)
+			monitoring.GET("/promql", handlers.PromQueryInstant)
+			monitoring.GET("/promql/range", handlers.PromQueryRange)
+		}
+		
+		// 缓存监控API（管理员）
+		cacheAPI := auth.Group("/cache")
+		cacheAPI.Use(middleware.AdminMiddleware())
+		{
+			cacheAPI.GET("/metrics", handlers.GetCacheMetrics)
+			cacheAPI.POST("/clear", handlers.ClearCache)
+			cacheAPI.POST("/clear/:pattern", handlers.ClearCachePattern)
 		}
 
 		// 报表中心 API
