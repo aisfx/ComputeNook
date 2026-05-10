@@ -189,7 +189,7 @@
             存储配额
           </h3>
         </div>
-        <div class="chart-body">
+        <div class="chart-body" v-if="storageQuota.hasData">
           <div class="donut-wrap">
             <svg viewBox="0 0 200 200" class="donut-svg">
               <circle cx="100" cy="100" r="70" fill="none" stroke="#f3f4f6" stroke-width="32"/>
@@ -219,6 +219,10 @@
               <span class="leg-small" v-else>文件数: {{ storageQuota.files.used.toLocaleString() }} / {{ storageQuota.files.total.toLocaleString() }} ({{ storageQuota.files.percentage }}%)</span>
             </div>
           </div>
+        </div>
+        <div v-else class="chart-empty">
+          <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+          <div style="color:#9ca3af;font-size:0.85rem">暂无存储配额</div>
         </div>
       </div>
     </div>
@@ -682,8 +686,8 @@ const showJobHistory = ref(false)
 const jobHistoryFilter = ref('')
 const jobHistoryLoading = ref(false)
 const jobHistoryList = ref<any[]>([])
-const jobStartDate = ref('')
-const jobEndDate = ref('')
+const jobStartDate = ref(new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0])
+const jobEndDate = ref(new Date().toISOString().split('T')[0])
 const selectedJob = ref<any>(null)
 
 const filteredJobHistory = computed(() => {
@@ -968,6 +972,7 @@ const runningJobs = ref<any[]>([])
 const nodes = ref<any[]>([])
 const machineTime = ref({ totalQuota: 0, used: 0, remaining: 0, usageRate: 0, hasLimit: false })
 const storageQuota = ref({
+  hasData: false,
   capacity: { used: '-', total: '-', percentage: 0 },
   files: { used: 0, total: 0, percentage: 0, noLimit: false }
 })
@@ -1030,11 +1035,13 @@ const loadJobStats = async () => {
     const token = localStorage.getItem('token') || sessionStorage.getItem('token')
     if (!token) return
     const username = currentUser.value?.username || ''
-    // page_size=5000 + no time filter → get all jobs for stats
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 15000) // 15秒超时
     const res = await fetch(
       `${getApiBase()}/api/jobs?page=1&page_size=5000&user=${encodeURIComponent(username)}`,
-      { headers: { Authorization: `Bearer ${token}` } }
+      { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal }
     )
+    clearTimeout(timeout)
     if (!res.ok) return
     const result = await res.json()
     const jobs = result.data || []
@@ -1054,7 +1061,7 @@ const loadJobStats = async () => {
 const loadMyResources = async () => {
   resourcesLoading.value = true
   try {
-    const res = await axios.get('/me/resources')
+    const res = await axios.get('me/resources')
     myResources.value = res.data.data || {}
     const qosList: any[] = myResources.value.qos_limits || []
     const bq = qosList.find((q: any) => q.billing_limit_mins > 0)
@@ -1076,9 +1083,11 @@ const loadMyResources = async () => {
       machineTime.value = { totalQuota: 0, used: 0, remaining: 0, usageRate: 0, hasLimit: false }
     }
   } catch (e) { console.error(e) } finally { resourcesLoading.value = false }
-  // 同步加载存储配额（内联避免被格式化工具删除）
+}
+
+const loadStorageQuota = async () => {
   try {
-    const sqRes = await axios.get('/files/quota')
+    const sqRes = await axios.get('files/quota')
     const quotas: any[] = sqRes.data.quotas || []
     if (quotas.length) {
       const q = quotas[0]
@@ -1094,10 +1103,11 @@ const loadMyResources = async () => {
       const inodeUsed: number = q.inode_used || 0
       const inodeHard: number = q.inode_hard || 0
       storageQuota.value = {
+        hasData: true,
         capacity: { used: fmtKB(usedKB), total: hardKB > 0 ? fmtKB(hardKB) : '无限制', percentage: pct },
-        files: { 
-          used: inodeUsed, 
-          total: inodeHard > 0 ? inodeHard : 0, 
+        files: {
+          used: inodeUsed,
+          total: inodeHard > 0 ? inodeHard : 0,
           percentage: inodeHard > 0 ? Math.min(100, Math.round(inodeUsed / inodeHard * 100)) : 0,
           noLimit: inodeHard === 0
         }
@@ -1115,6 +1125,7 @@ onMounted(() => {
   loadDashboardStats()
   loadNodes()
   loadJobStats()
+  loadStorageQuota()
   loadMyResources()
   setInterval(() => {
     loadDashboardStats(); loadNodes(); loadJobStats()

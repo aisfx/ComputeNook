@@ -39,15 +39,19 @@ func defaultSlurmBaseURL() string {
 func NewClient() (*Client, error) {
 	baseURL := defaultSlurmBaseURL()
 	token := os.Getenv("SLURM_REST_TOKEN")
-	// Token 可以为空，某些配置下不需要认证
 	apiVersion := defaultSlurmAPIVersion()
+	adminUser := os.Getenv("SLURM_ADMIN_USER")
+	if adminUser == "" {
+		adminUser = "root"
+	}
 
 	return &Client{
 		baseURL:    baseURL,
 		token:      token,
 		apiVersion: apiVersion,
+		username:   adminUser,
 		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: 10 * time.Second,
 		},
 	}, nil
 }
@@ -69,7 +73,7 @@ func NewClientForUser(username string) (*Client, error) {
 		apiVersion: apiVersion,
 		username:   username,
 		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: 10 * time.Second,
 		},
 	}, nil
 }
@@ -95,6 +99,9 @@ func (c *Client) doRequest(method, path string, body interface{}) ([]byte, error
 	req.Header.Set("Content-Type", "application/json")
 	if c.token != "" {
 		req.Header.Set("X-SLURM-USER-TOKEN", c.token)
+	}
+	if c.username != "" {
+		req.Header.Set("X-SLURM-USER-NAME", c.username)
 	}
 
 	resp, err := c.httpClient.Do(req)

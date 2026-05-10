@@ -4,13 +4,13 @@
 run:
 	go run .
 
-# 编译
+# 编译（Linux amd64）
 build:
-	go build -o hpc-backend .
+	GOOS=linux GOARCH=amd64 go build -o computenook .
 
 # 清理
 clean:
-	rm -f hpc-backend
+	rm -f computenook
 
 # 安装依赖
 install:

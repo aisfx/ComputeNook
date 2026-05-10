@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -186,8 +187,8 @@ func main() {
 		slurmAccounts := auth.Group("/slurm/accounts")
 		slurmAccounts.Use(middleware.AdminMiddleware())
 		{
-			slurmAccounts.GET("", handlers.GetSlurmAccounts)
-			slurmAccounts.GET("/:name", handlers.GetSlurmAccount)
+			slurmAccounts.GET("", cache.CacheMiddleware(cache.PrefixSlurmAccount+"list:", 2*time.Minute), handlers.GetSlurmAccounts)
+			slurmAccounts.GET("/:name", cache.CacheMiddleware(cache.PrefixSlurmAccount, 2*time.Minute), handlers.GetSlurmAccount)
 			slurmAccounts.POST("", handlers.CreateSlurmAccount)
 			slurmAccounts.PUT("/:name", handlers.UpdateSlurmAccount)
 			slurmAccounts.DELETE("/:name", handlers.DeleteSlurmAccount)
@@ -197,17 +198,16 @@ func main() {
 		slurmUsers := auth.Group("/slurm/users")
 		slurmUsers.Use(middleware.AdminMiddleware())
 		{
-			slurmUsers.GET("", handlers.GetSlurmUsers)
-			slurmUsers.GET("/:name", handlers.GetSlurmUser)
+			slurmUsers.GET("", cache.CacheMiddleware(cache.PrefixSlurmUser+"list:", 2*time.Minute), handlers.GetSlurmUsers)
+			slurmUsers.GET("/:name", cache.CacheMiddleware(cache.PrefixSlurmUser, 2*time.Minute), handlers.GetSlurmUser)
 			slurmUsers.POST("", handlers.CreateSlurmUser)
 			slurmUsers.PUT("/:name", handlers.UpdateSlurmUser)
 			slurmUsers.DELETE("/:name", handlers.DeleteSlurmUser)
 		}
 
 		// Slurm QoS 管理
-		// GET 接口普通用户也需要（作业提交时选择 QoS），写操作仅管理员
-		auth.GET("/qos", handlers.GetQoSList)
-		auth.GET("/qos/:name", handlers.GetQoS)
+		auth.GET("/qos", cache.CacheMiddleware(cache.PrefixQoS+"list:", 5*time.Minute), handlers.GetQoSList)
+		auth.GET("/qos/:name", cache.CacheMiddleware(cache.PrefixQoS, 5*time.Minute), handlers.GetQoS)
 		qos := auth.Group("/qos")
 		qos.Use(middleware.AdminMiddleware())
 		{
@@ -264,26 +264,13 @@ func main() {
 		// 作业管理 API
 		jobs := auth.Group("/jobs")
 		{
-			// 获取作业列表（普通用户只能看自己的，管理员可以看所有）
 			jobs.GET("", handlers.GetJobs)
-			
-			// 获取单个作业详情
 			jobs.GET("/:id", handlers.GetJob)
-			
-			// 提交作业
 			jobs.POST("", handlers.SubmitJob)
-			
-			// 取消作业
 			jobs.DELETE("/:id", handlers.CancelJob)
-			
-			// 暂停作业
 			jobs.POST("/:id/suspend", handlers.SuspendJob)
-			
-			// 恢复作业
 			jobs.POST("/:id/resume", handlers.ResumeJob)
-			
-			// 获取分区列表
-			jobs.GET("/partitions/list", handlers.GetPartitions)
+			jobs.GET("/partitions/list", cache.CacheMiddleware(cache.PrefixPartition+"list:", 5*time.Minute), handlers.GetPartitions)
 		}
 
 		// 作业模板 API
@@ -370,9 +357,9 @@ func main() {
 			files.POST("/rename", handlers.RenameFile)
 			files.POST("/copy", handlers.CopyFile)
 			// 配额
-			files.GET("/quota", handlers.GetQuota)
-			files.GET("/quota/fsinfo", handlers.GetFSInfo)
-			files.GET("/quota/all", handlers.GetAllQuotas)
+			files.GET("/quota", cache.CacheMiddleware(cache.PrefixQuota, 2*time.Minute), handlers.GetQuota)
+			files.GET("/quota/fsinfo", cache.CacheMiddleware(cache.PrefixQuota+"fsinfo:", 5*time.Minute), handlers.GetFSInfo)
+			files.GET("/quota/all", cache.CacheMiddleware(cache.PrefixQuota+"all:", 2*time.Minute), handlers.GetAllQuotas)
 			files.POST("/quota", handlers.SetQuota)
 			files.GET("/compress", handlers.CompressDownload)
 		}
@@ -380,8 +367,8 @@ func main() {
 		// 仪表盘统计 API
 		dashboard := auth.Group("/dashboard")
 		{
-			dashboard.GET("/stats", handlers.GetDashboardStats)
-			dashboard.GET("/nodes", handlers.GetDashboardNodes)
+			dashboard.GET("/stats", cache.CacheMiddleware(cache.PrefixDashboard+"stats:", 30*time.Second), handlers.GetDashboardStats)
+			dashboard.GET("/nodes", cache.CacheMiddleware(cache.PrefixDashboard+"nodes:", 30*time.Second), handlers.GetDashboardNodes)
 		}
 
 		// 用户自定义看板配置（跨设备同步）

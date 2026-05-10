@@ -242,7 +242,9 @@ func GetJobs(c *gin.Context) {
 
 	// 按作业 ID 倒序排序（最新的作业在前面）
 	sort.Slice(allJobs, func(i, j int) bool {
-		return allJobs[i]["job_id"].(int64) > allJobs[j]["job_id"].(int64)
+		idI, _ := allJobs[i]["job_id"].(int64)
+		idJ, _ := allJobs[j]["job_id"].(int64)
+		return idI > idJ
 	})
 	
 	// 计算分页

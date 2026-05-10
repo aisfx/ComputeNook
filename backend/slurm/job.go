@@ -58,6 +58,10 @@ type Job struct {
 	WorkingDirectory string `json:"working_directory"`
 	Stdout           string `json:"stdout"`
 	Stderr           string `json:"stderr"`
+	
+	// 容器相关字段（slurmdb 返回字符串，slurmctld 返回对象，用 RawMessage 兼容）
+	Container   json.RawMessage `json:"container"`
+	Environment []string        `json:"environment"`
 }
 
 // GetJobState 获取作业状态
@@ -133,6 +137,28 @@ func (j *Job) GetWorkingDirectory() string {
 	return j.WorkingDirectory
 }
 
+// IsContainerJob 判断是否为容器作业
+func (j *Job) IsContainerJob() bool {
+	// 检查环境变量中是否包含 SLURM_CONTAINER_IMAGE
+	for _, env := range j.Environment {
+		if strings.HasPrefix(env, "SLURM_CONTAINER_IMAGE=") {
+			return true
+		}
+	}
+	return false
+}
+
+// GetContainerImage 获取容器镜像
+func (j *Job) GetContainerImage() string {
+	// 从环境变量中提取
+	for _, env := range j.Environment {
+		if strings.HasPrefix(env, "SLURM_CONTAINER_IMAGE=") {
+			return strings.TrimPrefix(env, "SLURM_CONTAINER_IMAGE=")
+		}
+	}
+	return ""
+}
+
 // JobsResponse Slurm 作业列表响应
 type JobsResponse struct {
 	Jobs   []Job   `json:"jobs"`
@@ -196,7 +222,7 @@ func (c *Client) GetJobs(username string, startTime, endTime int64) ([]Job, erro
 			historyPath += "?"
 			hasParams = true
 		}
-		historyPath += fmt.Sprintf("submit_time=%d", startTime)
+		historyPath += fmt.Sprintf("start_time=%d", startTime)
 	}
 	
 	if endTime > 0 {
