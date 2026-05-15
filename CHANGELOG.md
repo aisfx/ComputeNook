@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-05-15
+
+### Added
+- **Web Shell 会话持久化**：使用 `<KeepAlive>` 保持 WebShell 组件状态，切换页面后 WebSocket 连接不断开，回到 Shell 页面时会话依然在线
+- **文件上传后台持续**：上传任务提升为全局状态（`uploadManager.ts`），切换到其他页面上传不中断，右下角进度面板全局可见
+- **登录验证码放大**：图形验证码生成尺寸从 160×60 提升至 240×80，前端显示高度同步增大，字符更清晰易读
+
+### Fixed
+- 修复 Layout.vue 中 `<KeepAlive>` 与 `v-else-if` 混用导致条件渲染链断裂的问题，所有页面组件改为独立 `v-if`
+- 修复 FileManager.vue 上传任务类型定义过窄（`status: 'pending' as const`）导致的 7 处 TypeScript 编译错误
+
+## [Unreleased - 待发布]
+
 ### Added
 - 数据库支持（SQLite 默认 / MySQL 可选），作业模板从 TOML 文件迁移至数据库存储，支持动态增删改查
 - 提供 `make migrate-templates` 迁移工具，将现有 `app-templates.toml` 导入数据库

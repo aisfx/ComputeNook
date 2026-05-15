@@ -171,8 +171,14 @@
                 <label>分区 *</label>
                 <select v-model="createForm.partition" required @change="loadResourcePresets">
                   <option value="" disabled>{{ partitionsLoading ? '加载中...' : '请选择' }}</option>
-                  <option v-for="p in partitions" :key="p.name" :value="p.name">{{ p.name }}</option>
+                  <option v-for="p in partitions" :key="p.name" :value="p.name" :disabled="p.state !== 'UP'">
+                    {{ p.name }}
+                    <template v-if="p.state !== 'UP'"> ({{ p.state === 'DOWN' ? '已停用' : p.state }})</template>
+                  </option>
                 </select>
+                <p v-if="partitions.some(p => p.state !== 'UP')" class="partition-hint">
+                  灰色选项为不可用分区
+                </p>
               </div>
               <div class="form-group">
                 <label>资源规格</label>
@@ -584,7 +590,9 @@ const loadPartitions = async () => {
     const res = await axios.get('/jobs/partitions/list')
     partitions.value = res.data.data || []
     if (partitions.value.length > 0 && !createForm.value.partition) {
-      createForm.value.partition = partitions.value[0].name
+      // 优先选择第一个可用分区
+      const availablePartition = partitions.value.find((p: any) => p.state === 'UP')
+      createForm.value.partition = availablePartition?.name || partitions.value[0].name
       await loadResourcePresets()
     }
   } catch { partitions.value = [] }
@@ -1288,6 +1296,8 @@ const cleanupSpace = async () => {
 .modules-row label { font-size: 0.8rem; font-weight: 500; color: hsl(var(--foreground)); }
 .modules-hint { font-size: 0.72rem; color: hsl(var(--muted-foreground)); }
 .modules-hint code { background: hsl(var(--muted)); padding: 1px 5px; border-radius: 3px; font-size: 0.7rem; }
+.partition-hint { font-size: 0.72rem; color: hsl(var(--muted-foreground)); margin-top: 0.25rem; }
+select option:disabled { color: #9ca3af; }
 .apps-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-bottom: 1.5rem; }
 .apps-table th { background: hsl(var(--muted)); padding: 0.5rem 0.75rem; text-align: left; font-size: 0.75rem; font-weight: 600; color: hsl(var(--muted-foreground)); border-bottom: 1px solid hsl(var(--border)); }
 .apps-table td { padding: 0.5rem 0.75rem; border-bottom: 1px solid hsl(var(--border)); color: hsl(var(--foreground)); }

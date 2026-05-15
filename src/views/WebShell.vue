@@ -447,7 +447,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, onDeactivated, nextTick } from 'vue'
 import axios from 'axios'
 import { Terminal } from 'xterm'
 import { FitAddon } from 'xterm-addon-fit'
@@ -774,7 +774,7 @@ onMounted(async () => {
   }
 })
 
-// 清理
+// 清理（仅在组件真正销毁时执行，keep-alive切换页面时不会触发）
 onBeforeUnmount(() => {
   tabs.value.forEach(tab => {
     tab.websocket?.close()

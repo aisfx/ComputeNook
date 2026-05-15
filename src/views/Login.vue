@@ -480,7 +480,7 @@ onMounted(() => {
 
 .captcha-row { display: flex; gap: 8px; align-items: center; }
 .captcha-row input { flex: 1; }
-.captcha-img { height: 40px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); cursor: pointer; flex-shrink: 0; }
+.captcha-img { height: 52px; border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); cursor: pointer; flex-shrink: 0; image-rendering: crisp-edges; }
 [data-theme="light"] .captcha-img { border-color: #e2e8f0; }
 [data-theme="ocean"] .captcha-img { border-color: rgba(0,180,180,0.22); }
 .captcha-img:hover { opacity: 0.8; }

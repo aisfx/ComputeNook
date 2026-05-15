@@ -53,7 +53,7 @@ func GetCaptchaImage(c *gin.Context) {
 	}
 	c.Header("Cache-Control", "no-cache, no-store")
 	c.Header("Content-Type", "image/png")
-	if err := captcha.WriteImage(c.Writer, id, 160, 60); err != nil {
+	if err := captcha.WriteImage(c.Writer, id, 240, 80); err != nil {
 		c.Status(http.StatusNotFound)
 	}
 }

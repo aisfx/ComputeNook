@@ -271,6 +271,8 @@
         </div>
       </div>
     </Teleport>
+
+    <!-- 上传进度面板已移至 Layout.vue 全局显示 -->
   </div>
 </template>
 
@@ -279,6 +281,7 @@ import { ref, computed, onMounted, onUnmounted, defineComponent, h, watch } from
 import { getUser } from '../utils/auth'
 import notification from '../utils/notification'
 import { fileManagerApi } from '../config/api'
+import { uploadTasks, showUploadPanel, enqueueUpload, clearFinishedUploads } from '../utils/uploadManager'
 
 // ── SVG 图标组件 ──────────────────────────────────────────────
 const svg = (d: string) => defineComponent({ render: () => h('svg', { viewBox: '0 0 24 24' }, [h('path', { d })]) })
@@ -640,23 +643,22 @@ const launchMount = async () => {
   notification.success(`正在启动挂载，挂载点: ${mountPoint}`)
 }
 
-const showUploadDialog = () => {  const input = document.createElement('input')
+// 上传任务队列（全局状态，切换页面不中断）
+// uploadTasks / showUploadPanel 来自 uploadManager.ts
+let uploadTaskId = 0
+
+const showUploadDialog = () => {
+  const input = document.createElement('input')
   input.type = 'file'; input.multiple = true
-  input.onchange = async (e: any) => {
-    for (const file of e.target.files) {
-      const fd = new FormData(); fd.append('file', file); fd.append('path', currentPath.value)
-      try {
-        const res = await fetch(fileManagerApi.upload(), {
-          method: 'POST', headers: { Authorization: `Bearer ${token()}` }, body: fd
-        })
-        if (!res.ok) throw new Error((await res.json()).error || '上传失败')
-        notification.success(`"${file.name}" 上传成功`)
-      } catch (e: any) { notification.error(`上传 "${file.name}" 失败: ${e.message}`) }
-    }
-    await loadDirectory()
+  input.onchange = (e: any) => {
+    const files = Array.from(e.target.files) as File[]
+    if (files.length === 0) return
+    enqueueUpload(files, currentPath.value, () => loadDirectory())
   }
   input.click()
 }
+
+const clearUploadTasks = () => clearFinishedUploads()
 
 // ── 格式化 ────────────────────────────────────────────────────
 const formatSize = (b: number) => {
@@ -1004,4 +1006,50 @@ onUnmounted(() => { document.removeEventListener('click', handleGlobalClick) })
 }
 .fm-btn-danger-sm svg { width: 14px; height: 14px; fill: currentColor; }
 .fm-btn-danger-sm:hover { background: hsl(var(--destructive)); color: #fff; }
+
+/* ── 上传进度面板 ── */
+.fm-upload-panel {
+  position: fixed; bottom: 24px; right: 24px; z-index: 9998;
+  width: 340px; max-height: 320px;
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0,0,0,.18);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.fm-upload-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 0.7rem 1rem;
+  background: hsl(var(--muted));
+  border-bottom: 1px solid hsl(var(--border));
+  font-size: 0.85rem; font-weight: 600;
+  color: hsl(var(--foreground));
+}
+.fm-upload-close {
+  background: none; border: none; cursor: pointer;
+  color: hsl(var(--muted-foreground));
+  font-size: 1rem; padding: 2px 6px;
+  border-radius: 4px; transition: all 0.15s;
+}
+.fm-upload-close:hover { background: hsl(var(--accent)); color: hsl(var(--foreground)); }
+.fm-upload-list { flex: 1; overflow-y: auto; padding: 0.5rem; }
+.fm-upload-item {
+  padding: 0.6rem 0.75rem;
+  border-radius: 8px;
+  background: hsl(var(--muted) / 0.3);
+  margin-bottom: 0.4rem;
+}
+.fm-upload-item:last-child { margin-bottom: 0; }
+.fm-upload-info { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem; }
+.fm-upload-name { font-size: 0.82rem; font-weight: 500; color: hsl(var(--foreground)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px; }
+.fm-upload-size { font-size: 0.72rem; color: hsl(var(--muted-foreground)); }
+.fm-upload-progress { height: 4px; background: hsl(var(--border)); border-radius: 2px; overflow: hidden; margin-bottom: 0.3rem; }
+.fm-upload-bar { height: 100%; background: linear-gradient(90deg, #6366f1, #8b5cf6); border-radius: 2px; transition: width 0.2s; }
+.fm-upload-status { display: flex; justify-content: flex-end; }
+.fm-upload-status span { font-size: 0.72rem; font-weight: 500; }
+.status-pending { color: hsl(var(--muted-foreground)); }
+.status-uploading { color: #6366f1; }
+.status-done { color: #10b981; }
+.status-error { color: hsl(var(--destructive)); cursor: help; }
 </style>

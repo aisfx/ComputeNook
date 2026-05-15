@@ -167,29 +167,32 @@
       <!-- Content -->
       <main class="content-area" :class="{ 'content-area--noscroll': currentView === 'rack' }">
         <Dashboard v-if="currentView === 'dashboard'" @navigate="currentView = $event" />
-        <JobManagement v-else-if="currentView === 'jobs'" @open-directory="handleOpenDirectory" @go-registry="currentView = 'registry'" @exec-container="currentView = 'shell'" />
-        <Monitoring v-else-if="currentView === 'monitoring' && isAdmin" :active-tab="monitoringTab" @tab-change="monitoringTab = $event" />
-        <RackView v-else-if="currentView === 'rack' && isAdmin" />
-        <NetworkTopology v-else-if="currentView === 'network' && isAdmin" />
-        <WebShell v-else-if="currentView === 'shell'" />
-        <Desktop v-else-if="currentView === 'desktop'" @open-download="currentView = 'download'" />
-        <FileManager ref="fileManagerRef" v-else-if="currentView === 'files'" />
-        <Registry v-else-if="currentView === 'registry'" />
-        <AITasks v-else-if="currentView === 'ai-tasks'" />
-        <Reports v-else-if="currentView === 'reports'" />
-        <Profile v-else-if="currentView === 'profile'" />
-        <Download v-else-if="currentView === 'download'" @go-desktop="navigate('desktop')" @go-files="navigate('files')" />
-        <AdminUsers v-else-if="currentView === 'admin' && adminTab === 'users' && isAdmin" />
-        <AdminGroups v-else-if="currentView === 'admin' && adminTab === 'groups' && isAdmin" />
-        <AdminQoS v-else-if="currentView === 'admin' && adminTab === 'qos' && isAdmin" />
-        <AdminAssociations v-else-if="currentView === 'admin' && adminTab === 'associations' && isAdmin" />
-        <AdminHours v-else-if="currentView === 'admin' && adminTab === 'hours' && isAdmin" />
-        <AdminQuota v-else-if="currentView === 'admin' && adminTab === 'quota' && isAdmin" />
-        <AdminAudit v-else-if="currentView === 'admin' && adminTab === 'audit' && isAdmin" />
-        <AdminCMDB v-else-if="currentView === 'admin' && adminTab === 'cmdb' && isAdmin" />
-        <AdminSlurmAccounts v-else-if="currentView === 'admin' && adminTab === 'slurm-accounts' && isAdmin" />
-        <AdminSlurmUsers v-else-if="currentView === 'admin' && adminTab === 'slurm-users' && isAdmin" />
-        <div v-else-if="!isAdmin && (currentView === 'monitoring' || currentView === 'admin' || currentView === 'rack' || currentView === 'network')" class="no-permission">
+        <JobManagement v-if="currentView === 'jobs'" @open-directory="handleOpenDirectory" @go-registry="currentView = 'registry'" @exec-container="currentView = 'shell'" />
+        <Monitoring v-if="currentView === 'monitoring' && isAdmin" :active-tab="monitoringTab" @tab-change="monitoringTab = $event" />
+        <RackView v-if="currentView === 'rack' && isAdmin" />
+        <NetworkTopology v-if="currentView === 'network' && isAdmin" />
+        <!-- WebShell 使用 keep-alive 保持会话，切换页面时保持 WebSocket 连接 -->
+        <KeepAlive>
+          <WebShell v-if="currentView === 'shell'" />
+        </KeepAlive>
+        <Desktop v-if="currentView === 'desktop'" @open-download="currentView = 'download'" />
+        <FileManager ref="fileManagerRef" v-if="currentView === 'files'" />
+        <Registry v-if="currentView === 'registry'" />
+        <AITasks v-if="currentView === 'ai-tasks'" />
+        <Reports v-if="currentView === 'reports'" />
+        <Profile v-if="currentView === 'profile'" />
+        <Download v-if="currentView === 'download'" @go-desktop="navigate('desktop')" @go-files="navigate('files')" />
+        <AdminUsers v-if="currentView === 'admin' && adminTab === 'users' && isAdmin" />
+        <AdminGroups v-if="currentView === 'admin' && adminTab === 'groups' && isAdmin" />
+        <AdminQoS v-if="currentView === 'admin' && adminTab === 'qos' && isAdmin" />
+        <AdminAssociations v-if="currentView === 'admin' && adminTab === 'associations' && isAdmin" />
+        <AdminHours v-if="currentView === 'admin' && adminTab === 'hours' && isAdmin" />
+        <AdminQuota v-if="currentView === 'admin' && adminTab === 'quota' && isAdmin" />
+        <AdminAudit v-if="currentView === 'admin' && adminTab === 'audit' && isAdmin" />
+        <AdminCMDB v-if="currentView === 'admin' && adminTab === 'cmdb' && isAdmin" />
+        <AdminSlurmAccounts v-if="currentView === 'admin' && adminTab === 'slurm-accounts' && isAdmin" />
+        <AdminSlurmUsers v-if="currentView === 'admin' && adminTab === 'slurm-users' && isAdmin" />
+        <div v-if="!isAdmin && (currentView === 'monitoring' || currentView === 'admin' || currentView === 'rack' || currentView === 'network')" class="no-permission">
           <div class="no-perm-icon">🔒</div>
           <h3>无访问权限</h3>
           <p>请联系管理员获取权限</p>
@@ -197,8 +200,43 @@
       </main>
     </div>
 
-    <!-- AI 悬浮助手 -->
-    <AIAssistant />
+    <!-- AI 悬浮助手（触发按钮由桌面宠物接管） -->
+    <AIAssistant ref="aiAssistantRef" :hide-trigger="true" />
+    
+    <!-- 桌面宠物 -->
+    <DesktopPet 
+      v-if="showDesktopPet" 
+      ref="desktopPetRef"
+      @openAI="openAIAssistant" 
+      @quickAction="handlePetQuickAction" 
+    />
+
+    <!-- 全局上传进度面板（右下角悬浮，切换页面不消失） -->
+    <Teleport to="body">
+      <div v-if="showUploadPanel" class="global-upload-panel">
+        <div class="global-upload-header">
+          <span>📤 上传中 ({{ uploadTasks.filter(t => t.status === 'uploading').length }}/{{ uploadTasks.length }})</span>
+          <button class="global-upload-close" @click="clearFinishedUploads" title="清除已完成">✕</button>
+        </div>
+        <div class="global-upload-list">
+          <div v-for="task in uploadTasks" :key="task.id" class="global-upload-item">
+            <div class="global-upload-info">
+              <span class="global-upload-name">{{ task.file.name }}</span>
+              <span class="global-upload-size">{{ formatUploadSize(task.file.size) }}</span>
+            </div>
+            <div class="global-upload-progress">
+              <div class="global-upload-bar" :style="{ width: task.progress + '%' }"></div>
+            </div>
+            <div class="global-upload-status">
+              <span v-if="task.status === 'pending'" class="status-pending">等待中</span>
+              <span v-else-if="task.status === 'uploading'" class="status-uploading">{{ task.progress }}%</span>
+              <span v-else-if="task.status === 'done'" class="status-done">✓ 完成</span>
+              <span v-else-if="task.status === 'error'" class="status-error" :title="task.error">✕ 失败</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -230,8 +268,16 @@ import RackView from './RackView.vue'
 import NetworkTopology from './NetworkTopology.vue'
 import AIAssistant from '../components/AIAssistant.vue'
 import AlertNotification from '../components/AlertNotification.vue'
+import DesktopPet from '../components/DesktopPet.vue'
 import { getUser, logout, setupAxiosInterceptors, isAdmin as checkAdmin } from '../utils/auth'
 import { dialog } from '../utils/dialog'
+import { uploadTasks, showUploadPanel, clearFinishedUploads } from '../utils/uploadManager'
+
+const formatUploadSize = (bytes: number) => {
+  if (bytes < 1024) return bytes + ' B'
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
+  return (bytes / 1024 / 1024).toFixed(1) + ' MB'
+}
 
 const router = useRouter()
 const currentView = ref('dashboard')
@@ -247,7 +293,10 @@ const mobileMenuOpen = ref(false)
 const currentUser = ref<any>(null)
 const isAdmin = ref(false)
 const fileManagerRef = ref<any>(null)
+const aiAssistantRef = ref<any>(null)
+const desktopPetRef = ref<any>(null)
 const theme = ref<'light' | 'dark' | 'ocean'>('light')
+const showDesktopPet = ref(true) // 桌面宠物开关
 
 provide('jobManagementTab', jobManagementTab)
 
@@ -348,6 +397,35 @@ const handleLogout = async () => {
 
 const goToProfile = () => { currentView.value = 'profile' }
 const goToAdmin = () => { router.push('/admin') }
+
+// 桌面宠物相关方法
+const openAIAssistant = () => {
+  // 通过 ref 调用 AIAssistant 的方法打开聊天窗口
+  if (aiAssistantRef.value?.toggleChat) {
+    aiAssistantRef.value.toggleChat()
+  }
+}
+
+const handlePetQuickAction = (action: string) => {
+  switch (action) {
+    case 'jobs':
+      currentView.value = 'jobs'
+      break
+    case 'files':
+      currentView.value = 'files'
+      break
+    case 'submit':
+      currentView.value = 'jobs'
+      // 可以触发作业提交面板
+      break
+    case 'monitor':
+      currentView.value = 'monitoring'
+      break
+    case 'users':
+      router.push('/admin')
+      break
+  }
+}
 
 // 页面标题映射，用于上报可读名称
 const PAGE_TITLES: Record<string, string> = {
@@ -790,4 +868,40 @@ onMounted(() => {
   .btn-admin { padding: 5px 8px; }
   .status-badge { display: none; }
 }
+
+/* ===== 全局上传进度面板 ===== */
+.global-upload-panel {
+  position: fixed; bottom: 24px; right: 24px; z-index: 9999;
+  width: 340px; max-height: 320px;
+  background: hsl(var(--card)); border: 1px solid hsl(var(--border));
+  border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.global-upload-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px; border-bottom: 1px solid hsl(var(--border));
+  font-size: 0.82rem; font-weight: 600; color: hsl(var(--foreground));
+  flex-shrink: 0;
+}
+.global-upload-close {
+  background: none; border: none; cursor: pointer; font-size: 14px;
+  color: hsl(var(--muted-foreground)); padding: 2px 4px; border-radius: 4px;
+}
+.global-upload-close:hover { background: hsl(var(--accent)); }
+.global-upload-list { overflow-y: auto; padding: 6px 0; }
+.global-upload-item {
+  padding: 8px 14px; display: flex; flex-direction: column; gap: 4px;
+  border-bottom: 1px solid hsl(var(--border) / 0.5);
+}
+.global-upload-item:last-child { border-bottom: none; }
+.global-upload-info { display: flex; justify-content: space-between; align-items: center; }
+.global-upload-name { font-size: 0.8rem; color: hsl(var(--foreground)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px; }
+.global-upload-size { font-size: 0.72rem; color: hsl(var(--muted-foreground)); flex-shrink: 0; }
+.global-upload-progress { height: 4px; background: hsl(var(--muted)); border-radius: 2px; overflow: hidden; }
+.global-upload-bar { height: 100%; background: hsl(262 83% 58%); border-radius: 2px; transition: width 0.2s; }
+.global-upload-status { font-size: 0.72rem; }
+.global-upload-status .status-pending { color: hsl(var(--muted-foreground)); }
+.global-upload-status .status-uploading { color: hsl(262 83% 58%); font-weight: 600; }
+.global-upload-status .status-done { color: hsl(var(--success)); }
+.global-upload-status .status-error { color: hsl(var(--destructive)); cursor: help; }
 </style>

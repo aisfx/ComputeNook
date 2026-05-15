@@ -1,7 +1,7 @@
 <template>
-  <!-- 悬浮按钮 -->
+  <!-- 悬浮按钮（桌面宠物模式下隐藏，由 DesktopPet 组件触发） -->
   <div class="ai-float">
-    <button class="ai-trigger" @click="toggleChat" :title="open ? '关闭助手' : '打开 AI 助手'"
+    <button v-if="!hideTrigger" class="ai-trigger" @click="toggleChat" :title="open ? '关闭助手' : '打开 AI 助手'"
       :style="{ opacity: maximized ? 0 : 1, pointerEvents: maximized ? 'none' : 'auto' }">
       <span class="ai-monkey">🐒</span>
       <span v-if="!open && unread > 0" class="ai-badge">{{ unread }}</span>
@@ -99,6 +99,9 @@ import { ref, nextTick } from 'vue'
 import axios from 'axios'
 import { getUser, getToken } from '../utils/auth'
 import { dialog } from '../utils/dialog'
+
+// hideTrigger=true 时隐藏悬浮按钮，由外部（桌面宠物）控制开关
+const props = withDefaults(defineProps<{ hideTrigger?: boolean }>(), { hideTrigger: false })
 
 // 带 token 的 axios 实例，确保 fetchContext 里的请求都携带认证
 const authAxios = axios.create()
@@ -391,6 +394,13 @@ const toggleChat = () => {
     })
   }
 }
+
+// 暴露方法供父组件调用
+defineExpose({
+  toggleChat,
+  open: () => { open.value = true },
+  close: () => { open.value = false }
+})
 
 const now = () => new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
 
