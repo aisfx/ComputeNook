@@ -538,4 +538,5 @@ onUnmounted(() => clearInterval(timer))
 .btn-ghost { padding: 8px 16px; background: none; color: hsl(var(--muted-foreground)); border: 1px solid hsl(var(--border)); border-radius: var(--radius-md); font-size: .83rem; cursor: pointer; }
 .log-content { background: #1e293b; color: #e2e8f0; padding: 12px 14px; border-radius: 8px; font-size: .78rem; line-height: 1.6; overflow-x: auto; margin: 0; max-height: 500px; overflow-y: auto; font-family: monospace; white-space: pre-wrap; }
 @media (max-width: 900px) { .stats-row { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 480px) { .stats-row { grid-template-columns: repeat(2, 1fr); } }
 </style>

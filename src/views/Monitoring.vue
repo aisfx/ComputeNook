@@ -1265,6 +1265,10 @@ onUnmounted(() => { if (timer) clearInterval(timer); stopAlertSound(); clearSoun
 @media (max-width: 900px) {
   .charts-grid, .slurm-grid, .alerts-grid { grid-template-columns: 1fr; }
 }
+@media (max-width: 480px) {
+  .node-card-grid { grid-template-columns: 1fr; }
+  .slurm-state-grid { grid-template-columns: repeat(2, 1fr); }
+}
 </style>
 
 

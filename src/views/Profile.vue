@@ -506,6 +506,13 @@ onMounted(() => {
   .profile-container {
     max-width: 100%;
   }
+  .info-row {
+    flex-direction: column;
+    gap: 2px;
+  }
+  .info-row .label {
+    min-width: 0;
+  }
 }
 
 .card {

@@ -1471,6 +1471,13 @@ onMounted(() => {
   font-size: 0.9rem;
 }
 
+@media (max-width: 1024px) {
+  .stats-grid,
+  .metrics-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
 @media (max-width: 768px) {
   .form-row {
     grid-template-columns: 1fr;

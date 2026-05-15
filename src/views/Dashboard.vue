@@ -1318,5 +1318,13 @@ onMounted(() => {
 @media (max-width: 1400px) { .stats-grid { grid-template-columns: repeat(3, 1fr); } }
 @media (max-width: 1200px) { .stats-grid { grid-template-columns: repeat(2, 1fr); } .charts-row { grid-template-columns: repeat(2, 1fr); } }
 @media (max-width: 900px)  { .charts-row { grid-template-columns: 1fr; } }
-@media (max-width: 600px)  { .stats-grid { grid-template-columns: 1fr; } .billing-summary { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 600px)  {
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  .billing-summary { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 480px)  {
+  .stats-grid { grid-template-columns: 1fr; }
+  .billing-summary { grid-template-columns: 1fr; }
+  .charts-row { gap: 0.75rem; }
+}
 </style>

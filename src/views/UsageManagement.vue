@@ -585,6 +585,7 @@ onMounted(() => {
   border: 1px solid #d1d5db;
   border-radius: 8px;
   width: 250px;
+  max-width: 100%;
 }
 
 .data-table {

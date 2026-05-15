@@ -644,6 +644,7 @@ onMounted(() => {
 .submit-form::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 2px; }
 
 .form-row.col2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+@media (max-width: 600px) { .form-row.col2 { grid-template-columns: 1fr; } }
 
 .form-group {
   display: flex;

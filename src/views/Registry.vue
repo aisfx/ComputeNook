@@ -521,4 +521,12 @@ onMounted(async () => {
   font-size: 0.82rem; line-height: 1.6;
   overflow-x: auto; margin: 0;
 }
+
+@media (max-width: 767px) {
+  .registry-page { flex-direction: column; }
+  .project-panel { width: 100% !important; min-width: 0; height: auto; max-height: 180px; }
+  .project-list { flex-direction: row; flex-wrap: wrap; gap: 4px; padding: 6px; }
+  .project-item { flex: 0 0 auto; padding: 4px 10px; }
+  .project-name { max-width: 80px; }
+}
 </style>

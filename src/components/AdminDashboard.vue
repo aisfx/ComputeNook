@@ -530,4 +530,15 @@ onUnmounted(() => clearInterval(timer))
   .kpi-row { grid-template-columns: repeat(3, 1fr); }
   .dash-grid { grid-template-columns: 1fr; }
 }
+@media (max-width: 600px) {
+  .kpi-row { grid-template-columns: repeat(2, 1fr); }
+  /* 固定列宽的行表格改为横向滚动 */
+  .node-list, .rank-list, .acc-list { overflow-x: auto; }
+  .node-row  { grid-template-columns: 80px 60px 1fr 70px; font-size: 0.72rem; }
+  .rank-row  { grid-template-columns: 20px 70px 1fr 46px 44px; font-size: 0.72rem; }
+  .acc-row   { grid-template-columns: 70px 1fr 80px 32px; font-size: 0.72rem; }
+}
+@media (max-width: 400px) {
+  .kpi-row { grid-template-columns: 1fr; }
+}
 </style>
