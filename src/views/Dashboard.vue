@@ -145,6 +145,16 @@
           </h3>
           <button class="btn-link-sm" @click="showBillingHistory = true" v-if="machineTime.hasLimit">消费记录 →</button>
         </div>
+        <!-- 多 QoS 切换 tab -->
+        <div v-if="machineTimeList.length > 1" class="qos-tabs">
+          <button
+            v-for="(item, idx) in machineTimeList"
+            :key="item.qosName"
+            class="qos-tab"
+            :class="{ active: machineTimeIndex === idx }"
+            @click="machineTimeIndex = idx; machineTime = item"
+          >{{ item.qosName }}</button>
+        </div>
         <div class="chart-body" v-if="machineTime.hasLimit">
           <div class="donut-wrap">
             <svg viewBox="0 0 200 200" class="donut-svg">
@@ -657,7 +667,9 @@ const accountQuotaList = computed(() => {
   return unique.map((a: any) => {
     const qosNames: string[] = a.qos_list || (a.qos ? [a.qos] : [])
     const qosInfo = qosList.find((q: any) => qosNames.includes(q.name)) || {}
-    const maxCpus = qosInfo.max_cpus || 0
+    const maxCpus = Number(qosInfo.max_cpus) || 0
+    const maxNodes = Number(qosInfo.max_nodes) || 0
+    const maxJobs = Number(qosInfo.max_jobs) || 0
     const usedCpus = runningJobs.value
       .filter((j: any) => !a.account || j.account === a.account)
       .reduce((s: number, j: any) => s + (j.cpus || 0), 0)
@@ -667,8 +679,8 @@ const accountQuotaList = computed(() => {
       partition: a.partition || '',
       qos: qosNames.join(', '),
       maxCpus,
-      maxNodes: qosInfo.max_nodes || 0,
-      maxJobs: qosInfo.max_jobs || 0,
+      maxNodes,
+      maxJobs,
       usedCpus,
       cpuPct,
     }
@@ -971,6 +983,8 @@ const jobStatsLoading = ref(false)
 const runningJobs = ref<any[]>([])
 const nodes = ref<any[]>([])
 const machineTime = ref({ totalQuota: 0, used: 0, remaining: 0, usageRate: 0, hasLimit: false })
+const machineTimeList = ref<any[]>([])   // 所有有限制的 QoS
+const machineTimeIndex = ref(0)          // 当前选中的索引
 const storageQuota = ref({
   hasData: false,
   capacity: { used: '-', total: '-', percentage: 0 },
@@ -1067,21 +1081,25 @@ const loadMyResources = async () => {
     const res = await axios.get('me/resources')
     myResources.value = res.data.data || {}
     const qosList: any[] = myResources.value.qos_limits || []
-    const bq = qosList.find((q: any) => q.billing_limit_mins > 0)
-    if (bq) {
+    const toHours = (mins: number) => Math.round(mins / 60 * 100) / 100
+    const bqList = qosList.filter((q: any) => q.billing_limit_mins > 0).map((bq: any) => {
       const total: number = bq.billing_limit_mins
       const used: number = bq.billing_used_mins || 0
       const remain = Math.max(0, total - used)
-      // 精确到2位小数，避免小作业截断为0
-      const toHours = (mins: number) => Math.round(mins / 60 * 100) / 100
       const usageRate = total > 0 ? parseFloat((used / total * 100).toFixed(2)) : 0
-      machineTime.value = {
+      return {
+        qosName: bq.name || '',
         totalQuota: toHours(total),
         used: toHours(used),
         remaining: toHours(remain),
         usageRate,
         hasLimit: true
       }
+    })
+    machineTimeList.value = bqList
+    machineTimeIndex.value = 0
+    if (bqList.length > 0) {
+      machineTime.value = bqList[0]
     } else {
       machineTime.value = { totalQuota: 0, used: 0, remaining: 0, usageRate: 0, hasLimit: false }
     }
@@ -1202,6 +1220,10 @@ onMounted(() => {
 .chart-card-header h3 { margin: 0; font-size: 0.9rem; font-weight: 600; color: #374151; display: flex; align-items: center; }
 .btn-link-sm { background: none; border: none; color: #667eea; font-size: 0.78rem; cursor: pointer; padding: 0; font-weight: 500; white-space: nowrap; }
 .btn-link-sm:hover { text-decoration: underline; }
+.qos-tabs { display: flex; gap: 0.4rem; margin-bottom: 0.75rem; flex-wrap: wrap; }
+.qos-tab { padding: 2px 10px; border: 1px solid #e5e7eb; border-radius: 12px; font-size: 0.75rem; background: #f9fafb; color: #6b7280; cursor: pointer; transition: all 0.15s; }
+.qos-tab:hover { border-color: #667eea; color: #667eea; }
+.qos-tab.active { background: #667eea; border-color: #667eea; color: #fff; font-weight: 500; }
 .quota-select { padding: 2px 6px; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.75rem; color: #374151; background: #f9fafb; cursor: pointer; }
 .chart-body { display: flex; align-items: center; gap: 0.75rem; min-width: 0; overflow: hidden; }
 .donut-wrap { flex-shrink: 0; }
@@ -1283,7 +1305,7 @@ onMounted(() => {
 .btn-close { background: none; border: none; font-size: 1.5rem; cursor: pointer; color: #9ca3af; line-height: 1; padding: 0; }
 .modal-body { padding: 1.25rem 1.5rem; overflow-y: auto; flex: 1; }
 .modal-loading { text-align: center; padding: 3rem; color: #9ca3af; }
-.filter-select { padding: 0.4rem 0.75rem; border: 1px solid #d1d5db; border-radius: 8px; font-size: 0.85rem; }
+.filter-select { padding: 0.4rem 2rem 0.4rem 0.75rem; border: 1px solid #d1d5db; border-radius: 8px; font-size: 0.85rem; background-color: #fff; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23888' d='M6 8L1 3h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 0.5rem center; color: #374151; appearance: none; -webkit-appearance: none; cursor: pointer; }
 .btn-query { padding: 0.4rem 1rem; background: #667eea; color: white; border: none; border-radius: 8px; font-size: 0.85rem; cursor: pointer; }
 .btn-query:hover { background: #5a6fd6; }
 .btn-export { padding: 0.4rem 1rem; background: #10b981; color: white; border: none; border-radius: 8px; font-size: 0.85rem; cursor: pointer; }

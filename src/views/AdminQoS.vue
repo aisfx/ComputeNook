@@ -36,7 +36,7 @@
             <td>{{ formatLimitValue(extractGPULimit(qos)) }}</td>
             <td>{{ formatLimitValue(extractNodeLimit(qos)) }}</td>
             <td>{{ formatWallTimeLimit(extractWallTimeLimit(qos)) }}</td>
-            <td>{{ formatLimitValue(extractBillingLimit(qos)) }}</td>
+            <td>{{ formatBillingLimit(qos) }}</td>
             <td>
               <div class="action-buttons">
                 <button class="btn btn-link" @click="editQoS(qos)">✏️ 编辑</button>
@@ -113,9 +113,9 @@
           </div>
 
           <div class="form-group">
-            <label>总机时限制（数字）</label>
-            <input type="number" v-model.number="formData.grp_tres_mins" placeholder="100000" />
-            <small class="form-hint">输入数字即可，系统会自动添加 billing= 前缀</small>
+            <label>总机时限制（小时）</label>
+            <input type="number" v-model.number="formData.grp_tres_mins" placeholder="6000" />
+            <small class="form-hint">输入小时数，系统会自动转换为分钟并添加 billing= 前缀</small>
           </div>
         </div>
         <div class="modal-footer">
@@ -321,89 +321,54 @@ const editQoS = (qos: any) => {
 
 // 从新的API结构中提取CPU限制
 const extractCPULimit = (qos: any): number => {
-  // 检查新的嵌套结构 - 优先从 tres.total 获取
-  if (qos.limits?.max?.tres?.total) {
-    const totalTres = qos.limits.max.tres.total
-    const cpuTres = totalTres.find((tres: any) => tres.type === 'cpu' && tres.id === 1)
-    if (cpuTres) return cpuTres.count
-  }
-  
-  // 备选：从 tres.per.user 获取
+  // 优先从 tres.per.user 获取（per-user 限制）
   if (qos.limits?.max?.tres?.per?.user) {
     const userTres = qos.limits.max.tres.per.user
-    const cpuTres = userTres.find((tres: any) => tres.type === 'cpu' && tres.id === 1)
+    const cpuTres = userTres.find((tres: any) => tres.type === 'cpu')
     if (cpuTres) return cpuTres.count
   }
-  
   // 兼容旧结构
   if (qos.max_cpus_pu) return extractNumber(qos.max_cpus_pu)
   if (qos.MaxCPUs) return extractNumber(qos.MaxCPUs)
-  
   return 0
 }
 
 // 从新的API结构中提取GPU限制
 const extractGPULimit = (qos: any): number => {
-  // 检查新的嵌套结构 - 优先从 tres.total 获取
-  if (qos.limits?.max?.tres?.total) {
-    const totalTres = qos.limits.max.tres.total
-    const gpuTres = totalTres.find((tres: any) => tres.type === 'gres/gpu' && tres.id === 6)
-    if (gpuTres) return gpuTres.count
-  }
-  
-  // 备选：从 tres.per.user 获取
+  // 优先从 tres.per.user 获取
   if (qos.limits?.max?.tres?.per?.user) {
     const userTres = qos.limits.max.tres.per.user
-    const gpuTres = userTres.find((tres: any) => tres.type === 'gres/gpu' && tres.id === 6)
+    const gpuTres = userTres.find((tres: any) => tres.type === 'gres/gpu')
     if (gpuTres) return gpuTres.count
   }
-  
   // 兼容旧结构
   if (qos.max_tres_pu) return extractGPUCount(qos.max_tres_pu)
   if (qos.MaxTRES) return extractGPUCount(qos.MaxTRES)
-  
   return 0
 }
 
 // 从新的API结构中提取节点限制
 const extractNodeLimit = (qos: any): number => {
-  // 检查新的嵌套结构 - 优先从 tres.total 获取
-  if (qos.limits?.max?.tres?.total) {
-    const totalTres = qos.limits.max.tres.total
-    const nodeTres = totalTres.find((tres: any) => tres.type === 'node' && tres.id === 4)
-    if (nodeTres) return nodeTres.count
-  }
-  
-  // 备选：从 tres.per.user 获取
+  // 优先从 tres.per.user 获取
   if (qos.limits?.max?.tres?.per?.user) {
     const userTres = qos.limits.max.tres.per.user
-    const nodeTres = userTres.find((tres: any) => tres.type === 'node' && tres.id === 4)
+    const nodeTres = userTres.find((tres: any) => tres.type === 'node')
     if (nodeTres) return nodeTres.count
   }
-  
   // 兼容旧结构
   if (qos.max_nodes_pu) return extractNumber(qos.max_nodes_pu)
   if (qos.MaxNodes) return extractNumber(qos.MaxNodes)
-  
   return 0
 }
 
 // 从新的API结构中提取内存限制（MB转GB）
 const extractMemoryLimit = (qos: any): number => {
-  // 检查新的嵌套结构 - 优先从 tres.total 获取
-  if (qos.limits?.max?.tres?.total) {
-    const totalTres = qos.limits.max.tres.total
-    const memTres = totalTres.find((tres: any) => tres.type === 'mem' && tres.id === 2)
-    if (memTres) return Math.floor(memTres.count / 1024) // MB 转 GB
-  }
-  
-  // 备选：从 tres.per.user 获取
+  // 优先从 tres.per.user 获取
   if (qos.limits?.max?.tres?.per?.user) {
     const userTres = qos.limits.max.tres.per.user
-    const memTres = userTres.find((tres: any) => tres.type === 'mem' && tres.id === 2)
+    const memTres = userTres.find((tres: any) => tres.type === 'mem')
     if (memTres) return Math.floor(memTres.count / 1024) // MB 转 GB
   }
-  
   return 0
 }
 
@@ -459,18 +424,18 @@ const extractWallTimeLimit = (qos: any): number => {
   return 0
 }
 
-// 从新的API结构中提取总机时限制
+// 从新的API结构中提取总机时限制（返回小时）
 const extractBillingLimit = (qos: any): number => {
   // 检查新的嵌套结构
   if (qos.limits?.max?.tres?.minutes?.total) {
     const totalTres = qos.limits.max.tres.minutes.total
     const billingTres = totalTres.find((tres: any) => tres.type === 'billing')
-    if (billingTres) return billingTres.count
+    if (billingTres) return billingTres.count / 60
   }
   
   // 兼容旧结构
-  if (qos.grp_tres_mins) return extractBillingMins(qos.grp_tres_mins)
-  if (qos.GrpTRESMins) return extractBillingMins(qos.GrpTRESMins)
+  if (qos.grp_tres_mins) return extractBillingMins(qos.grp_tres_mins) / 60
+  if (qos.GrpTRESMins) return extractBillingMins(qos.GrpTRESMins) / 60
   
   return 0
 }
@@ -479,6 +444,13 @@ const extractBillingLimit = (qos: any): number => {
 const formatLimitValue = (value: number): string => {
   if (!value || value === 0) return '无限制'
   return value.toString()
+}
+
+// 格式化总机时显示（小时）
+const formatBillingLimit = (qos: any): string => {
+  const hours = extractBillingLimit(qos)
+  if (!hours || hours === 0) return '无限制'
+  return `${Math.round(hours)} 小时`
 }
 
 // 格式化运行时间限制
@@ -548,7 +520,7 @@ const saveQoS = async () => {
       max_cpus_pu: formData.value.max_cpus,  // 映射到 MaxCPUs
       max_nodes_pu: formData.value.max_nodes, // 映射到 MaxNodes
       max_wall_pj: formData.value.max_wall_days * 1440, // 转换天为分钟
-      grp_tres_mins: formData.value.grp_tres_mins.toString() // 转换为字符串
+      grp_tres_mins: (formData.value.grp_tres_mins * 60).toString()  // 小时转分钟
     }
     
     // 构建 TRES 字符串，包含 GPU 和内存限制

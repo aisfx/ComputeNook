@@ -138,34 +138,44 @@ func (c *Client) GetQoS(name string) (*QoS, error) {
 	return &response.QoS[0], nil
 }
 
-// CreateQoS 创建 QoS
-func (c *Client) CreateQoS(qos *QoS) error {
-	// 构建 v0.0.43 格式的 QoS 对象
-	qosData := map[string]interface{}{
-		"name":  qos.Name,
-		"flags": []string{}, // 空的flags数组
-	}
-	
-	// 只添加非空字段
-	if qos.Description != "" {
-		qosData["description"] = qos.Description
-	}
-	
-	// 构建 limits 结构
-	limits := map[string]interface{}{}
+// buildQoSLimits 构建 Slurm v0.0.43 格式的 limits 结构
+// CPU/内存/节点/GPU 放入 tres.per.user（per-user 限制）
+// 总机时放入 tres.minutes.total（GrpTRESMins）
+func buildQoSLimits(qos *QoS) map[string]interface{} {
 	maxLimits := map[string]interface{}{}
-	
-	// 构建 TRES 限制
+
+	// per-user TRES 限制
+	userLimits := []TRESItem{}
+
+	if qos.MaxCPUs != nil && extractNumber(qos.MaxCPUs) > 0 {
+		userLimits = append(userLimits, TRESItem{Type: "cpu", Name: "", ID: 1, Count: int64(extractNumber(qos.MaxCPUs))})
+	}
+	if memGB := extractMemoryFromTRES(qos.MaxTRES); memGB > 0 {
+		userLimits = append(userLimits, TRESItem{Type: "mem", Name: "", ID: 2, Count: int64(memGB * 1024)})
+	}
+	if qos.MaxNodes != nil && extractNumber(qos.MaxNodes) > 0 {
+		userLimits = append(userLimits, TRESItem{Type: "node", Name: "", ID: 4, Count: int64(extractNumber(qos.MaxNodes))})
+	}
+	if gpuCount := extractGPUCountFromTRES(qos.MaxTRES); gpuCount > 0 {
+		userLimits = append(userLimits, TRESItem{Type: "gres/gpu", Name: "", ID: 6, Count: int64(gpuCount)})
+	}
+
+	// 总机时限制 (GrpTRESMins -> minutes.total)
+	minutesTotal := []TRESItem{}
+	if qos.GrpTRESMins != "" {
+		minutesTotal = append(minutesTotal, TRESItem{Type: "billing", Name: "", ID: 5, Count: parseGrpTRESMins(qos.GrpTRESMins)})
+	}
+
 	tres := map[string]interface{}{
 		"total": []TRESItem{},
 		"per": map[string]interface{}{
 			"account": []TRESItem{},
 			"job":     []TRESItem{},
 			"node":    []TRESItem{},
-			"user":    []TRESItem{},
+			"user":    userLimits,
 		},
 		"minutes": map[string]interface{}{
-			"total": []TRESItem{},
+			"total": minutesTotal,
 			"per": map[string]interface{}{
 				"qos":     []TRESItem{},
 				"job":     []TRESItem{},
@@ -174,271 +184,75 @@ func (c *Client) CreateQoS(qos *QoS) error {
 			},
 		},
 	}
-	
-	// 构建总限制数组 (tres.total)
-	totalLimits := []TRESItem{}
-	
-	// 添加 CPU 限制到 total
-	if qos.MaxCPUs != nil && extractNumber(qos.MaxCPUs) > 0 {
-		cpuLimit := TRESItem{
-			Type:  "cpu",
-			Name:  "",
-			ID:    1,
-			Count: int64(extractNumber(qos.MaxCPUs)),
-		}
-		totalLimits = append(totalLimits, cpuLimit)
-	}
-	
-	// 添加内存限制到 total (从 GB 转换为 MB)
-	if memGB := extractMemoryFromTRES(qos.MaxTRES); memGB > 0 {
-		memLimit := TRESItem{
-			Type:  "mem",
-			Name:  "",
-			ID:    2,
-			Count: int64(memGB * 1024), // GB 转 MB
-		}
-		totalLimits = append(totalLimits, memLimit)
-	}
-	
-	// 添加节点限制到 total
-	if qos.MaxNodes != nil && extractNumber(qos.MaxNodes) > 0 {
-		nodeLimit := TRESItem{
-			Type:  "node",
-			Name:  "",
-			ID:    4,
-			Count: int64(extractNumber(qos.MaxNodes)),
-		}
-		totalLimits = append(totalLimits, nodeLimit)
-	}
-	
-	// 添加 GPU 限制到 total
-	if gpuCount := extractGPUCountFromTRES(qos.MaxTRES); gpuCount > 0 {
-		gpuLimit := TRESItem{
-			Type:  "gres/gpu",
-			Name:  "",
-			ID:    6, // GPU 通常是 ID 6
-			Count: int64(gpuCount),
-		}
-		totalLimits = append(totalLimits, gpuLimit)
-	}
-	
-	// 设置总限制
-	if len(totalLimits) > 0 {
-		tres["total"] = totalLimits
-	}
-	
-	// 添加总机时限制到 minutes.total
-	if qos.GrpTRESMins != "" {
-		billingLimit := TRESItem{
-			Type:  "billing",
-			Name:  "",
-			ID:    5,
-			Count: parseGrpTRESMins(qos.GrpTRESMins),
-		}
-		tres["minutes"].(map[string]interface{})["total"] = []TRESItem{billingLimit}
-	}
-	
 	maxLimits["tres"] = tres
-	
-	// 添加作业数限制
+
+	// 作业数限制
 	if qos.MaxJobs != nil && extractNumber(qos.MaxJobs) > 0 {
-		jobs := map[string]interface{}{
+		maxLimits["jobs"] = map[string]interface{}{
 			"per": map[string]interface{}{
-				"user": LimitValue{
-					Set:      true,
-					Infinite: false,
-					Number:   extractNumber(qos.MaxJobs),
-				},
+				"user": LimitValue{Set: true, Infinite: false, Number: extractNumber(qos.MaxJobs)},
 			},
 		}
-		maxLimits["jobs"] = jobs
-	}
-	
-	// 添加提交作业数限制
-	if qos.MaxSubmit != nil && extractNumber(qos.MaxSubmit) > 0 {
-		activeJobs := map[string]interface{}{
-			"count": LimitValue{
-				Set:      true,
-				Infinite: false,
-				Number:   extractNumber(qos.MaxSubmit),
-			},
-		}
-		maxLimits["active_jobs"] = activeJobs
-	}
-	
-	limits["max"] = maxLimits
-	qosData["limits"] = limits
-	
-	body := map[string]interface{}{
-		"qos": []map[string]interface{}{qosData},
 	}
 
+	// 提交作业数限制
+	if qos.MaxSubmit != nil && extractNumber(qos.MaxSubmit) > 0 {
+		maxLimits["active_jobs"] = map[string]interface{}{
+			"count": LimitValue{Set: true, Infinite: false, Number: extractNumber(qos.MaxSubmit)},
+		}
+	}
+
+	return map[string]interface{}{"max": maxLimits}
+}
+
+// buildQoSData 构建提交给 Slurm API 的 QoS 对象
+func buildQoSData(qos *QoS) map[string]interface{} {
+	qosData := map[string]interface{}{
+		"name":   qos.Name,
+		"flags":  []string{},
+		"limits": buildQoSLimits(qos),
+	}
+	if qos.Description != "" {
+		qosData["description"] = qos.Description
+	}
+	return qosData
+}
+
+// CreateQoS 创建 QoS
+func (c *Client) CreateQoS(qos *QoS) error {
+	body := map[string]interface{}{
+		"qos": []map[string]interface{}{buildQoSData(qos)},
+	}
 	respBody, err := c.doRequest("POST", "/slurmdb/v0.0.43/qos", body)
 	if err != nil {
 		return err
 	}
-
 	var response QoSResponse
 	if err := json.Unmarshal(respBody, &response); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
-
 	if len(response.Errors) > 0 {
 		return fmt.Errorf("slurm API error: %s", response.Errors[0].Error)
 	}
-
 	return nil
 }
 
 // UpdateQoS 更新 QoS
 func (c *Client) UpdateQoS(name string, qos *QoS) error {
-	// 构建 v0.0.43 格式的 QoS 对象
-	qosData := map[string]interface{}{
-		"name":  qos.Name,
-		"flags": []string{}, // 空的flags数组
-	}
-	
-	// 只添加非空字段
-	if qos.Description != "" {
-		qosData["description"] = qos.Description
-	}
-	
-	// 构建 limits 结构
-	limits := map[string]interface{}{}
-	maxLimits := map[string]interface{}{}
-	
-	// 构建 TRES 限制
-	tres := map[string]interface{}{
-		"total": []TRESItem{},
-		"per": map[string]interface{}{
-			"account": []TRESItem{},
-			"job":     []TRESItem{},
-			"node":    []TRESItem{},
-			"user":    []TRESItem{},
-		},
-		"minutes": map[string]interface{}{
-			"total": []TRESItem{},
-			"per": map[string]interface{}{
-				"qos":     []TRESItem{},
-				"job":     []TRESItem{},
-				"account": []TRESItem{},
-				"user":    []TRESItem{},
-			},
-		},
-	}
-	
-	// 构建总限制数组 (tres.total)
-	totalLimits := []TRESItem{}
-	
-	// 添加 CPU 限制到 total
-	if qos.MaxCPUs != nil && extractNumber(qos.MaxCPUs) > 0 {
-		cpuLimit := TRESItem{
-			Type:  "cpu",
-			Name:  "",
-			ID:    1,
-			Count: int64(extractNumber(qos.MaxCPUs)),
-		}
-		totalLimits = append(totalLimits, cpuLimit)
-	}
-	
-	// 添加内存限制到 total (从 GB 转换为 MB)
-	if memGB := extractMemoryFromTRES(qos.MaxTRES); memGB > 0 {
-		memLimit := TRESItem{
-			Type:  "mem",
-			Name:  "",
-			ID:    2,
-			Count: int64(memGB * 1024), // GB 转 MB
-		}
-		totalLimits = append(totalLimits, memLimit)
-	}
-	
-	// 添加节点限制到 total
-	if qos.MaxNodes != nil && extractNumber(qos.MaxNodes) > 0 {
-		nodeLimit := TRESItem{
-			Type:  "node",
-			Name:  "",
-			ID:    4,
-			Count: int64(extractNumber(qos.MaxNodes)),
-		}
-		totalLimits = append(totalLimits, nodeLimit)
-	}
-	
-	// 添加 GPU 限制到 total
-	if gpuCount := extractGPUCountFromTRES(qos.MaxTRES); gpuCount > 0 {
-		gpuLimit := TRESItem{
-			Type:  "gres/gpu",
-			Name:  "",
-			ID:    6, // GPU 通常是 ID 6
-			Count: int64(gpuCount),
-		}
-		totalLimits = append(totalLimits, gpuLimit)
-	}
-	
-	// 设置总限制
-	if len(totalLimits) > 0 {
-		tres["total"] = totalLimits
-	}
-	
-	// 添加总机时限制到 minutes.total
-	if qos.GrpTRESMins != "" {
-		billingLimit := TRESItem{
-			Type:  "billing",
-			Name:  "",
-			ID:    5,
-			Count: parseGrpTRESMins(qos.GrpTRESMins),
-		}
-		tres["minutes"].(map[string]interface{})["total"] = []TRESItem{billingLimit}
-	}
-	
-	maxLimits["tres"] = tres
-	
-	// 添加作业数限制
-	if qos.MaxJobs != nil && extractNumber(qos.MaxJobs) > 0 {
-		jobs := map[string]interface{}{
-			"per": map[string]interface{}{
-				"user": LimitValue{
-					Set:      true,
-					Infinite: false,
-					Number:   extractNumber(qos.MaxJobs),
-				},
-			},
-		}
-		maxLimits["jobs"] = jobs
-	}
-	
-	// 添加提交作业数限制
-	if qos.MaxSubmit != nil && extractNumber(qos.MaxSubmit) > 0 {
-		activeJobs := map[string]interface{}{
-			"count": LimitValue{
-				Set:      true,
-				Infinite: false,
-				Number:   extractNumber(qos.MaxSubmit),
-			},
-		}
-		maxLimits["active_jobs"] = activeJobs
-	}
-	
-	limits["max"] = maxLimits
-	qosData["limits"] = limits
-	
 	body := map[string]interface{}{
-		"qos": []map[string]interface{}{qosData},
+		"qos": []map[string]interface{}{buildQoSData(qos)},
 	}
-
 	respBody, err := c.doRequest("POST", "/slurmdb/v0.0.43/qos", body)
 	if err != nil {
 		return err
 	}
-
 	var response QoSResponse
 	if err := json.Unmarshal(respBody, &response); err != nil {
 		return fmt.Errorf("failed to parse response: %w", err)
 	}
-
 	if len(response.Errors) > 0 {
 		return fmt.Errorf("slurm API error: %s", response.Errors[0].Error)
 	}
-
 	return nil
 }
 

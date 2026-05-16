@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-05-16
+
+### Added
+- **机时管理单位统一**：AdminQoS 和 AdminHours 两个页面的总机时字段统一使用小时为单位，编辑时输入小时数，系统自动换算为分钟写入 Slurm
+- **Dashboard 多 QoS 机时切换**：用户绑定多个有机时限制的 QoS 时，机时信息卡片顶部显示胶囊 tab，可切换查看各 QoS 的已用/剩余/使用率
+- **创建用户自动绑定同名 QoS**：创建用户时，若 Slurm 中存在与用户名同名的 QoS，自动创建 Association 并绑定，无需手动操作
+
+### Fixed
+- **QoS 资源限制写入位置修正**：CPU / 内存 / 节点 / GPU 限制从 `tres.total`（全局总量）改为写入 `tres.per.user`（per-user 限制），与 Slurm 语义一致，修复设置后前端仍显示"无限制"的问题
+- **账户配额卡片数据来源修正**：从 `tres.per.user` 正确提取 CPU / 节点 / 作业数限制，修复配额始终显示"无限制"的问题
+- **Dashboard QoS 名称字段修正**：`me/resources` 接口返回的 QoS 名称字段为 `name`，修复前端读取 `qos_name` 导致 tab 标签为空的问题
+
 ## [0.4.0] - 2026-05-15
 
 ### Added

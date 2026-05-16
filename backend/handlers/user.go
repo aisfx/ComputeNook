@@ -210,6 +210,31 @@ func CreateUser(c *gin.Context) {
 		return
 	}
 
+	// 尝试绑定同名 QoS（非阻塞，失败不影响用户创建）
+	go func() {
+		slurmClient, err := GetSlurmAdminClient()
+		if err != nil {
+			return
+		}
+		qosList, err := slurmClient.GetQoSList()
+		if err != nil {
+			return
+		}
+		for _, q := range qosList {
+			if q.Name == user.Username {
+				// 找到同名 QoS，绑定到用户的默认账户（与用户名相同）
+				assoc := &slurm.Association{
+					User:    user.Username,
+					Account: user.Username,
+					Cluster: "cluster",
+					QoS:     []string{q.Name},
+				}
+				_ = slurmClient.CreateAssociation(assoc)
+				break
+			}
+		}
+	}()
+
 	// 不返回密码
 	user.Password = ""
 	c.JSON(http.StatusCreated, gin.H{"message": "User created successfully", "data": user})
@@ -552,6 +577,24 @@ func UpdateProfile(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "个人信息更新成功"})
 }
 
+// extractTRESCount 从 TRES 列表中提取指定类型的 count
+func extractTRESCount(items []slurm.TRESItem, tresType string) int64 {
+	for _, t := range items {
+		if t.Type == tresType {
+			return t.Count
+		}
+	}
+	return 0
+}
+
+// extractLimitValue 从 LimitValue 中提取数值（未设置或无限制时返回 0）
+func extractLimitValue(lv slurm.LimitValue) int {
+	if lv.Set && !lv.Infinite {
+		return lv.Number
+	}
+	return 0
+}
+
 // GetMyResources 获取当前用户的资源限制（Association + QoS）
 func GetMyResources(c *gin.Context) {
 	username, exists := c.Get("username")
@@ -676,16 +719,16 @@ func GetMyResources(c *gin.Context) {
 			item := map[string]interface{}{
 				"name":               q.Name,
 				"description":        q.Description,
-				"max_cpus":           q.MaxCPUs,
-				"max_nodes":          q.MaxNodes,
-				"max_tres":           q.MaxTRES,
-				"max_jobs":           q.MaxJobs,
-				"max_submit":         q.MaxSubmit,
-				"max_wall_pu":        q.MaxWallPU,
+				"max_cpus":           extractTRESCount(q.Limits.Max.TRES.Per.User, "cpu"),
+				"max_nodes":          extractTRESCount(q.Limits.Max.TRES.Per.User, "node"),
+				"max_gpus":           extractTRESCount(q.Limits.Max.TRES.Per.User, "gres/gpu"),
+				"max_memory_mb":      extractTRESCount(q.Limits.Max.TRES.Per.User, "mem"),
+				"max_jobs":           extractLimitValue(q.Limits.Max.Jobs.Per.User),
+				"max_submit":         extractLimitValue(q.Limits.Max.ActiveJobs.Count),
 				"max_wall_pj":        q.MaxWall,
 				"grp_tres_mins":      q.GrpTRESMins,
 				"billing_limit_mins": billingLimit,
-				"billing_used_mins":  usedBillingMins, // float64，保留小数
+				"billing_used_mins":  usedBillingMins,
 			}
 			qosLimits = append(qosLimits, item)
 		}
