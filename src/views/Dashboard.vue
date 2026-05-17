@@ -656,28 +656,36 @@ const refreshAll = async () => {
 const accountQuotaList = computed(() => {
   const assocs: any[] = myResources.value.associations || []
   const qosList: any[] = myResources.value.qos_limits || []
-  // 按 account 去重，同一账户多个分区只保留一条
-  const seen = new Set<string>()
-  const unique = assocs.filter((a: any) => {
+  // 按 account 合并，同一账户的所有 qos_list 合并去重
+  const accountMap = new Map<string, string[]>()
+  for (const a of assocs) {
     const key = a.account || '-'
-    if (seen.has(key)) return false
-    seen.add(key)
-    return true
-  })
-  return unique.map((a: any) => {
-    const qosNames: string[] = a.qos_list || (a.qos ? [a.qos] : [])
-    const qosInfo = qosList.find((q: any) => qosNames.includes(q.name)) || {}
+    const existing = accountMap.get(key) || []
+    const names: string[] = a.qos_list || (a.qos ? [a.qos] : [])
+    for (const n of names) {
+      if (!existing.includes(n)) existing.push(n)
+    }
+    accountMap.set(key, existing)
+  }
+  return Array.from(accountMap.entries()).map(([account, qosNames]) => {
+    // 优先找有实际限制的 QoS（max_cpus/max_nodes/max_jobs 任意一个 > 0）
+    const qosInfo =
+      qosList.find((q: any) => qosNames.includes(q.name) && (q.max_cpus > 0 || q.max_nodes > 0 || q.max_jobs > 0)) ||
+      qosList.find((q: any) => qosNames.includes(q.name)) ||
+      {}
     const maxCpus = Number(qosInfo.max_cpus) || 0
     const maxNodes = Number(qosInfo.max_nodes) || 0
     const maxJobs = Number(qosInfo.max_jobs) || 0
     const usedCpus = runningJobs.value
-      .filter((j: any) => !a.account || j.account === a.account)
+      .filter((j: any) => !account || j.account === account)
       .reduce((s: number, j: any) => s + (j.cpus || 0), 0)
     const cpuPct = maxCpus > 0 ? Math.min(100, Math.round(usedCpus / maxCpus * 100)) : 0
+    // 找到 assoc 的 partition（取第一条）
+    const assoc = assocs.find((a: any) => (a.account || '-') === account) || {}
     return {
-      account: a.account || '-',
-      partition: a.partition || '',
-      qos: qosNames.join(', '),
+      account,
+      partition: assoc.partition || '',
+      qos: qosInfo.name || qosNames.join(', '),
       maxCpus,
       maxNodes,
       maxJobs,

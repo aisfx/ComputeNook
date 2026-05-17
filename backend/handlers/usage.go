@@ -92,6 +92,27 @@ func GetUserUsageByAccount(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": usage})
 }
 
+// GetAllUsersUsageRecords 获取所有用户的原始使用记录（管理员专用，用于机时管理页面）
+func GetAllUsersUsageRecords(c *gin.Context) {
+	startTime := parseTimeParam(c.DefaultQuery("start_time", ""), time.Now().AddDate(0, 0, -7), false)
+	endTime   := parseTimeParam(c.DefaultQuery("end_time", ""),   time.Now(),                   true)
+
+	username, _ := c.Get("username")
+	client, err := GetSlurmClientForUser(username.(string))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	records, err := client.GetAllUsersUsage(startTime, endTime)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"data": records})
+}
+
 // GetAllAccountsUsage 获取所有账户的机时使用情况
 func GetAllAccountsUsage(c *gin.Context) {
 	startTime := parseTimeParam(c.DefaultQuery("start_time", ""), time.Now().AddDate(0, 0, -7), false)
