@@ -75,6 +75,12 @@ type QoS struct {
 					User    []TRESItem `json:"user"`
 				} `json:"per"`
 			} `json:"tres"`
+			WallClock struct {
+				Per struct {
+					QoS LimitValue `json:"qos"`
+					Job LimitValue `json:"job"`
+				} `json:"per"`
+			} `json:"wall_clock"`
 		} `json:"max"`
 	} `json:"limits,omitempty"`
 	
@@ -84,6 +90,7 @@ type QoS struct {
 	MaxWallPU   interface{} `json:"max_wall_pu,omitempty"`   // 每用户最大运行时间（分钟）
 	MaxNodes    interface{} `json:"max_nodes_pu,omitempty"`  // 每用户最大节点数
 	MaxCPUs     interface{} `json:"max_cpus_pu,omitempty"`   // 每用户最大 CPU 核心数
+	MaxGPUs     interface{} `json:"max_gpus_pu,omitempty"`   // 每用户最大 GPU 数量（独立字段）
 	MaxTRES     string      `json:"max_tres_pu,omitempty"`   // 每用户最大 TRES (包含 GPU 等资源)
 	MaxWall     interface{} `json:"max_wall_pj,omitempty"`   // 每作业最大运行时间（分钟）
 	GrpTRESMins string      `json:"grp_tres_mins,omitempty"` // 组总机时（TRES-minutes）
@@ -97,7 +104,7 @@ type QoSResponse struct {
 
 // GetQoSList 获取所有 QoS
 func (c *Client) GetQoSList() ([]QoS, error) {
-	respBody, err := c.doRequest("GET", "/slurmdb/v0.0.43/qos", nil)
+	respBody, err := c.doRequest("GET", c.buildAPIPath("/qos"), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -116,7 +123,7 @@ func (c *Client) GetQoSList() ([]QoS, error) {
 
 // GetQoS 获取单个 QoS
 func (c *Client) GetQoS(name string) (*QoS, error) {
-	path := fmt.Sprintf("/slurmdb/v0.0.43/qos/%s", name)
+	path := c.buildAPIPath(fmt.Sprintf("/qos/%s", name))
 	respBody, err := c.doRequest("GET", path, nil)
 	if err != nil {
 		return nil, err
@@ -139,8 +146,6 @@ func (c *Client) GetQoS(name string) (*QoS, error) {
 }
 
 // buildQoSLimits 构建 Slurm v0.0.43 格式的 limits 结构
-// CPU/内存/节点/GPU 放入 tres.per.user（per-user 限制）
-// 总机时放入 tres.minutes.total（GrpTRESMins）
 func buildQoSLimits(qos *QoS) map[string]interface{} {
 	maxLimits := map[string]interface{}{}
 
@@ -150,13 +155,22 @@ func buildQoSLimits(qos *QoS) map[string]interface{} {
 	if qos.MaxCPUs != nil && extractNumber(qos.MaxCPUs) > 0 {
 		userLimits = append(userLimits, TRESItem{Type: "cpu", Name: "", ID: 1, Count: int64(extractNumber(qos.MaxCPUs))})
 	}
+	// 内存：优先从 MaxTRES 字符串解析，单位 GB -> MB
 	if memGB := extractMemoryFromTRES(qos.MaxTRES); memGB > 0 {
 		userLimits = append(userLimits, TRESItem{Type: "mem", Name: "", ID: 2, Count: int64(memGB * 1024)})
 	}
 	if qos.MaxNodes != nil && extractNumber(qos.MaxNodes) > 0 {
 		userLimits = append(userLimits, TRESItem{Type: "node", Name: "", ID: 4, Count: int64(extractNumber(qos.MaxNodes))})
 	}
-	if gpuCount := extractGPUCountFromTRES(qos.MaxTRES); gpuCount > 0 {
+	// GPU：优先用独立字段 MaxGPUs，其次从 MaxTRES 字符串解析
+	gpuCount := 0
+	if qos.MaxGPUs != nil {
+		gpuCount = extractNumber(qos.MaxGPUs)
+	}
+	if gpuCount == 0 {
+		gpuCount = extractGPUCountFromTRES(qos.MaxTRES)
+	}
+	if gpuCount > 0 {
 		userLimits = append(userLimits, TRESItem{Type: "gres/gpu", Name: "", ID: 6, Count: int64(gpuCount)})
 	}
 
@@ -202,6 +216,17 @@ func buildQoSLimits(qos *QoS) map[string]interface{} {
 		}
 	}
 
+	// 作业运行时间限制（MaxWall，单位分钟）
+	// v0.0.43 格式：limits.max.wall_clock.per.job，值为 LimitValue
+	if qos.MaxWall != nil && extractNumber(qos.MaxWall) > 0 {
+		wallMins := extractNumber(qos.MaxWall)
+		maxLimits["wall_clock"] = map[string]interface{}{
+			"per": map[string]interface{}{
+				"job": LimitValue{Set: true, Infinite: false, Number: wallMins},
+			},
+		}
+	}
+
 	return map[string]interface{}{"max": maxLimits}
 }
 
@@ -223,7 +248,7 @@ func (c *Client) CreateQoS(qos *QoS) error {
 	body := map[string]interface{}{
 		"qos": []map[string]interface{}{buildQoSData(qos)},
 	}
-	respBody, err := c.doRequest("POST", "/slurmdb/v0.0.43/qos", body)
+	respBody, err := c.doRequest("POST", c.buildAPIPath("/qos"), body)
 	if err != nil {
 		return err
 	}
@@ -242,7 +267,7 @@ func (c *Client) UpdateQoS(name string, qos *QoS) error {
 	body := map[string]interface{}{
 		"qos": []map[string]interface{}{buildQoSData(qos)},
 	}
-	respBody, err := c.doRequest("POST", "/slurmdb/v0.0.43/qos", body)
+	respBody, err := c.doRequest("POST", c.buildAPIPath("/qos"), body)
 	if err != nil {
 		return err
 	}
@@ -258,7 +283,7 @@ func (c *Client) UpdateQoS(name string, qos *QoS) error {
 
 // DeleteQoS 删除 QoS
 func (c *Client) DeleteQoS(name string) error {
-	path := fmt.Sprintf("/slurmdb/v0.0.43/qos/%s", name)
+	path := c.buildAPIPath(fmt.Sprintf("/qos/%s", name))
 	respBody, err := c.doRequest("DELETE", path, nil)
 	if err != nil {
 		return err
@@ -277,13 +302,19 @@ func (c *Client) DeleteQoS(name string) error {
 }
 
 // 辅助函数：从 TRES 字符串中提取 GPU 数量
+// 支持格式: "gres/gpu=4" 或 "gres/gpu=2,mem=11G" 等逗号分隔
 func extractGPUCountFromTRES(tres string) int {
-	// 解析 "gres/gpu=4" 格式
-	if len(tres) > 0 {
-		parts := strings.Split(tres, "=")
-		if len(parts) == 2 && strings.Contains(parts[0], "gpu") {
-			if count, err := strconv.Atoi(parts[1]); err == nil {
-				return count
+	if len(tres) == 0 {
+		return 0
+	}
+	for _, part := range strings.Split(tres, ",") {
+		part = strings.TrimSpace(part)
+		if strings.Contains(part, "gpu") {
+			kv := strings.SplitN(part, "=", 2)
+			if len(kv) == 2 {
+				if count, err := strconv.Atoi(strings.TrimSpace(kv[1])); err == nil {
+					return count
+				}
 			}
 		}
 	}
@@ -291,26 +322,37 @@ func extractGPUCountFromTRES(tres string) int {
 }
 
 // 辅助函数：从 TRES 字符串中提取内存 (GB)
+// 支持格式: "mem=256G"、"mem=262144M"、"gres/gpu=2,mem=11G" 等
 func extractMemoryFromTRES(tres string) int {
-	// 解析 "mem=256G" 或 "mem=262144M" 格式
-	if len(tres) > 0 {
-		parts := strings.Split(tres, ",")
-		for _, part := range parts {
-			if strings.Contains(part, "mem=") {
-				memStr := strings.Split(part, "=")[1]
-				if strings.HasSuffix(memStr, "G") {
-					if gb, err := strconv.Atoi(strings.TrimSuffix(memStr, "G")); err == nil {
-						return gb
-					}
-				} else if strings.HasSuffix(memStr, "M") {
-					if mb, err := strconv.Atoi(strings.TrimSuffix(memStr, "M")); err == nil {
-						return mb / 1024 // 转换为 GB
-					}
+	if len(tres) == 0 {
+		return 0
+	}
+	for _, part := range strings.Split(tres, ",") {
+		part = strings.TrimSpace(part)
+		if strings.HasPrefix(part, "mem=") {
+			memStr := strings.TrimPrefix(part, "mem=")
+			if strings.HasSuffix(memStr, "G") {
+				if gb, err := strconv.Atoi(strings.TrimSuffix(memStr, "G")); err == nil {
+					return gb
+				}
+			} else if strings.HasSuffix(memStr, "M") {
+				if mb, err := strconv.Atoi(strings.TrimSuffix(memStr, "M")); err == nil {
+					return mb / 1024
+				}
+			} else {
+				// 纯数字，单位 MB
+				if mb, err := strconv.Atoi(memStr); err == nil {
+					return mb / 1024
 				}
 			}
 		}
 	}
 	return 0
+}
+
+// ExtractNumber 提取数值（处理可能是对象的情况），供外部包使用
+func ExtractNumber(value interface{}) int {
+	return extractNumber(value)
 }
 
 // 辅助函数：提取数值（处理可能是对象的情况）

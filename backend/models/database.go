@@ -39,6 +39,11 @@ func InitDatabase() error {
 		return err
 	}
 
+	// 创建充值记录表
+	if err := CreateBillingRechargeTable(); err != nil {
+		logger.Warn("Failed to create billing_recharge table: %v", err)
+	}
+
 	logger.Info("Database initialized successfully (type: %s)", dbType)
 	return nil
 }

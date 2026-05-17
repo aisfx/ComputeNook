@@ -293,6 +293,25 @@ export const qosAPI = {
   deleteQoS: async (name: string) => {
     const response = await axios.delete(`/qos/${name}`)
     return response.data
+  },
+
+  // 充值机时
+  rechargeQoS: async (qosName: string, amount: number, notes?: string) => {
+    const response = await axios.post('/billing/recharge', {
+      qos_name: qosName,
+      amount,
+      notes
+    })
+    return response.data
+  },
+
+  // 获取充值历史
+  getRechargeHistory: async (qosName?: string, limit?: number) => {
+    const params: any = {}
+    if (qosName) params.qos_name = qosName
+    if (limit) params.limit = limit
+    const response = await axios.get('/billing/recharge/history', { params })
+    return response.data.data
   }
 }
 
@@ -527,6 +546,14 @@ export const usageAPI = {
   // 获取集群整体机时使用情况
   getClusterUsage: async (startTime: string, endTime: string) => {
     const response = await axios.get('/usage/cluster', {
+      params: { start_time: startTime, end_time: endTime }
+    })
+    return response.data
+  },
+
+  // 获取所有用户原始使用记录（管理员，含 user/qos/billing_mins 字段）
+  getAllUsersRecords: async (startTime: string, endTime: string) => {
+    const response = await axios.get('/usage/all-records', {
       params: { start_time: startTime, end_time: endTime }
     })
     return response.data

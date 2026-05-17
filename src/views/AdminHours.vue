@@ -2,7 +2,7 @@
   <div class="admin-hours">
     <div class="page-header">
       <h3>⏱️ 机时管理</h3>
-      <button class="btn-secondary" @click="openAddModal">+ 分配机时</button>
+      <button class="btn-secondary" @click="openAddModal">💰 充值机时</button>
     </div>
 
     <div class="filters-bar">
@@ -22,27 +22,78 @@
             <th>QoS 名称</th>
             <th>描述</th>
             <th>总机时(小时)</th>
+            <th>已用(小时)</th>
+            <th>剩余(小时)</th>
+            <th>使用率</th>
             <th>状态</th>
             <th>操作</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="item in filteredHoursList" :key="item.id">
-            <td><strong>{{ item.name }}</strong></td>
-            <td>{{ item.description || '-' }}</td>
-            <td>{{ item.total.toLocaleString() }}</td>
-            <td>
-              <span class="status-badge" :class="getStatusClass(item)">
-                {{ getStatusText(item) }}
-              </span>
-            </td>
-            <td>
-              <div class="action-buttons">
-                <button class="btn-link" @click="editHours(item)">✏️ 编辑</button>
-                <button class="btn-link danger" @click="deleteHours(item)">🗑️ 清除</button>
-              </div>
-            </td>
-          </tr>
+          <template v-for="item in filteredHoursList" :key="item.id">
+            <!-- QoS 汇总行 -->
+            <tr class="qos-row" @click="toggleExpand(item.name)" style="cursor:pointer">
+              <td>
+                <span class="expand-icon">{{ expandedQoS.has(item.name) ? '▼' : '▶' }}</span>
+                <strong>{{ item.name }}</strong>
+              </td>
+              <td>{{ item.description || '-' }}</td>
+              <td>{{ item.total.toLocaleString() }}</td>
+              <td>{{ item.used.toLocaleString() }}</td>
+              <td>{{ item.remaining.toLocaleString() }}</td>
+              <td>
+                <div class="progress-wrap">
+                  <div class="progress-bar">
+                    <div class="progress-fill" :style="{ width: Math.min(item.usage, 100) + '%', background: getProgressColor(item.usage) }"></div>
+                  </div>
+                  <span class="usage-text">{{ item.usage }}%</span>
+                </div>
+              </td>
+              <td>
+                <span class="status-badge" :class="getStatusClass(item)">
+                  {{ getStatusText(item) }}
+                </span>
+              </td>
+              <td>
+                <div class="action-buttons">
+                  <button class="btn-link" @click.stop="editHours(item)">✏️ 编辑</button>
+                  <button class="btn-link danger" @click.stop="deleteHours(item)">🗑️ 清除</button>
+                </div>
+              </td>
+            </tr>
+            <!-- 用户明细行 -->
+            <template v-if="expandedQoS.has(item.name)">
+              <tr v-if="loadingUsers.has(item.name)">
+                <td colspan="8" class="user-loading">加载用户数据中...</td>
+              </tr>
+              <template v-else>
+                <tr v-for="u in (userUsageMap[item.name] || [])" :key="u.user" class="user-row">
+                  <td class="user-indent">└ {{ u.user }}</td>
+                  <td></td>
+                  <td>{{ item.total.toLocaleString() }}</td>
+                  <td>{{ u.used.toLocaleString() }}</td>
+                  <td>{{ Math.max(0, item.total - u.used).toLocaleString() }}</td>
+                  <td>
+                    <div class="progress-wrap">
+                      <div class="progress-bar">
+                        <div class="progress-fill" :style="{ width: Math.min(u.pct, 100) + '%', background: getProgressColor(u.pct) }"></div>
+                      </div>
+                      <span class="usage-text">{{ u.pct }}%</span>
+                    </div>
+                  </td>
+                  <td>
+                    <span class="status-badge" :class="u.pct >= 100 ? 'status-expired' : u.pct >= 80 ? 'status-warning' : 'status-normal'">
+                      {{ u.pct >= 100 ? '已超额' : u.pct >= 80 ? '即将用完' : '正常' }}
+                    </span>
+                  </td>
+                  <td></td>
+                </tr>
+                <tr v-if="!(userUsageMap[item.name]?.length)">
+                  <td colspan="8" class="user-loading">暂无用户使用记录</td>
+                </tr>
+              </template>
+            </template>
+          </template>
         </tbody>
       </table>
       
@@ -56,7 +107,7 @@
     <div v-if="showModal" class="modal-overlay">
       <div class="modal">
         <div class="modal-header">
-          <h3>{{ isEdit ? '编辑机时分配' : '分配机时' }}</h3>
+          <h3>{{ isEdit ? '编辑机时配额' : '充值机时' }}</h3>
           <button class="btn-close" @click="closeModal">×</button>
         </div>
         <div class="modal-body">
@@ -79,14 +130,15 @@
           </div>
 
           <div class="form-group">
-            <label>总机时（小时）*</label>
+            <label>{{ isEdit ? '总机时（小时）' : '充值金额（小时）' }} *</label>
             <input 
               type="number" 
               v-model.number="formData.total" 
-              placeholder="例如: 10000" 
+              :placeholder="isEdit ? '例如: 10000' : '例如: 100'" 
               min="1"
             />
-            <small class="form-hint">将转换为 billing-minutes 写入 QoS 的 GrpTRESMins</small>
+            <small class="form-hint" v-if="isEdit">直接设置 QoS 的总配额（将覆盖原有配额）</small>
+            <small class="form-hint" v-else>充值金额将累加到当前配额（当前配额会自动保留）</small>
           </div>
 
           <div class="form-group">
@@ -111,7 +163,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
-import { userAPI, qosAPI, slurmAccountAPI, usageAPI } from '../api'
+import { qosAPI, slurmAccountAPI, usageAPI } from '../api'
 import dialog from '../utils/dialog'
 
 const hoursList = ref<any[]>([])
@@ -121,21 +173,24 @@ const showModal = ref(false)
 const isEdit = ref(false)
 const saving = ref(false)
 const modalError = ref('')
-const filterType = ref('all')
 const searchQuery = ref('')
 
 const qosList = ref<any[]>([])
 const accounts = ref<any[]>([])
 
+// 展开状态和用户使用量
+const expandedQoS = ref<Set<string>>(new Set())
+const userUsageMap = ref<Record<string, any[]>>({})
+const loadingUsers = ref<Set<string>>(new Set())
+
 const formData = ref({
-  type: 'qos',       // 通过 QoS 的 GrpTRESMins 来限制机时
-  name: '',          // QoS 名称
-  total: 0,          // 总机时（小时），转换为 billing-minutes 存入 GrpTRESMins
+  type: 'qos',
+  name: '',
+  total: 0,
   expireDate: '',
   notes: ''
 })
 
-// 加载 QoS 和账户列表
 const loadQoSAndAccounts = async () => {
   try {
     const [qosData, accountsData] = await Promise.all([
@@ -149,20 +204,16 @@ const loadQoSAndAccounts = async () => {
   }
 }
 
-// 可选择的目标列表（QoS 名称）
 const availableTargets = computed(() => {
   return qosList.value.map((q: any) => q.name)
 })
 
-// 从 QoS 数据中提取 billing 限制（小时）
 const extractBillingHours = (qos: any): number => {
-  // 新版 v0.0.43 嵌套结构
   const minutesTotal = qos?.limits?.max?.tres?.minutes?.total
   if (Array.isArray(minutesTotal)) {
     const billing = minutesTotal.find((t: any) => t.type === 'billing')
     if (billing && billing.count > 0) return billing.count / 60
   }
-  // 旧版字段 grp_tres_mins
   if (qos?.grp_tres_mins) {
     const mins = parseInt(qos.grp_tres_mins)
     if (!isNaN(mins) && mins > 0) return mins / 60
@@ -170,46 +221,111 @@ const extractBillingHours = (qos: any): number => {
   return 0
 }
 
-// 过滤后的机时列表（基于 QoS 数据）
 const filteredHoursList = computed(() => {
   let filtered = hoursList.value
-
-  if (filterType.value !== 'all') {
-    filtered = filtered.filter(item => item.type === filterType.value)
-  }
-
   if (searchQuery.value) {
     const query = searchQuery.value.toLowerCase()
-    filtered = filtered.filter(item =>
-      item.name.toLowerCase().includes(query)
-    )
+    filtered = filtered.filter(item => item.name.toLowerCase().includes(query))
   }
-
   return filtered
 })
 
-// 加载机时列表（从 QoS 读取 billing 限制）
+// 展开/收起用户明细
+const toggleExpand = async (qosName: string) => {
+  if (expandedQoS.value.has(qosName)) {
+    expandedQoS.value.delete(qosName)
+    expandedQoS.value = new Set(expandedQoS.value)
+    return
+  }
+  expandedQoS.value.add(qosName)
+  expandedQoS.value = new Set(expandedQoS.value)
+  await loadUserUsage(qosName)
+}
+
+// 加载某个 QoS 下所有用户的使用量
+const loadUserUsage = async (qosName: string) => {
+  if (userUsageMap.value[qosName]) return // 已加载
+  loadingUsers.value.add(qosName)
+  loadingUsers.value = new Set(loadingUsers.value)
+  try {
+    const now = new Date()
+    const end = now.toISOString().split('T')[0]
+    const start = new Date(now.getFullYear(), 0, 1).toISOString().split('T')[0]
+    const res = await usageAPI.getAllUsersRecords(start, end)
+    const records: any[] = res.data || res || []
+    // 按用户聚合，过滤该 QoS
+    const userMap: Record<string, number> = {}
+    for (const r of records) {
+      if (r.qos && r.qos !== qosName) continue
+      const user = r.user || r.user_name || r.username
+      if (!user) continue
+      const mins = (r.billing_mins || 0) + (r.billing_hours || 0) * 60
+      userMap[user] = (userMap[user] || 0) + mins
+    }
+    const qosItem = hoursList.value.find(h => h.name === qosName)
+    const totalHours = qosItem?.total || 0
+    userUsageMap.value[qosName] = Object.entries(userMap)
+      .filter(([, mins]) => mins > 0)
+      .map(([user, mins]) => {
+        const used = Math.round(mins / 60 * 100) / 100
+        const pct = totalHours > 0 ? Math.min(100, Math.round(used / totalHours * 100)) : 0
+        return { user, used, pct }
+      })
+      .sort((a, b) => b.used - a.used)
+  } catch (e) {
+    console.error('loadUserUsage error:', e)
+    userUsageMap.value[qosName] = []
+  } finally {
+    loadingUsers.value.delete(qosName)
+    loadingUsers.value = new Set(loadingUsers.value)
+  }
+}
+
 const loadHoursList = async () => {
   loading.value = true
   error.value = ''
-
   try {
     const qosData = await qosAPI.getQoSList()
     qosList.value = qosData || []
 
+    // 同时获取今年的使用量汇总
+    const now = new Date()
+    const end = now.toISOString().split('T')[0]
+    const start = new Date(now.getFullYear(), 0, 1).toISOString().split('T')[0]
+    let allRecords: any[] = []
+    try {
+      const usageRes = await usageAPI.getAllUsersRecords(start, end)
+      allRecords = usageRes.data || usageRes || []
+    } catch (e) {
+      console.warn('Failed to load usage data:', e)
+    }
+
+    // 按 QoS 聚合 billing-minutes
+    const qosUsedMap: Record<string, number> = {}
+    for (const r of allRecords) {
+      const qos = r.qos
+      if (!qos) continue
+      const mins = (r.billing_mins || 0) + (r.billing_hours || 0) * 60
+      qosUsedMap[qos] = (qosUsedMap[qos] || 0) + mins
+    }
+
     hoursList.value = qosList.value
       .filter((qos: any) => extractBillingHours(qos) > 0)
       .map((qos: any) => {
-        const total = extractBillingHours(qos)
+        const total = Math.round(extractBillingHours(qos))
+        const usedMins = qosUsedMap[qos.name] || 0
+        const used = Math.round(usedMins / 60 * 100) / 100
+        const remaining = Math.max(0, Math.round((total - used) * 100) / 100)
+        const usage = total > 0 ? Math.min(100, Math.round(used / total * 100)) : 0
         return {
           id: qos.name,
           type: 'qos',
           name: qos.name,
           description: qos.description || '',
-          total: Math.round(total),
-          used: 0,       // 需要查询实际使用量
-          remaining: Math.round(total),
-          usage: 0,
+          total,
+          used,
+          remaining,
+          usage,
           expireDate: '-',
           notes: qos.description || ''
         }
@@ -221,21 +337,18 @@ const loadHoursList = async () => {
   }
 }
 
-// 获取进度条颜色
 const getProgressColor = (usage: number) => {
   if (usage >= 90) return 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)'
   if (usage >= 70) return 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
   return 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
 }
 
-// 获取状态样式
 const getStatusClass = (item: any) => {
   if (item.usage >= 100) return 'status-expired'
   if (item.usage >= 80) return 'status-warning'
   return 'status-normal'
 }
 
-// 获取状态文本
 const getStatusText = (item: any) => {
   if (item.usage >= 100) return '已超额'
   if (item.usage >= 80) return '即将用完'
@@ -262,33 +375,23 @@ const editHours = (item: any) => {
 
 const saveHours = async () => {
   modalError.value = ''
-
-  if (!formData.value.name) {
-    modalError.value = '请选择 QoS'
-    return
-  }
-  if (formData.value.total <= 0) {
-    modalError.value = '总机时必须大于0'
-    return
-  }
-
+  if (!formData.value.name) { modalError.value = '请选择 QoS'; return }
+  if (formData.value.total <= 0) { modalError.value = isEdit.value ? '总机时必须大于0' : '充值金额必须大于0'; return }
   saving.value = true
-
   try {
-    // 将小时转换为 billing-minutes，写入 QoS 的 GrpTRESMins
-    const billingMinutes = formData.value.total * 60
-    const qosPayload = {
-      name: formData.value.name,
-      description: formData.value.notes,
-      grp_tres_mins: String(billingMinutes)
-    }
-
     if (isEdit.value) {
+      // 编辑模式：直接设置总配额
+      const billingMinutes = Math.round(formData.value.total * 60)
+      const qosPayload = {
+        name: formData.value.name,
+        description: formData.value.notes,
+        grp_tres_mins: String(billingMinutes)
+      }
       await qosAPI.updateQoS(formData.value.name, qosPayload)
     } else {
-      await qosAPI.updateQoS(formData.value.name, qosPayload)
+      // 充值模式：调用充值接口（自动累加）
+      await qosAPI.rechargeQoS(formData.value.name, formData.value.total, formData.value.notes)
     }
-
     closeModal()
     await loadHoursList()
   } catch (err: any) {
@@ -322,6 +425,20 @@ onMounted(() => {
 
 <style scoped>
 .admin-hours { padding: 1.5rem; display: flex; flex-direction: column; gap: 1.25rem; }
+
+/* 展开图标和用户行样式 */
+.expand-icon { font-size: 0.65rem; color: hsl(var(--muted-foreground)); margin-right: 6px; }
+.qos-row:hover { background: hsl(var(--muted)/0.3); }
+.user-row { background: hsl(var(--muted)/0.12); }
+.user-row:hover { background: hsl(var(--muted)/0.25); }
+.user-indent { padding-left: 2rem !important; font-size: 0.82rem; color: hsl(var(--muted-foreground)); }
+.user-loading { text-align: center; padding: 0.6rem 1rem !important; font-size: 0.8rem; color: hsl(var(--muted-foreground)); }
+
+/* 进度条 */
+.progress-wrap { display: flex; align-items: center; gap: 6px; }
+.progress-bar { width: 80px; height: 6px; background: hsl(var(--muted)); border-radius: 999px; overflow: hidden; flex-shrink: 0; }
+.progress-fill { height: 100%; border-radius: 999px; transition: width 0.3s; }
+.usage-text { font-size: 0.8rem; color: hsl(var(--muted-foreground)); white-space: nowrap; }
 
 .filters-bar {
   display: flex; gap: 0.6rem; align-items: center;

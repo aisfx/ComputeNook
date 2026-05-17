@@ -595,6 +595,94 @@ func extractLimitValue(lv slurm.LimitValue) int {
 	return 0
 }
 
+// extractQoSCPULimit 兼容新旧结构提取 CPU 限制（与 AdminQoS 前端逻辑一致）
+// 优先 per.user，其次 total（GrpTRES）
+func extractQoSCPULimit(q slurm.QoS) int64 {
+	if v := extractTRESCount(q.Limits.Max.TRES.Per.User, "cpu"); v > 0 {
+		return v
+	}
+	if v := extractTRESCount(q.Limits.Max.TRES.Total, "cpu"); v > 0 {
+		return v
+	}
+	if q.MaxCPUs != nil {
+		if n := slurm.ExtractNumber(q.MaxCPUs); n > 0 {
+			return int64(n)
+		}
+	}
+	return 0
+}
+
+// extractQoSNodeLimit 兼容新旧结构提取节点限制
+func extractQoSNodeLimit(q slurm.QoS) int64 {
+	if v := extractTRESCount(q.Limits.Max.TRES.Per.User, "node"); v > 0 {
+		return v
+	}
+	if v := extractTRESCount(q.Limits.Max.TRES.Total, "node"); v > 0 {
+		return v
+	}
+	if q.MaxNodes != nil {
+		if n := slurm.ExtractNumber(q.MaxNodes); n > 0 {
+			return int64(n)
+		}
+	}
+	return 0
+}
+
+// extractQoSGPULimit 兼容新旧结构提取 GPU 限制
+func extractQoSGPULimit(q slurm.QoS) int64 {
+	if v := extractTRESCount(q.Limits.Max.TRES.Per.User, "gres/gpu"); v > 0 {
+		return v
+	}
+	if v := extractTRESCount(q.Limits.Max.TRES.Total, "gres/gpu"); v > 0 {
+		return v
+	}
+	return 0
+}
+
+// extractQoSMemoryMB 兼容新旧结构提取内存限制（MB）
+func extractQoSMemoryMB(q slurm.QoS) int64 {
+	if v := extractTRESCount(q.Limits.Max.TRES.Per.User, "mem"); v > 0 {
+		return v
+	}
+	if v := extractTRESCount(q.Limits.Max.TRES.Total, "mem"); v > 0 {
+		return v
+	}
+	return 0
+}
+
+// extractQoSJobsLimit 兼容新旧结构提取每用户最大运行作业数
+// 对应 AdminQoS 的 extractJobsLimit：limits.max.jobs.per.user
+func extractQoSJobsLimit(q slurm.QoS) int {
+	if v := extractLimitValue(q.Limits.Max.Jobs.Per.User); v > 0 {
+		return v
+	}
+	if q.MaxJobs != nil {
+		if n := slurm.ExtractNumber(q.MaxJobs); n > 0 {
+			return n
+		}
+	}
+	return 0
+}
+
+// extractQoSSubmitLimit 兼容新旧结构提取最大提交作业数
+// active_jobs.count 对应 sacctmgr 的 MaxSubmitPU
+func extractQoSSubmitLimit(q slurm.QoS) int {
+	// 优先 active_jobs.count（Slurm REST API 实际存放位置）
+	if v := extractLimitValue(q.Limits.Max.ActiveJobs.Count); v > 0 {
+		return v
+	}
+	// 兼容 jobs.count
+	if v := extractLimitValue(q.Limits.Max.Jobs.Count); v > 0 {
+		return v
+	}
+	if q.MaxSubmit != nil {
+		if n := slurm.ExtractNumber(q.MaxSubmit); n > 0 {
+			return n
+		}
+	}
+	return 0
+}
+
 // GetMyResources 获取当前用户的资源限制（Association + QoS）
 func GetMyResources(c *gin.Context) {
 	username, exists := c.Get("username")
@@ -650,35 +738,44 @@ func GetMyResources(c *gin.Context) {
 	// 收集用户可用的 QoS 名称
 	qosNames := make(map[string]bool)
 	assocList := make([]map[string]interface{}, 0)
+	fmt.Printf("[RESOURCES] user=%s total_associations=%d\n", username, len(associations))
 	for _, a := range associations {
+		fmt.Printf("[RESOURCES] assoc: account=%s partition=%s qos=%v\n", a.Account, a.Partition, a.QoS)
 		// 过滤掉 root account
 		if a.Account == "root" {
 			continue
+		}
+		qosList := a.QoS
+		// 如果 association 没有绑定 QoS，尝试用账户名作为同名 QoS（常见约定）
+		if len(qosList) == 0 && a.Account != "" {
+			qosList = []string{a.Account}
 		}
 		item := map[string]interface{}{
 			"account":   a.Account,
 			"partition": a.Partition,
 			"qos":       "",
-			"qos_list":  a.QoS,
+			"qos_list":  qosList,
 			"max_jobs":  0,
 		}
 		assocList = append(assocList, item)
-		for _, q := range a.QoS {
+		for _, q := range qosList {
 			qosNames[q] = true
 		}
 	}
+	fmt.Printf("[RESOURCES] collected qosNames=%v\n", qosNames)
 
 	// 获取相关 QoS 的限制
 	allQoS, err := client.GetQoSList()
 	qosLimits := make([]map[string]interface{}, 0)
 	if err == nil {
-		// 预先查一次用户的历史作业，避免每个 QoS 重复查询
-		var allUserRecords []slurm.UsageRecord
-		userParam := ResolveUID(username.(string))
+		// 获取所有用户的历史作业（用于统计 QoS 总使用量）
+		// 因为一个 account 对应一个 QoS，需要统计该 QoS 下所有用户的使用量
+		var allUsersRecords []slurm.UsageRecord
 		startTime := time.Now().AddDate(-1, 0, 0) // 近一年
 		endTime := time.Now()
-		allUserRecords, _ = client.GetUserUsage(userParam, startTime, endTime)
-		fmt.Printf("[BILLING] user=%s uid=%s total_records=%d\n", username, userParam, len(allUserRecords))
+		// 使用空字符串获取所有用户的记录
+		allUsersRecords, _ = client.GetUserUsage("", startTime, endTime)
+		fmt.Printf("[BILLING] fetched all users records, total=%d\n", len(allUsersRecords))
 
 		for _, q := range allQoS {
 			if !qosNames[q.Name] {
@@ -699,32 +796,37 @@ func GetMyResources(c *gin.Context) {
 			}
 
 			// 统计该 QoS 下的已使用 billing-minutes（按 QoS 过滤作业）
+			// 注意：一个 account 对应一个 QoS，统计该 QoS 下所有用户的使用量
 			var usedBillingMins float64
 			if billingLimit > 0 {
-				for _, r := range allUserRecords {
+				for _, r := range allUsersRecords {
+					// 按 QoS 过滤（因为一个 account 对应一个 QoS）
 					if r.QoS == q.Name {
 						usedBillingMins += r.BillingMins
 					}
 				}
-				// 如果按 QoS 过滤后为 0，退回到统计所有作业（slurmdb 可能不返回 QoS 字段）
+				// 如果按 QoS 过滤后为 0，可能是 slurmdb 不返回 QoS 字段
+				// 尝试按 account 过滤（假设 QoS 名称 == account 名称）
 				if usedBillingMins == 0 {
-					for _, r := range allUserRecords {
-						usedBillingMins += r.BillingMins
+					for _, r := range allUsersRecords {
+						if r.Account == q.Name {
+							usedBillingMins += r.BillingMins
+						}
 					}
 				}
-				fmt.Printf("[BILLING] user=%s uid=%s qos=%s limit=%d used=%.4f mins\n",
-					username, userParam, q.Name, billingLimit, usedBillingMins)
+				fmt.Printf("[BILLING] qos=%s limit=%d used=%.4f mins (all users in this account)\n",
+					q.Name, billingLimit, usedBillingMins)
 			}
 
 			item := map[string]interface{}{
 				"name":               q.Name,
 				"description":        q.Description,
-				"max_cpus":           extractTRESCount(q.Limits.Max.TRES.Per.User, "cpu"),
-				"max_nodes":          extractTRESCount(q.Limits.Max.TRES.Per.User, "node"),
-				"max_gpus":           extractTRESCount(q.Limits.Max.TRES.Per.User, "gres/gpu"),
-				"max_memory_mb":      extractTRESCount(q.Limits.Max.TRES.Per.User, "mem"),
-				"max_jobs":           extractLimitValue(q.Limits.Max.Jobs.Per.User),
-				"max_submit":         extractLimitValue(q.Limits.Max.ActiveJobs.Count),
+				"max_cpus":           extractQoSCPULimit(q),
+				"max_nodes":          extractQoSNodeLimit(q),
+				"max_gpus":           extractQoSGPULimit(q),
+				"max_memory_mb":      extractQoSMemoryMB(q),
+				"max_jobs":           extractQoSJobsLimit(q),
+				"max_submit":         extractQoSSubmitLimit(q),
 				"max_wall_pj":        q.MaxWall,
 				"grp_tres_mins":      q.GrpTRESMins,
 				"billing_limit_mins": billingLimit,

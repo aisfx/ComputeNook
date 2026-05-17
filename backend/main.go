@@ -216,6 +216,14 @@ func main() {
 			qos.DELETE("/:name", handlers.DeleteQoS)
 		}
 
+		// 机时充值管理
+		billing := auth.Group("/billing")
+		billing.Use(middleware.AdminMiddleware())
+		{
+			billing.POST("/recharge", handlers.RechargeQoS)
+			billing.GET("/recharge/history", handlers.GetRechargeHistory)
+		}
+
 		// Slurm 资源绑定管理
 		associations := auth.Group("/slurm/associations")
 		associations.Use(middleware.AdminMiddleware())
@@ -257,6 +265,7 @@ func main() {
 			usage.GET("/account", middleware.AdminMiddleware(), handlers.GetAccountUsageWithBilling)
 			usage.GET("/account/user", middleware.AdminMiddleware(), handlers.GetUserUsageByAccount)
 			usage.GET("/accounts", middleware.AdminMiddleware(), handlers.GetAllAccountsUsage)
+			usage.GET("/all-records", middleware.AdminMiddleware(), handlers.GetAllUsersUsageRecords)
 			usage.GET("/summary", middleware.AdminMiddleware(), handlers.GetUsageSummary)
 			usage.GET("/cluster", middleware.AdminMiddleware(), handlers.GetClusterUsage)
 		}

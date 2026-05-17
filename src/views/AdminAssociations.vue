@@ -10,7 +10,8 @@
 
     <div v-if="loading" class="loading"><div class="spinner"></div>加载中...</div>
 
-    <div v-else class="card" style="padding:0;overflow:hidden">
+    <div v-else class="card" style="padding:0">
+      <div style="overflow-x:auto">
       <table class="table">
         <thead>
           <tr>
@@ -63,6 +64,7 @@
           </tr>
         </tbody>
       </table>
+      </div>
     </div>
   </div>
 
@@ -266,7 +268,7 @@ onUnmounted(() => { document.removeEventListener('click', closeMenu) })
   position: absolute; right: 0; top: calc(100% + 4px);
   background: hsl(var(--card)); border: 1px solid hsl(var(--border));
   border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.12);
-  min-width: 130px; z-index: 100; overflow: hidden;
+  min-width: 130px; z-index: 1000; overflow: hidden;
 }
 .dropdown-item {
   display: block; width: 100%; padding: 7px 14px;

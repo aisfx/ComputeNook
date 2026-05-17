@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"os"
 
@@ -137,6 +138,10 @@ func UpdateQoS(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+
+	// 调试：打印收到的字段
+	fmt.Printf("[QoS UPDATE] name=%s MaxWall=%v MaxGPUs=%v MaxCPUs=%v MaxNodes=%v MaxTRES=%s MaxJobs=%v MaxSubmit=%v\n",
+		name, qos.MaxWall, qos.MaxGPUs, qos.MaxCPUs, qos.MaxNodes, qos.MaxTRES, qos.MaxJobs, qos.MaxSubmit)
 
 	// 开发模式：模拟更新成功
 	if os.Getenv("DEV_MODE") == "true" {
