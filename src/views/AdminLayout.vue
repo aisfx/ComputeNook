@@ -98,26 +98,6 @@
             <a :class="['nav-sub-item', { active: adminTab === 'quota' }]" @click.stop="adminTab = 'quota'">存储配额</a>
           </div>
 
-          <!-- 集群监控 expandable -->
-          <a
-            :class="['nav-item', { active: adminTab === 'monitoring' || adminTab === 'custom-dashboard' }]"
-            @click="groupExpanded.monitoring = !groupExpanded.monitoring"
-            :title="sidebarCollapsed ? '集群监控' : ''"
-          >
-            <span class="nav-item-icon">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-            </span>
-            <span class="nav-item-label">集群监控</span>
-            <span class="nav-item-chevron" v-if="!sidebarCollapsed">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline :points="groupExpanded.monitoring ? '18 15 12 9 6 15' : '6 9 12 15 18 9'"/></svg>
-            </span>
-          </a>
-          <div v-if="groupExpanded.monitoring && !sidebarCollapsed" class="nav-sub">
-            <a :class="['nav-sub-item', { active: adminTab === 'monitoring' && monitoringTab === 'cluster' }]" @click.stop="adminTab = 'monitoring'; monitoringTab = 'cluster'">集群状态</a>
-            <a :class="['nav-sub-item', { active: adminTab === 'custom-dashboard' }]" @click.stop="adminTab = 'custom-dashboard'">监控面板</a>
-            <a :class="['nav-sub-item', { active: adminTab === 'monitoring' && monitoringTab === 'alerts' }]" @click.stop="adminTab = 'monitoring'; monitoringTab = 'alerts'">告警规则</a>
-          </div>
-
           <!-- 基础设施 -->
           <a
             :class="['nav-item', { active: adminTab === 'rack' || adminTab === 'network' || adminTab === 'cmdb' }]"
@@ -134,7 +114,6 @@
           </a>
           <div v-if="groupExpanded.infra && !sidebarCollapsed" class="nav-sub">
             <a :class="['nav-sub-item', { active: adminTab === 'rack' }]" @click.stop="adminTab = 'rack'">机柜管理</a>
-            <a :class="['nav-sub-item', { active: adminTab === 'network' }]" @click.stop="adminTab = 'network'">网络拓扑</a>
             <a :class="['nav-sub-item', { active: adminTab === 'cmdb' }]" @click.stop="adminTab = 'cmdb'">主机资产</a>
           </div>
 
@@ -150,7 +129,7 @@
             <span class="nav-item-label">AI 诊断</span>
           </a>
 
-          <!-- 数据审计（始终最后） -->
+          <!-- 数据审计 -->
           <a
             :class="['nav-item', { active: adminTab === 'audit' }]"
             @click="adminTab = 'audit'"
@@ -198,22 +177,59 @@
       </header>
 
       <main class="content-area">
-        <AdminDashboard v-if="adminTab === 'dashboard'" />
-        <Monitoring v-else-if="adminTab === 'monitoring'" :active-tab="monitoringTab" @tab-change="monitoringTab = $event" />
-        <RackView v-else-if="adminTab === 'rack'" />
-        <NetworkTopology v-else-if="adminTab === 'network'" />
-        <AdminUsers v-else-if="adminTab === 'users'" />
-        <AdminGroups v-else-if="adminTab === 'groups'" />
-        <AdminQoS v-else-if="adminTab === 'qos'" />
-        <AdminAssociations v-else-if="adminTab === 'associations'" />
-        <AdminHours v-else-if="adminTab === 'hours'" />
-        <AdminQuota v-else-if="adminTab === 'quota'" />
-        <AdminAudit v-else-if="adminTab === 'audit'" />
-        <AdminCMDB v-else-if="adminTab === 'cmdb'" />
-        <AdminSlurmAccounts v-else-if="adminTab === 'slurm-accounts'" />
-        <AdminSlurmUsers v-else-if="adminTab === 'slurm-users'" />
-        <CustomDashboard v-else-if="adminTab === 'custom-dashboard'" />
-        <AIDiagnostics v-else-if="adminTab === 'ai-diagnostics'" />
+        <!-- 总览：整合 AdminDashboard / 集群监控 / 用量报表 -->
+        <div v-if="adminTab === 'dashboard'" class="integrated-view">
+          <div class="integrated-subtabs">
+            <button :class="['isub-tab', dashSubTab==='overview' && 'active']" @click="dashSubTab='overview'">📊 总览</button>
+            <span class="isub-divider"></span>
+            <!-- 集群监控：带下拉子菜单 -->
+            <div class="isub-dropdown" :class="{ open: monDropOpen }">
+              <button
+                :class="['isub-tab', monSubTabs.includes(dashSubTab) && 'active']"
+                @click="monDropOpen = !monDropOpen"
+              >
+                🖥️ 集群监控
+                <svg class="isub-chevron" :class="{ rotated: monDropOpen }" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+              </button>
+              <div class="isub-drop-menu" v-show="monDropOpen">
+                <button :class="['isub-drop-item', dashSubTab==='mon-mgmt' && 'active']"    @click="dashSubTab='mon-mgmt';    monDropOpen=false">🖥️ 管理节点</button>
+                <button :class="['isub-drop-item', dashSubTab==='mon-cluster' && 'active']" @click="dashSubTab='mon-cluster'; monDropOpen=false">⚡ 计算节点</button>
+                <button :class="['isub-drop-item', dashSubTab==='mon-network' && 'active']" @click="dashSubTab='mon-network'; monDropOpen=false">🌐 网络监控</button>
+                <button :class="['isub-drop-item', dashSubTab==='mon-jobs' && 'active']"    @click="dashSubTab='mon-jobs';    monDropOpen=false">📋 作业管理</button>
+              </div>
+            </div>
+            <button :class="['isub-tab', dashSubTab==='mon-alerts' && 'active']"  @click="dashSubTab='mon-alerts'">🔔 告警规则</button>
+            <span class="isub-divider"></span>
+            <button :class="['isub-tab', dashSubTab==='reports' && 'active']" @click="dashSubTab='reports'">📈 用量报表</button>
+          </div>
+          <div class="integrated-body">
+            <div v-if="dashSubTab==='overview'" class="fill-view"><AdminDashboard /></div>
+            <Monitoring v-else-if="dashSubTab==='mon-mgmt'"    active-tab="mgmt" />
+            <Monitoring v-else-if="dashSubTab==='mon-cluster'" active-tab="cluster" />
+            <Monitoring v-else-if="dashSubTab==='mon-network'" active-tab="network" />
+            <Monitoring v-else-if="dashSubTab==='mon-jobs'"    active-tab="jobs" />
+            <Monitoring v-else-if="dashSubTab==='mon-alerts'"  active-tab="alerts" />
+            <Reports v-else-if="dashSubTab==='reports'" />
+          </div>
+        </div>
+
+        <!-- 撑满型：不加 padding -->
+        <RackView v-else-if="adminTab === 'rack'" class="fill-view" />
+        <NetworkTopology v-else-if="adminTab === 'network'" class="fill-view" />
+        <AdminCMDB v-else-if="adminTab === 'cmdb'" class="fill-view" />
+        <CustomDashboard v-else-if="adminTab === 'custom-dashboard'" class="fill-view" />
+
+        <!-- 普通型：加 padding -->
+        <div v-else-if="adminTab === 'users'" class="pad-view"><AdminUsers /></div>
+        <div v-else-if="adminTab === 'groups'" class="pad-view"><AdminGroups /></div>
+        <div v-else-if="adminTab === 'qos'" class="pad-view"><AdminQoS /></div>
+        <div v-else-if="adminTab === 'associations'" class="pad-view"><AdminAssociations /></div>
+        <div v-else-if="adminTab === 'hours'" class="pad-view"><AdminHours /></div>
+        <div v-else-if="adminTab === 'quota'" class="pad-view"><AdminQuota /></div>
+        <div v-else-if="adminTab === 'audit'" class="pad-view"><AdminAudit /></div>
+        <div v-else-if="adminTab === 'slurm-accounts'" class="pad-view"><AdminSlurmAccounts /></div>
+        <div v-else-if="adminTab === 'slurm-users'" class="pad-view"><AdminSlurmUsers /></div>
+        <div v-else-if="adminTab === 'ai-diagnostics'" class="pad-view"><AIDiagnostics /></div>
       </main>
     </div>
   </div>
@@ -233,6 +249,7 @@ import AdminSlurmAccounts from './AdminSlurmAccounts.vue'
 import AdminSlurmUsers from './AdminSlurmUsers.vue'
 import AdminAssociations from './AdminAssociations.vue'
 import Monitoring from './Monitoring.vue'
+import Reports from './Reports.vue'
 import RackView from './RackView.vue'
 import NetworkTopology from './NetworkTopology.vue'
 import CustomDashboard from './CustomDashboard.vue'
@@ -244,7 +261,10 @@ import { dialog } from '../utils/dialog'
 const router = useRouter()
 const adminTab = ref('dashboard')
 const monitoringTab = ref('cluster')
-const groupExpanded = reactive({ user: true, account: false, resource: false, monitoring: true, infra: true })
+const dashSubTab = ref<'overview'|'mon-mgmt'|'mon-cluster'|'mon-network'|'mon-jobs'|'mon-alerts'|'reports'>('overview')
+const monDropOpen = ref(false)
+const monSubTabs = ['mon-mgmt', 'mon-cluster', 'mon-network', 'mon-jobs']
+const groupExpanded = reactive({ user: true, account: true, resource: true, monitoring: true, infra: true })
 const sidebarCollapsed = ref(false)
 const currentUser = ref<any>(null)
 const theme = ref<'light' | 'dark' | 'ocean'>('light')
@@ -256,22 +276,15 @@ const themeIcon = computed(() => THEME_ICONS[theme.value])
 const themeLabel = computed(() => THEME_LABELS[theme.value])
 
 const currentTitle = computed(() => {
+  if (adminTab.value === 'dashboard') {
+    const sub: Record<string, string> = { overview: '集群总览', monitoring: '集群监控', reports: '用量报表' }
+    return sub[dashSubTab.value] || '集群总览'
+  }
   const map: Record<string, string> = {
-    dashboard: '集群总览',
-    monitoring: '集群监控',
-    rack: '机柜管理',
-    network: '网络拓扑',
-    'ai-diagnostics': 'AI 故障诊断',
-    users: '用户',
-    groups: '用户组',
-    'slurm-accounts': 'Slurm账户',
-    'slurm-users': 'Slurm用户',
-    associations: '资源绑定',
-    qos: 'QoS配置',
-    hours: '机时管理',
-    quota: '存储配额',
-    audit: '数据审计',
-    'custom-dashboard': '监控面板',
+    rack: '机柜管理', network: '网络拓扑', 'ai-diagnostics': 'AI 故障诊断',
+    users: '用户', groups: '用户组', 'slurm-accounts': 'Slurm账户', 'slurm-users': 'Slurm用户',
+    associations: '资源绑定', qos: 'QoS配置', hours: '机时管理', quota: '存储配额',
+    'custom-dashboard': '监控面板', cmdb: '主机资产', audit: '数据审计',
   }
   return map[adminTab.value] || '管理后台'
 })
@@ -562,7 +575,111 @@ onMounted(() => {
 }
 .btn-back:hover { background: hsl(var(--accent)); color: hsl(var(--accent-foreground)); }
 
-.content-area { flex: 1; overflow-y: auto; background: hsl(var(--background)); padding: 24px; }
+.content-area {
+  flex: 1;
+  overflow: hidden;
+  background: hsl(var(--background));
+  display: flex;
+  flex-direction: column;
+}
+
+/* 撑满型：占满全部空间，无 padding */
+.fill-view {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+/* 普通型：有 padding，可滚动 */
+.pad-view {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.5rem;
+  min-height: 0;
+}
+
+/* integrated-view 撑满 */
+.integrated-view { display: flex; flex-direction: column; flex: 1; overflow: hidden; min-height: 0; }
+
+.integrated-subtabs {
+  display: flex; gap: 0; flex-shrink: 0;
+  border-bottom: 2px solid hsl(var(--border));
+  background: hsl(var(--card));
+  padding: 0 1.5rem;
+}
+
+.isub-tab {
+  padding: 0.65rem 1.25rem;
+  font-size: 0.875rem; font-weight: 500;
+  color: hsl(var(--muted-foreground));
+  background: transparent; border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px; cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+.isub-tab:hover { color: hsl(var(--foreground)); background: hsl(var(--muted) / 0.3); }
+.isub-tab.active { color: hsl(var(--primary)); border-bottom-color: hsl(var(--primary)); font-weight: 600; }
+
+/* 集群监控下拉 */
+.isub-dropdown { position: relative; }
+
+.isub-chevron {
+  display: inline-block;
+  margin-left: 3px;
+  vertical-align: middle;
+  transition: transform 0.2s;
+  opacity: 0.6;
+}
+.isub-chevron.rotated { transform: rotate(180deg); }
+
+.isub-drop-menu {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 0;
+  min-width: 160px;
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+  z-index: 300;
+  overflow: hidden;
+  padding: 0.3rem 0;
+}
+
+.isub-drop-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.6rem 1.25rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: hsl(var(--muted-foreground));
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s, color 0.12s;
+  white-space: nowrap;
+}
+.isub-drop-item:hover { background: hsl(var(--muted) / 0.5); color: hsl(var(--foreground)); }
+.isub-drop-item.active { color: hsl(var(--primary)); background: hsl(var(--primary) / 0.08); font-weight: 700; }
+
+.isub-divider {
+  display: inline-block;
+  width: 1px;
+  height: 20px;
+  background: hsl(var(--border));
+  margin: auto 0.25rem;
+  align-self: center;
+  flex-shrink: 0;
+}
+
+.integrated-body { flex: 1; overflow-y: auto; min-height: 0; }
 
 .sidebar.collapsed .nav-item-label,
 .sidebar.collapsed .nav-item-chevron,

@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="admin-page">
     <!-- 二级导航 -->
     <div class="sub-nav">
@@ -13,9 +13,84 @@
       </button>
     </div>
 
-    <!-- Dashboard 总览 -->
-    <div v-if="currentTab === 'dashboard'" class="tab-content">
-      <AdminDashboard />
+    <!-- Dashboard 总览 / 集群监控 / 用量报表 / 审计日志 整合 -->
+    <div v-if="currentTab === 'dashboard'" class="tab-content tab-content-flush">
+      <!-- 子 tab -->
+      <div class="dash-subtabs">
+        <button :class="['dash-subtab', dashSubTab==='overview' && 'active']" @click="dashSubTab='overview'">📊 总览</button>
+        <!-- 集群监控子项直接展开 -->
+        <button :class="['dash-subtab', dashSubTab==='mon-mgmt' && 'active']"    @click="dashSubTab='mon-mgmt'">🖥️ 管理节点</button>
+        <button :class="['dash-subtab', dashSubTab==='mon-cluster' && 'active']" @click="dashSubTab='mon-cluster'">⚡ 计算节点</button>
+        <button :class="['dash-subtab', dashSubTab==='mon-network' && 'active']" @click="dashSubTab='mon-network'">🌐 网络监控</button>
+        <button :class="['dash-subtab', dashSubTab==='mon-jobs' && 'active']"    @click="dashSubTab='mon-jobs'">📋 作业管理</button>
+        <button :class="['dash-subtab', dashSubTab==='mon-alerts' && 'active']"  @click="dashSubTab='mon-alerts'">🔔 告警规则</button>
+        <button :class="['dash-subtab', dashSubTab==='reports' && 'active']" @click="dashSubTab='reports'">📈 用量报表</button>
+        <button :class="['dash-subtab', dashSubTab==='audit' && 'active']" @click="dashSubTab='audit'">📝 审计日志</button>
+      </div>
+      <div class="dash-sub-content">
+        <AdminDashboard v-if="dashSubTab==='overview'" />
+        <Monitoring v-if="dashSubTab==='mon-mgmt'"    active-tab="mgmt" />
+        <Monitoring v-if="dashSubTab==='mon-cluster'" active-tab="cluster" />
+        <Monitoring v-if="dashSubTab==='mon-network'" active-tab="network" />
+        <Monitoring v-if="dashSubTab==='mon-jobs'"    active-tab="jobs" />
+        <Monitoring v-if="dashSubTab==='mon-alerts'"  active-tab="alerts" />
+        <Reports v-if="dashSubTab==='reports'" />
+        <!-- 审计日志 -->
+        <div v-if="dashSubTab==='audit'" class="tab-content">
+          <div class="page-header">
+            <h3>📝 审计日志</h3>
+          </div>
+          <div class="card filters-card">
+            <div class="filters-row">
+              <div class="filter-group">
+                <select v-model="auditFilters.action">
+                  <option value="">全部操作</option>
+                  <option value="login">登录</option>
+                  <option value="logout">登出</option>
+                  <option value="create">创建</option>
+                  <option value="update">更新</option>
+                  <option value="delete">删除</option>
+                  <option value="submit">提交作业</option>
+                </select>
+              </div>
+              <div class="filter-group">
+                <input type="text" v-model="auditFilters.user" placeholder="用户名" />
+              </div>
+              <div class="filter-group">
+                <input type="date" v-model="auditFilters.startDate" />
+              </div>
+              <div class="filter-group">
+                <input type="date" v-model="auditFilters.endDate" />
+              </div>
+              <button class="btn-secondary" @click="searchAuditLogs">🔍 查询</button>
+            </div>
+          </div>
+          <div class="card">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>时间</th><th>用户</th><th>操作类型</th><th>资源</th><th>详情</th><th>IP 地址</th><th>状态</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="log in filteredAuditLogs" :key="log.id">
+                  <td>{{ log.timestamp }}</td>
+                  <td><strong>{{ log.user }}</strong></td>
+                  <td><span class="action-badge">{{ log.action }}</span></td>
+                  <td>{{ log.resource }}</td>
+                  <td>{{ log.details }}</td>
+                  <td><code>{{ log.ip }}</code></td>
+                  <td>
+                    <span :class="['status-badge', log.success ? 'status-success' : 'status-failed']">
+                      {{ log.success ? '成功' : '失败' }}
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- 用户管理 -->
@@ -193,65 +268,7 @@
       </div>
     </div>
 
-    <!-- 集群监控 (Prometheus) -->
-    <div v-if="currentTab === 'monitoring'" class="tab-content">
-      <div class="page-header">
-        <h3>📊 集群监控 (Prometheus)</h3>
-        <button class="btn-secondary" @click="refreshMetrics">🔄 刷新数据</button>
-      </div>
-
-      <!-- 告警信息 -->
-      <div class="card">
-        <h4>🚨 告警信息</h4>
-        <div class="alerts-container">
-          <div v-for="alert in alerts" :key="alert.id" :class="['alert-item', `alert-${alert.severity}`]">
-            <div class="alert-header">
-              <span class="alert-icon">{{ getAlertIcon(alert.severity) }}</span>
-              <strong>{{ alert.name }}</strong>
-              <span class="alert-time">{{ alert.time }}</span>
-            </div>
-            <div class="alert-body">
-              <p>{{ alert.message }}</p>
-              <div class="alert-labels">
-                <span v-for="(value, key) in alert.labels" :key="key" class="label-tag">
-                  {{ key }}: {{ value }}
-                </span>
-              </div>
-            </div>
-            <div class="alert-actions">
-              <button class="btn-link" @click="acknowledgeAlert(alert.id)">✓ 确认</button>
-              <button class="btn-link" @click="silenceAlert(alert.id)">🔕 静默</button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 监控指标 -->
-      <div class="metrics-grid">
-        <div class="card metric-card">
-          <h4>CPU 使用率</h4>
-          <div class="metric-value">{{ metrics.cpuUsage }}%</div>
-          <canvas ref="cpuChartRef" width="300" height="150"></canvas>
-        </div>
-        <div class="card metric-card">
-          <h4>内存使用率</h4>
-          <div class="metric-value">{{ metrics.memUsage }}%</div>
-          <canvas ref="memChartRef" width="300" height="150"></canvas>
-        </div>
-        <div class="card metric-card">
-          <h4>网络流量</h4>
-          <div class="metric-value">{{ metrics.networkTraffic }} MB/s</div>
-          <canvas ref="netChartRef" width="300" height="150"></canvas>
-        </div>
-        <div class="card metric-card">
-          <h4>存储 I/O</h4>
-          <div class="metric-value">{{ metrics.diskIO }} MB/s</div>
-          <canvas ref="diskChartRef" width="300" height="150"></canvas>
-        </div>
-      </div>
-    </div>
-
-    <!-- 审计日志 -->
+    <!-- 集群监控和数据统计已整合到总览 tab -->
     <div v-if="currentTab === 'audit'" class="tab-content">
       <div class="page-header">
         <h3>📝 审计日志</h3>
@@ -527,11 +544,14 @@ import axios from 'axios'
 import AdminAssociations from './AdminAssociations.vue'
 import AdminSlurmAccounts from './AdminSlurmAccounts.vue'
 import AdminDashboard from '../components/AdminDashboard.vue'
+import Monitoring from './Monitoring.vue'
+import Reports from './Reports.vue'
 import { dialog } from '../utils/dialog'
 
 const API_BASE_URL = ''
 
 const currentTab = ref('dashboard')
+const dashSubTab = ref<'overview'|'mon-mgmt'|'mon-cluster'|'mon-network'|'mon-jobs'|'mon-alerts'|'reports'|'audit'>('overview')
 const showAddUserModal = ref(false)
 const showAddGroupModal = ref(false)
 const showAddQosModal = ref(false)
@@ -540,15 +560,12 @@ const editingGroup = ref<any>(null)
 const loading = ref(false)
 
 const adminTabs = [
-  { id: 'dashboard', label: '总览', icon: '📊' },
-  { id: 'users', label: '用户管理', icon: '👥' },
-  { id: 'groups', label: '用户组管理', icon: '👨‍👩‍👧‍👦' },
-  { id: 'accounts', label: '账户管理', icon: '💼' },
+  { id: 'dashboard',    label: '总览',    icon: '📊' },
+  { id: 'users',        label: '用户管理', icon: '👥' },
+  { id: 'groups',       label: '用户组',   icon: '👨‍👩‍👧‍👦' },
+  { id: 'accounts',     label: '账户管理', icon: '💼' },
   { id: 'associations', label: '账户关联', icon: '🔗' },
-  { id: 'qos', label: '资源配置', icon: '⚙️' },
-  { id: 'monitoring', label: '集群监控', icon: '🖥️' },
-  { id: 'audit', label: '审计日志', icon: '📝' },
-  { id: 'statistics', label: '数据统计', icon: '📈' }
+  { id: 'qos',          label: '资源配置', icon: '⚙️' },
 ]
 
 // 用户管理
@@ -971,525 +988,94 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.admin-page {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
-
-.sub-nav {
-  display: flex;
-  gap: 0.5rem;
-  padding: 1rem;
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-  overflow-x: auto;
-}
-
-.sub-nav-btn {
-  padding: 0.75rem 1.5rem;
-  border: none;
-  background: transparent;
-  color: #666;
-  font-size: 0.95rem;
-  font-weight: 600;
-  cursor: pointer;
-  border-radius: 6px;
-  transition: all 0.2s;
-  white-space: nowrap;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.sub-nav-btn:hover {
-  background: #f3f4f6;
-  color: #667eea;
-}
-
-.sub-nav-btn.active {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-}
-
-.tab-icon {
-  font-size: 1.1rem;
-}
-
-.tab-content {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
-
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.page-header h3 {
-  margin: 0;
-  font-size: 1.3rem;
-  color: #333;
-}
-
-.filters-card {
-  padding: 1.5rem;
-}
-
-.filters-row {
-  display: flex;
-  gap: 1rem;
-  align-items: center;
-  flex-wrap: wrap;
-}
-
-.filter-group {
-  flex: 1;
-  min-width: 150px;
-}
-
-.filter-group input,
-.filter-group select {
-  width: 100%;
-  padding: 0.625rem;
-  border: 2px solid #e5e7eb;
-  border-radius: 6px;
-  font-size: 0.95rem;
-}
-
-.filter-group input:focus,
-.filter-group select:focus {
-  outline: none;
-  border-color: #667eea;
-}
-
-.data-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.data-table thead {
-  background: #f9fafb;
-}
-
-.data-table th {
-  padding: 1rem;
-  text-align: left;
-  font-weight: 600;
-  color: #555;
-  border-bottom: 2px solid #e5e7eb;
-}
-
-.data-table td {
-  padding: 1rem;
-  border-bottom: 1px solid #e5e7eb;
-  color: #333;
-}
-
-.data-table tbody tr:hover {
-  background: #f9fafb;
-}
-
-.status-badge {
-  padding: 0.375rem 0.75rem;
-  border-radius: 12px;
-  font-size: 0.85rem;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.status-active {
-  background: #d1fae5;
-  color: #065f46;
-}
-
-.status-locked {
-  background: #fee2e2;
-  color: #991b1b;
-}
-
-.status-inactive {
-  background: #f3f4f6;
-  color: #6b7280;
-}
-
-.status-success {
-  background: #d1fae5;
-  color: #065f46;
-}
-
-.status-failed {
-  background: #fee2e2;
-  color: #991b1b;
-}
-
-.action-buttons {
-  display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-}
-
-.user-tags,
-.qos-tags {
-  display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-}
-
-.user-tag,
-.qos-tag {
-  padding: 0.25rem 0.625rem;
-  background: #e0e7ff;
-  color: #4338ca;
-  border-radius: 6px;
-  font-size: 0.85rem;
-}
-
-.qos-badge {
-  padding: 0.375rem 0.75rem;
-  background: #fef3c7;
-  color: #92400e;
-  border-radius: 12px;
-  font-size: 0.85rem;
-  font-weight: 600;
-}
-
-.priority-badge {
-  padding: 0.375rem 0.75rem;
-  color: white;
-  border-radius: 12px;
-  font-size: 0.85rem;
-  font-weight: 600;
-}
-
-.action-badge {
-  padding: 0.375rem 0.75rem;
-  background: #dbeafe;
-  color: #1e40af;
-  border-radius: 12px;
-  font-size: 0.85rem;
-  font-weight: 600;
-}
-
-/* 告警 */
-.alerts-container {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.alert-item {
-  padding: 1rem;
-  border-radius: 8px;
-  border-left: 4px solid;
-}
-
-.alert-critical {
-  background: #fef2f2;
-  border-color: #ef4444;
-}
-
-.alert-warning {
-  background: #fffbeb;
-  border-color: #f59e0b;
-}
-
-.alert-info {
-  background: #eff6ff;
-  border-color: #3b82f6;
-}
-
-.alert-header {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  margin-bottom: 0.5rem;
-}
-
-.alert-icon {
-  font-size: 1.2rem;
-}
-
-.alert-time {
-  margin-left: auto;
-  font-size: 0.85rem;
-  color: #666;
-}
-
-.alert-body p {
-  margin: 0 0 0.5rem 0;
-  color: #333;
-}
-
-.alert-labels {
-  display: flex;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-}
-
-.label-tag {
-  padding: 0.25rem 0.625rem;
-  background: rgba(0,0,0,0.05);
-  border-radius: 6px;
-  font-size: 0.8rem;
-  font-family: monospace;
-}
-
-.alert-actions {
-  margin-top: 0.75rem;
-  display: flex;
-  gap: 0.5rem;
-}
-
-/* 监控指标 */
-.metrics-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 1.5rem;
-}
-
-.metric-card {
-  text-align: center;
-}
-
-.metric-card h4 {
-  margin: 0 0 0.5rem 0;
-  color: #667eea;
-}
-
-.metric-value {
-  font-size: 2rem;
-  font-weight: 700;
-  color: #333;
-  margin-bottom: 1rem;
-}
-
-.metric-card canvas {
-  width: 100%;
-  border-radius: 8px;
-}
-
-/* 统计卡片 */
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 1.5rem;
-}
-
-.stat-card {
-  display: flex;
-  align-items: center;
-  gap: 1.5rem;
-  padding: 1.5rem;
-}
-
-.stat-icon {
-  font-size: 3rem;
-}
-
-.stat-content {
-  flex: 1;
-}
-
-.stat-label {
-  font-size: 0.9rem;
-  color: #666;
-  margin-bottom: 0.5rem;
-}
-
-.stat-value {
-  font-size: 2rem;
-  font-weight: 700;
-  color: #333;
-  margin-bottom: 0.25rem;
-}
-
-.stat-change {
-  font-size: 0.85rem;
-  color: #666;
-}
-
-.stat-change.positive {
-  color: #10b981;
-}
-
-.progress-bar {
-  position: relative;
-  width: 100%;
-  height: 24px;
-  background: #e5e7eb;
-  border-radius: 12px;
-  overflow: hidden;
-}
-
-.progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-  transition: width 0.3s;
-}
-
-.progress-text {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: #333;
-}
-
-/* 表单 */
-.user-form {
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
-
-.form-row {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 1rem;
-}
-
-.checkbox-label {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  cursor: pointer;
-}
-
-.checkbox-label input {
-  cursor: pointer;
-}
-
-.checkbox-label input {
-  cursor: pointer;
-}
-
-.empty-text {
-  color: #999;
-  font-style: italic;
-  font-size: 0.9rem;
-}
-
-/* 成员选择器 */
-.member-selector {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1.5rem;
-  padding: 1rem;
-  background: #f9fafb;
-  border-radius: 8px;
-}
-
-.available-users,
-.selected-users {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.available-users h5,
-.selected-users h5 {
-  margin: 0;
-  color: #667eea;
-  font-size: 0.95rem;
-}
-
-.user-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  max-height: 300px;
-  overflow-y: auto;
-  padding: 0.5rem;
-  background: white;
-  border-radius: 6px;
-  border: 2px solid #e5e7eb;
-}
-
-.user-checkbox {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem;
-  cursor: pointer;
-  border-radius: 4px;
-  transition: background 0.2s;
-}
-
-.user-checkbox:hover {
-  background: #f3f4f6;
-}
-
-.user-checkbox input {
-  cursor: pointer;
-}
-
-.selected-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  padding: 0.75rem;
-  background: white;
-  border-radius: 6px;
-  border: 2px solid #e5e7eb;
-  min-height: 100px;
-}
-
-.selected-tag {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 0.75rem;
-  background: #e0e7ff;
-  color: #4338ca;
-  border-radius: 6px;
-  font-size: 0.9rem;
-}
-
-.selected-tag button {
-  background: none;
-  border: none;
-  color: #4338ca;
-  cursor: pointer;
-  font-size: 1rem;
-  padding: 0;
-  line-height: 1;
-}
-
-.selected-tag button:hover {
-  color: #ef4444;
-}
-
-.empty-hint {
-  color: #999;
-  font-style: italic;
-  font-size: 0.9rem;
-}
-
-@media (max-width: 1024px) {
-  .stats-grid,
-  .metrics-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (max-width: 768px) {
-  .form-row {
-    grid-template-columns: 1fr;
-  }
-  
-  .stats-grid,
-  .metrics-grid {
-    grid-template-columns: 1fr;
-  }
-  
-  .member-selector {
-    grid-template-columns: 1fr;
-  }
+.admin-page { display:flex; flex-direction:column; height:100%; background:hsl(var(--background)); }
+
+.sub-nav { display:flex; gap:0; padding:0 1rem; background:hsl(var(--card)); border-bottom:2px solid hsl(var(--border)); overflow-x:auto; flex-shrink:0; }
+
+.sub-nav-btn { display:flex; align-items:center; gap:0.4rem; padding:0.65rem 1.1rem; border:none; background:transparent; color:hsl(var(--muted-foreground)); font-size:0.875rem; font-weight:500; cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; transition:color 0.15s,border-color 0.15s; white-space:nowrap; }
+.sub-nav-btn:hover { color:hsl(var(--foreground)); background:hsl(var(--muted)/0.3); }
+.sub-nav-btn.active { color:hsl(var(--primary)); border-bottom-color:hsl(var(--primary)); font-weight:600; }
+.tab-icon { font-size:1rem; }
+
+.tab-content { display:flex; flex-direction:column; gap:1.25rem; padding:1.25rem; flex:1; overflow:auto; }
+.tab-content-flush { gap:0; padding:0; overflow:hidden; display:flex; flex-direction:column; }
+
+.dash-subtabs { display:flex; gap:0; border-bottom:1px solid hsl(var(--border)); background:hsl(var(--card)); padding:0 1rem; flex-shrink:0; }
+.dash-subtab { padding:0.55rem 1.1rem; font-size:0.85rem; font-weight:500; color:hsl(var(--muted-foreground)); background:transparent; border:none; border-bottom:2px solid transparent; margin-bottom:-1px; cursor:pointer; transition:color 0.15s,border-color 0.15s; white-space:nowrap; }
+.dash-subtab:hover { color:hsl(var(--foreground)); background:hsl(var(--muted)/0.3); }
+.dash-subtab.active { color:hsl(var(--primary)); border-bottom-color:hsl(var(--primary)); font-weight:600; }
+.dash-sub-content { flex:1; overflow:auto; min-height:0; }
+
+.page-header { display:flex; justify-content:space-between; align-items:center; }
+.page-header h3 { margin:0; font-size:1.1rem; font-weight:700; color:hsl(var(--foreground)); }
+
+.filters-card { padding:1rem 1.25rem; }
+.filters-row { display:flex; gap:0.75rem; align-items:center; flex-wrap:wrap; }
+.filter-group { flex:1; min-width:140px; }
+.filter-group input, .filter-group select { width:100%; padding:0.45rem 0.65rem; border:1px solid hsl(var(--border)); border-radius:6px; font-size:0.85rem; background:hsl(var(--background)); color:hsl(var(--foreground)); outline:none; }
+.filter-group input:focus, .filter-group select:focus { border-color:hsl(var(--primary)); }
+
+.data-table { width:100%; border-collapse:collapse; font-size:0.85rem; }
+.data-table thead { background:hsl(var(--muted)/0.5); }
+.data-table th { padding:0.65rem 0.875rem; text-align:left; font-weight:600; color:hsl(var(--muted-foreground)); border-bottom:1px solid hsl(var(--border)); white-space:nowrap; }
+.data-table td { padding:0.65rem 0.875rem; border-bottom:1px solid hsl(var(--border)); color:hsl(var(--foreground)); }
+.data-table tbody tr:last-child td { border-bottom:none; }
+.data-table tbody tr:hover td { background:hsl(var(--muted)/0.3); }
+
+.status-badge { padding:0.2rem 0.6rem; border-radius:10px; font-size:0.78rem; font-weight:600; white-space:nowrap; }
+.status-active   { background:rgba(16,185,129,0.12); color:#10b981; }
+.status-locked   { background:rgba(239,68,68,0.1); color:#ef4444; }
+.status-inactive { background:hsl(var(--muted)); color:hsl(var(--muted-foreground)); }
+.status-success  { background:rgba(16,185,129,0.12); color:#10b981; }
+.status-failed   { background:rgba(239,68,68,0.1); color:#ef4444; }
+
+.action-buttons { display:flex; gap:0.4rem; flex-wrap:wrap; }
+.user-tags, .qos-tags { display:flex; gap:0.4rem; flex-wrap:wrap; }
+.user-tag, .qos-tag { padding:0.15rem 0.5rem; background:hsl(var(--primary)/0.1); color:hsl(var(--primary)); border-radius:4px; font-size:0.78rem; }
+.qos-badge { padding:0.2rem 0.6rem; background:rgba(245,158,11,0.1); color:#f59e0b; border-radius:10px; font-size:0.78rem; font-weight:600; }
+.priority-badge { padding:0.2rem 0.6rem; color:white; border-radius:10px; font-size:0.78rem; font-weight:600; }
+.action-badge { padding:0.2rem 0.6rem; background:hsl(var(--primary)/0.1); color:hsl(var(--primary)); border-radius:10px; font-size:0.78rem; font-weight:600; }
+
+.alerts-container { display:flex; flex-direction:column; gap:0.75rem; }
+.alert-item { padding:0.875rem 1rem; border-radius:8px; border-left:3px solid; }
+.alert-critical { background:rgba(239,68,68,0.06); border-color:#ef4444; }
+.alert-warning  { background:rgba(245,158,11,0.06); border-color:#f59e0b; }
+.alert-info     { background:rgba(59,130,246,0.06); border-color:#3b82f6; }
+.alert-header { display:flex; align-items:center; gap:0.6rem; margin-bottom:0.4rem; }
+.alert-icon { font-size:1rem; }
+.alert-time { margin-left:auto; font-size:0.78rem; color:hsl(var(--muted-foreground)); }
+.alert-body p { margin:0 0 0.4rem; color:hsl(var(--foreground)); font-size:0.85rem; }
+.alert-labels { display:flex; gap:0.4rem; flex-wrap:wrap; }
+.label-tag { padding:0.15rem 0.5rem; background:hsl(var(--muted)); border-radius:4px; font-size:0.75rem; font-family:monospace; }
+.alert-actions { margin-top:0.5rem; display:flex; gap:0.4rem; }
+
+.user-form { display:flex; flex-direction:column; gap:1.25rem; }
+.form-row { display:grid; grid-template-columns:repeat(2,1fr); gap:0.875rem; }
+.checkbox-label { display:flex; align-items:center; gap:0.5rem; cursor:pointer; }
+.empty-text { color:hsl(var(--muted-foreground)); font-style:italic; font-size:0.85rem; }
+
+.member-selector { display:grid; grid-template-columns:1fr 1fr; gap:1rem; padding:0.875rem; background:hsl(var(--muted)/0.3); border-radius:8px; }
+.available-users, .selected-users { display:flex; flex-direction:column; gap:0.5rem; }
+.available-users h5, .selected-users h5 { margin:0; color:hsl(var(--primary)); font-size:0.85rem; }
+.user-list { display:flex; flex-direction:column; gap:0.3rem; max-height:260px; overflow-y:auto; padding:0.5rem; background:hsl(var(--background)); border-radius:6px; border:1px solid hsl(var(--border)); }
+.user-checkbox { display:flex; align-items:center; gap:0.5rem; padding:0.4rem 0.5rem; cursor:pointer; border-radius:4px; font-size:0.85rem; transition:background 0.15s; }
+.user-checkbox:hover { background:hsl(var(--muted)/0.5); }
+.selected-tags { display:flex; flex-wrap:wrap; gap:0.4rem; padding:0.6rem; background:hsl(var(--background)); border-radius:6px; border:1px solid hsl(var(--border)); min-height:80px; }
+.selected-tag { display:flex; align-items:center; gap:0.4rem; padding:0.3rem 0.6rem; background:hsl(var(--primary)/0.1); color:hsl(var(--primary)); border-radius:4px; font-size:0.82rem; }
+.selected-tag button { background:none; border:none; color:hsl(var(--primary)); cursor:pointer; font-size:0.9rem; padding:0; line-height:1; }
+.selected-tag button:hover { color:#ef4444; }
+.empty-hint { color:hsl(var(--muted-foreground)); font-style:italic; font-size:0.85rem; }
+
+.progress-bar { position:relative; width:100%; height:20px; background:hsl(var(--muted)); border-radius:10px; overflow:hidden; }
+.progress-fill { height:100%; background:hsl(var(--primary)); transition:width 0.3s; }
+.progress-text { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-size:0.78rem; font-weight:600; color:hsl(var(--foreground)); }
+
+@media (max-width:768px) {
+  .form-row { grid-template-columns:1fr; }
+  .member-selector { grid-template-columns:1fr; }
 }
 </style>
+
+
+
+

@@ -21,6 +21,7 @@ const (
 	PrefixSlurmUser   = "slurm:user:"
 	PrefixAssociation = "slurm:assoc:"
 	PrefixReport      = "report:"
+	PrefixMonitoring  = "monitoring:"
 )
 
 // UserKey 用户信息缓存Key

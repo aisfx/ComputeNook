@@ -336,7 +336,6 @@ const handleOpenDirectory = (path: string) => {
 
 const monitoringSubItems = [
   { id: 'cluster', label: '集群状态' },
-  { id: 'alerts', label: '告警规则' },
 ]
 
 const otherMenuItems = [

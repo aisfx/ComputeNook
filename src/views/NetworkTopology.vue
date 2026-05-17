@@ -280,7 +280,7 @@ onUnmounted(() => {
 })
 </script>
 <style scoped>
-.topo-page{display:flex;flex-direction:column;height:100%;gap:0.6rem;overflow:hidden}
+.topo-page{position:absolute;inset:0;display:flex;flex-direction:column;gap:0.6rem;overflow:hidden;padding:0.75rem}
 .topo-toolbar{display:flex;justify-content:space-between;align-items:center;flex-shrink:0;gap:1rem;flex-wrap:wrap}
 .topo-toolbar-right{display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap}
 .topo-legend{display:flex;gap:0.6rem;flex-wrap:wrap;font-size:0.75rem;color:#6b7280;align-items:center}
@@ -303,7 +303,7 @@ onUnmounted(() => {
 .btn-pri:hover:not(:disabled){opacity:0.88}
 .btn-pri:disabled{opacity:0.4;cursor:not-allowed}
 .topo-err{color:#ef4444;font-size:0.8rem;flex-shrink:0}
-.topo-canvas-wrap{flex:1;position:relative;overflow:hidden;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc;min-height:0}
+.topo-canvas-wrap{flex:1;position:relative;overflow:hidden;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc;min-height:200px}
 .topo-svg{width:100%;height:100%;display:block}
 .topo-edge{cursor:pointer;transition:stroke-width 0.15s}
 .topo-edge:hover{stroke-width:4 !important}

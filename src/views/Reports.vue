@@ -544,10 +544,19 @@ onMounted(() => {
   text-transform: uppercase; letter-spacing: 0.05em;
 }
 .filter-item select, .filter-item input[type="date"] {
-  padding: 0.4rem 0.65rem; border: 1px solid hsl(var(--border)); border-radius: 7px;
-  font-size: 0.82rem; background: hsl(var(--background)); color: hsl(var(--foreground)); outline: none;
+  padding: 0.4rem 2rem 0.4rem 0.65rem; border: 1px solid hsl(var(--border)); border-radius: 7px;
+  font-size: 0.82rem; background-color: hsl(var(--background)); color: hsl(var(--foreground)); outline: none;
   transition: border-color 0.15s;
 }
+.filter-item select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23888' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.5rem center;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+}
+.filter-item select option { background-color: hsl(var(--background)); color: hsl(var(--foreground)); }
 .filter-item select:focus, .filter-item input[type="date"]:focus {
   border-color: hsl(var(--ring));
 }

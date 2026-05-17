@@ -559,11 +559,17 @@ const cmdbAutoScan = async () => {
   } finally { cmdbScanning.value = false }
 }
 
-onMounted(() => { loadAll(); updateContainerH(); window.addEventListener('resize', updateContainerH); window.addEventListener('mousemove', onMouseMove); window.addEventListener('mouseup', onMouseUp) })
+onMounted(() => {
+  loadAll()
+  nextTick(() => { setTimeout(updateContainerH, 100) })
+  window.addEventListener('resize', updateContainerH)
+  window.addEventListener('mousemove', onMouseMove)
+  window.addEventListener('mouseup', onMouseUp)
+})
 onUnmounted(() => { window.removeEventListener('resize', updateContainerH); window.removeEventListener('mousemove', onMouseMove); window.removeEventListener('mouseup', onMouseUp) })
 </script>
 <style scoped>
-.rack-page { display:flex; flex-direction:column; height:100%; gap:0.6rem; overflow:hidden; }
+.rack-page { position:absolute; inset:0; display:flex; flex-direction:column; gap:0.6rem; overflow:hidden; padding:0.75rem; }
 .rack-toolbar { display:flex; justify-content:space-between; align-items:center; flex-shrink:0; gap:1rem; }
 .rack-toolbar-right { display:flex; gap:0.6rem; }
 .rack-legend { display:flex; gap:0.75rem; flex-wrap:wrap; font-size:0.78rem; color:#6b7280; }
@@ -574,7 +580,7 @@ onUnmounted(() => { window.removeEventListener('resize', updateContainerH); wind
 .dot-down{background:#f3f4f6;border-color:#d1d5db}
 .rack-err{color:#ef4444;font-size:0.82rem;flex-shrink:0}
 .empty{text-align:center;padding:3rem;color:#9ca3af}
-.rack-scroll-area{flex:1;min-height:0;overflow-x:auto;overflow-y:hidden;position:relative}
+.rack-scroll-area{flex:1;min-height:200px;overflow-x:auto;overflow-y:hidden;position:relative}
 .cable-svg{position:absolute;top:0;left:0;pointer-events:none;z-index:10}
 .cable-line{pointer-events:stroke;cursor:pointer;transition:stroke-width 0.15s}
 .cable-line:hover{stroke-width:4}

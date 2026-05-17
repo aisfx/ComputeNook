@@ -1,209 +1,183 @@
 <template>
-  <div class="admin-dashboard">
-    <!-- 顶部操作栏 -->
-    <div class="dash-header">
-      <div class="dash-title">
-        <h3>集群总览</h3>
-        <span class="dash-time">最后更新: {{ lastUpdate }}</span>
+  <div class="db" ref="dashEl" :style="{
+    '--db-bg': themeVars.bg,
+    '--db-header-bg': themeVars.headerBg,
+    '--db-header-border': themeVars.headerBorder,
+    '--db-card-bg': themeVars.cardBg,
+    '--db-card-border': themeVars.cardBorder,
+    '--db-kpi-bg': themeVars.kpiBg,
+    '--db-text': themeVars.text,
+    '--db-sub': themeVars.subText,
+    '--db-res-bg': themeVars.resBg,
+  }">
+    <!-- 顶部标题栏 -->
+    <div class="db-header">
+      <div class="db-header-left">
+        <div class="db-logo"></div>
+        <div>
+          <div class="db-title">算力小筑集群监控大屏</div>
+          <div class="db-subtitle">High Performance Computing Cluster</div>
+        </div>
       </div>
-      <div class="dash-actions">
-        <select v-model="timeRange" @change="loadAll" class="time-select">
-          <option value="1h">最近 1 小时</option>
-          <option value="24h">最近 24 小时</option>
-          <option value="7d">最近 7 天</option>
-          <option value="30d">最近 30 天</option>
-        </select>
-        <button class="btn-refresh" @click="loadAll" :disabled="loading">
-          <span :class="{ spinning: loading }">⟳</span> 刷新
-        </button>
+      <div class="db-header-center">
+        <div class="db-time">{{ currentTime }}</div>
+        <div class="db-date">{{ currentDate }}</div>
+      </div>
+      <div class="db-header-right">
+        <div :class="['db-status', alertCount>0 ? 'db-status-warn' : 'db-status-ok']">
+          <span class="db-status-dot"></span>{{ alertCount>0 ? alertCount+' 条告警' : '系统正常' }}
+        </div>
+        <button class="db-btn" @click="loadAll" :disabled="loading">🔄</button>
+        <button class="db-btn" @click="toggleFullscreen">{{ isFullscreen ? '⊠' : '⛶' }}</button>
       </div>
     </div>
 
-    <!-- KPI 卡片行 -->
-    <div class="kpi-row">
-      <div class="kpi-card">
-        <div class="kpi-icon">🖥️</div>
-        <div class="kpi-body">
-          <div class="kpi-value">{{ stats.totalNodes }}</div>
-          <div class="kpi-label">总节点数</div>
-          <div class="kpi-sub">
-            <span class="ok">{{ stats.idleNodes }} 空闲</span> ·
-            <span class="warn">{{ stats.allocNodes }} 占用</span> ·
-            <span class="err">{{ stats.downNodes }} 故障</span>
-          </div>
-        </div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-icon">⚡</div>
-        <div class="kpi-body">
-          <div class="kpi-value">{{ stats.runningJobs }}</div>
-          <div class="kpi-label">运行中作业</div>
-          <div class="kpi-sub">
-            <span class="warn">{{ stats.pendingJobs }} 排队</span> ·
-            <span class="muted">{{ stats.completedJobs }} 已完成</span>
-          </div>
-        </div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-icon">🧮</div>
-        <div class="kpi-body">
-          <div class="kpi-value">{{ stats.cpuUtil }}%</div>
-          <div class="kpi-label">CPU 利用率</div>
-          <div class="kpi-bar">
-            <div class="kpi-bar-fill" :style="{ width: stats.cpuUtil + '%', background: cpuColor(stats.cpuUtil) }"></div>
-          </div>
-        </div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-icon">💾</div>
-        <div class="kpi-body">
-          <div class="kpi-value">{{ stats.memUtil }}%</div>
-          <div class="kpi-label">内存利用率</div>
-          <div class="kpi-bar">
-            <div class="kpi-bar-fill" :style="{ width: stats.memUtil + '%', background: cpuColor(stats.memUtil) }"></div>
-          </div>
-        </div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-icon">🎮</div>
-        <div class="kpi-body">
-          <div class="kpi-value">{{ stats.gpuUtil }}%</div>
-          <div class="kpi-label">GPU 利用率</div>
-          <div class="kpi-bar">
-            <div class="kpi-bar-fill" :style="{ width: stats.gpuUtil + '%', background: '#8b5cf6' }"></div>
-          </div>
-        </div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-icon">👥</div>
-        <div class="kpi-body">
-          <div class="kpi-value">{{ stats.activeUsers }}</div>
-          <div class="kpi-label">活跃用户</div>
-          <div class="kpi-sub"><span class="muted">共 {{ stats.totalUsers }} 用户</span></div>
-        </div>
+    <!-- KPI 行 -->
+    <div class="db-kpi-row">
+      <div class="db-kpi" v-for="k in kpiList" :key="k.label" :style="{'--kc':k.color}">
+        <div class="db-kpi-accent"></div>
+        <div class="db-kpi-val">{{ k.val }}</div>
+        <div class="db-kpi-label">{{ k.label }}</div>
+        <div class="db-kpi-bar"><div class="db-kpi-bar-fill" :style="{width:k.pct+'%'}"></div></div>
       </div>
     </div>
 
-    <!-- 中间两列 -->
-    <div class="dash-grid">
-      <!-- 左：节点状态表 -->
-      <div class="dash-card">
-        <div class="card-header">
-          <span>🖥️ 节点状态</span>
-          <span class="card-badge">{{ nodes.length }} 个节点</span>
-        </div>
-        <div class="node-list">
-          <div v-if="nodes.length === 0" class="empty-hint">暂无节点数据</div>
-          <div v-for="node in nodes" :key="node.name" class="node-row">
-            <div class="node-name">{{ node.name }}</div>
-            <div class="node-state">
-              <span :class="['node-badge', nodeStateClass(node.state)]">{{ node.state }}</span>
-            </div>
-            <div class="node-res">
-              <span class="res-item">CPU {{ node.cpuAlloc }}/{{ node.cpuTotal }}</span>
-              <span class="res-item">MEM {{ node.memAlloc }}G/{{ node.memTotal }}G</span>
-              <span v-if="node.gpuTotal > 0" class="res-item gpu">GPU {{ node.gpuAlloc }}/{{ node.gpuTotal }}</span>
-            </div>
-            <div class="node-bar-wrap">
-              <div class="node-bar">
-                <div class="node-bar-fill cpu" :style="{ width: nodeUtil(node.cpuAlloc, node.cpuTotal) + '%' }"></div>
+    <!-- 主内容：三列 -->
+    <div class="db-main">
+
+      <!-- 左列 -->
+      <div class="db-col db-col-left">
+        <!-- 算力统计 -->
+        <div class="db-card db-card-fixed">
+          <div class="db-card-title">⚡ 算力统计</div>
+          <!-- CPU 算力 -->
+          <div class="db-compute-section">
+            <div class="db-compute-type">CPU 算力</div>
+            <div class="db-compute-items">
+              <div class="db-compute-item">
+                <div class="db-compute-label">FP64 双精度</div>
+                <div class="db-compute-val" style="color:#3b82f6">{{ cpuCompute.fp64 }}</div>
+                <div class="db-compute-unit">TFLOPS</div>
+              </div>
+              <div class="db-compute-item">
+                <div class="db-compute-label">FP32 单精度</div>
+                <div class="db-compute-val" style="color:#60a5fa">{{ cpuCompute.fp32 }}</div>
+                <div class="db-compute-unit">TFLOPS</div>
               </div>
             </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 右：分区状态 + 作业队列 -->
-      <div class="dash-right">
-        <!-- 分区状态 -->
-        <div class="dash-card">
-          <div class="card-header">
-            <span>📦 分区状态</span>
-          </div>
-          <table class="mini-table">
-            <thead><tr><th>分区</th><th>状态</th><th>节点</th><th>运行</th><th>排队</th></tr></thead>
-            <tbody>
-              <tr v-if="partitions.length === 0"><td colspan="5" class="empty-hint">暂无数据</td></tr>
-              <tr v-for="p in partitions" :key="p.name">
-                <td><strong>{{ p.name }}</strong></td>
-                <td><span :class="['part-badge', p.state === 'UP' ? 'up' : 'down']">{{ p.state }}</span></td>
-                <td>{{ p.nodes }}</td>
-                <td class="num-cell">{{ p.running }}</td>
-                <td class="num-cell warn">{{ p.pending }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        <!-- 最近作业 -->
-        <div class="dash-card" style="margin-top:12px">
-          <div class="card-header">
-            <span>📋 最近作业</span>
-            <span class="card-badge">{{ recentJobs.length }} 条</span>
-          </div>
-          <table class="mini-table">
-            <thead><tr><th>ID</th><th>用户</th><th>名称</th><th>状态</th><th>运行时长</th></tr></thead>
-            <tbody>
-              <tr v-if="recentJobs.length === 0"><td colspan="5" class="empty-hint">暂无数据</td></tr>
-              <tr v-for="job in recentJobs" :key="job.id">
-                <td><code>{{ job.id }}</code></td>
-                <td>{{ job.user }}</td>
-                <td class="job-name">{{ job.name }}</td>
-                <td><span :class="['job-badge', job.state.toLowerCase()]">{{ job.state }}</span></td>
-                <td class="muted">{{ job.runtime }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-
-    <!-- 底部：用户机时排行 + 账户用量 -->
-    <div class="dash-grid" style="margin-top:12px">
-      <!-- 用户机时排行 -->
-      <div class="dash-card">
-        <div class="card-header">
-          <span>🏆 用户机时排行 ({{ timeRange }})</span>
-        </div>
-        <div v-if="topUsers.length === 0" class="empty-hint">暂无数据</div>
-        <div v-for="(u, i) in topUsers" :key="u.user" class="rank-row">
-          <div class="rank-num" :class="i < 3 ? 'top' : ''">{{ i + 1 }}</div>
-          <div class="rank-user">{{ u.user }}</div>
-          <div class="rank-bar-wrap">
-            <div class="rank-bar">
-              <div class="rank-bar-fill" :style="{ width: (u.hours / (topUsers[0]?.hours || 1) * 100) + '%' }"></div>
+            <div class="db-compute-used">
+              <span class="db-compute-used-label">已用核数</span>
+              <span class="db-compute-used-val">{{ clusterRes.cpuTotal - clusterRes.cpuFree }} / {{ clusterRes.cpuTotal }}</span>
             </div>
           </div>
-          <div class="rank-val">{{ u.hours.toFixed(1) }}h</div>
-          <div class="rank-jobs muted">{{ u.jobs }} 作业</div>
-        </div>
-      </div>
-
-      <!-- 账户用量 -->
-      <div class="dash-card">
-        <div class="card-header">
-          <span>💼 账户用量</span>
-        </div>
-        <div v-if="accountUsage.length === 0" class="empty-hint">暂无数据</div>
-        <div v-for="acc in accountUsage" :key="acc.account" class="acc-row">
-          <div class="acc-name">{{ acc.account }}</div>
-          <div class="acc-bar-wrap">
-            <div class="acc-bar">
-              <div class="acc-bar-fill"
-                :style="{
-                  width: acc.total > 0 ? Math.min(acc.used / acc.total * 100, 100) + '%' : '0%',
-                  background: acc.total > 0 && acc.used / acc.total > 0.9 ? '#ef4444' :
-                              acc.total > 0 && acc.used / acc.total > 0.7 ? '#f59e0b' : '#22c55e'
-                }">
+          <div class="db-compute-divider"></div>
+          <!-- GPU 算力 -->
+          <div class="db-compute-section">
+            <div class="db-compute-type">GPU 算力</div>
+            <div class="db-compute-items db-compute-items-3">
+              <div class="db-compute-item">
+                <div class="db-compute-label">FP32</div>
+                <div class="db-compute-val" style="color:#10b981">{{ gpuCompute.fp32 }}</div>
+                <div class="db-compute-unit">TFLOPS</div>
+              </div>
+              <div class="db-compute-item">
+                <div class="db-compute-label">FP16</div>
+                <div class="db-compute-val" style="color:#34d399">{{ gpuCompute.fp16 }}</div>
+                <div class="db-compute-unit">TFLOPS</div>
+              </div>
+              <div class="db-compute-item">
+                <div class="db-compute-label">INT8</div>
+                <div class="db-compute-val" style="color:#6ee7b7">{{ gpuCompute.int8 }}</div>
+                <div class="db-compute-unit">TOPS</div>
               </div>
             </div>
+            <div class="db-compute-used">
+              <span class="db-compute-used-label">已用GPU</span>
+              <span class="db-compute-used-val">{{ clusterRes.gpuTotal - clusterRes.gpuFree }} / {{ clusterRes.gpuTotal }}</span>
+            </div>
           </div>
-          <div class="acc-stat">
-            <span v-if="acc.total > 0">{{ formatMins(acc.used) }} / {{ formatMins(acc.total) }}</span>
-            <span v-else class="muted">{{ formatMins(acc.used) }} 已用</span>
+        </div>
+        <!-- 资源统计 -->
+        <div class="db-card db-card-fixed">
+          <div class="db-card-title">🖥️ 资源统计</div>
+          <div class="db-res-grid">
+            <div class="db-res-item"><div class="db-res-val">{{ clusterRes.cpuTotal }}</div><div class="db-res-label">CPU总核数</div></div>
+            <div class="db-res-item"><div class="db-res-val" style="color:#10b981">{{ clusterRes.cpuFree }}</div><div class="db-res-label">空闲核数</div></div>
+            <div class="db-res-item"><div class="db-res-val">{{ clusterRes.memTotal }}</div><div class="db-res-label">内存总量(GB)</div></div>
+            <div class="db-res-item"><div class="db-res-val" style="color:#10b981">{{ clusterRes.memFree }}</div><div class="db-res-label">空闲内存(GB)</div></div>
+            <div class="db-res-item"><div class="db-res-val" style="color:#8b5cf6">{{ clusterRes.gpuTotal }}</div><div class="db-res-label">GPU总卡数</div></div>
+            <div class="db-res-item"><div class="db-res-val" style="color:#10b981">{{ clusterRes.gpuFree }}</div><div class="db-res-label">空闲GPU</div></div>
           </div>
-          <div class="acc-pct muted">
-            {{ acc.total > 0 ? (acc.used / acc.total * 100).toFixed(0) + '%' : '—' }}
+        </div>
+        <!-- 作业类型 -->
+        <div class="db-card db-card-fill">
+          <div class="db-card-title">📊 作业类型分布</div>
+          <div ref="jobPieEl" class="db-chart-fill"></div>
+        </div>
+      </div>
+
+      <!-- 中列：网络拓扑图 -->
+      <div class="db-col db-col-center">
+        <div class="db-card db-card-fill">
+          <div class="db-card-header">
+            <span class="db-card-title">🌐 集群网络拓扑</span>
+            <div class="db-legend">
+              <span class="db-leg"><i style="background:#10b981"></i>空闲</span>
+              <span class="db-leg"><i style="background:#f59e0b"></i>繁忙</span>
+              <span class="db-leg"><i style="background:#ef4444"></i>故障</span>
+              <span class="db-leg"><i style="background:#6366f1"></i>正常</span>
+            </div>
+          </div>
+          <div class="db-topo-wrap">
+            <div ref="topoEl" class="db-chart-fill"></div>
+            <canvas ref="topoFlowEl" class="db-topo-flow"></canvas>
+          </div>
+          <div class="db-node-stats">
+            <div class="db-ns-item"><div class="db-ns-num" style="color:#ef4444">{{ clusterNodeStates.unschedulable }}</div><div class="db-ns-label">不可调度</div></div>
+            <div class="db-ns-item"><div class="db-ns-num" style="color:#f59e0b">{{ clusterNodeStates.busy }}</div><div class="db-ns-label">繁忙</div></div>
+            <div class="db-ns-item"><div class="db-ns-num" style="color:#6366f1">{{ clusterNodeStates.normal }}</div><div class="db-ns-label">正常</div></div>
+            <div class="db-ns-item"><div class="db-ns-num" style="color:#10b981">{{ clusterNodeStates.idle }}</div><div class="db-ns-label">空闲</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 右列 -->
+      <div class="db-col db-col-right">
+        <!-- 上半：两列并排 -->
+        <div class="db-right-grid">
+          <!-- 作业运行曲线 -->
+          <div class="db-card db-right-card">
+            <div class="db-card-title">📈 作业运行曲线</div>
+            <div ref="jobCurveEl" class="db-chart-right"></div>
+          </div>
+          <!-- 资源趋势 -->
+          <div class="db-card db-right-card">
+            <div class="db-card-header">
+              <span class="db-card-title">⚡ 资源趋势</span>
+              <div class="db-tabs">
+                <button :class="['db-tab',trendTab==='cpu'&&'active']" @click="trendTab='cpu';drawTrend()">CPU</button>
+                <button :class="['db-tab',trendTab==='mem'&&'active']" @click="trendTab='mem';drawTrend()">内存</button>
+                <button :class="['db-tab',trendTab==='gpu'&&'active']" @click="trendTab='gpu';drawTrend()">GPU</button>
+              </div>
+            </div>
+            <div ref="trendEl" class="db-chart-right"></div>
+          </div>
+          <!-- 排队趋势 -->
+          <div class="db-card db-right-card">
+            <div class="db-card-title">📋 排队作业趋势</div>
+            <div ref="queueEl" class="db-chart-right"></div>
+          </div>
+          <!-- 告警 -->
+          <div class="db-card db-right-card db-card-alert">
+            <div class="db-card-title">🔔 告警列表</div>
+            <div class="db-alert-list">
+              <div v-if="recentAlerts.length===0" class="db-alert-empty">✅ 暂无告警</div>
+              <div v-for="a in recentAlerts" :key="a.id" :class="['db-alert-item','db-alert-'+a.level]">
+                <span class="db-alert-dot"></span>
+                <span class="db-alert-name">{{ a.name }}</span>
+                <span class="db-alert-time">{{ a.time }}</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -212,333 +186,643 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { getApiBase, getToken } from '../utils/auth'
+import * as echarts from 'echarts/core'
+import { PieChart, BarChart, LineChart, ScatterChart, GaugeChart, GraphChart } from 'echarts/charts'
+import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'
+import { CanvasRenderer } from 'echarts/renderers'
+echarts.use([PieChart, BarChart, LineChart, ScatterChart, GaugeChart, GraphChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer])
 
-const loading = ref(false)
-const lastUpdate = ref('—')
-const timeRange = ref('24h')
-let timer: any = null
+// ── 主题感知 ──────────────────────────────────────────────
+const currentTheme = ref(document.documentElement.getAttribute('data-theme') || 'light')
+let themeObserver: MutationObserver | null = null
 
-const stats = ref({
-  totalNodes: 0, idleNodes: 0, allocNodes: 0, downNodes: 0,
-  runningJobs: 0, pendingJobs: 0, completedJobs: 0,
-  cpuUtil: 0, memUtil: 0, gpuUtil: 0,
-  activeUsers: 0, totalUsers: 0,
+const isDark = computed(() => currentTheme.value === 'dark' || currentTheme.value === 'ocean')
+
+const themeVars = computed(() => {
+  if (currentTheme.value === 'dark') return {
+    bg: 'linear-gradient(135deg,#0f172a 0%,#1e293b 50%,#0f172a 100%)',
+    headerBg: 'rgba(15,23,42,.8)', headerBorder: 'rgba(99,102,241,.3)',
+    cardBg: 'rgba(30,41,59,.7)', cardBorder: 'rgba(255,255,255,.06)',
+    kpiBg: 'rgba(30,41,59,.8)', text: '#e2e8f0', subText: '#64748b',
+    splitLine: '#1e293b', axisLine: '#334155', chartText: '#64748b',
+    resBg: 'rgba(255,255,255,.03)', gaugeTrack: 'rgba(255,255,255,0.06)',
+  }
+  if (currentTheme.value === 'ocean') return {
+    bg: 'linear-gradient(135deg,#0a1628 0%,#0d2137 50%,#0a1628 100%)',
+    headerBg: 'rgba(10,22,40,.9)', headerBorder: 'rgba(56,189,248,.3)',
+    cardBg: 'rgba(13,33,55,.8)', cardBorder: 'rgba(56,189,248,.08)',
+    kpiBg: 'rgba(13,33,55,.9)', text: '#e0f2fe', subText: '#4a7fa5',
+    splitLine: '#0d2137', axisLine: '#1e3a5f', chartText: '#4a7fa5',
+    resBg: 'rgba(56,189,248,.04)', gaugeTrack: 'rgba(56,189,248,0.06)',
+  }
+  // light
+  return {
+    bg: 'linear-gradient(135deg,#f0f4ff 0%,#e8edf8 50%,#f0f4ff 100%)',
+    headerBg: 'rgba(255,255,255,.9)', headerBorder: 'rgba(99,102,241,.2)',
+    cardBg: 'rgba(255,255,255,.9)', cardBorder: 'rgba(0,0,0,.08)',
+    kpiBg: 'rgba(255,255,255,.95)', text: '#1e293b', subText: '#64748b',
+    splitLine: '#e2e8f0', axisLine: '#cbd5e1', chartText: '#64748b',
+    resBg: 'rgba(0,0,0,.03)', gaugeTrack: 'rgba(0,0,0,0.06)',
+  }
 })
 
+const loading = ref(false)
+const currentTime = ref('')
+const currentDate = ref('')
+const isFullscreen = ref(false)
+const dashEl = ref<HTMLElement>()
+type TrendTab = 'cpu' | 'mem' | 'gpu'
+const trendTab = ref<TrendTab>('cpu')
+let clockTimer: any = null
+let refreshTimer: any = null
+
+const stats = ref({ totalNodes:0, runningJobs:0, pendingJobs:0, completedJobs:0, cpuUtil:0, memUtil:0, activeUsers:0, totalUsers:0,
+  totalGpus:0, allocGpus:0,
+  totalCpus:0, allocCpus:0, totalMemGb:0, freeMemGb:0,
+  jobTypes:{ mpi:0, openmp:0, gpu:0, array:0, serial:0 } })
 const nodes = ref<any[]>([])
-const partitions = ref<any[]>([])
-const recentJobs = ref<any[]>([])
-const topUsers = ref<any[]>([])
-const accountUsage = ref<any[]>([])
+const trendData = ref<{time:string;cpu:number;mem:number}[]>([])
+const recentAlerts = ref<{id:number;name:string;level:string;time:string}[]>([])
+const alertCount = computed(() => recentAlerts.value.length)
 
-const cpuColor = (v: number) =>
-  v > 90 ? '#ef4444' : v > 70 ? '#f59e0b' : '#22c55e'
+const clusterNodeStates = computed(() => {
+  const r = { unschedulable:0, busy:0, normal:0, idle:0 }
+  for (const n of nodes.value) {
+    const s = (n.state||'').toLowerCase()
+    if (s.includes('down')||s.includes('drain')) { r.unschedulable++; continue }
+    const u = n.cpuTotal>0 ? n.cpuAlloc/n.cpuTotal : 0
+    if (u>=0.7) r.busy++; else if (u>=0.2) r.normal++; else r.idle++
+  }
+  return r
+})
+const clusterRes = computed(() => {
+  // 优先用 dashboard/stats 的聚合数据，fallback 到 node-metrics 累加
+  const cpuTotal = stats.value.totalCpus || nodes.value.reduce((s:number,n:any)=>s+(n.cpuTotal||0),0)
+  const cpuFree  = Math.max(0, (stats.value.totalCpus || 0) - (stats.value.allocCpus || 0))
+  const memTotal = stats.value.totalMemGb > 0 ? stats.value.totalMemGb : nodes.value.reduce((s:number,n:any)=>s+(n.memTotal||0),0)
+  const memFree  = stats.value.freeMemGb > 0 ? stats.value.freeMemGb : nodes.value.reduce((s:number,n:any)=>s+Math.max(0,(n.memTotal||0)-(n.memAlloc||0)),0)
+  return { cpuTotal: Math.round(cpuTotal), cpuFree: Math.round(cpuFree), memTotal: memTotal.toFixed(0), memFree: memFree.toFixed(0), gpuTotal: stats.value.totalGpus, gpuFree: Math.max(0, stats.value.totalGpus - stats.value.allocGpus) }
+})
 
-const nodeStateClass = (s: string) => {
-  const st = (s || '').toLowerCase()
-  if (st.includes('idle')) return 'idle'
-  if (st.includes('alloc') || st.includes('mix')) return 'alloc'
-  if (st.includes('down') || st.includes('drain')) return 'down'
-  return 'unknown'
+const totalCpuHours = computed(() => nodes.value.reduce((s:number,n:any)=>s+(n.cpuAlloc||0),0))
+
+// 算力估算：CPU FP64 ≈ 核数 × 16 GFLOPS，FP32 ≈ 核数 × 32 GFLOPS
+// GPU FP32 ≈ GPU卡数 × 10 TFLOPS，FP16 × 2，INT8 × 4（典型A100/V100估算）
+const cpuCompute = computed(() => {
+  const cores = stats.value.totalCpus || nodes.value.reduce((s:number,n:any)=>s+(n.cpuTotal||0),0)
+  return {
+    fp64: cores > 0 ? (cores * 16 / 1000).toFixed(1) : '--',
+    fp32: cores > 0 ? (cores * 32 / 1000).toFixed(1) : '--',
+  }
+})
+const gpuCompute = computed(() => {
+  const gpus = stats.value.totalGpus
+  return {
+    fp32: gpus > 0 ? (gpus * 10).toFixed(1) : '--',
+    fp16: gpus > 0 ? (gpus * 20).toFixed(1) : '--',
+    int8: gpus > 0 ? (gpus * 40).toFixed(1) : '--',
+  }
+})
+const kpiList = computed(() => [
+  { icon:'', label:'总节点数',   val:stats.value.totalNodes,  pct:100, color:'#3b82f6' },
+  { icon:'', label:'CPU利用率',  val:stats.value.cpuUtil+'%', pct:stats.value.cpuUtil, color:'#10b981' },
+  { icon:'', label:'内存利用率', val:stats.value.memUtil+'%', pct:stats.value.memUtil, color:'#8b5cf6' },
+  { icon:'', label:'运行作业',   val:stats.value.runningJobs, pct:Math.min(100,stats.value.runningJobs*5), color:'#f97316' },
+  { icon:'', label:'活跃告警',   val:alertCount.value,        pct:alertCount.value>0?100:0, color:alertCount.value>0?'#ef4444':'#14b8a6' },
+])
+
+const toggleFullscreen = () => {
+  if (!dashEl.value) return
+  if (!document.fullscreenElement) { dashEl.value.requestFullscreen(); isFullscreen.value=true }
+  else { document.exitFullscreen(); isFullscreen.value=false }
 }
 
-const nodeUtil = (alloc: number, total: number) =>
-  total > 0 ? Math.round(alloc / total * 100) : 0
+const jobPieEl   = ref<HTMLElement>()
+const queueEl    = ref<HTMLElement>()
+const clusterEl  = ref<HTMLElement>()
+const topoEl     = ref<HTMLElement>()
+const topoFlowEl = ref<HTMLCanvasElement>()
+const jobCurveEl = ref<HTMLElement>()
+const trendEl    = ref<HTMLElement>()
+let jobPie:      echarts.ECharts|null=null
+let queueChart:  echarts.ECharts|null=null
+let clusterChart:echarts.ECharts|null=null
+let topoChart:   echarts.ECharts|null=null
+// 流量粒子动画
+let flowRaf: number = 0
+type FlowLink = { x1:number; y1:number; x2:number; y2:number; color:string; active:boolean }
+type Particle = { link:FlowLink; t:number; speed:number }
+let flowLinks: FlowLink[] = []
+let particles: Particle[] = []
+let jobCurve:    echarts.ECharts|null=null
+let trendChart:  echarts.ECharts|null=null
+let gaugeCpu:    echarts.ECharts|null=null
+let gaugeMem:    echarts.ECharts|null=null
+let gaugeGpu:    echarts.ECharts|null=null
 
-const formatMins = (mins: number) => {
-  if (!mins) return '0m'
-  if (mins < 60) return `${Math.round(mins)}m`
-  return `${(mins / 60).toFixed(1)}h`
-}
+const drawTopo = async () => {
+  await nextTick()
+  if (!topoEl.value) return
+  if (!topoChart) { topoChart = echarts.init(topoEl.value) }
+  topoChart.resize()
 
-const timeRangeDays = () => {
-  const map: Record<string, number> = { '1h': 0.04, '24h': 1, '7d': 7, '30d': 30 }
-  return map[timeRange.value] || 1
-}
+  const W = topoEl.value.clientWidth  || 400
+  const H = topoEl.value.clientHeight || 500
 
-const api = (path: string) =>
-  fetch(`${getApiBase()}${path}`, { headers: { Authorization: `Bearer ${getToken()}` } })
-    .then(r => r.ok ? r.json() : null).catch(() => null)
+  const graphNodes: any[] = []
+  const graphLinks: any[] = []
+  const rawLinks: {src:string; tgt:string; active:boolean}[] = []
 
-const loadNodes = async () => {
-  const data = await api('/api/monitoring/node-metrics')
-  if (!data?.nodes) return
-  const ns = data.nodes.map((n: any) => ({
-    name: n.instance?.replace(/:\d+$/, '') || n.nodename || '—',
-    state: n.state || 'UNKNOWN',
-    cpuAlloc: n.cpu_alloc ?? 0,
-    cpuTotal: n.cpu_total ?? n.cpus ?? 0,
-    memAlloc: Math.round((n.mem_alloc ?? 0) / 1024),
-    memTotal: Math.round((n.mem_total ?? n.memory ?? 0) / 1024),
-    gpuAlloc: n.gpu_alloc ?? 0,
-    gpuTotal: n.gpu_total ?? 0,
-  }))
-  nodes.value = ns
+  const aggCount = Math.min(4, Math.max(2, Math.ceil(nodes.value.length / 8)))
 
-  // 汇总 KPI
-  stats.value.totalNodes = ns.length
-  stats.value.idleNodes = ns.filter((n: any) => nodeStateClass(n.state) === 'idle').length
-  stats.value.allocNodes = ns.filter((n: any) => nodeStateClass(n.state) === 'alloc').length
-  stats.value.downNodes = ns.filter((n: any) => nodeStateClass(n.state) === 'down').length
+  // 以 (0,0) 为中心的相对坐标，半径根据容器尺寸计算
+  const AGG_R  = Math.min(W, H) * 0.22
+  const NODE_R = Math.min(W, H) * 0.42
 
-  const totalCpu = ns.reduce((s: number, n: any) => s + n.cpuTotal, 0)
-  const allocCpu = ns.reduce((s: number, n: any) => s + n.cpuAlloc, 0)
-  const totalMem = ns.reduce((s: number, n: any) => s + n.memTotal, 0)
-  const allocMem = ns.reduce((s: number, n: any) => s + n.memAlloc, 0)
-  const totalGpu = ns.reduce((s: number, n: any) => s + n.gpuTotal, 0)
-  const allocGpu = ns.reduce((s: number, n: any) => s + n.gpuAlloc, 0)
-  stats.value.cpuUtil = totalCpu > 0 ? Math.round(allocCpu / totalCpu * 100) : 0
-  stats.value.memUtil = totalMem > 0 ? Math.round(allocMem / totalMem * 100) : 0
-  stats.value.gpuUtil = totalGpu > 0 ? Math.round(allocGpu / totalGpu * 100) : 0
-}
-
-const loadPartitions = async () => {
-  const data = await api('/api/jobs/partitions/list')
-  if (!data?.data) return
-  partitions.value = data.data.map((p: any) => ({
-    name: p.name,
-    state: p.state || 'UP',
-    nodes: p.nodes || '—',
-    running: 0,
-    pending: 0,
-  }))
-}
-
-const loadJobs = async () => {
-  const data = await api('/api/jobs?page_size=20')
-  if (!data?.data) return
-  const jobs = data.data
-  stats.value.runningJobs = jobs.filter((j: any) => j.job_state === 'RUNNING').length
-  stats.value.pendingJobs = jobs.filter((j: any) => j.job_state === 'PENDING').length
-  stats.value.completedJobs = jobs.filter((j: any) => j.job_state === 'COMPLETED').length
-
-  // 更新分区作业数
-  partitions.value.forEach((p: any) => {
-    p.running = jobs.filter((j: any) => j.partition === p.name && j.job_state === 'RUNNING').length
-    p.pending = jobs.filter((j: any) => j.partition === p.name && j.job_state === 'PENDING').length
+  graphNodes.push({
+    id:'core', name:'核心交换机', x:0, y:0, symbolSize:38,
+    itemStyle:{color:'#6366f1',shadowBlur:20,shadowColor:'#6366f1'},
+    label:{show:true,color:'#e2e8f0',fontSize:10,position:'inside'},
   })
 
-  recentJobs.value = jobs.slice(0, 10).map((j: any) => ({
-    id: j.job_id,
-    user: j.user_name || '—',
-    name: j.name || '—',
-    state: j.job_state || '—',
-    runtime: formatRuntime(j.run_time),
-  }))
-
-  // 用户机时排行：按 run_time * cpus 估算
-  const userMap: Record<string, { hours: number; jobs: number }> = {}
-  for (const j of jobs) {
-    const u = j.user_name || 'unknown'
-    const h = ((j.run_time || 0) * (j.cpus || 1)) / 3600
-    if (!userMap[u]) userMap[u] = { hours: 0, jobs: 0 }
-    userMap[u].hours += h
-    userMap[u].jobs++
-  }
-  topUsers.value = Object.entries(userMap)
-    .map(([user, v]) => ({ user, ...v }))
-    .sort((a, b) => b.hours - a.hours)
-    .slice(0, 8)
-
-  // 活跃用户数
-  stats.value.activeUsers = Object.keys(userMap).length
-}
-
-const loadUsers = async () => {
-  const data = await api('/api/users')
-  if (data?.data) stats.value.totalUsers = data.data.length
-  else if (Array.isArray(data)) stats.value.totalUsers = data.length
-}
-
-const loadAccountUsage = async () => {
-  const data = await api('/api/slurm/accounts')
-  if (!data?.data && !Array.isArray(data)) return
-  const accounts: any[] = data?.data || data || []
-  const days = timeRangeDays()
-  const end = Math.floor(Date.now() / 1000)
-  const start = end - Math.round(days * 86400)
-
-  const results = await Promise.all(
-    accounts.slice(0, 10).map(async (acc: any) => {
-      const name = acc.name || acc.Name
-      const usage = await api(`/api/usage/account?account=${name}&start_time=${start}&end_time=${end}`)
-      return {
-        account: name,
-        used: usage?.data?.used_billing ?? 0,
-        total: usage?.data?.total_billing ?? 0,
-      }
+  for (let i = 0; i < aggCount; i++) {
+    const angle = (i / aggCount) * Math.PI * 2 - Math.PI / 2
+    const id = `agg${i}`
+    graphNodes.push({
+      id, name:`汇聚${i+1}`,
+      x: Math.cos(angle) * AGG_R,
+      y: Math.sin(angle) * AGG_R,
+      symbolSize:26,
+      itemStyle:{color:'#3b82f6',shadowBlur:15,shadowColor:'#3b82f6'},
+      label:{show:true,color:'#e2e8f0',fontSize:9,position:'inside'},
     })
-  )
-  accountUsage.value = results.filter(r => r.account)
+    graphLinks.push({ source:'core', target:id, lineStyle:{color:'rgba(99,102,241,0.5)',width:2} })
+    rawLinks.push({ src:'core', tgt:id, active:true })
+
+    const myNodes = nodes.value.length > 0
+      ? nodes.value.filter((_,idx) => idx % aggCount === i)
+      : Array.from({length:4}, (_,j) => ({name:`node${i*4+j+1}`,state:'idle',cpuAlloc:0,cpuTotal:8}))
+    const sliced = myNodes.slice(0, 8)
+    const spread = Math.min(Math.PI * 0.55, sliced.length * 0.2)
+    sliced.forEach((n, j) => {
+      const na = angle + (sliced.length > 1 ? (j / (sliced.length - 1) - 0.5) * spread : 0)
+      const nid = `n_${i}_${j}`
+      const nc = nodeColor(n.state)
+      const hasTraffic = (n.cpuAlloc||0) > 0
+        || n.state?.toLowerCase().includes('alloc')
+        || n.state?.toLowerCase().includes('mix')
+      graphNodes.push({
+        id:nid, name:n.name||`node${j+1}`,
+        x: Math.cos(na) * NODE_R,
+        y: Math.sin(na) * NODE_R,
+        symbolSize:14,
+        itemStyle:{color:nc,shadowBlur:8,shadowColor:nc},
+        label:{show:false},
+      })
+      graphLinks.push({
+        source:id, target:nid,
+        lineStyle:{color: hasTraffic ? 'rgba(59,130,246,0.6)' : 'rgba(59,130,246,0.2)', width: hasTraffic ? 1.5 : 1},
+      })
+      rawLinks.push({ src:id, tgt:nid, active:hasTraffic })
+    })
+  }
+
+  // 先渲染节点数据，zoom/center 在 setTimeout 里修正
+  topoChart.setOption({
+    backgroundColor:'transparent',
+    tooltip:{ formatter:(p:any) => p.data?.name || '' },
+    series:[{
+      type:'graph', layout:'none', roam:true,
+      zoom:0.8, center:['50%','50%'],
+      nodes:graphNodes, edges:graphLinks,
+      lineStyle:{curveness:0.06},
+      emphasis:{focus:'adjacency'},
+      animationDuration:1000, animationEasing:'elasticOut' as const,
+    }],
+  })
+
+  // 延迟读取容器尺寸，确保 DOM 已稳定渲染
+  await nextTick()
+  setTimeout(() => {
+    if (!topoChart || !topoEl.value) return
+    topoChart.resize()
+    const RW = topoEl.value.clientWidth  || 400
+    const RH = topoEl.value.clientHeight || 500
+
+    const xs = graphNodes.map((n:any) => n.x)
+    const ys = graphNodes.map((n:any) => n.y)
+    const minX = Math.min(...xs), maxX = Math.max(...xs)
+    const minY = Math.min(...ys), maxY = Math.max(...ys)
+    const spanX = maxX - minX || 1
+    const spanY = maxY - minY || 1
+    const gcx = (minX + maxX) / 2
+    const gcy = (minY + maxY) / 2
+    const zoom = Math.min((RW * 0.75) / spanX, (RH * 0.75) / spanY)
+
+    topoChart.setOption({
+      series:[{ zoom, center:[gcx, gcy] }]
+    })
+    startFlowAnimation(graphNodes, rawLinks)
+  }, 150)
 }
 
-const formatRuntime = (secs: number) => {
-  if (!secs) return '0s'
-  if (secs < 60) return `${secs}s`
-  if (secs < 3600) return `${Math.floor(secs / 60)}m`
-  return `${Math.floor(secs / 3600)}h${Math.floor((secs % 3600) / 60)}m`
+// 将图坐标系转换为 canvas 像素坐标 —— 使用 ECharts convertToPixel 精确对齐
+const topoCoordToPixel = (nx:number, ny:number) => {
+  if (!topoChart) return { x:0, y:0 }
+  const pt = topoChart.convertToPixel({ seriesIndex:0 }, [nx, ny]) as [number, number]
+  return { x: pt[0], y: pt[1] }
 }
+
+const startFlowAnimation = (graphNodes: any[], rawLinks: {src:string;tgt:string;active:boolean}[]) => {
+  cancelAnimationFrame(flowRaf)
+  const canvas = topoFlowEl.value
+  if (!canvas) return
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+
+  // canvas 尺寸与 echarts 容器保持一致
+  const syncSize = () => {
+    const parent = canvas.parentElement
+    if (parent) { canvas.width = parent.clientWidth; canvas.height = parent.clientHeight }
+  }
+  syncSize()
+
+  // 节点 id -> 图坐标
+  const nodeMap: Record<string, {x:number;y:number}> = {}
+  graphNodes.forEach(n => { nodeMap[n.id] = {x:n.x, y:n.y} })
+
+  // 只对有流量的链路生成粒子，存储图坐标（每帧用 convertToPixel 转换）
+  flowLinks = rawLinks
+    .filter(l => l.active && nodeMap[l.src] && nodeMap[l.tgt])
+    .map(l => {
+      const s = nodeMap[l.src], t = nodeMap[l.tgt]
+      return { x1:s.x, y1:s.y, x2:t.x, y2:t.y, color:'#60a5fa', active:true }
+    })
+
+  // 初始化粒子，错开初始位置
+  particles = []
+  flowLinks.forEach(link => {
+    const count = 2 + Math.floor(Math.random()*2)
+    for (let i=0;i<count;i++) {
+      particles.push({ link, t: i/count, speed: 0.004 + Math.random()*0.003 })
+    }
+  })
+
+  const draw = () => {
+    syncSize()
+    const w = canvas.width, h = canvas.height
+    ctx.clearRect(0, 0, w, h)
+
+    particles.forEach(p => {
+      p.t += p.speed
+      if (p.t > 1) p.t -= 1
+
+      const { x1, y1, x2, y2 } = p.link
+      // 每帧通过 ECharts API 获取精确像素坐标
+      const gx = x1 + (x2 - x1) * p.t
+      const gy = y1 + (y2 - y1) * p.t
+      const px = topoCoordToPixel(gx, gy)
+
+      if (px.x === 0 && px.y === 0) return
+
+      // 粒子光晕
+      const grad = ctx.createRadialGradient(px.x, px.y, 0, px.x, px.y, 6)
+      grad.addColorStop(0, 'rgba(96,165,250,0.95)')
+      grad.addColorStop(0.4, 'rgba(96,165,250,0.5)')
+      grad.addColorStop(1, 'rgba(96,165,250,0)')
+      ctx.beginPath()
+      ctx.arc(px.x, px.y, 6, 0, Math.PI*2)
+      ctx.fillStyle = grad
+      ctx.fill()
+
+      // 粒子核心
+      ctx.beginPath()
+      ctx.arc(px.x, px.y, 2.5, 0, Math.PI*2)
+      ctx.fillStyle = '#e0f2fe'
+      ctx.fill()
+    })
+
+    flowRaf = requestAnimationFrame(draw)
+  }
+  draw()
+}
+
+const nodeColor = (s:string) => {
+  const st=(s||'').toLowerCase()
+  if (st.includes('down')||st.includes('drain')) return '#ef4444'
+  if (st.includes('alloc')||st.includes('mix')) return '#f59e0b'
+  if (st.includes('idle')) return '#10b981'
+  return '#6366f1'
+}
+
+const drawCluster = async () => {
+  await nextTick()
+  if (!clusterEl.value) return
+  if (!clusterChart) clusterChart = echarts.init(clusterEl.value)
+  const cols = Math.max(4, Math.ceil(Math.sqrt(nodes.value.length||16)))
+  const data = nodes.value.length > 0
+    ? nodes.value.map((n,i) => ({ value:[i%cols, Math.floor(i/cols), Math.random()*60+20], name:n.name, itemStyle:{color:nodeColor(n.state), shadowBlur:8, shadowColor:nodeColor(n.state)} }))
+    : Array.from({length:16},(_,i)=>({ value:[i%4,Math.floor(i/4),Math.random()*80+10], name:'node'+(i+1), itemStyle:{color:'#10b981',shadowBlur:8,shadowColor:'#10b981'} }))
+  clusterChart.setOption({
+    backgroundColor:'transparent',
+    tooltip:{ formatter:(p:any)=>`${p.name}` },
+    grid:{top:5,right:5,bottom:5,left:5},
+    xAxis:{type:'value',show:false,min:-0.5,max:cols-0.5},
+    yAxis:{type:'value',show:false,min:-0.5},
+    series:[{ type:'scatter', data, symbolSize:(v: any)=>Math.max(14,Math.min(32,v[2]/2.8)), emphasis:{scale:1.6}, animationDuration:1000, animationEasing:'elasticOut' as const }],
+  })
+}
+
+const drawJobPie = async () => {
+  await nextTick()
+  if (!jobPieEl.value) return
+  if (!jobPie) jobPie = echarts.init(jobPieEl.value)
+  const tv = themeVars.value
+  const t = stats.value.jobTypes
+  const total = t.mpi + t.openmp + t.gpu + t.array + t.serial || 1
+  const data = [
+    { name:'MPI',    value:t.mpi,    itemStyle:{color:'#3b82f6'} },
+    { name:'OpenMP', value:t.openmp, itemStyle:{color:'#8b5cf6'} },
+    { name:'GPU',    value:t.gpu,    itemStyle:{color:'#10b981'} },
+    { name:'Array',  value:t.array,  itemStyle:{color:'#f59e0b'} },
+    { name:'Serial', value:t.serial, itemStyle:{color:'#64748b'} },
+  ].filter(d => d.value > 0)
+  // 无数据时显示占位
+  const chartData = data.length > 0 ? data : [
+    { name:'MPI',    value:3, itemStyle:{color:'#3b82f6'} },
+    { name:'OpenMP', value:2, itemStyle:{color:'#8b5cf6'} },
+    { name:'GPU',    value:2, itemStyle:{color:'#10b981'} },
+    { name:'Array',  value:1, itemStyle:{color:'#f59e0b'} },
+    { name:'Serial', value:4, itemStyle:{color:'#64748b'} },
+  ]
+  jobPie.setOption({
+    backgroundColor:'transparent',
+    tooltip:{ trigger:'item', formatter:(p:any)=>`${p.name}: ${p.value} (${((p.value/total)*100).toFixed(1)}%)` },
+    legend:{ orient:'vertical', right:4, top:'center', textStyle:{color:tv.chartText,fontSize:9}, itemWidth:8, itemHeight:8, itemGap:5 },
+    series:[{
+      type:'pie', radius:['35%','62%'], center:['38%','50%'],
+      data:chartData,
+      label:{ show:true, position:'inside', formatter:'{d}%', fontSize:9, color:'#fff', fontWeight:600 },
+      labelLine:{ show:false },
+      animationType:'scale' as const,
+    }],
+  })
+}
+
+const drawQueue = async () => {
+  await nextTick()
+  if (!queueEl.value) return
+  if (!queueChart) queueChart = echarts.init(queueEl.value)
+  const times = trendData.value.map(d=>d.time)
+  const tv = themeVars.value
+  queueChart.setOption({
+    backgroundColor:'transparent',
+    grid:{top:5,right:5,bottom:18,left:28},
+    tooltip:{trigger:'axis' as const},
+    xAxis:{type:'category' as const,data:times,axisLabel:{fontSize:9,color:tv.chartText},axisLine:{lineStyle:{color:tv.axisLine}},splitLine:{show:false}},
+    yAxis:{type:'value' as const,axisLabel:{fontSize:9,color:tv.chartText},splitLine:{lineStyle:{color:tv.splitLine}},axisLine:{show:false}},
+    series:[{type:'bar',data:trendData.value.map(()=>stats.value.pendingJobs),itemStyle:{color:'#f59e0b',borderRadius:[3,3,0,0]},barMaxWidth:16}],
+  })
+}
+
+const drawJobCurve = async () => {
+  await nextTick()
+  if (!jobCurveEl.value) return
+  if (!jobCurve) jobCurve = echarts.init(jobCurveEl.value)
+  const times = trendData.value.map(d=>d.time)
+  const tv = themeVars.value
+  jobCurve.setOption({
+    backgroundColor:'transparent',
+    tooltip:{trigger:'axis' as const},
+    legend:{bottom:0,textStyle:{color:tv.chartText,fontSize:9},itemWidth:10,itemHeight:6},
+    grid:{top:5,right:5,bottom:28,left:28},
+    xAxis:{type:'category' as const,data:times,axisLabel:{fontSize:9,color:tv.chartText},axisLine:{lineStyle:{color:tv.axisLine}},splitLine:{show:false}},
+    yAxis:{type:'value' as const,axisLabel:{fontSize:9,color:tv.chartText},splitLine:{lineStyle:{color:tv.splitLine}},axisLine:{show:false}},
+    series:[
+      {name:'运行',type:'line',smooth:true,symbol:'none',data:trendData.value.map(()=>stats.value.runningJobs),lineStyle:{color:'#3b82f6',width:2},areaStyle:{color:'#3b82f6',opacity:0.15}},
+      {name:'排队',type:'line',smooth:true,symbol:'none',data:trendData.value.map(()=>stats.value.pendingJobs),lineStyle:{color:'#f59e0b',width:2},areaStyle:{color:'#f59e0b',opacity:0.15}},
+    ],
+  })
+}
+
+const drawTrend = async () => {
+  await nextTick()
+  if (!trendEl.value) return
+  if (!trendChart) trendChart = echarts.init(trendEl.value)
+  const times = trendData.value.map(d=>d.time)
+  const tv = themeVars.value
+  const colorMap = {cpu:'#3b82f6',mem:'#8b5cf6',gpu:'#10b981'}
+  const dataMap = {cpu:trendData.value.map(d=>d.cpu),mem:trendData.value.map(d=>d.mem),gpu:trendData.value.map(()=>stats.value.cpuUtil)}
+  const color = colorMap[trendTab.value]
+  trendChart.setOption({
+    backgroundColor:'transparent',
+    grid:{top:5,right:5,bottom:18,left:28},
+    tooltip:{trigger:'axis' as const},
+    xAxis:{type:'category' as const,data:times,axisLabel:{fontSize:9,color:tv.chartText},axisLine:{lineStyle:{color:tv.axisLine}},splitLine:{show:false}},
+    yAxis:{type:'value' as const,axisLabel:{fontSize:9,color:tv.chartText},splitLine:{lineStyle:{color:tv.splitLine}},axisLine:{show:false}},
+    series:[{type:'line',smooth:true,symbol:'none',data:dataMap[trendTab.value],lineStyle:{color,width:2},areaStyle:{color,opacity:0.15}}],
+  })
+}
+
+const drawAll = async () => {
+  await drawTopo(); await drawJobPie(); await drawQueue(); await drawJobCurve(); await drawTrend()
+}
+
+const api = (path:string) =>
+  fetch(`${getApiBase()}${path}`,{headers:{Authorization:`Bearer ${getToken()}`}})
+    .then(r=>r.ok?r.json():null).catch(()=>null)
 
 const loadAll = async () => {
   loading.value = true
-  await Promise.all([loadNodes(), loadPartitions(), loadJobs(), loadUsers(), loadAccountUsage()])
-  lastUpdate.value = new Date().toLocaleTimeString()
+  const [nodeData, jobData, userData, dashData] = await Promise.all([
+    api('/api/monitoring/node-metrics'),
+    api('/api/jobs?page_size=100'),
+    api('/api/users'),
+    api('/api/dashboard/stats'),
+  ])
+
+  // 从 dashboard/stats 拿真实核数、内存、GPU
+  if (dashData?.data) {
+    const d = dashData.data
+    stats.value.totalGpus = d.total_gpus || 0
+    stats.value.allocGpus = d.allocated_gpus || 0
+    stats.value.totalCpus = d.total_cpus || 0
+    stats.value.allocCpus = d.allocated_cpus || 0
+    stats.value.totalMemGb = d.total_memory_gb || 0
+    stats.value.freeMemGb  = d.free_memory_gb || 0
+    // CPU 利用率用 Slurm 分配率
+    const tc = d.total_cpus || 0
+    const ac = d.allocated_cpus || 0
+    stats.value.cpuUtil = tc > 0 ? Math.round(ac / tc * 100) : 0
+    // 内存利用率
+    const mt = d.total_memory_gb || 0
+    const mf = d.free_memory_gb || 0
+    stats.value.memUtil = mt > 0 ? Math.round((mt - mf) / mt * 100) : 0
+  }
+
+  if (nodeData?.nodes) {
+    const ns = nodeData.nodes.map((n:any) => ({
+      name: n.instance?.replace(/:\d+$/, '') || '',
+      state: n.up === false ? 'down' : 'idle',
+      cpuAlloc: 0,  // node-metrics 不含分配数，用 dashboard/stats 的聚合值
+      cpuTotal: 0,
+      memTotal: n.mem_total_gb || 0,
+      memAlloc: n.mem_used_gb || 0,
+    }))
+    nodes.value = ns
+    stats.value.totalNodes = ns.length
+    // 如果 Prometheus 有数据，用实际 CPU 使用率覆盖
+    if (nodeData.connected) {
+      const avgCpu = nodeData.nodes.reduce((s:number, n:any) => s + (n.cpu_usage || 0), 0) / (nodeData.nodes.length || 1)
+      stats.value.cpuUtil = Math.round(avgCpu)
+      const totalMem = nodeData.nodes.reduce((s:number, n:any) => s + (n.mem_total_gb || 0), 0)
+      const usedMem  = nodeData.nodes.reduce((s:number, n:any) => s + (n.mem_used_gb || 0), 0)
+      stats.value.memUtil = totalMem > 0 ? Math.round(usedMem / totalMem * 100) : 0
+    }
+  }
+  if (jobData?.data) {
+    const jobs=jobData.data
+    stats.value.runningJobs=jobs.filter((j:any)=>j.job_state==='RUNNING').length
+    stats.value.pendingJobs=jobs.filter((j:any)=>j.job_state==='PENDING').length
+    stats.value.completedJobs=jobs.length
+    stats.value.activeUsers=new Set(jobs.map((j:any)=>j.user_name).filter(Boolean)).size
+    // 推断作业类型：优先用 job_type 字段，否则按特征推断
+    const types = { mpi:0, openmp:0, gpu:0, array:0, serial:0 }
+    jobs.forEach((j:any) => {
+      const jt = (j.job_type||j.type||'').toLowerCase()
+      const name = (j.name||j.job_name||'').toLowerCase()
+      const numTasks = j.num_tasks||j.ntasks||1
+      const numNodes = j.num_nodes||j.nodes||1
+      const gresStr = (j.tres_req_str||j.gres||j.tres||'').toLowerCase()
+      const arrayId = j.array_job_id||j.array_task_id
+      if (arrayId && arrayId !== '0') { types.array++ }
+      else if (jt.includes('mpi') || name.includes('mpi') || (numTasks>1 && numNodes>1)) { types.mpi++ }
+      else if (gresStr.includes('gpu') || name.includes('gpu') || jt.includes('gpu')) { types.gpu++ }
+      else if (jt.includes('omp') || name.includes('omp') || name.includes('openmp') || (numTasks>1 && numNodes<=1)) { types.openmp++ }
+      else { types.serial++ }
+    })
+    stats.value.jobTypes = types
+  }
+  if (userData?.data) stats.value.totalUsers=userData.data.length
+  trendData.value.push({ time:new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'}), cpu:stats.value.cpuUtil, mem:stats.value.memUtil })
+  if (trendData.value.length>20) trendData.value.shift()
   loading.value = false
+  drawAll()
 }
 
-onMounted(() => {
-  loadAll()
-  timer = setInterval(loadAll, 30000)
+onMounted(()=>{
+  const tick=()=>{ const n=new Date(); currentTime.value=n.toLocaleTimeString('zh-CN'); currentDate.value=n.toLocaleDateString('zh-CN',{weekday:'long',year:'numeric',month:'long',day:'numeric'}) }
+  tick(); clockTimer=setInterval(tick,1000)
+  // 监听主题变化，重绘所有图表
+  themeObserver = new MutationObserver(()=>{
+    currentTheme.value = document.documentElement.getAttribute('data-theme') || 'light'
+    drawAll()
+  })
+  themeObserver.observe(document.documentElement, { attributes:true, attributeFilter:['data-theme'] })
+  loadAll(); refreshTimer=setInterval(loadAll,30000)
 })
-onUnmounted(() => clearInterval(timer))
+onUnmounted(()=>{
+  clearInterval(clockTimer); clearInterval(refreshTimer)
+  cancelAnimationFrame(flowRaf)
+  themeObserver?.disconnect()
+  ;[jobPie,queueChart,clusterChart,jobCurve,trendChart].forEach(c=>c?.dispose())
+})
 </script>
-
 <style scoped>
-.admin-dashboard { display: flex; flex-direction: column; gap: 12px; padding: 4px 0; }
-
-.dash-header {
-  display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 4px;
-}
-.dash-title h3 { margin: 0; font-size: 1rem; font-weight: 700; }
-.dash-time { font-size: 0.72rem; color: hsl(var(--muted-foreground)); margin-left: 8px; }
-.dash-actions { display: flex; gap: 8px; align-items: center; }
-.time-select {
-  padding: 5px 10px; border: 1px solid hsl(var(--border));
-  border-radius: 6px; font-size: 0.8rem;
-  background: hsl(var(--background)); color: hsl(var(--foreground));
-}
-.btn-refresh {
-  padding: 5px 12px; border: 1px solid hsl(var(--border));
-  border-radius: 6px; font-size: 0.8rem; cursor: pointer;
-  background: hsl(var(--background)); color: hsl(var(--foreground));
-  transition: background 0.15s;
-}
-.btn-refresh:hover { background: hsl(var(--accent)); }
-.spinning { display: inline-block; animation: spin 1s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
-
-/* KPI */
-.kpi-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; }
-.kpi-card {
-  background: hsl(var(--card)); border: 1px solid hsl(var(--border));
-  border-radius: 10px; padding: 14px 12px;
-  display: flex; gap: 10px; align-items: flex-start;
-}
-.kpi-icon { font-size: 1.4rem; line-height: 1; flex-shrink: 0; }
-.kpi-body { flex: 1; min-width: 0; }
-.kpi-value { font-size: 1.5rem; font-weight: 700; line-height: 1.1; }
-.kpi-label { font-size: 0.72rem; color: hsl(var(--muted-foreground)); margin-top: 2px; }
-.kpi-sub { font-size: 0.68rem; margin-top: 4px; }
-.kpi-bar { height: 4px; background: hsl(var(--muted)); border-radius: 2px; margin-top: 6px; overflow: hidden; }
-.kpi-bar-fill { height: 100%; border-radius: 2px; transition: width 0.4s; }
-.ok { color: #22c55e; }
-.warn { color: #f59e0b; }
-.err { color: #ef4444; }
-.muted { color: hsl(var(--muted-foreground)); }
-
-/* Grid */
-.dash-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.dash-right { display: flex; flex-direction: column; }
-.dash-card {
-  background: hsl(var(--card)); border: 1px solid hsl(var(--border));
-  border-radius: 10px; padding: 14px;
-}
-.card-header {
-  display: flex; align-items: center; justify-content: space-between;
-  font-size: 0.82rem; font-weight: 600; margin-bottom: 10px;
-}
-.card-badge {
-  font-size: 0.7rem; background: hsl(var(--muted));
-  color: hsl(var(--muted-foreground)); padding: 2px 8px; border-radius: 10px;
-}
-.empty-hint { font-size: 0.78rem; color: hsl(var(--muted-foreground)); text-align: center; padding: 16px 0; }
-
-/* Node list */
-.node-list { display: flex; flex-direction: column; gap: 6px; max-height: 320px; overflow-y: auto; }
-.node-list::-webkit-scrollbar { width: 3px; }
-.node-list::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 2px; }
-.node-row {
-  display: grid; grid-template-columns: 90px 70px 1fr 80px;
-  align-items: center; gap: 8px; font-size: 0.78rem;
-  padding: 5px 6px; border-radius: 6px;
-  background: hsl(var(--muted) / 0.3);
-}
-.node-name { font-weight: 600; font-family: monospace; }
-.node-badge {
-  padding: 1px 7px; border-radius: 10px; font-size: 0.68rem; font-weight: 600;
-}
-.node-badge.idle { background: rgba(34,197,94,.12); color: #22c55e; }
-.node-badge.alloc { background: rgba(245,158,11,.12); color: #f59e0b; }
-.node-badge.down { background: rgba(239,68,68,.12); color: #ef4444; }
-.node-badge.unknown { background: hsl(var(--muted)); color: hsl(var(--muted-foreground)); }
-.node-res { display: flex; gap: 6px; flex-wrap: wrap; }
-.res-item { font-size: 0.68rem; color: hsl(var(--muted-foreground)); }
-.res-item.gpu { color: #8b5cf6; }
-.node-bar-wrap { }
-.node-bar { height: 4px; background: hsl(var(--muted)); border-radius: 2px; overflow: hidden; }
-.node-bar-fill.cpu { height: 100%; background: #3b82f6; border-radius: 2px; transition: width 0.3s; }
-
-/* Mini table */
-.mini-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
-.mini-table th {
-  text-align: left; padding: 4px 6px;
-  font-size: 0.68rem; font-weight: 600; text-transform: uppercase;
-  color: hsl(var(--muted-foreground)); border-bottom: 1px solid hsl(var(--border));
-}
-.mini-table td { padding: 5px 6px; border-bottom: 1px solid hsl(var(--border) / 0.5); }
-.mini-table tr:last-child td { border-bottom: none; }
-.num-cell { text-align: right; font-variant-numeric: tabular-nums; }
-.part-badge { padding: 1px 7px; border-radius: 10px; font-size: 0.68rem; font-weight: 600; }
-.part-badge.up { background: rgba(34,197,94,.12); color: #22c55e; }
-.part-badge.down { background: rgba(239,68,68,.12); color: #ef4444; }
-.job-badge { padding: 1px 7px; border-radius: 10px; font-size: 0.68rem; font-weight: 600; }
-.job-badge.running { background: rgba(59,130,246,.12); color: #3b82f6; }
-.job-badge.pending { background: rgba(245,158,11,.12); color: #f59e0b; }
-.job-badge.completed { background: rgba(34,197,94,.12); color: #22c55e; }
-.job-badge.cancelled, .job-badge.failed { background: rgba(239,68,68,.12); color: #ef4444; }
-.job-name { max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-/* Rank */
-.rank-row {
-  display: grid; grid-template-columns: 24px 80px 1fr 52px 48px;
-  align-items: center; gap: 8px; padding: 5px 4px;
-  font-size: 0.78rem;
-}
-.rank-num { font-weight: 700; color: hsl(var(--muted-foreground)); text-align: center; }
-.rank-num.top { color: #f59e0b; }
-.rank-user { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rank-bar { height: 6px; background: hsl(var(--muted)); border-radius: 3px; overflow: hidden; }
-.rank-bar-fill { height: 100%; background: hsl(var(--primary)); border-radius: 3px; transition: width 0.4s; }
-.rank-val { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
-.rank-jobs { text-align: right; font-size: 0.68rem; }
-
-/* Account usage */
-.acc-row {
-  display: grid; grid-template-columns: 80px 1fr 90px 36px;
-  align-items: center; gap: 8px; padding: 5px 4px; font-size: 0.78rem;
-}
-.acc-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.acc-bar { height: 6px; background: hsl(var(--muted)); border-radius: 3px; overflow: hidden; }
-.acc-bar-fill { height: 100%; border-radius: 3px; transition: width 0.4s; }
-.acc-stat { font-size: 0.7rem; color: hsl(var(--muted-foreground)); text-align: right; }
-.acc-pct { text-align: right; font-size: 0.7rem; }
-
-@media (max-width: 1200px) {
-  .kpi-row { grid-template-columns: repeat(3, 1fr); }
-  .dash-grid { grid-template-columns: 1fr; }
-}
-@media (max-width: 600px) {
-  .kpi-row { grid-template-columns: repeat(2, 1fr); }
-  /* 固定列宽的行表格改为横向滚动 */
-  .node-list, .rank-list, .acc-list { overflow-x: auto; }
-  .node-row  { grid-template-columns: 80px 60px 1fr 70px; font-size: 0.72rem; }
-  .rank-row  { grid-template-columns: 20px 70px 1fr 46px 44px; font-size: 0.72rem; }
-  .acc-row   { grid-template-columns: 70px 1fr 80px 32px; font-size: 0.72rem; }
-}
-@media (max-width: 400px) {
-  .kpi-row { grid-template-columns: 1fr; }
-}
+.db{display:flex;flex-direction:column;height:100%;background:var(--db-bg,linear-gradient(135deg,#0f172a 0%,#1e293b 50%,#0f172a 100%));overflow:hidden;color:var(--db-text,#e2e8f0);font-family:system-ui,sans-serif}
+.db-header{display:flex;align-items:center;padding:.6rem 1.25rem;background:var(--db-header-bg,rgba(15,23,42,.8));border-bottom:1px solid var(--db-header-border,rgba(99,102,241,.3));flex-shrink:0}
+.db-header-left{display:flex;align-items:center;gap:.75rem;flex:1}
+.db-header-center{flex:1;text-align:center}
+.db-header-right{display:flex;align-items:center;gap:.6rem;flex:1;justify-content:flex-end}
+.db-logo{width:32px;height:32px;background:linear-gradient(135deg,#6366f1,#8b5cf6);border-radius:8px;box-shadow:0 0 12px rgba(99,102,241,.6)}
+.db-title{font-size:1.1rem;font-weight:700;background:linear-gradient(90deg,#60a5fa,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.db-subtitle{font-size:.65rem;color:var(--db-sub,#64748b);letter-spacing:.05em}
+.db-time{font-size:1.4rem;font-weight:700;color:#60a5fa;font-variant-numeric:tabular-nums;text-shadow:0 0 20px rgba(96,165,250,.5)}
+.db-date{font-size:.68rem;color:var(--db-sub,#64748b);text-align:center}
+.db-status{display:flex;align-items:center;gap:.4rem;padding:.25rem .75rem;border-radius:20px;font-size:.72rem;font-weight:600}
+.db-status-ok{background:rgba(16,185,129,.15);color:#10b981;border:1px solid rgba(16,185,129,.3)}
+.db-status-warn{background:rgba(239,68,68,.15);color:#ef4444;border:1px solid rgba(239,68,68,.3)}
+.db-status-dot{width:6px;height:6px;border-radius:50%;background:currentColor;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.db-btn{padding:.25rem .6rem;border:1px solid rgba(99,102,241,.4);border-radius:5px;background:rgba(99,102,241,.1);color:#a5b4fc;cursor:pointer;font-size:.85rem}
+.db-btn:hover{background:rgba(99,102,241,.25)}
+.db-kpi-row{display:grid;grid-template-columns:repeat(5,1fr);gap:.6rem;padding:.6rem 1rem;flex-shrink:0}
+.db-kpi{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.18rem;padding:.7rem .5rem .6rem;min-height:76px;background:var(--db-kpi-bg,rgba(30,41,59,.8));border-radius:8px;border:1px solid var(--db-card-border,rgba(255,255,255,.06));overflow:hidden;text-align:center}
+.db-kpi-accent{position:absolute;top:0;left:0;right:0;height:3px;background:var(--kc);border-radius:8px 8px 0 0}
+.db-kpi-val{font-size:1.6rem;font-weight:800;color:var(--db-text,#f1f5f9);line-height:1;letter-spacing:-.02em}
+.db-kpi-label{font-size:.65rem;color:var(--db-sub,#64748b);margin-top:.1rem;white-space:nowrap}
+.db-kpi-bar{width:80%;height:2px;background:rgba(128,128,128,.12);border-radius:2px;margin-top:.35rem;overflow:hidden}
+.db-kpi-bar-fill{height:100%;background:var(--kc);border-radius:2px;transition:width .6s ease;box-shadow:0 0 4px var(--kc)}
+.db-kpi-bar-fill{height:100%;background:var(--kc);border-radius:1px;transition:width .5s;box-shadow:0 0 6px var(--kc)}
+.db-main{display:grid;grid-template-columns:220px 1fr 480px;gap:.5rem;padding:0 1rem .5rem;flex:1;min-height:0;overflow:hidden}
+.db-col{display:flex;flex-direction:column;gap:.5rem;overflow:hidden;flex:1;min-height:0}
+.db-col-right{overflow:visible}
+.db-card{background:var(--db-card-bg,rgba(30,41,59,.7));border:1px solid var(--db-card-border,rgba(255,255,255,.06));border-radius:10px;padding:.65rem .75rem;display:flex;flex-direction:column;overflow:hidden}
+.db-card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:.3rem}
+.db-card-title{font-size:.72rem;font-weight:600;color:var(--db-sub,#94a3b8);margin-bottom:.3rem}
+.db-chart-h180{flex:1;min-height:0;max-height:180px;width:100%}
+.db-chart-h160{width:100%;height:160px;flex-shrink:0}
+.db-chart-h120{width:100%;height:100px;flex-shrink:0}
+.db-chart-h150{width:100%;height:150px;flex-shrink:0}
+.db-chart-h100{width:100%;height:100px;flex-shrink:0}
+.db-chart-h160{width:100%;height:160px;flex-shrink:0}
+.db-card-fixed{flex-shrink:0}
+.db-chart-flex{flex:1;min-height:0;width:100%}
+.db-chart-fill{flex:1;min-height:0;width:100%}
+.db-topo-wrap{flex:1;min-height:0;position:relative;overflow:hidden}
+.db-topo-wrap .db-chart-fill{position:absolute;inset:0;width:100%;height:100%}
+.db-topo-flow{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1}
+.db-card-fill{flex:1;min-height:0}
+/* gauge 方正布局 */
+.db-gauge-row{display:flex;gap:.4rem;justify-content:space-around;padding:.2rem 0}
+.db-gauge-item{display:flex;flex-direction:column;align-items:center;flex:1}
+.db-gauge-chart{width:100%;aspect-ratio:1/1;max-height:90px}
+.db-gauge-label{font-size:.65rem;color:var(--db-sub,#64748b);margin-top:.1rem}
+/* 算力统计 */
+.db-compute-section{padding:.3rem 0}
+.db-compute-type{font-size:.68rem;font-weight:600;color:var(--db-sub,#94a3b8);margin-bottom:.4rem;letter-spacing:.04em}
+.db-compute-items{display:grid;grid-template-columns:1fr 1fr;gap:.3rem;margin-bottom:.35rem}
+.db-compute-items-3{grid-template-columns:1fr 1fr 1fr}
+.db-compute-item{background:var(--db-res-bg,rgba(255,255,255,.03));border-radius:6px;padding:.3rem .4rem;text-align:center}
+.db-compute-label{font-size:.6rem;color:var(--db-sub,#64748b);margin-bottom:.1rem}
+.db-compute-val{font-size:1.05rem;font-weight:800;line-height:1.1}
+.db-compute-unit{font-size:.55rem;color:var(--db-sub,#64748b);margin-top:.05rem}
+.db-compute-used{display:flex;justify-content:space-between;align-items:center;padding:.2rem .1rem}
+.db-compute-used-label{font-size:.62rem;color:var(--db-sub,#64748b)}
+.db-compute-used-val{font-size:.72rem;font-weight:600;color:var(--db-text,#e2e8f0)}
+.db-compute-divider{height:1px;background:var(--db-card-border,rgba(255,255,255,.06));margin:.3rem 0}
+.db-res-grid{display:grid;grid-template-columns:1fr 1fr;gap:.3rem}
+.db-res-item{text-align:center;padding:.3rem;background:var(--db-res-bg,rgba(255,255,255,.03));border-radius:6px}
+.db-res-val{font-size:1rem;font-weight:700;color:var(--db-text,#f1f5f9)}
+.db-res-label{font-size:.6rem;color:var(--db-sub,#64748b)}
+.db-stat-list{display:flex;flex-direction:column;gap:.2rem}
+.db-stat-row{display:flex;justify-content:space-between;font-size:.72rem;padding:.2rem 0;border-bottom:1px solid rgba(128,128,128,.1);color:var(--db-sub,#64748b)}
+.db-stat-val{font-weight:600;color:var(--db-text,#e2e8f0)}
+.db-col-center .db-card{flex:1}
+.db-chart-cluster{flex:1;min-height:0;width:100%}
+.db-node-stats{display:flex;justify-content:space-around;padding:.4rem 0;border-top:1px solid var(--db-card-border,rgba(255,255,255,.06));flex-shrink:0}
+.db-ns-item{text-align:center}
+.db-ns-num{font-size:1.3rem;font-weight:800;text-shadow:0 0 10px currentColor}
+.db-ns-label{font-size:.6rem;color:var(--db-sub,#64748b)}
+.db-legend{display:flex;align-items:center;gap:.4rem;font-size:.62rem;color:var(--db-sub,#64748b)}
+.db-leg{display:flex;align-items:center;gap:.2rem}
+.db-leg i{display:inline-block;width:7px;height:7px;border-radius:50%}
+.db-tabs{display:flex;gap:0}
+.db-tab{padding:.15rem .5rem;font-size:.68rem;border:1px solid rgba(99,102,241,.3);background:transparent;color:var(--db-sub,#64748b);cursor:pointer;border-right:none}
+.db-tab:first-child{border-radius:4px 0 0 4px}.db-tab:last-child{border-radius:0 4px 4px 0;border-right:1px solid rgba(99,102,241,.3)}
+.db-tab.active{background:rgba(99,102,241,.3);color:#a5b4fc;border-color:#6366f1}
+.db-alert-list{display:flex;flex-direction:column;gap:.2rem;overflow-y:auto;flex:1;min-height:0}
+.db-alert-empty{font-size:.72rem;color:#10b981;text-align:center;padding:.5rem}
+.db-alert-item{display:flex;align-items:center;gap:.4rem;font-size:.7rem;padding:.22rem .4rem;border-radius:5px;background:var(--db-res-bg,rgba(255,255,255,.03))}
+.db-alert-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;background:#ef4444;box-shadow:0 0 6px #ef4444}
+.db-alert-name{flex:1;color:var(--db-text,#cbd5e1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.db-alert-time{font-size:.62rem;color:var(--db-sub,#475569);flex-shrink:0}
+/* 右列 2×2 网格 */
+.db-right-grid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:.5rem;flex:1;min-height:0;height:100%}
+.db-right-card{display:flex;flex-direction:column;overflow:hidden;min-height:0}
+.db-chart-right{flex:1;min-height:0;width:100%;min-height:120px}
 </style>
+
+
