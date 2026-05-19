@@ -497,6 +497,21 @@
                 <option value="CANCELLED">已取消</option>
               </select>
               <button class="btn-query" @click="loadJobHistory">查询</button>
+              <!-- 自选列按钮 -->
+              <div class="column-selector-wrap" @click.stop>
+                <button class="btn-columns" @click="showColumnSelector = !showColumnSelector" title="自选列">
+                  ⚙️ 列
+                </button>
+                <div v-if="showColumnSelector" class="column-selector-dropdown" @click.stop>
+                  <div class="column-selector-header">选择显示列</div>
+                  <div class="column-options-list">
+                    <label v-for="col in visibleColumns" :key="col.key" class="column-option">
+                      <input type="checkbox" v-model="col.visible" @change="toggleColumnVisibility(col.key)" />
+                      <span>{{ col.label }}</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
               <button class="btn-export" @click="exportJobExcel" title="导出 Excel">📥 导出</button>
               <button class="btn-close" @click="showJobHistory = false">×</button>
             </div>
@@ -506,27 +521,45 @@
             <table v-else class="data-table">
               <thead>
                 <tr>
-                  <th>作业ID</th><th>作业名</th><th>提交人</th><th>状态</th><th>分区</th>
-                  <th>节点数</th><th>CPU核</th><th>提交时间</th><th>运行时长</th><th>操作</th>
+                  <th v-if="isColumnVisible('job_id')">作业ID</th>
+                  <th v-if="isColumnVisible('name')">作业名</th>
+                  <th v-if="isColumnVisible('user')">提交人</th>
+                  <th v-if="isColumnVisible('job_state')">状态</th>
+                  <th v-if="isColumnVisible('partition')">分区</th>
+                  <th v-if="isColumnVisible('num_nodes')">节点数</th>
+                  <th v-if="isColumnVisible('cpus')">CPU核</th>
+                  <th v-if="isColumnVisible('submit_time')" @click="toggleSort('submit_time')" class="sortable">
+                    提交时间 <span class="sort-icon">{{ getSortIcon('submit_time') }}</span>
+                  </th>
+                  <th v-if="isColumnVisible('start_time')" @click="toggleSort('start_time')" class="sortable">
+                    开始时间 <span class="sort-icon">{{ getSortIcon('start_time') }}</span>
+                  </th>
+                  <th v-if="isColumnVisible('end_time')" @click="toggleSort('end_time')" class="sortable">
+                    结束时间 <span class="sort-icon">{{ getSortIcon('end_time') }}</span>
+                  </th>
+                  <th v-if="isColumnVisible('run_time')">运行时长</th>
+                  <th>操作</th>
                 </tr>
               </thead>
               <tbody>
                 <tr v-for="job in filteredJobHistory" :key="job.job_id" class="clickable-row" @click="openJobDetail(job)">
-                  <td><code>{{ job.job_id }}</code></td>
-                  <td>{{ job.name || '-' }}</td>
-                  <td><span class="user-tag">{{ job.user_id || job.user_name || job.user || '-' }}</span></td>
-                  <td><span :class="['state-badge', `state-${(job.job_state||'').toLowerCase()}`]">{{ job.job_state }}</span></td>
-                  <td>{{ job.partition || '-' }}</td>
-                  <td>{{ job.num_nodes || '-' }}</td>
-                  <td>{{ job.cpus || '-' }}</td>
-                  <td>{{ formatTime(job.submit_time) }}</td>
-                  <td>{{ formatElapsed(job.run_time) }}</td>
+                  <td v-if="isColumnVisible('job_id')"><code>{{ job.job_id }}</code></td>
+                  <td v-if="isColumnVisible('name')">{{ job.name || '-' }}</td>
+                  <td v-if="isColumnVisible('user')"><span class="user-tag">{{ job.user_id || job.user_name || job.user || '-' }}</span></td>
+                  <td v-if="isColumnVisible('job_state')"><span :class="['state-badge', `state-${(job.job_state||'').toLowerCase()}`]">{{ job.job_state }}</span></td>
+                  <td v-if="isColumnVisible('partition')">{{ job.partition || '-' }}</td>
+                  <td v-if="isColumnVisible('num_nodes')">{{ job.num_nodes || '-' }}</td>
+                  <td v-if="isColumnVisible('cpus')">{{ job.cpus || '-' }}</td>
+                  <td v-if="isColumnVisible('submit_time')">{{ formatTime(job.submit_time) }}</td>
+                  <td v-if="isColumnVisible('start_time')">{{ formatTime(job.start_time) }}</td>
+                  <td v-if="isColumnVisible('end_time')">{{ formatTime(job.end_time) }}</td>
+                  <td v-if="isColumnVisible('run_time')">{{ formatElapsed(job.run_time) }}</td>
                   <td @click.stop>
                     <button class="btn-detail" @click="openJobDetail(job)">详情</button>
                   </td>
                 </tr>
                 <tr v-if="filteredJobHistory.length === 0">
-                  <td colspan="10" class="empty-cell">暂无数据</td>
+                  <td :colspan="visibleColumns.filter(c => c.visible).length + 1" class="empty-cell">暂无数据</td>
                 </tr>
               </tbody>
             </table>
@@ -595,6 +628,7 @@
                     <th>QoS</th>
                     <th>状态</th>
                     <th>开始时间</th>
+                    <th>结束时间</th>
                     <th>运行时长</th>
                     <th>CPU 小时</th>
                     <th>GPU 小时</th>
@@ -614,13 +648,14 @@
                       </span>
                     </td>
                     <td>{{ formatTime(r.start_time) }}</td>
+                    <td>{{ formatTime(r.end_time) }}</td>
                     <td>{{ formatElapsed(r.elapsed_secs) }}</td>
                     <td>{{ (r.cpu_hours || 0).toFixed(2) }}</td>
                     <td>{{ (r.gpu_hours || 0).toFixed(2) }}</td>
                     <td><strong style="color:#667eea">{{ ((r.billing_mins || 0) || (r.billing_hours || 0) * 60 || (r.cpu_hours || 0) * 60).toFixed(1) }}</strong></td>
                   </tr>
                   <tr v-if="billingValidRecords.length === 0">
-                    <td colspan="11" class="empty-cell">暂无消费记录</td>
+                    <td colspan="12" class="empty-cell">暂无消费记录</td>
                   </tr>
                 </tbody>
               </table>
@@ -710,11 +745,74 @@ const jobStartDate = ref(new Date(Date.now() - 7 * 86400000).toISOString().split
 const jobEndDate = ref(new Date().toISOString().split('T')[0])
 const selectedJob = ref<any>(null)
 
+// 排序相关
+const sortColumn = ref<string>('')
+const sortOrder = ref<'asc' | 'desc'>('desc')
+
+// 自选列功能
+const availableColumns = [
+  { key: 'job_id', label: '作业ID', visible: true },
+  { key: 'name', label: '作业名', visible: true },
+  { key: 'user', label: '提交人', visible: true },
+  { key: 'job_state', label: '状态', visible: true },
+  { key: 'partition', label: '分区', visible: true },
+  { key: 'num_nodes', label: '节点数', visible: true },
+  { key: 'cpus', label: 'CPU核', visible: true },
+  { key: 'submit_time', label: '提交时间', visible: true },
+  { key: 'start_time', label: '开始时间', visible: true },
+  { key: 'end_time', label: '结束时间', visible: true },
+  { key: 'run_time', label: '运行时长', visible: true },
+]
+const visibleColumns = ref([...availableColumns])
+const showColumnSelector = ref(false)
+
 const filteredJobHistory = computed(() => {
   let list = jobHistoryList.value
   if (jobHistoryFilter.value) list = list.filter(j => j.job_state === jobHistoryFilter.value)
+  
+  // 排序
+  if (sortColumn.value) {
+    list = [...list].sort((a, b) => {
+      let aVal = a[sortColumn.value]
+      let bVal = b[sortColumn.value]
+      
+      // 处理时间字段
+      if (['submit_time', 'start_time', 'end_time'].includes(sortColumn.value)) {
+        aVal = aVal || 0
+        bVal = bVal || 0
+      }
+      
+      if (aVal === bVal) return 0
+      const comparison = aVal > bVal ? 1 : -1
+      return sortOrder.value === 'asc' ? comparison : -comparison
+    })
+  }
+  
   return list
 })
+
+const toggleSort = (column: string) => {
+  if (sortColumn.value === column) {
+    sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    sortColumn.value = column
+    sortOrder.value = 'desc'
+  }
+}
+
+const getSortIcon = (column: string) => {
+  if (sortColumn.value !== column) return '↕'
+  return sortOrder.value === 'asc' ? '↑' : '↓'
+}
+
+const isColumnVisible = (key: string) => {
+  return visibleColumns.value.find(c => c.key === key)?.visible ?? false
+}
+
+const toggleColumnVisibility = (key: string) => {
+  const col = visibleColumns.value.find(c => c.key === key)
+  if (col) col.visible = !col.visible
+}
 
 const openJobList = async (state: string) => {
   jobHistoryFilter.value = state
@@ -831,6 +929,24 @@ const suspendJob = async (jobId: any) => {
 
 watch(showJobHistory, async (v) => {
   if (v && jobHistoryList.value.length === 0) await loadJobHistory()
+  // 关闭列选择器
+  if (!v) showColumnSelector.value = false
+})
+
+// 点击模态框外部关闭列选择器
+watch(showColumnSelector, (v) => {
+  if (v) {
+    const closeSelector = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      if (!target.closest('.column-selector-wrap')) {
+        showColumnSelector.value = false
+        document.removeEventListener('click', closeSelector)
+      }
+    }
+    setTimeout(() => {
+      document.addEventListener('click', closeSelector)
+    }, 0)
+  }
 })
 
 const loadJobHistory = async () => {
@@ -861,16 +977,31 @@ const loadJobHistory = async () => {
 const exportJobExcel = () => {
   const rows = filteredJobHistory.value
   if (!rows.length) return
-  const headers = ['作业ID', '作业名', '提交人', '状态', '分区', '节点数', 'CPU核', '提交时间', '运行时长']
+  
+  // 根据可见列生成表头和数据
+  const visibleCols = visibleColumns.value.filter(c => c.visible)
+  const headers = visibleCols.map(c => c.label)
+  
   const csvRows = [
     headers.join(','),
-    ...rows.map(j => [
-      j.job_id, `"${j.name || ''}"`,
-      j.user_id || j.user_name || j.user || '',
-      j.job_state, j.partition || '',
-      j.num_nodes || '', j.cpus || '',
-      formatTime(j.submit_time), formatElapsed(j.run_time)
-    ].join(','))
+    ...rows.map(j => {
+      return visibleCols.map(col => {
+        switch (col.key) {
+          case 'job_id': return j.job_id
+          case 'name': return `"${j.name || ''}"`
+          case 'user': return j.user_id || j.user_name || j.user || ''
+          case 'job_state': return j.job_state
+          case 'partition': return j.partition || ''
+          case 'num_nodes': return j.num_nodes || ''
+          case 'cpus': return j.cpus || ''
+          case 'submit_time': return formatTime(j.submit_time)
+          case 'start_time': return formatTime(j.start_time)
+          case 'end_time': return formatTime(j.end_time)
+          case 'run_time': return formatElapsed(j.run_time)
+          default: return ''
+        }
+      }).join(',')
+    })
   ]
   downloadCsv(csvRows.join('\n'), `jobs_${jobStartDate.value || 'all'}_${jobEndDate.value || 'all'}.csv`)
 }
@@ -934,7 +1065,7 @@ const loadBillingHistory = async () => {
 const exportBillingExcel = () => {
   const rows = billingValidRecords.value
   if (!rows.length) return
-  const headers = ['作业ID', '作业名', '账户', '分区', 'QoS', '状态', '开始时间', '运行时长(秒)', 'CPU小时', 'GPU小时', '消耗核时']
+  const headers = ['作业ID', '作业名', '账户', '分区', 'QoS', '状态', '开始时间', '结束时间', '运行时长(秒)', 'CPU小时', 'GPU小时', '消耗核时']
   const csvRows = [
     headers.join(','),
     ...rows.map(r => [
@@ -945,6 +1076,7 @@ const exportBillingExcel = () => {
       r.qos || '',
       r.state || '',
       formatTime(r.start_time),
+      formatTime(r.end_time),
       r.elapsed_secs || 0,
       (r.cpu_hours || 0).toFixed(2),
       (r.gpu_hours || 0).toFixed(2),
@@ -1318,8 +1450,53 @@ onMounted(() => {
 .btn-query:hover { background: #5a6fd6; }
 .btn-export { padding: 0.4rem 1rem; background: #10b981; color: white; border: none; border-radius: 8px; font-size: 0.85rem; cursor: pointer; }
 .btn-export:hover { background: #059669; }
+.btn-columns { padding: 0.4rem 1rem; background: #f59e0b; color: white; border: none; border-radius: 8px; font-size: 0.85rem; cursor: pointer; }
+.btn-columns:hover { background: #d97706; }
 .btn-detail { padding: 2px 10px; background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 0.78rem; cursor: pointer; color: #374151; white-space: nowrap; }
 .btn-detail:hover { background: #e5e7eb; }
+
+/* 自选列下拉框 */
+.column-selector-wrap { position: relative; }
+.column-selector-dropdown {
+  position: absolute; top: 100%; right: 0; margin-top: 0.5rem;
+  background: white; border: 1px solid #e5e7eb; border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  min-width: 200px; z-index: 1000;
+}
+.column-selector-header {
+  font-size: 0.85rem; font-weight: 600; color: #374151;
+  padding: 0.75rem 0.75rem 0.5rem 0.75rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+.column-options-list {
+  max-height: 350px; overflow-y: auto;
+  padding: 0.5rem 0.75rem 0.75rem 0.75rem;
+}
+.column-option {
+  display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.5rem 0.4rem; cursor: pointer; font-size: 0.85rem;
+  color: #374151; border-radius: 4px; margin-bottom: 0.25rem;
+}
+.column-option:hover { background: #f9fafb; }
+.column-option input[type="checkbox"] {
+  cursor: pointer; width: 16px; height: 16px;
+  flex-shrink: 0;
+}
+.column-option span {
+  flex: 1; white-space: nowrap;
+}
+
+/* 可排序表头 */
+.sortable {
+  cursor: pointer; user-select: none;
+}
+.sortable:hover {
+  background: #f9fafb;
+}
+.sort-icon {
+  display: inline-block; margin-left: 0.25rem;
+  color: #9ca3af; font-size: 0.75rem;
+}
 .clickable-row { cursor: pointer; }
 .clickable-row:hover td { background: #f0f4ff !important; }
 .data-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
