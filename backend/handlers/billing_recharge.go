@@ -42,21 +42,11 @@ func RechargeQoS(c *gin.Context) {
 	}
 
 	// 提取当前 billing 配额（分钟）
-	var currentBillingMins int64
-	for _, tres := range qos.Limits.Max.TRES.Minutes.Total {
-		if tres.Type == "billing" {
-			currentBillingMins = tres.Count
-			break
-		}
-	}
-	if currentBillingMins == 0 && qos.GrpTRESMins != "" {
-		// 兼容旧格式
-		currentBillingMins, _ = strconv.ParseInt(qos.GrpTRESMins, 10, 64)
-	}
+	currentBillingMins := slurm.ExtractBillingQuota(qos)
 
-	beforeTotalHours := float64(currentBillingMins) / 60.0
+	beforeTotalHours := slurm.MinutesToHours(currentBillingMins)
 	afterTotalHours := beforeTotalHours + req.Amount
-	newBillingMins := int64(afterTotalHours * 60)
+	newBillingMins := slurm.HoursToMinutes(afterTotalHours)
 
 	// 更新 QoS 配额
 	updateQoS := &slurm.QoS{

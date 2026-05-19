@@ -1,6 +1,7 @@
 package models
 
 import (
+	"os"
 	"time"
 )
 
@@ -138,11 +139,9 @@ func GetRechargeRecords(qosName string, limit int) ([]BillingRecharge, error) {
 
 // GetDBType 获取数据库类型
 func GetDBType() string {
-	// 这里需要从环境变量或配置中获取
-	// 简化处理，直接检查 DB 驱动
-	if DB == nil {
-		return "sqlite"
+	dbType := os.Getenv("DB_TYPE")
+	if dbType == "" {
+		return "sqlite" // 默认使用 SQLite
 	}
-	// 通过 driver 判断
-	return "sqlite" // 默认
+	return dbType
 }

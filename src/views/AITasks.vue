@@ -282,7 +282,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { getApiBase } from '../utils/auth'
 import notification from '../utils/notification'
 import dialog from '../utils/dialog'
@@ -348,6 +348,121 @@ const scriptTpls: Record<string, string> = {
   triton: '#!/bin/bash\n#SBATCH -o slurm-%j.out\ntritonserver --model-repository=/data/triton_models --http-port=8000 --grpc-port=8001'
 }
 const applyScriptTpl = (name: string) => { createForm.value.script = scriptTpls[name] || '' }
+
+// 更新脚本内容中的 SBATCH 参数
+const updateScriptParams = () => {
+  let script = createForm.value.script
+  if (!script || !script.includes('#SBATCH')) return
+
+  // 更新作业名称
+  if (createForm.value.name) {
+    if (script.includes('#SBATCH -J ')) {
+      script = script.replace(/#SBATCH\s+-J\s+\S+/g, `#SBATCH -J ${createForm.value.name}`)
+    } else {
+      script = script.replace('#!/bin/bash\n', `#!/bin/bash\n#SBATCH -J ${createForm.value.name}\n`)
+    }
+  }
+
+  // 更新分区
+  if (createForm.value.partition) {
+    if (script.includes('#SBATCH -p ')) {
+      script = script.replace(/#SBATCH\s+-p\s+\S+/g, `#SBATCH -p ${createForm.value.partition}`)
+    } else {
+      const jobLine = script.match(/#SBATCH\s+-J\s+\S+/)
+      if (jobLine) {
+        script = script.replace(/(#SBATCH\s+-J\s+\S+)/g, `$1\n#SBATCH -p ${createForm.value.partition}`)
+      }
+    }
+  }
+
+  // 更新节点数
+  if (script.includes('#SBATCH -N ')) {
+    script = script.replace(/#SBATCH\s+-N\s+\d+/g, `#SBATCH -N ${createForm.value.nodes}`)
+  } else {
+    const partLine = script.match(/#SBATCH\s+-p\s+\S+/)
+    if (partLine) {
+      script = script.replace(/(#SBATCH\s+-p\s+\S+)/g, `$1\n#SBATCH -N ${createForm.value.nodes}`)
+    }
+  }
+
+  // 更新 CPU 核心数
+  if (script.includes('#SBATCH -c ')) {
+    script = script.replace(/#SBATCH\s+-c\s+\d+/g, `#SBATCH -c ${createForm.value.cpus}`)
+  } else if (script.includes('#SBATCH --ntasks-per-node=')) {
+    script = script.replace(/#SBATCH\s+--ntasks-per-node=\d+/g, `#SBATCH --ntasks-per-node=${createForm.value.cpus}`)
+  } else {
+    const nodeLine = script.match(/#SBATCH\s+-N\s+\d+/)
+    if (nodeLine) {
+      script = script.replace(/(#SBATCH\s+-N\s+\d+)/g, `$1\n#SBATCH -c ${createForm.value.cpus}`)
+    }
+  }
+
+  // 更新内存
+  if (createForm.value.memory > 0) {
+    if (script.includes('#SBATCH --mem=')) {
+      script = script.replace(/#SBATCH\s+--mem=\d+G?/g, `#SBATCH --mem=${createForm.value.memory}G`)
+    } else {
+      const cpuLine = script.match(/#SBATCH\s+-c\s+\d+/)
+      if (cpuLine) {
+        script = script.replace(/(#SBATCH\s+-c\s+\d+)/g, `$1\n#SBATCH --mem=${createForm.value.memory}G`)
+      }
+    }
+  } else {
+    script = script.replace(/\n?#SBATCH\s+--mem=\d+G?\n?/g, '\n')
+  }
+
+  // 更新时间
+  if (createForm.value.time_limit > 0) {
+    const timeStr = `${String(createForm.value.time_limit).padStart(2, '0')}:00:00`
+    if (script.includes('#SBATCH -t ') || script.includes('#SBATCH --time=')) {
+      script = script.replace(/#SBATCH\s+-t\s+\S+/g, `#SBATCH -t ${timeStr}`)
+      script = script.replace(/#SBATCH\s+--time=\S+/g, `#SBATCH --time=${timeStr}`)
+    } else {
+      const memLine = script.match(/#SBATCH\s+--mem=\d+G?/)
+      if (memLine) {
+        script = script.replace(/(#SBATCH\s+--mem=\d+G?)/g, `$1\n#SBATCH -t ${timeStr}`)
+      }
+    }
+  } else {
+    script = script.replace(/\n?#SBATCH\s+(-t|--time=)\s*\S+\n?/g, '\n')
+  }
+
+  // 更新 GPU
+  if (createForm.value.gpus > 0) {
+    if (script.includes('#SBATCH --gres=gpu:')) {
+      script = script.replace(/#SBATCH\s+--gres=gpu:\d+/g, `#SBATCH --gres=gpu:${createForm.value.gpus}`)
+    } else {
+      const memLine = script.match(/#SBATCH\s+--mem=\d+G?/)
+      if (memLine) {
+        script = script.replace(/(#SBATCH\s+--mem=\d+G?)/g, `$1\n#SBATCH --gres=gpu:${createForm.value.gpus}`)
+      }
+    }
+  } else {
+    script = script.replace(/\n?#SBATCH\s+--gres=gpu:\d+\n?/g, '\n')
+  }
+
+  // 清理多余的空行
+  script = script.replace(/\n{3,}/g, '\n\n')
+
+  createForm.value.script = script
+}
+
+// 监听表单参数变化，自动更新脚本内容
+watch(
+  () => [
+    createForm.value.name,
+    createForm.value.partition,
+    createForm.value.nodes,
+    createForm.value.cpus,
+    createForm.value.memory,
+    createForm.value.time_limit,
+    createForm.value.gpus
+  ],
+  () => {
+    updateScriptParams()
+  },
+  { deep: true }
+)
 
 const loadAll = async () => {
   loading.value = true

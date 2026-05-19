@@ -1,0 +1,13 @@
+﻿<template>
+  <div class="mon">
+    <!-- 主 Tab 导航 -->
+    <div class="mon-main-tabs">
+      <button :class=["mon-tab", mainTab==='mgmt' && 'active']" @click="mainTab='mgmt'">🖥️ 管理节点</button>
+      <button :class=["mon-tab", mainTab==='cluster' && 'active']" @click="mainTab='cluster'">⚡ 计算节点</button>
+      <button :class=["mon-tab", mainTab==='network' && 'active']" @click="mainTab='network'">🌐 网络监控</button>
+      <button :class=["mon-tab", mainTab==='alerts' && 'active']" @click="mainTab='alerts'">🔔 告警规则</button>
+      <div class="mon-tab-right">
+        <span class="refresh-tip">{{ lastRefresh ? `刷新于 ${lastRefresh}` : "" }}</span>
+        <button class="btn-sec" @click="loadAll" :disabled="loading">{{ loading ? "刷新中..." : " 刷新" }}</button>
+      </div>
+    </div>

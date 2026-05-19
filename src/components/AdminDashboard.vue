@@ -162,10 +162,23 @@
             </div>
             <div ref="trendEl" class="db-chart-right"></div>
           </div>
-          <!-- 排队趋势 -->
-          <div class="db-card db-right-card">
-            <div class="db-card-title">📋 排队作业趋势</div>
-            <div ref="queueEl" class="db-chart-right"></div>
+          <!-- 用户活跃排行 -->
+          <div class="db-card db-right-card db-card-rank">
+            <div class="db-card-header">
+              <span class="db-card-title">🏆 用户活跃排行</span>
+              <span class="db-rank-meta">近7天 · {{ stats.totalUsers }} 人</span>
+            </div>
+            <div class="db-rank-list">
+              <div v-if="userRankList.length === 0" class="db-alert-empty">暂无数据</div>
+              <div v-for="(u, i) in userRankList" :key="u.name" class="db-rank-item">
+                <span :class="['db-rank-no', i===0&&'rank-gold', i===1&&'rank-silver', i===2&&'rank-bronze']">{{ i+1 }}</span>
+                <span class="db-rank-name">{{ u.name }}</span>
+                <div class="db-rank-bar-wrap">
+                  <div class="db-rank-bar" :style="{width: (u.count/userRankList[0].count*100)+'%', background: i===0?'#f59e0b':i===1?'#94a3b8':i===2?'#b45309':'#3b82f6'}"></div>
+                </div>
+                <span class="db-rank-count">{{ u.count }}</span>
+              </div>
+            </div>
           </div>
           <!-- 告警 -->
           <div class="db-card db-right-card db-card-alert">
@@ -245,7 +258,21 @@ const stats = ref({ totalNodes:0, runningJobs:0, pendingJobs:0, completedJobs:0,
 const nodes = ref<any[]>([])
 const trendData = ref<{time:string;cpu:number;mem:number}[]>([])
 const recentAlerts = ref<{id:number;name:string;level:string;time:string}[]>([])
+const jobHistoryForRank = ref<any[]>([])
 const alertCount = computed(() => recentAlerts.value.length)
+
+// 用户7天活跃排行（按作业数降序，取前8）
+const userRankList = computed(() => {
+  const map: Record<string, number> = {}
+  for (const j of jobHistoryForRank.value) {
+    const u = j.user_name || j.user_id || j.user || ''
+    if (u) map[u] = (map[u] || 0) + 1
+  }
+  return Object.entries(map)
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 8)
+})
 
 const clusterNodeStates = computed(() => {
   const r = { unschedulable:0, busy:0, normal:0, idle:0 }
@@ -290,7 +317,7 @@ const kpiList = computed(() => [
   { icon:'', label:'CPU利用率',  val:stats.value.cpuUtil+'%', pct:stats.value.cpuUtil, color:'#10b981' },
   { icon:'', label:'内存利用率', val:stats.value.memUtil+'%', pct:stats.value.memUtil, color:'#8b5cf6' },
   { icon:'', label:'运行作业',   val:stats.value.runningJobs, pct:Math.min(100,stats.value.runningJobs*5), color:'#f97316' },
-  { icon:'', label:'活跃告警',   val:alertCount.value,        pct:alertCount.value>0?100:0, color:alertCount.value>0?'#ef4444':'#14b8a6' },
+  { icon:'', label:'活跃用户',   val:stats.value.activeUsers + ' / ' + stats.value.totalUsers, pct: stats.value.totalUsers>0 ? Math.round(stats.value.activeUsers/stats.value.totalUsers*100) : 0, color:'#06b6d4' },
 ])
 
 const toggleFullscreen = () => {
@@ -591,13 +618,14 @@ const drawJobCurve = async () => {
   await nextTick()
   if (!jobCurveEl.value) return
   if (!jobCurve) jobCurve = echarts.init(jobCurveEl.value)
+  jobCurve.resize()
   const times = trendData.value.map(d=>d.time)
   const tv = themeVars.value
   jobCurve.setOption({
     backgroundColor:'transparent',
     tooltip:{trigger:'axis' as const},
-    legend:{bottom:0,textStyle:{color:tv.chartText,fontSize:9},itemWidth:10,itemHeight:6},
-    grid:{top:5,right:5,bottom:28,left:28},
+    legend:{top:2,right:4,textStyle:{color:tv.chartText,fontSize:9},itemWidth:10,itemHeight:6,itemGap:8},
+    grid:{top:22,right:5,bottom:18,left:28},
     xAxis:{type:'category' as const,data:times,axisLabel:{fontSize:9,color:tv.chartText},axisLine:{lineStyle:{color:tv.axisLine}},splitLine:{show:false}},
     yAxis:{type:'value' as const,axisLabel:{fontSize:9,color:tv.chartText},splitLine:{lineStyle:{color:tv.splitLine}},axisLine:{show:false}},
     series:[
@@ -611,6 +639,7 @@ const drawTrend = async () => {
   await nextTick()
   if (!trendEl.value) return
   if (!trendChart) trendChart = echarts.init(trendEl.value)
+  trendChart.resize()
   const times = trendData.value.map(d=>d.time)
   const tv = themeVars.value
   const colorMap = {cpu:'#3b82f6',mem:'#8b5cf6',gpu:'#10b981'}
@@ -636,11 +665,13 @@ const api = (path:string) =>
 
 const loadAll = async () => {
   loading.value = true
-  const [nodeData, jobData, userData, dashData] = await Promise.all([
+  const sevenDaysAgo = Math.floor((Date.now() - 7 * 86400000) / 1000)
+  const [nodeData, jobData, userData, dashData, historyData] = await Promise.all([
     api('/api/monitoring/node-metrics'),
     api('/api/jobs?page_size=100'),
     api('/api/users'),
     api('/api/dashboard/stats'),
+    api(`/api/jobs?page_size=2000&start_time=${sevenDaysAgo}`),
   ])
 
   // 从 dashboard/stats 拿真实核数、内存、GPU
@@ -706,6 +737,7 @@ const loadAll = async () => {
     stats.value.jobTypes = types
   }
   if (userData?.data) stats.value.totalUsers=userData.data.length
+  if (historyData?.data) jobHistoryForRank.value = historyData.data
   trendData.value.push({ time:new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'}), cpu:stats.value.cpuUtil, mem:stats.value.memUtil })
   if (trendData.value.length>20) trendData.value.shift()
   loading.value = false
@@ -718,6 +750,9 @@ onMounted(()=>{
   // 监听主题变化，重绘所有图表
   themeObserver = new MutationObserver(()=>{
     currentTheme.value = document.documentElement.getAttribute('data-theme') || 'light'
+    // 销毁所有图表实例，强制用新主题色重建
+    ;[jobPie,queueChart,clusterChart,topoChart,jobCurve,trendChart].forEach(c=>c?.dispose())
+    jobPie=null; queueChart=null; clusterChart=null; topoChart=null; jobCurve=null; trendChart=null
     drawAll()
   })
   themeObserver.observe(document.documentElement, { attributes:true, attributeFilter:['data-theme'] })
@@ -731,7 +766,7 @@ onUnmounted(()=>{
 })
 </script>
 <style scoped>
-.db{display:flex;flex-direction:column;height:100%;background:var(--db-bg,linear-gradient(135deg,#0f172a 0%,#1e293b 50%,#0f172a 100%));overflow:hidden;color:var(--db-text,#e2e8f0);font-family:system-ui,sans-serif}
+.db{display:flex;flex-direction:column;flex:1;min-height:0;background:var(--db-bg,linear-gradient(135deg,#0f172a 0%,#1e293b 50%,#0f172a 100%));overflow:hidden;color:var(--db-text,#e2e8f0);font-family:system-ui,sans-serif}
 .db-header{display:flex;align-items:center;padding:.6rem 1.25rem;background:var(--db-header-bg,rgba(15,23,42,.8));border-bottom:1px solid var(--db-header-border,rgba(99,102,241,.3));flex-shrink:0}
 .db-header-left{display:flex;align-items:center;gap:.75rem;flex:1}
 .db-header-center{flex:1;text-align:center}
@@ -758,7 +793,7 @@ onUnmounted(()=>{
 .db-kpi-bar-fill{height:100%;background:var(--kc);border-radius:1px;transition:width .5s;box-shadow:0 0 6px var(--kc)}
 .db-main{display:grid;grid-template-columns:220px 1fr 480px;gap:.5rem;padding:0 1rem .5rem;flex:1;min-height:0;overflow:hidden}
 .db-col{display:flex;flex-direction:column;gap:.5rem;overflow:hidden;flex:1;min-height:0}
-.db-col-right{overflow:visible}
+.db-col-right{overflow:hidden;display:flex;flex-direction:column}
 .db-card{background:var(--db-card-bg,rgba(30,41,59,.7));border:1px solid var(--db-card-border,rgba(255,255,255,.06));border-radius:10px;padding:.65rem .75rem;display:flex;flex-direction:column;overflow:hidden}
 .db-card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:.3rem}
 .db-card-title{font-size:.72rem;font-weight:600;color:var(--db-sub,#94a3b8);margin-bottom:.3rem}
@@ -820,9 +855,22 @@ onUnmounted(()=>{
 .db-alert-name{flex:1;color:var(--db-text,#cbd5e1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .db-alert-time{font-size:.62rem;color:var(--db-sub,#475569);flex-shrink:0}
 /* 右列 2×2 网格 */
-.db-right-grid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:.5rem;flex:1;min-height:0;height:100%}
-.db-right-card{display:flex;flex-direction:column;overflow:hidden;min-height:0}
-.db-chart-right{flex:1;min-height:0;width:100%;min-height:120px}
+.db-right-grid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:.5rem;flex:1;min-height:0}
+.db-right-card{display:flex;flex-direction:column;overflow:hidden;min-height:0;height:100%}
+.db-chart-right{flex:1;min-height:0;width:100%}
+/* 用户排行 */
+.db-card-rank{overflow:hidden}
+.db-rank-meta{font-size:.6rem;color:var(--db-sub,#64748b)}
+.db-rank-list{display:flex;flex-direction:column;gap:.22rem;overflow-y:auto;flex:1;min-height:0;padding-top:.1rem}
+.db-rank-item{display:flex;align-items:center;gap:.35rem;font-size:.7rem}
+.db-rank-no{width:16px;height:16px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:.62rem;font-weight:700;background:rgba(99,102,241,.15);color:#a5b4fc;flex-shrink:0}
+.rank-gold{background:rgba(245,158,11,.2);color:#f59e0b}
+.rank-silver{background:rgba(148,163,184,.2);color:#94a3b8}
+.rank-bronze{background:rgba(180,83,9,.2);color:#b45309}
+.db-rank-name{width:52px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--db-text,#e2e8f0);flex-shrink:0}
+.db-rank-bar-wrap{flex:1;height:5px;background:rgba(255,255,255,.06);border-radius:3px;overflow:hidden}
+.db-rank-bar{height:100%;border-radius:3px;transition:width .5s ease}
+.db-rank-count{font-size:.68rem;font-weight:600;color:var(--db-sub,#94a3b8);flex-shrink:0;width:22px;text-align:right}
 </style>
 
 

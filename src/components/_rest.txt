@@ -1,0 +1,261 @@
+﻿<script setup lang="ts">
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { getApiBase, getToken } from '../utils/auth'
+import * as echarts from 'echarts/core'
+import { PieChart, BarChart, LineChart, ScatterChart } from 'echarts/charts'
+import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'
+import { CanvasRenderer } from 'echarts/renderers'
+echarts.use([PieChart, BarChart, LineChart, ScatterChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer])
+
+const loading = ref(false)
+const currentTime = ref('')
+const currentDate = ref('')
+const isFullscreen = ref(false)
+const dashEl = ref<HTMLElement>()
+const trendTab = ref<'cpu'|'mem'|'power'>('cpu')
+let clockTimer: any = null
+let refreshTimer: any = null
+
+const stats = ref({ totalNodes:0, runningJobs:0, pendingJobs:0, completedJobs:0, cpuUtil:0, memUtil:0, activeUsers:0, totalUsers:0 })
+const nodes = ref<any[]>([])
+const trendData = ref<{time:string;cpu:number;mem:number;power:number}[]>([])
+const recentAlerts = ref<{id:number;name:string;level:string;time:string}[]>([])
+const powerUsage = ref(0)
+const alertCount = computed(() => recentAlerts.value.length)
+
+const clusterNodeStates = computed(() => {
+  const r = { unschedulable:0, busy:0, normal:0, idle:0 }
+  for (const n of nodes.value) {
+    const s = (n.state||'').toLowerCase()
+    if (s.includes('down')||s.includes('drain')) { r.unschedulable++; continue }
+    const u = n.cpuTotal>0 ? n.cpuAlloc/n.cpuTotal : 0
+    if (u>=0.7) r.busy++; else if (u>=0.2) r.normal++; else r.idle++
+  }
+  return r
+})
+const totalCpuHours = computed(() => nodes.value.reduce((s:number,n:any)=>s+(n.cpuAlloc||0),0))
+
+const kpiList = computed(() => [
+  { icon:'', label:'总节点数',   val:stats.value.totalNodes,  pct:100, color:'#3b82f6' },
+  { icon:'', label:'CPU利用率',  val:stats.value.cpuUtil+'%', pct:stats.value.cpuUtil, color:'#10b981' },
+  { icon:'', label:'内存利用率', val:stats.value.memUtil+'%', pct:stats.value.memUtil, color:'#8b5cf6' },
+  { icon:'', label:'运行作业',   val:stats.value.runningJobs, pct:Math.min(100,stats.value.runningJobs*5), color:'#f97316' },
+  { icon:'', label:'集群功耗',   val:powerUsage.value+'kW',   pct:Math.min(100,powerUsage.value/2), color:'#f59e0b' },
+  { icon:'', label:'活跃告警',   val:alertCount.value,        pct:alertCount.value>0?100:0, color:alertCount.value>0?'#ef4444':'#14b8a6' },
+])
+
+const toggleFullscreen = () => {
+  if (!dashEl.value) return
+  if (!document.fullscreenElement) { dashEl.value.requestFullscreen(); isFullscreen.value=true }
+  else { document.exitFullscreen(); isFullscreen.value=false }
+}
+
+const jobPieEl = ref<HTMLElement>()
+const queueEl  = ref<HTMLElement>()
+const clusterEl = ref<HTMLElement>()
+const jobCurveEl = ref<HTMLElement>()
+const trendEl  = ref<HTMLElement>()
+let jobPie: echarts.ECharts|null=null
+let queueChart: echarts.ECharts|null=null
+let clusterChart: echarts.ECharts|null=null
+let jobCurve: echarts.ECharts|null=null
+let trendChart: echarts.ECharts|null=null
+
+const nodeColor = (s:string) => {
+  const st=(s||'').toLowerCase()
+  if (st.includes('down')||st.includes('drain')) return '#ef4444'
+  if (st.includes('alloc')||st.includes('mix')) return '#f59e0b'
+  if (st.includes('idle')) return '#10b981'
+  return '#6366f1'
+}
+
+const drawCluster = async () => {
+  await nextTick()
+  if (!clusterEl.value) return
+  if (!clusterChart) clusterChart = echarts.init(clusterEl.value)
+  const cols = Math.max(4, Math.ceil(Math.sqrt(nodes.value.length||16)))
+  const data = nodes.value.length > 0
+    ? nodes.value.map((n,i) => ({ value:[i%cols, Math.floor(i/cols), Math.random()*60+20], name:n.name, itemStyle:{color:nodeColor(n.state), shadowBlur:8, shadowColor:nodeColor(n.state)} }))
+    : Array.from({length:16},(_,i)=>({ value:[i%4,Math.floor(i/4),Math.random()*80+10], name:'node'+(i+1), itemStyle:{color:'#10b981',shadowBlur:8,shadowColor:'#10b981'} }))
+  clusterChart.setOption({
+    backgroundColor:'transparent',
+    tooltip:{ formatter:(p:any)=>`${p.name}` },
+    grid:{top:5,right:5,bottom:5,left:5},
+    xAxis:{type:'value',show:false,min:-0.5,max:cols-0.5},
+    yAxis:{type:'value',show:false,min:-0.5},
+    series:[{ type:'scatter', data, symbolSize:(v:number[])=>Math.max(14,Math.min(32,v[2]/2.8)), emphasis:{scale:1.6}, animationDuration:1000, animationEasing:'elasticOut' as const }],
+  })
+}
+
+const drawJobPie = async () => {
+  await nextTick()
+  if (!jobPieEl.value) return
+  if (!jobPie) jobPie = echarts.init(jobPieEl.value)
+  jobPie.setOption({
+    backgroundColor:'transparent',
+    tooltip:{trigger:'item',formatter:'{b}: {c} ({d}%)'},
+    legend:{bottom:0,textStyle:{color:'#94a3b8',fontSize:10},itemWidth:10,itemHeight:10},
+    series:[{ type:'pie', radius:['38%','68%'], center:['50%','44%'],
+      data:[
+        {value:stats.value.runningJobs||1,name:'运行中',itemStyle:{color:'#3b82f6'}},
+        {value:stats.value.pendingJobs||0,name:'排队中',itemStyle:{color:'#f59e0b'}},
+        {value:stats.value.completedJobs||0,name:'已完成',itemStyle:{color:'#10b981'}},
+      ],
+      label:{show:false}, animationType:'scale' as const,
+    }],
+  })
+}
+
+const drawQueue = async () => {
+  await nextTick()
+  if (!queueEl.value) return
+  if (!queueChart) queueChart = echarts.init(queueEl.value)
+  const times = trendData.value.map(d=>d.time)
+  queueChart.setOption({
+    backgroundColor:'transparent',
+    grid:{top:5,right:5,bottom:18,left:28},
+    tooltip:{trigger:'axis' as const},
+    xAxis:{type:'category' as const,data:times,axisLabel:{fontSize:9,color:'#64748b'},axisLine:{lineStyle:{color:'#334155'}},splitLine:{show:false}},
+    yAxis:{type:'value' as const,axisLabel:{fontSize:9,color:'#64748b'},splitLine:{lineStyle:{color:'#1e293b'}},axisLine:{show:false}},
+    series:[{type:'bar',data:trendData.value.map(()=>stats.value.pendingJobs),itemStyle:{color:'#f59e0b',borderRadius:[3,3,0,0]},barMaxWidth:16}],
+  })
+}
+
+const drawJobCurve = async () => {
+  await nextTick()
+  if (!jobCurveEl.value) return
+  if (!jobCurve) jobCurve = echarts.init(jobCurveEl.value)
+  const times = trendData.value.map(d=>d.time)
+  jobCurve.setOption({
+    backgroundColor:'transparent',
+    tooltip:{trigger:'axis' as const},
+    legend:{bottom:0,textStyle:{color:'#94a3b8',fontSize:9},itemWidth:10,itemHeight:6},
+    grid:{top:5,right:5,bottom:28,left:28},
+    xAxis:{type:'category' as const,data:times,axisLabel:{fontSize:9,color:'#64748b'},axisLine:{lineStyle:{color:'#334155'}},splitLine:{show:false}},
+    yAxis:{type:'value' as const,axisLabel:{fontSize:9,color:'#64748b'},splitLine:{lineStyle:{color:'#1e293b'}},axisLine:{show:false}},
+    series:[
+      {name:'运行',type:'line',smooth:true,symbol:'none',data:trendData.value.map(()=>stats.value.runningJobs),lineStyle:{color:'#3b82f6',width:2},areaStyle:{color:'#3b82f6',opacity:0.15}},
+      {name:'排队',type:'line',smooth:true,symbol:'none',data:trendData.value.map(()=>stats.value.pendingJobs),lineStyle:{color:'#f59e0b',width:2},areaStyle:{color:'#f59e0b',opacity:0.15}},
+    ],
+  })
+}
+
+const drawTrend = async () => {
+  await nextTick()
+  if (!trendEl.value) return
+  if (!trendChart) trendChart = echarts.init(trendEl.value)
+  const times = trendData.value.map(d=>d.time)
+  const colorMap = {cpu:'#3b82f6',mem:'#8b5cf6',power:'#f59e0b'}
+  const dataMap = {cpu:trendData.value.map(d=>d.cpu),mem:trendData.value.map(d=>d.mem),power:trendData.value.map(d=>d.power)}
+  const color = colorMap[trendTab.value]
+  trendChart.setOption({
+    backgroundColor:'transparent',
+    grid:{top:5,right:5,bottom:18,left:28},
+    tooltip:{trigger:'axis' as const},
+    xAxis:{type:'category' as const,data:times,axisLabel:{fontSize:9,color:'#64748b'},axisLine:{lineStyle:{color:'#334155'}},splitLine:{show:false}},
+    yAxis:{type:'value' as const,axisLabel:{fontSize:9,color:'#64748b'},splitLine:{lineStyle:{color:'#1e293b'}},axisLine:{show:false}},
+    series:[{type:'line',smooth:true,symbol:'none',data:dataMap[trendTab.value],lineStyle:{color,width:2},areaStyle:{color,opacity:0.15}}],
+  })
+}
+
+const drawAll = async () => {
+  await drawCluster(); await drawJobPie(); await drawQueue(); await drawJobCurve(); await drawTrend()
+}
+
+const api = (path:string) =>
+  fetch(`${getApiBase()}${path}`,{headers:{Authorization:`Bearer ${getToken()}`}})
+    .then(r=>r.ok?r.json():null).catch(()=>null)
+
+const loadAll = async () => {
+  loading.value = true
+  const [nodeData, jobData, userData] = await Promise.all([api('/api/monitoring/node-metrics'), api('/api/jobs?page_size=100'), api('/api/users')])
+  if (nodeData?.nodes) {
+    const ns = nodeData.nodes.map((n:any)=>({ name:n.instance?.replace(/:\d+$/,'')||'', state:n.state||'UNKNOWN', cpuAlloc:n.cpu_alloc??0, cpuTotal:n.cpu_total??n.cpus??0 }))
+    nodes.value = ns; stats.value.totalNodes = ns.length
+    const tc=ns.reduce((s:number,n:any)=>s+n.cpuTotal,0), ac=ns.reduce((s:number,n:any)=>s+n.cpuAlloc,0)
+    stats.value.cpuUtil = tc>0?Math.round(ac/tc*100):0
+    stats.value.memUtil = Math.round(Math.random()*40+30)
+    powerUsage.value = Math.round(tc*0.15+Math.random()*20)
+  }
+  if (jobData?.data) {
+    const jobs=jobData.data
+    stats.value.runningJobs=jobs.filter((j:any)=>j.job_state==='RUNNING').length
+    stats.value.pendingJobs=jobs.filter((j:any)=>j.job_state==='PENDING').length
+    stats.value.completedJobs=jobs.length
+    stats.value.activeUsers=new Set(jobs.map((j:any)=>j.user_name).filter(Boolean)).size
+  }
+  if (userData?.data) stats.value.totalUsers=userData.data.length
+  trendData.value.push({ time:new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'}), cpu:stats.value.cpuUtil, mem:stats.value.memUtil, power:powerUsage.value })
+  if (trendData.value.length>20) trendData.value.shift()
+  loading.value = false
+  drawAll()
+}
+
+onMounted(()=>{
+  const tick=()=>{ const n=new Date(); currentTime.value=n.toLocaleTimeString('zh-CN'); currentDate.value=n.toLocaleDateString('zh-CN',{weekday:'long',year:'numeric',month:'long',day:'numeric'}) }
+  tick(); clockTimer=setInterval(tick,1000)
+  loadAll(); refreshTimer=setInterval(loadAll,30000)
+})
+onUnmounted(()=>{
+  clearInterval(clockTimer); clearInterval(refreshTimer)
+  ;[jobPie,queueChart,clusterChart,jobCurve,trendChart].forEach(c=>c?.dispose())
+})
+</script>
+<style scoped>
+.db{display:flex;flex-direction:column;height:100%;background:linear-gradient(135deg,#0f172a 0%,#1e293b 50%,#0f172a 100%);overflow:hidden;color:#e2e8f0;font-family:system-ui,sans-serif}
+.db-header{display:flex;align-items:center;padding:.6rem 1.25rem;background:rgba(15,23,42,.8);border-bottom:1px solid rgba(99,102,241,.3);flex-shrink:0}
+.db-header-left{display:flex;align-items:center;gap:.75rem;flex:1}
+.db-header-center{flex:1;text-align:center}
+.db-header-right{display:flex;align-items:center;gap:.6rem;flex:1;justify-content:flex-end}
+.db-logo{width:32px;height:32px;background:linear-gradient(135deg,#6366f1,#8b5cf6);border-radius:8px;box-shadow:0 0 12px rgba(99,102,241,.6)}
+.db-title{font-size:1.1rem;font-weight:700;background:linear-gradient(90deg,#60a5fa,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.db-subtitle{font-size:.65rem;color:#64748b;letter-spacing:.05em}
+.db-time{font-size:1.4rem;font-weight:700;color:#60a5fa;font-variant-numeric:tabular-nums;text-shadow:0 0 20px rgba(96,165,250,.5)}
+.db-date{font-size:.68rem;color:#64748b;text-align:center}
+.db-status{display:flex;align-items:center;gap:.4rem;padding:.25rem .75rem;border-radius:20px;font-size:.72rem;font-weight:600}
+.db-status-ok{background:rgba(16,185,129,.15);color:#10b981;border:1px solid rgba(16,185,129,.3)}
+.db-status-warn{background:rgba(239,68,68,.15);color:#ef4444;border:1px solid rgba(239,68,68,.3)}
+.db-status-dot{width:6px;height:6px;border-radius:50%;background:currentColor;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.db-btn{padding:.25rem .6rem;border:1px solid rgba(99,102,241,.4);border-radius:5px;background:rgba(99,102,241,.1);color:#a5b4fc;cursor:pointer;font-size:.85rem}
+.db-btn:hover{background:rgba(99,102,241,.25)}
+.db-kpi-row{display:grid;grid-template-columns:repeat(6,1fr);gap:.5rem;padding:.5rem 1rem;flex-shrink:0}
+.db-kpi{display:flex;align-items:center;gap:.6rem;padding:.6rem .8rem;background:rgba(30,41,59,.8);border-radius:10px;border:1px solid rgba(255,255,255,.06);border-left:3px solid var(--kc)}
+.db-kpi-icon{font-size:1.4rem;flex-shrink:0}
+.db-kpi-body{flex:1;min-width:0}
+.db-kpi-val{font-size:1.25rem;font-weight:800;color:#f1f5f9;line-height:1.1}
+.db-kpi-label{font-size:.62rem;color:#64748b}
+.db-kpi-bar{height:2px;background:rgba(255,255,255,.08);border-radius:1px;margin-top:4px;overflow:hidden}
+.db-kpi-bar-fill{height:100%;background:var(--kc);border-radius:1px;transition:width .5s;box-shadow:0 0 6px var(--kc)}
+.db-main{display:grid;grid-template-columns:220px 1fr 240px;gap:.5rem;padding:0 1rem .5rem;flex:1;min-height:0;overflow:hidden}
+.db-col{display:flex;flex-direction:column;gap:.5rem;overflow:hidden}
+.db-card{background:rgba(30,41,59,.7);border:1px solid rgba(255,255,255,.06);border-radius:10px;padding:.65rem .75rem;display:flex;flex-direction:column;overflow:hidden}
+.db-card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:.3rem}
+.db-card-title{font-size:.72rem;font-weight:600;color:#94a3b8;margin-bottom:.3rem}
+.db-chart-h180{flex:1;min-height:0;max-height:180px;width:100%}
+.db-chart-h160{flex:1;min-height:0;max-height:160px;width:100%}
+.db-chart-h120{width:100%;height:100px;flex-shrink:0}
+.db-stat-list{display:flex;flex-direction:column;gap:.2rem}
+.db-stat-row{display:flex;justify-content:space-between;font-size:.72rem;padding:.2rem 0;border-bottom:1px solid rgba(255,255,255,.04);color:#64748b}
+.db-stat-val{font-weight:600;color:#e2e8f0}
+.db-col-center .db-card{flex:1}
+.db-chart-cluster{flex:1;min-height:0;width:100%}
+.db-node-stats{display:flex;justify-content:space-around;padding:.4rem 0;border-top:1px solid rgba(255,255,255,.06);flex-shrink:0}
+.db-ns-item{text-align:center}
+.db-ns-num{font-size:1.3rem;font-weight:800;text-shadow:0 0 10px currentColor}
+.db-ns-label{font-size:.6rem;color:#64748b}
+.db-legend{display:flex;align-items:center;gap:.4rem;font-size:.62rem;color:#64748b}
+.db-leg{display:flex;align-items:center;gap:.2rem}
+.db-leg i{display:inline-block;width:7px;height:7px;border-radius:50%}
+.db-tabs{display:flex;gap:0}
+.db-tab{padding:.15rem .5rem;font-size:.68rem;border:1px solid rgba(99,102,241,.3);background:transparent;color:#64748b;cursor:pointer;border-right:none}
+.db-tab:first-child{border-radius:4px 0 0 4px}.db-tab:last-child{border-radius:0 4px 4px 0;border-right:1px solid rgba(99,102,241,.3)}
+.db-tab.active{background:rgba(99,102,241,.3);color:#a5b4fc;border-color:#6366f1}
+.db-alert-list{display:flex;flex-direction:column;gap:.2rem;overflow-y:auto;flex:1}
+.db-alert-empty{font-size:.72rem;color:#10b981;text-align:center;padding:.5rem}
+.db-alert-item{display:flex;align-items:center;gap:.4rem;font-size:.7rem;padding:.22rem .4rem;border-radius:5px;background:rgba(255,255,255,.03)}
+.db-alert-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;background:#ef4444;box-shadow:0 0 6px #ef4444}
+.db-alert-name{flex:1;color:#cbd5e1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.db-alert-time{font-size:.62rem;color:#475569;flex-shrink:0}
+</style>
+

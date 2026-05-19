@@ -115,7 +115,7 @@
   </div>
 </template>
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { getApiBase } from '../utils/auth'
 import notification from '../utils/notification'
 const props = defineProps<{ type: 'train' | 'infer' }>()
@@ -134,6 +134,122 @@ const trainTpls = [{ id:'pytorch',icon:'🔥',name:'PyTorch DDP',tag:'多机多�
 const inferTpls = [{ id:'vllm',icon:'',name:'vLLM',tag:'OpenAI API',gpus:4,cpus:16,memory:64,nodes:1,script:'#!/bin/bash\n#SBATCH -o slurm-%j.out\npython -m vllm.entrypoints.openai.api_server --model /data/models/llama3 --host 0.0.0.0 --port 8000'},{ id:'triton',icon:'',name:'Triton',tag:'高性能',gpus:2,cpus:8,memory:32,nodes:1,script:'#!/bin/bash\n#SBATCH -o slurm-%j.out\ntritonserver --model-repository=/data/triton_models --http-port=8000'}]
 const templates = computed(() => props.type === 'train' ? trainTpls : inferTpls)
 const applyTpl = (tpl: any) => { selectedTpl.value = tpl.id; form.value.gpus = tpl.gpus; form.value.cpus = tpl.cpus; form.value.memory = tpl.memory; form.value.nodes = tpl.nodes; form.value.script = tpl.script; if (!form.value.name) form.value.name = tpl.id + '-job' }
+
+// 更新脚本内容中的 SBATCH 参数
+const updateScriptParams = () => {
+  let script = form.value.script
+  if (!script || !script.includes('#SBATCH')) return
+
+  // 更新作业名称
+  if (form.value.name) {
+    if (script.includes('#SBATCH -J ')) {
+      script = script.replace(/#SBATCH\s+-J\s+\S+/g, `#SBATCH -J ${form.value.name}`)
+    } else {
+      script = script.replace('#!/bin/bash\n', `#!/bin/bash\n#SBATCH -J ${form.value.name}\n`)
+    }
+  }
+
+  // 更新分区
+  if (form.value.partition) {
+    if (script.includes('#SBATCH -p ')) {
+      script = script.replace(/#SBATCH\s+-p\s+\S+/g, `#SBATCH -p ${form.value.partition}`)
+    } else {
+      const jobLine = script.match(/#SBATCH\s+-J\s+\S+/)
+      if (jobLine) {
+        script = script.replace(/(#SBATCH\s+-J\s+\S+)/g, `$1\n#SBATCH -p ${form.value.partition}`)
+      }
+    }
+  }
+
+  // 更新节点数
+  if (script.includes('#SBATCH -N ')) {
+    script = script.replace(/#SBATCH\s+-N\s+\d+/g, `#SBATCH -N ${form.value.nodes}`)
+  } else {
+    const partLine = script.match(/#SBATCH\s+-p\s+\S+/)
+    if (partLine) {
+      script = script.replace(/(#SBATCH\s+-p\s+\S+)/g, `$1\n#SBATCH -N ${form.value.nodes}`)
+    }
+  }
+
+  // 更新 CPU 核心数
+  if (script.includes('#SBATCH -c ')) {
+    script = script.replace(/#SBATCH\s+-c\s+\d+/g, `#SBATCH -c ${form.value.cpus}`)
+  } else if (script.includes('#SBATCH --ntasks-per-node=')) {
+    script = script.replace(/#SBATCH\s+--ntasks-per-node=\d+/g, `#SBATCH --ntasks-per-node=${form.value.cpus}`)
+  } else {
+    const nodeLine = script.match(/#SBATCH\s+-N\s+\d+/)
+    if (nodeLine) {
+      script = script.replace(/(#SBATCH\s+-N\s+\d+)/g, `$1\n#SBATCH -c ${form.value.cpus}`)
+    }
+  }
+
+  // 更新内存
+  if (form.value.memory > 0) {
+    if (script.includes('#SBATCH --mem=')) {
+      script = script.replace(/#SBATCH\s+--mem=\d+G?/g, `#SBATCH --mem=${form.value.memory}G`)
+    } else {
+      const cpuLine = script.match(/#SBATCH\s+-c\s+\d+/)
+      if (cpuLine) {
+        script = script.replace(/(#SBATCH\s+-c\s+\d+)/g, `$1\n#SBATCH --mem=${form.value.memory}G`)
+      }
+    }
+  } else {
+    script = script.replace(/\n?#SBATCH\s+--mem=\d+G?\n?/g, '\n')
+  }
+
+  // 更新时间
+  if (form.value.time > 0) {
+    const timeStr = `${String(form.value.time).padStart(2, '0')}:00:00`
+    if (script.includes('#SBATCH -t ') || script.includes('#SBATCH --time=')) {
+      script = script.replace(/#SBATCH\s+-t\s+\S+/g, `#SBATCH -t ${timeStr}`)
+      script = script.replace(/#SBATCH\s+--time=\S+/g, `#SBATCH --time=${timeStr}`)
+    } else {
+      const memLine = script.match(/#SBATCH\s+--mem=\d+G?/)
+      if (memLine) {
+        script = script.replace(/(#SBATCH\s+--mem=\d+G?)/g, `$1\n#SBATCH -t ${timeStr}`)
+      }
+    }
+  } else {
+    script = script.replace(/\n?#SBATCH\s+(-t|--time=)\s*\S+\n?/g, '\n')
+  }
+
+  // 更新 GPU
+  if (form.value.gpus > 0) {
+    if (script.includes('#SBATCH --gres=gpu:')) {
+      script = script.replace(/#SBATCH\s+--gres=gpu:\d+/g, `#SBATCH --gres=gpu:${form.value.gpus}`)
+    } else {
+      const memLine = script.match(/#SBATCH\s+--mem=\d+G?/)
+      if (memLine) {
+        script = script.replace(/(#SBATCH\s+--mem=\d+G?)/g, `$1\n#SBATCH --gres=gpu:${form.value.gpus}`)
+      }
+    }
+  } else {
+    script = script.replace(/\n?#SBATCH\s+--gres=gpu:\d+\n?/g, '\n')
+  }
+
+  // 清理多余的空行
+  script = script.replace(/\n{3,}/g, '\n\n')
+
+  form.value.script = script
+}
+
+// 监听表单参数变化，自动更新脚本内容
+watch(
+  () => [
+    form.value.name,
+    form.value.partition,
+    form.value.nodes,
+    form.value.cpus,
+    form.value.memory,
+    form.value.time,
+    form.value.gpus
+  ],
+  () => {
+    updateScriptParams()
+  },
+  { deep: true }
+)
+
 const token = () => localStorage.getItem('token') || sessionStorage.getItem('token')
 const loadPartitions = async () => { try { const r = await fetch(getApiBase()+'/api/jobs/partitions/list',{headers:{Authorization:'Bearer '+token()}}); const d = await r.json(); const l=(d.data||[]).map((p:any)=>p.name).filter(Boolean); if(l.length){partitions.value=l;form.value.partition=l[0]} } catch { form.value.partition='gpu' } }
 const loadImages = async () => { loadingImages.value=true; try { const cr=await fetch(getApiBase()+'/api/registry/config',{headers:{Authorization:'Bearer '+token()}}); const cfg=await cr.json(); const h=(cfg.harbor_url||'').replace(/^https?:\/\//,'').replace(/\/$/,''); const pr=await fetch(getApiBase()+'/api/registry/projects',{headers:{Authorization:'Bearer '+token()}}); const pd=await pr.json(); const imgs:ImageItem[]=[]; await Promise.all((pd.data||[]).map(async(proj:any)=>{ try{ const res=await fetch(getApiBase()+'/api/registry/projects/'+proj.name+'/repositories',{headers:{Authorization:'Bearer '+token()}}); if(!res.ok)return; const data=await res.json(); for(const repo of(data.data||[])){const n=repo.name?.split('/').pop()||''; if(n)imgs.push({name:proj.name+'/'+n,addr:h+'/'+proj.name+'/'+n+':latest'})} }catch{} })); allImages.value=imgs } catch{} finally{loadingImages.value=false} }

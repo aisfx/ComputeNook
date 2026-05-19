@@ -205,9 +205,12 @@ const generatedScript = computed(() => {
     `#SBATCH -N ${f.nodes}`,
     `#SBATCH -c ${f.cpus}`,
   ]
-  if (f.memory) lines.push(`#SBATCH --mem=${f.memory}G`)
-  if (f.gpus) lines.push(`#SBATCH --gres=gpu:${f.gpus}`)
-  if (f.time) lines.push(`#SBATCH -t ${f.time}:00:00`)
+  if (f.memory > 0) lines.push(`#SBATCH --mem=${f.memory}G`)
+  if (f.gpus > 0) lines.push(`#SBATCH --gres=gpu:${f.gpus}`)
+  if (f.time > 0) {
+    const timeStr = `${String(f.time).padStart(2, '0')}:00:00`
+    lines.push(`#SBATCH -t ${timeStr}`)
+  }
   lines.push('')
   lines.push('echo "Container job started: $(date)"')
   lines.push(`echo "Image: ${f.image}"`)

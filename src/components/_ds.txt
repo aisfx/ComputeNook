@@ -1,0 +1,291 @@
+﻿<script setup lang="ts">
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { getApiBase, getToken } from '../utils/auth'
+import * as echarts from 'echarts/core'
+import { GaugeChart, LineChart } from 'echarts/charts'
+import { GridComponent, TooltipComponent } from 'echarts/components'
+import { CanvasRenderer } from 'echarts/renderers'
+echarts.use([GaugeChart, LineChart, GridComponent, TooltipComponent, CanvasRenderer])
+
+const loading = ref(false)
+const lastUpdate = ref('—')
+const isFullscreen = ref(false)
+const dashEl = ref<HTMLElement>()
+
+const toggleFullscreen = () => {
+  if (!dashEl.value) return
+  if (!document.fullscreenElement) {
+    dashEl.value.requestFullscreen()
+    isFullscreen.value = true
+  } else {
+    document.exitFullscreen()
+    isFullscreen.value = false
+  }
+}
+let timer: any = null
+
+const stats = ref({
+  totalNodes: 0, runningJobs: 0, pendingJobs: 0, completedJobs: 0,
+  cpuUtil: 0, memUtil: 0, gpuUtil: 0, activeUsers: 0, totalUsers: 0,
+})
+const nodes = ref<any[]>([])
+const trendData = ref<{ time: string; cpuSched: number; cpu: number; mem: number }[]>([])
+
+const clusterRes = computed(() => {
+  const cpuTotal = nodes.value.reduce((s: number, n: any) => s + (n.cpuTotal || 0), 0)
+  const cpuFree = nodes.value.reduce((s: number, n: any) => s + Math.max(0, (n.cpuTotal || 0) - (n.cpuAlloc || 0)), 0)
+  const memTotal = nodes.value.reduce((s: number, n: any) => s + (n.memTotal || 0), 0)
+  const memFree = nodes.value.reduce((s: number, n: any) => s + Math.max(0, (n.memTotal || 0) - (n.memAlloc || 0)), 0)
+  return { cpuTotal, cpuFree, memTotal: memTotal.toFixed(0), memFree: memFree.toFixed(0) }
+})
+
+const clusterNodeStates = computed(() => {
+  const r = { unschedulable: 0, busy: 0, normal: 0, idle: 0 }
+  for (const n of nodes.value) {
+    const s = (n.state || '').toLowerCase()
+    if (s.includes('down') || s.includes('drain')) { r.unschedulable++; continue }
+    const util = n.cpuTotal > 0 ? n.cpuAlloc / n.cpuTotal : 0
+    if (util >= 0.7) r.busy++
+    else if (util >= 0.2) r.normal++
+    else r.idle++
+  }
+  return r
+})
+
+const totalCpuHours = computed(() =>
+  nodes.value.reduce((s: number, n: any) => s + (n.cpuAlloc || 0), 0)
+)
+
+const gaugeColor = (v: number, warn: number) =>
+  v > warn ? '#ef4444' : v > warn * 0.8 ? '#f59e0b' : '#10b981'
+
+const gaugeStatusText = (v: number, warn: number) =>
+  v > warn ? '告警' : v > warn * 0.8 ? '警告' : '正常'
+
+const nodeStateClass = (s: string) => {
+  const st = (s || '').toLowerCase()
+  if (st.includes('idle')) return 'dot-idle'
+  if (st.includes('alloc') || st.includes('mix')) return 'dot-alloc'
+  if (st.includes('down') || st.includes('drain')) return 'dot-down'
+  return 'dot-normal'
+}
+
+// Chart refs
+const gaugeCpuSchedEl = ref<HTMLElement>()
+const gaugeCpuEl = ref<HTMLElement>()
+const gaugeMemEl = ref<HTMLElement>()
+const trendCpuSchedEl = ref<HTMLElement>()
+const trendCpuEl = ref<HTMLElement>()
+const trendMemEl = ref<HTMLElement>()
+const nodeMatrixEl = ref<HTMLElement>()
+const centerTab = ref<'cpuSched'|'cpu'|'mem'>('cpuSched')
+let gaugeCpuSched: echarts.ECharts | null = null
+let gaugeCpu: echarts.ECharts | null = null
+let gaugeMem: echarts.ECharts | null = null
+let trendCpuSched: echarts.ECharts | null = null
+let trendCpuChart: echarts.ECharts | null = null
+let trendMemChart: echarts.ECharts | null = null
+let nodeMatrixChart: echarts.ECharts | null = null
+
+const mkGaugeOpt = (val: number, warn: number) => {
+  const color = gaugeColor(val, warn)
+  return {
+    backgroundColor: 'transparent',
+    series: [{
+      type: 'gauge',
+      startAngle: 210, endAngle: -30,
+      min: 0, max: 100,
+      radius: '88%',
+      center: ['50%', '60%'],
+      pointer: { show: false },
+      progress: {
+        show: true, width: 10,
+        itemStyle: { color }
+      },
+      axisLine: { lineStyle: { width: 10, color: [[1, 'rgba(255,255,255,0.08)']] } },
+      axisTick: { show: false },
+      splitLine: { show: false },
+      axisLabel: { show: false },
+      detail: {
+        valueAnimation: true,
+        formatter: '{value}%',
+        color,
+        fontSize: 14,
+        fontWeight: 700,
+        offsetCenter: [0, '10%'],
+      },
+      data: [{ value: val }],
+    }],
+  }
+}
+
+const mkTrendOpt = (data: number[], color: string) => ({
+  backgroundColor: 'transparent',
+  grid: { top: 4, right: 4, bottom: 18, left: 28 },
+  tooltip: { trigger: 'axis' as const, confine: true },
+  xAxis: {
+    type: 'category' as const,
+    data: trendData.value.map(d => d.time),
+    axisLabel: { fontSize: 9, color: '#9ca3af' },
+    axisLine: { lineStyle: { color: '#e5e7eb' } },
+    splitLine: { show: false },
+  },
+  yAxis: {
+    type: 'value' as const, min: 0, max: 100,
+    axisLabel: { fontSize: 9, color: '#9ca3af' },
+    splitLine: { lineStyle: { color: '#f3f4f6' } },
+    axisLine: { show: false },
+  },
+  series: [{
+    type: 'line', data, smooth: true, symbol: 'none',
+    lineStyle: { color, width: 1.5 },
+    areaStyle: { color, opacity: 0.1 },
+  }],
+})
+
+const drawCenterChart = async () => {
+  await nextTick()
+  if (!nodeMatrixEl.value) return
+  if (!nodeMatrixChart) {
+    nodeMatrixChart = echarts.init(nodeMatrixEl.value, undefined, { renderer: 'canvas' })
+    // 强制设置容器及内部所有子元素背景
+    nodeMatrixEl.value.style.background = '#f0f2f5'
+    const inner = nodeMatrixEl.value.querySelector('div') as HTMLElement | null
+    if (inner) inner.style.background = '#f0f2f5'
+  }
+  const colorMap = { cpuSched: '#3b82f6', cpu: '#10b981', mem: '#f59e0b' }
+  const dataMap = {
+    cpuSched: trendData.value.map(d => d.cpuSched),
+    cpu: trendData.value.map(d => d.cpu),
+    mem: trendData.value.map(d => d.mem),
+  }
+  const data = dataMap[centerTab.value]
+  const color = colorMap[centerTab.value]
+  nodeMatrixChart.setOption({
+    backgroundColor: '#f0f2f5',
+    tooltip: { trigger: 'axis' as const, confine: true },
+    xAxis: {
+      type: 'category' as const,
+      data: trendData.value.map(d => d.time),
+      axisLabel: { fontSize: 10, color: '#9ca3af' },
+      axisLine: { lineStyle: { color: '#e5e7eb' } },
+      splitLine: { show: false },
+    },
+    yAxis: {
+      type: 'value' as const, min: 0, max: 100,
+      axisLabel: { fontSize: 10, color: '#9ca3af', formatter: (v: number) => v + '%' },
+      splitLine: { lineStyle: { color: '#f3f4f6' } },
+      axisLine: { show: false },
+    },
+    series: [{
+      type: 'line', data, smooth: true, symbol: 'none',
+      lineStyle: { color, width: 2 },
+      areaStyle: { color, opacity: 0.1 },
+    }],
+  })
+}
+
+const switchCenterTab = (tab: 'cpuSched'|'cpu'|'mem') => {
+  centerTab.value = tab
+  drawCenterChart()
+}
+
+const drawCharts = async () => {
+  await nextTick()
+  const cpuVal = stats.value.cpuUtil
+  const memVal = stats.value.memUtil
+
+  if (gaugeCpuSchedEl.value) {
+    if (!gaugeCpuSched) gaugeCpuSched = echarts.init(gaugeCpuSchedEl.value)
+    gaugeCpuSched.setOption(mkGaugeOpt(cpuVal, 90))
+  }
+  if (gaugeCpuEl.value) {
+    if (!gaugeCpu) gaugeCpu = echarts.init(gaugeCpuEl.value)
+    gaugeCpu.setOption(mkGaugeOpt(cpuVal, 90))
+  }
+  if (gaugeMemEl.value) {
+    if (!gaugeMem) gaugeMem = echarts.init(gaugeMemEl.value)
+    gaugeMem.setOption(mkGaugeOpt(memVal, 80))
+  }
+
+  const cpuSchedArr = trendData.value.map(d => d.cpuSched)
+  const cpuArr = trendData.value.map(d => d.cpu)
+  const memArr = trendData.value.map(d => d.mem)
+
+  if (trendCpuSchedEl.value) {
+    if (!trendCpuSched) trendCpuSched = echarts.init(trendCpuSchedEl.value)
+    trendCpuSched.setOption(mkTrendOpt(cpuSchedArr, '#3b82f6'))
+  }
+  if (trendCpuEl.value) {
+    if (!trendCpuChart) trendCpuChart = echarts.init(trendCpuEl.value)
+    trendCpuChart.setOption(mkTrendOpt(cpuArr, '#3b82f6'))
+  }
+  if (trendMemEl.value) {
+    if (!trendMemChart) trendMemChart = echarts.init(trendMemEl.value)
+    trendMemChart.setOption(mkTrendOpt(memArr, '#f59e0b'))
+  }
+  drawCenterChart()
+}
+
+const api = (path: string) =>
+  fetch(`${getApiBase()}${path}`, { headers: { Authorization: `Bearer ${getToken()}` } })
+    .then(r => r.ok ? r.json() : null).catch(() => null)
+
+const loadNodes = async () => {
+  const data = await api('/api/monitoring/node-metrics')
+  if (!data?.nodes) return
+  const ns = data.nodes.map((n: any) => ({
+    name: n.instance?.replace(/:\d+$/, '') || n.nodename || '—',
+    state: n.state || 'UNKNOWN',
+    cpuAlloc: n.cpu_alloc ?? 0,
+    cpuTotal: n.cpu_total ?? n.cpus ?? 0,
+    memAlloc: Math.round((n.mem_alloc ?? 0) / 1024),
+    memTotal: Math.round((n.mem_total ?? n.memory ?? 0) / 1024),
+  }))
+  nodes.value = ns
+  stats.value.totalNodes = ns.length
+  const totalCpu = ns.reduce((s: number, n: any) => s + n.cpuTotal, 0)
+  const allocCpu = ns.reduce((s: number, n: any) => s + n.cpuAlloc, 0)
+  const totalMem = ns.reduce((s: number, n: any) => s + n.memTotal, 0)
+  const allocMem = ns.reduce((s: number, n: any) => s + n.memAlloc, 0)
+  stats.value.cpuUtil = totalCpu > 0 ? Math.round(allocCpu / totalCpu * 100) : 0
+  stats.value.memUtil = totalMem > 0 ? Math.round(allocMem / totalMem * 100) : 0
+  trendData.value.push({
+    time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+    cpuSched: stats.value.cpuUtil,
+    cpu: stats.value.cpuUtil,
+    mem: stats.value.memUtil,
+  })
+  if (trendData.value.length > 20) trendData.value.shift()
+}
+
+const loadJobs = async () => {
+  const data = await api('/api/jobs?page_size=100')
+  if (!data?.data) return
+  const jobs = data.data
+  stats.value.runningJobs = jobs.filter((j: any) => j.job_state === 'RUNNING').length
+  stats.value.pendingJobs = jobs.filter((j: any) => j.job_state === 'PENDING').length
+  stats.value.completedJobs = jobs.length
+  stats.value.activeUsers = new Set(jobs.map((j: any) => j.user_name).filter(Boolean)).size
+}
+
+const loadUsers = async () => {
+  const data = await api('/api/users')
+  if (data?.data) stats.value.totalUsers = data.data.length
+}
+
+const loadAll = async () => {
+  loading.value = true
+  await Promise.all([loadNodes(), loadJobs(), loadUsers()])
+  lastUpdate.value = new Date().toLocaleTimeString()
+  loading.value = false
+  drawCharts()
+}
+
+onMounted(() => { loadAll(); timer = setInterval(loadAll, 30000) })
+onUnmounted(() => {
+  clearInterval(timer)
+  ;[gaugeCpuSched, gaugeCpu, gaugeMem, trendCpuSched, trendCpuChart, trendMemChart, nodeMatrixChart]
+    .forEach(c => c?.dispose())
+})
+</script>

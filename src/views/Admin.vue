@@ -1004,7 +1004,7 @@ onMounted(() => {
 .dash-subtab { padding:0.55rem 1.1rem; font-size:0.85rem; font-weight:500; color:hsl(var(--muted-foreground)); background:transparent; border:none; border-bottom:2px solid transparent; margin-bottom:-1px; cursor:pointer; transition:color 0.15s,border-color 0.15s; white-space:nowrap; }
 .dash-subtab:hover { color:hsl(var(--foreground)); background:hsl(var(--muted)/0.3); }
 .dash-subtab.active { color:hsl(var(--primary)); border-bottom-color:hsl(var(--primary)); font-weight:600; }
-.dash-sub-content { flex:1; overflow:auto; min-height:0; }
+.dash-sub-content { flex:1; overflow:hidden; min-height:0; display:flex; flex-direction:column; }
 
 .page-header { display:flex; justify-content:space-between; align-items:center; }
 .page-header h3 { margin:0; font-size:1.1rem; font-weight:700; color:hsl(var(--foreground)); }

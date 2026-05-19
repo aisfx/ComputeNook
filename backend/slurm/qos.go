@@ -82,6 +82,13 @@ type QoS struct {
 				} `json:"per"`
 			} `json:"wall_clock"`
 		} `json:"max"`
+		Min struct {
+			TRES struct {
+				Per struct {
+					Job []TRESItem `json:"job"`
+				} `json:"per"`
+			} `json:"tres"`
+		} `json:"min,omitempty"`
 	} `json:"limits,omitempty"`
 	
 	// 保留旧字段以兼容，同时支持前端发送的字段名
@@ -94,6 +101,20 @@ type QoS struct {
 	MaxTRES     string      `json:"max_tres_pu,omitempty"`   // 每用户最大 TRES (包含 GPU 等资源)
 	MaxWall     interface{} `json:"max_wall_pj,omitempty"`   // 每作业最大运行时间（分钟）
 	GrpTRESMins string      `json:"grp_tres_mins,omitempty"` // 组总机时（TRES-minutes）
+	
+	// 新增字段：最小资源要求
+	MinCPUs     interface{} `json:"min_cpus_pj,omitempty"`   // 每作业最小 CPU 核心数
+	MinNodes    interface{} `json:"min_nodes_pj,omitempty"`  // 每作业最小节点数
+	MinTRES     string      `json:"min_tres_pj,omitempty"`   // 每作业最小 TRES
+	
+	// 新增字段：抢占和优先级控制
+	Preempt     []string    `json:"preempt,omitempty"`       // 可以抢占的 QoS 列表
+	PreemptMode string      `json:"preempt_mode,omitempty"`  // 抢占模式：off, suspend, requeue, cancel
+	PreemptExemptTime int   `json:"preempt_exempt_time,omitempty"` // 抢占豁免时间（秒）
+	
+	// 新增字段：使用因子（影响公平共享调度）
+	UsageFactor float64     `json:"usage_factor,omitempty"`  // 使用因子，默认 1.0
+	UsageThreshold float64  `json:"usage_threshold,omitempty"` // 使用阈值
 }
 
 // QoSResponse Slurm QoS 列表响应
@@ -147,8 +168,11 @@ func (c *Client) GetQoS(name string) (*QoS, error) {
 
 // buildQoSLimits 构建 Slurm v0.0.43 格式的 limits 结构
 func buildQoSLimits(qos *QoS) map[string]interface{} {
+	limits := map[string]interface{}{}
 	maxLimits := map[string]interface{}{}
+	minLimits := map[string]interface{}{}
 
+	// ========== MAX LIMITS ==========
 	// per-user TRES 限制
 	userLimits := []TRESItem{}
 
@@ -227,7 +251,38 @@ func buildQoSLimits(qos *QoS) map[string]interface{} {
 		}
 	}
 
-	return map[string]interface{}{"max": maxLimits}
+	limits["max"] = maxLimits
+
+	// ========== MIN LIMITS ==========
+	// per-job 最小 TRES 限制
+	jobMinLimits := []TRESItem{}
+	
+	if qos.MinCPUs != nil && extractNumber(qos.MinCPUs) > 0 {
+		jobMinLimits = append(jobMinLimits, TRESItem{Type: "cpu", Name: "", ID: 1, Count: int64(extractNumber(qos.MinCPUs))})
+	}
+	if qos.MinNodes != nil && extractNumber(qos.MinNodes) > 0 {
+		jobMinLimits = append(jobMinLimits, TRESItem{Type: "node", Name: "", ID: 4, Count: int64(extractNumber(qos.MinNodes))})
+	}
+	// 从 MinTRES 字符串解析其他资源
+	if qos.MinTRES != "" {
+		if minMemGB := extractMemoryFromTRES(qos.MinTRES); minMemGB > 0 {
+			jobMinLimits = append(jobMinLimits, TRESItem{Type: "mem", Name: "", ID: 2, Count: int64(minMemGB * 1024)})
+		}
+		if minGPU := extractGPUCountFromTRES(qos.MinTRES); minGPU > 0 {
+			jobMinLimits = append(jobMinLimits, TRESItem{Type: "gres/gpu", Name: "", ID: 6, Count: int64(minGPU)})
+		}
+	}
+
+	if len(jobMinLimits) > 0 {
+		minLimits["tres"] = map[string]interface{}{
+			"per": map[string]interface{}{
+				"job": jobMinLimits,
+			},
+		}
+		limits["min"] = minLimits
+	}
+
+	return limits
 }
 
 // buildQoSData 构建提交给 Slurm API 的 QoS 对象
@@ -237,9 +292,48 @@ func buildQoSData(qos *QoS) map[string]interface{} {
 		"flags":  []string{},
 		"limits": buildQoSLimits(qos),
 	}
+	
 	if qos.Description != "" {
 		qosData["description"] = qos.Description
 	}
+	
+	// 优先级
+	if qos.Priority != nil {
+		if priority := extractNumber(qos.Priority); priority > 0 {
+			qosData["priority"] = map[string]interface{}{
+				"set":    true,
+				"number": priority,
+			}
+		}
+	}
+	
+	// 抢占配置
+	if len(qos.Preempt) > 0 {
+		qosData["preempt"] = map[string]interface{}{
+			"list": qos.Preempt,
+			"mode": qos.PreemptMode,
+		}
+	}
+	
+	// 抢占豁免时间
+	if qos.PreemptExemptTime > 0 {
+		qosData["preempt"] = map[string]interface{}{
+			"exempt_time": map[string]interface{}{
+				"set":    true,
+				"number": qos.PreemptExemptTime,
+			},
+		}
+	}
+	
+	// 使用因子
+	if qos.UsageFactor > 0 {
+		qosData["usage_factor"] = qos.UsageFactor
+	}
+	
+	if qos.UsageThreshold > 0 {
+		qosData["usage_threshold"] = qos.UsageThreshold
+	}
+	
 	return qosData
 }
 
@@ -386,6 +480,123 @@ func parseGrpTRESMins(grpTresMins string) int64 {
 	// 输入可能是数字字符串，需要转换为整数
 	if count, err := strconv.ParseInt(grpTresMins, 10, 64); err == nil {
 		return count
+	}
+	return 0
+}
+
+// MinutesToHours 将分钟转换为小时
+func MinutesToHours(minutes int64) float64 {
+	return float64(minutes) / 60.0
+}
+
+// HoursToMinutes 将小时转换为分钟
+func HoursToMinutes(hours float64) int64 {
+	return int64(hours * 60)
+}
+
+// ExtractBillingQuota 从QoS中提取billing配额（分钟）
+func ExtractBillingQuota(qos *QoS) int64 {
+	// 优先从新格式提取
+	for _, tres := range qos.Limits.Max.TRES.Minutes.Total {
+		if tres.Type == "billing" {
+			return tres.Count
+		}
+	}
+	// 兼容旧格式
+	if qos.GrpTRESMins != "" {
+		return parseGrpTRESMins(qos.GrpTRESMins)
+	}
+	return 0
+}
+
+// ValidateQoS 验证 QoS 配置的合理性
+func ValidateQoS(qos *QoS) error {
+	if qos.Name == "" {
+		return fmt.Errorf("QoS name is required")
+	}
+	
+	// 验证优先级范围 (通常 0-65535)
+	if qos.Priority != nil {
+		priority := extractNumber(qos.Priority)
+		if priority < 0 || priority > 65535 {
+			return fmt.Errorf("priority must be between 0 and 65535")
+		}
+	}
+	
+	// 验证最小值不超过最大值
+	if qos.MinCPUs != nil && qos.MaxCPUs != nil {
+		minCPU := extractNumber(qos.MinCPUs)
+		maxCPU := extractNumber(qos.MaxCPUs)
+		if minCPU > 0 && maxCPU > 0 && minCPU > maxCPU {
+			return fmt.Errorf("min_cpus_pj (%d) cannot exceed max_cpus_pu (%d)", minCPU, maxCPU)
+		}
+	}
+	
+	if qos.MinNodes != nil && qos.MaxNodes != nil {
+		minNodes := extractNumber(qos.MinNodes)
+		maxNodes := extractNumber(qos.MaxNodes)
+		if minNodes > 0 && maxNodes > 0 && minNodes > maxNodes {
+			return fmt.Errorf("min_nodes_pj (%d) cannot exceed max_nodes_pu (%d)", minNodes, maxNodes)
+		}
+	}
+	
+	// 验证抢占模式
+	if qos.PreemptMode != "" {
+		validModes := map[string]bool{
+			"off":     true,
+			"suspend": true,
+			"requeue": true,
+			"cancel":  true,
+		}
+		if !validModes[qos.PreemptMode] {
+			return fmt.Errorf("invalid preempt_mode: %s (must be off, suspend, requeue, or cancel)", qos.PreemptMode)
+		}
+	}
+	
+	// 验证使用因子范围
+	if qos.UsageFactor < 0 {
+		return fmt.Errorf("usage_factor cannot be negative")
+	}
+	
+	if qos.UsageThreshold < 0 || qos.UsageThreshold > 1 {
+		return fmt.Errorf("usage_threshold must be between 0 and 1")
+	}
+	
+	return nil
+}
+
+// GetQoSPriority 获取 QoS 优先级（处理不同格式）
+func GetQoSPriority(qos *QoS) int {
+	return extractNumber(qos.Priority)
+}
+
+// GetQoSMaxJobsPerUser 获取每用户最大作业数
+func GetQoSMaxJobsPerUser(qos *QoS) int {
+	// 优先从新格式提取
+	if qos.Limits.Max.Jobs.Per.User.Set {
+		return qos.Limits.Max.Jobs.Per.User.Number
+	}
+	// 兼容旧格式
+	return extractNumber(qos.MaxJobs)
+}
+
+// GetQoSMaxWallPerJob 获取每作业最大运行时间（分钟）
+func GetQoSMaxWallPerJob(qos *QoS) int {
+	// 优先从新格式提取
+	if qos.Limits.Max.WallClock.Per.Job.Set {
+		return qos.Limits.Max.WallClock.Per.Job.Number
+	}
+	// 兼容旧格式
+	return extractNumber(qos.MaxWall)
+}
+
+// GetQoSTRESLimit 从 QoS 中提取指定类型的 TRES 限制
+func GetQoSTRESLimit(qos *QoS, tresType string) int64 {
+	// 从 per-user TRES 限制中查找
+	for _, tres := range qos.Limits.Max.TRES.Per.User {
+		if tres.Type == tresType || strings.Contains(tres.Type, tresType) {
+			return tres.Count
+		}
 	}
 	return 0
 }

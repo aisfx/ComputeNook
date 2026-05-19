@@ -2,7 +2,6 @@
   <div class="admin-hours">
     <div class="page-header">
       <h3>⏱️ 机时管理</h3>
-      <button class="btn-secondary" @click="openAddModal">💰 充值机时</button>
     </div>
 
     <div class="filters-bar">
@@ -21,7 +20,7 @@
           <tr>
             <th>QoS 名称</th>
             <th>描述</th>
-            <th>总机时(小时)</th>
+            <th>总额(小时)</th>
             <th>已用(小时)</th>
             <th>剩余(小时)</th>
             <th>使用率</th>
@@ -56,7 +55,7 @@
               </td>
               <td>
                 <div class="action-buttons">
-                  <button class="btn-link" @click.stop="editHours(item)">✏️ 编辑</button>
+                  <button class="btn-link" @click.stop="editHours(item)">💰 充值</button>
                   <button class="btn-link danger" @click.stop="deleteHours(item)">🗑️ 清除</button>
                 </div>
               </td>
@@ -107,7 +106,7 @@
     <div v-if="showModal" class="modal-overlay">
       <div class="modal">
         <div class="modal-header">
-          <h3>{{ isEdit ? '编辑机时配额' : '充值机时' }}</h3>
+          <h3>充值机时</h3>
           <button class="btn-close" @click="closeModal">×</button>
         </div>
         <div class="modal-body">
@@ -116,36 +115,39 @@
           <div class="form-group">
             <label>QoS 名称 *</label>
             <input 
-              v-if="isEdit" 
               v-model="formData.name" 
               disabled 
             />
-            <select v-else v-model="formData.name">
-              <option value="">请选择 QoS...</option>
-              <option v-for="item in availableTargets" :key="item" :value="item">
-                {{ item }}
-              </option>
-            </select>
-            <small class="form-hint">选择要设置机时限制的 QoS</small>
+            <small class="form-hint">当前QoS</small>
           </div>
 
           <div class="form-group">
-            <label>{{ isEdit ? '总机时（小时）' : '充值金额（小时）' }} *</label>
+            <label>充值金额（小时） *</label>
             <input 
               type="number" 
               v-model.number="formData.total" 
-              :placeholder="isEdit ? '例如: 10000' : '例如: 100'" 
+              placeholder="例如: 100" 
               min="1"
             />
-            <small class="form-hint" v-if="isEdit">直接设置 QoS 的总配额（将覆盖原有配额）</small>
-            <small class="form-hint" v-else>充值金额将累加到当前配额（当前配额会自动保留）</small>
+            <small class="form-hint">充值金额将累加到当前配额</small>
+          </div>
+
+          <div class="form-group">
+            <label>初始billing值（小时）</label>
+            <input 
+              type="number" 
+              v-model.number="formData.initialBilling" 
+              placeholder="可选，例如: 61200" 
+              min="0"
+            />
+            <small class="form-hint">如果填写，将直接设置QoS的billing配额为此值（覆盖原有配额）</small>
           </div>
 
           <div class="form-group">
             <label>备注</label>
             <textarea 
               v-model="formData.notes" 
-              placeholder="可选的备注信息（写入 QoS description）"
+              placeholder="可选的备注信息"
               rows="3"
             ></textarea>
           </div>
@@ -170,7 +172,6 @@ const hoursList = ref<any[]>([])
 const loading = ref(false)
 const error = ref('')
 const showModal = ref(false)
-const isEdit = ref(false)
 const saving = ref(false)
 const modalError = ref('')
 const searchQuery = ref('')
@@ -187,6 +188,7 @@ const formData = ref({
   type: 'qos',
   name: '',
   total: 0,
+  initialBilling: 0,
   expireDate: '',
   notes: ''
 })
@@ -355,20 +357,14 @@ const getStatusText = (item: any) => {
   return '正常'
 }
 
-const openAddModal = () => {
-  isEdit.value = false
-  formData.value = { type: 'qos', name: '', total: 0, expireDate: '', notes: '' }
-  showModal.value = true
-}
-
 const editHours = (item: any) => {
-  isEdit.value = true
   formData.value = {
     type: item.type,
     name: item.name,
-    total: item.total,
-    expireDate: item.expireDate === '-' ? '' : item.expireDate,
-    notes: item.notes || ''
+    total: 0,
+    initialBilling: 0,
+    expireDate: '',
+    notes: ''
   }
   showModal.value = true
 }
@@ -376,12 +372,23 @@ const editHours = (item: any) => {
 const saveHours = async () => {
   modalError.value = ''
   if (!formData.value.name) { modalError.value = '请选择 QoS'; return }
-  if (formData.value.total <= 0) { modalError.value = isEdit.value ? '总机时必须大于0' : '充值金额必须大于0'; return }
+  
+  // 如果设置了初始billing值，则优先使用
+  if (formData.value.initialBilling > 0) {
+    if (formData.value.total > 0) {
+      modalError.value = '不能同时设置充值金额和初始billing值，请只填写其中一个'
+      return
+    }
+  } else if (formData.value.total <= 0) {
+    modalError.value = '请填写充值金额或初始billing值'
+    return
+  }
+  
   saving.value = true
   try {
-    if (isEdit.value) {
-      // 编辑模式：直接设置总配额
-      const billingMinutes = Math.round(formData.value.total * 60)
+    if (formData.value.initialBilling > 0) {
+      // 直接设置billing配额
+      const billingMinutes = Math.round(formData.value.initialBilling * 60)
       const qosPayload = {
         name: formData.value.name,
         description: formData.value.notes,
@@ -389,13 +396,13 @@ const saveHours = async () => {
       }
       await qosAPI.updateQoS(formData.value.name, qosPayload)
     } else {
-      // 充值模式：调用充值接口（自动累加）
+      // 调用充值接口（自动累加）
       await qosAPI.rechargeQoS(formData.value.name, formData.value.total, formData.value.notes)
     }
     closeModal()
     await loadHoursList()
   } catch (err: any) {
-    modalError.value = err.response?.data?.error || '保存失败'
+    modalError.value = err.response?.data?.error || '操作失败'
   } finally {
     saving.value = false
   }

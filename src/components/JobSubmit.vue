@@ -130,7 +130,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { getUser, getApiBase } from '../utils/auth'
 import { fileManagerApi } from '../config/api'
 import notification from '../utils/notification'
@@ -537,6 +537,119 @@ const applyScriptTemplate = (type: string) => {
   if (type === 'vllm') { form.value.gpus = 4; form.value.cpus = 16; form.value.nodes = 1 }
   if (type === 'triton') { form.value.gpus = 2; form.value.cpus = 8; form.value.nodes = 1 }
 }
+
+// 更新脚本内容中的 SBATCH 参数
+const updateScriptParams = () => {
+  let script = form.value.scriptContent
+  if (!script || !script.includes('#SBATCH')) return
+
+  // 更新作业名称
+  if (form.value.name) {
+    script = script.replace(/#SBATCH\s+-J\s+\S+/g, `#SBATCH -J ${form.value.name}`)
+  }
+
+  // 更新分区
+  if (form.value.partition) {
+    script = script.replace(/#SBATCH\s+-p\s+\S+/g, `#SBATCH -p ${form.value.partition}`)
+  }
+
+  // 更新节点数
+  script = script.replace(/#SBATCH\s+-N\s+\d+/g, `#SBATCH -N ${form.value.nodes}`)
+
+  // 更新 CPU 核心数
+  script = script.replace(/#SBATCH\s+-c\s+\d+/g, `#SBATCH -c ${form.value.cpus}`)
+  script = script.replace(/#SBATCH\s+--ntasks-per-node=\d+/g, `#SBATCH --ntasks-per-node=${form.value.cpus}`)
+
+  // 更新内存
+  if (form.value.memory > 0) {
+    if (script.includes('#SBATCH --mem=')) {
+      script = script.replace(/#SBATCH\s+--mem=\d+G?/g, `#SBATCH --mem=${form.value.memory}G`)
+    } else {
+      // 如果脚本中没有内存参数，在 CPU 行后添加
+      script = script.replace(/(#SBATCH\s+-c\s+\d+)/g, `$1\n#SBATCH --mem=${form.value.memory}G`)
+    }
+  } else {
+    // 如果内存设为 0，移除内存限制行
+    script = script.replace(/\n?#SBATCH\s+--mem=\d+G?\n?/g, '\n')
+  }
+
+  // 更新时间
+  if (form.value.time > 0) {
+    const timeStr = `${String(form.value.time).padStart(2, '0')}:00:00`
+    if (script.includes('#SBATCH -t ') || script.includes('#SBATCH --time=')) {
+      script = script.replace(/#SBATCH\s+-t\s+\S+/g, `#SBATCH -t ${timeStr}`)
+      script = script.replace(/#SBATCH\s+--time=\S+/g, `#SBATCH --time=${timeStr}`)
+    } else {
+      // 如果脚本中没有时间参数，在内存行后添加
+      const memLine = script.match(/#SBATCH\s+--mem=\d+G?/)
+      if (memLine) {
+        script = script.replace(/(#SBATCH\s+--mem=\d+G?)/g, `$1\n#SBATCH -t ${timeStr}`)
+      } else {
+        script = script.replace(/(#SBATCH\s+-c\s+\d+)/g, `$1\n#SBATCH -t ${timeStr}`)
+      }
+    }
+  } else {
+    // 如果时间设为 0，移除时间限制行
+    script = script.replace(/\n?#SBATCH\s+(-t|--time=)\s*\S+\n?/g, '\n')
+  }
+
+  // 更新 GPU
+  if (form.value.gpus > 0) {
+    if (script.includes('#SBATCH --gres=gpu:')) {
+      script = script.replace(/#SBATCH\s+--gres=gpu:\d+/g, `#SBATCH --gres=gpu:${form.value.gpus}`)
+    } else {
+      // 如果脚本中没有 GPU 参数，在内存行后添加
+      const memLine = script.match(/#SBATCH\s+--mem=\d+G?/)
+      if (memLine) {
+        script = script.replace(/(#SBATCH\s+--mem=\d+G?)/g, `$1\n#SBATCH --gres=gpu:${form.value.gpus}`)
+      } else {
+        script = script.replace(/(#SBATCH\s+-c\s+\d+)/g, `$1\n#SBATCH --gres=gpu:${form.value.gpus}`)
+      }
+    }
+  } else {
+    // 如果 GPU 设为 0，移除 GPU 行
+    script = script.replace(/\n?#SBATCH\s+--gres=gpu:\d+\n?/g, '\n')
+  }
+
+  // 更新 QoS
+  if (form.value.qos) {
+    if (script.includes('#SBATCH --qos=')) {
+      script = script.replace(/#SBATCH\s+--qos=\S+/g, `#SBATCH --qos=${form.value.qos}`)
+    } else {
+      // 在时间行后添加 QoS
+      const timeLine = script.match(/#SBATCH\s+(-t|--time=)\s*\S+/)
+      if (timeLine) {
+        script = script.replace(/(#SBATCH\s+(-t|--time=)\s*\S+)/g, `$1\n#SBATCH --qos=${form.value.qos}`)
+      }
+    }
+  } else {
+    // 移除 QoS 行
+    script = script.replace(/\n?#SBATCH\s+--qos=\S+\n?/g, '\n')
+  }
+
+  // 清理多余的空行
+  script = script.replace(/\n{3,}/g, '\n\n')
+
+  form.value.scriptContent = script
+}
+
+// 监听表单参数变化，自动更新脚本内容
+watch(
+  () => [
+    form.value.name,
+    form.value.partition,
+    form.value.nodes,
+    form.value.cpus,
+    form.value.memory,
+    form.value.time,
+    form.value.gpus,
+    form.value.qos
+  ],
+  () => {
+    updateScriptParams()
+  },
+  { deep: true }
+)
 
 const submitJob = async () => {
   submitting.value = true

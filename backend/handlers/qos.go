@@ -109,6 +109,12 @@ func CreateQoS(c *gin.Context) {
 		return
 	}
 
+	// 验证 QoS 配置
+	if err := slurm.ValidateQoS(&qos); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Invalid QoS configuration: %s", err.Error())})
+		return
+	}
+
 	// 开发模式：模拟创建成功
 	if os.Getenv("DEV_MODE") == "true" {
 		c.JSON(http.StatusCreated, gin.H{"message": "QoS created successfully (dev mode)", "data": qos})
@@ -139,9 +145,17 @@ func UpdateQoS(c *gin.Context) {
 		return
 	}
 
+	// 验证 QoS 配置
+	if err := slurm.ValidateQoS(&qos); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Invalid QoS configuration: %s", err.Error())})
+		return
+	}
+
 	// 调试：打印收到的字段
 	fmt.Printf("[QoS UPDATE] name=%s MaxWall=%v MaxGPUs=%v MaxCPUs=%v MaxNodes=%v MaxTRES=%s MaxJobs=%v MaxSubmit=%v\n",
 		name, qos.MaxWall, qos.MaxGPUs, qos.MaxCPUs, qos.MaxNodes, qos.MaxTRES, qos.MaxJobs, qos.MaxSubmit)
+	fmt.Printf("[QoS UPDATE] MinCPUs=%v MinNodes=%v MinTRES=%s Preempt=%v PreemptMode=%s Priority=%v\n",
+		qos.MinCPUs, qos.MinNodes, qos.MinTRES, qos.Preempt, qos.PreemptMode, qos.Priority)
 
 	// 开发模式：模拟更新成功
 	if os.Getenv("DEV_MODE") == "true" {
