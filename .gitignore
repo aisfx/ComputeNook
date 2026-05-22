@@ -23,9 +23,25 @@ backend/tools/rdp-tunnel/go.sum
 # 编译产物
 src/**/*.vue.js
 src/**/*.ts.js
+*.js.map
+
+# 临时文件
+src/**/_*.txt
+src/**/*.tmp
+src/**/*.template.txt
+src/**/*_script.txt
+
+# 数据库文件
+backend/data/*.db
+backend/data/*.db-shm
+backend/data/*.db-wal
 
 # Kiro IDE
 .kiro/
 
 # SSH Keys
 backend/keys/
+
+# 项目文档（不打包）
+presentation.html
+算力小筑-项目介绍PPT大纲.md
