@@ -141,55 +141,115 @@
         </div>
       </div>
 
-      <!-- 右列 -->
+      <!-- 右列：排行榜 -->
       <div class="db-col db-col-right">
-        <!-- 上半：两列并排 -->
-        <div class="db-right-grid">
-          <!-- 作业运行曲线 -->
-          <div class="db-card db-right-card">
-            <div class="db-card-title">📈 作业运行曲线</div>
-            <div ref="jobCurveEl" class="db-chart-right"></div>
+        <!-- 用户活跃排行 -->
+        <div class="db-card db-card-rank">
+          <div class="db-card-header">
+            <span class="db-card-title">🏆 用户活跃 TOP10</span>
+            <span class="db-rank-meta">作业数</span>
           </div>
-          <!-- 资源趋势 -->
-          <div class="db-card db-right-card">
-            <div class="db-card-header">
-              <span class="db-card-title">⚡ 资源趋势</span>
-              <div class="db-tabs">
-                <button :class="['db-tab',trendTab==='cpu'&&'active']" @click="trendTab='cpu';drawTrend()">CPU</button>
-                <button :class="['db-tab',trendTab==='mem'&&'active']" @click="trendTab='mem';drawTrend()">内存</button>
-                <button :class="['db-tab',trendTab==='gpu'&&'active']" @click="trendTab='gpu';drawTrend()">GPU</button>
-              </div>
-            </div>
-            <div ref="trendEl" class="db-chart-right"></div>
-          </div>
-          <!-- 用户活跃排行 -->
-          <div class="db-card db-right-card db-card-rank">
-            <div class="db-card-header">
-              <span class="db-card-title">🏆 用户活跃排行</span>
-              <span class="db-rank-meta">近7天 · {{ stats.totalUsers }} 人</span>
-            </div>
-            <div class="db-rank-list">
-              <div v-if="userRankList.length === 0" class="db-alert-empty">暂无数据</div>
-              <div v-for="(u, i) in userRankList" :key="u.name" class="db-rank-item">
-                <span :class="['db-rank-no', i===0&&'rank-gold', i===1&&'rank-silver', i===2&&'rank-bronze']">{{ i+1 }}</span>
-                <span class="db-rank-name">{{ u.name }}</span>
-                <div class="db-rank-bar-wrap">
-                  <div class="db-rank-bar" :style="{width: (u.count/userRankList[0].count*100)+'%', background: i===0?'#f59e0b':i===1?'#94a3b8':i===2?'#b45309':'#3b82f6'}"></div>
+          <div class="db-rank-list-bar">
+            <div v-if="userRankList.length === 0" class="db-rank-empty">暂无数据</div>
+            <div v-for="(u, i) in userRankList.slice(0,10)" :key="u.name" class="db-rank-bar-item">
+              <div class="db-rank-badge" :class="'rank-'+(i+1)">{{ i+1 }}</div>
+              <div class="db-rank-bar-label">{{ u.name }}</div>
+              <div class="db-rank-bar-container">
+                <div class="db-rank-bar-fill" :style="{
+                  width: (u.count/userRankList[0].count*100)+'%',
+                  background: `linear-gradient(90deg, ${i===0?'#f59e0b':'#3b82f6'}, ${i===0?'#fb923c':'#60a5fa'})`
+                }">
+                  <div class="db-rank-bar-shine"></div>
                 </div>
-                <span class="db-rank-count">{{ u.count }}</span>
+                <div class="db-rank-bar-value">{{ u.count }}</div>
               </div>
             </div>
           </div>
-          <!-- 告警 -->
-          <div class="db-card db-right-card db-card-alert">
-            <div class="db-card-title">🔔 告警列表</div>
-            <div class="db-alert-list">
-              <div v-if="recentAlerts.length===0" class="db-alert-empty">✅ 暂无告警</div>
-              <div v-for="a in recentAlerts" :key="a.id" :class="['db-alert-item','db-alert-'+a.level]">
-                <span class="db-alert-dot"></span>
-                <span class="db-alert-name">{{ a.name }}</span>
-                <span class="db-alert-time">{{ a.time }}</span>
+        </div>
+        
+        <!-- 节点使用排行 -->
+        <div class="db-card db-card-rank">
+          <div class="db-card-header">
+            <span class="db-card-title">🖥️ 节点使用 TOP10</span>
+            <span class="db-rank-meta">节点数</span>
+          </div>
+          <div class="db-rank-list-bar">
+            <div v-if="userNodeRankList.length === 0" class="db-rank-empty">暂无数据</div>
+            <div v-for="(u, i) in userNodeRankList.slice(0,10)" :key="u.name" class="db-rank-bar-item">
+              <div class="db-rank-badge" :class="'rank-'+(i+1)">{{ i+1 }}</div>
+              <div class="db-rank-bar-label">{{ u.name }}</div>
+              <div class="db-rank-bar-container">
+                <div class="db-rank-bar-fill" :style="{
+                  width: (u.nodes/userNodeRankList[0].nodes*100)+'%',
+                  background: `linear-gradient(90deg, ${i===0?'#10b981':'#3b82f6'}, ${i===0?'#34d399':'#60a5fa'})`
+                }">
+                  <div class="db-rank-bar-shine"></div>
+                </div>
+                <div class="db-rank-bar-value">{{ u.nodes }}</div>
               </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 存储使用排行 -->
+        <div class="db-card db-card-rank">
+          <div class="db-card-header">
+            <span class="db-card-title">💾 存储使用 TOP10</span>
+            <span class="db-rank-meta">GB</span>
+          </div>
+          <div ref="storageChartEl" class="db-chart-fill"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 底部：作业信息和告警 -->
+    <div class="db-bottom">
+      <!-- 作业运行曲线 -->
+      <div class="db-card db-card-bottom">
+        <div class="db-card-header">
+          <span class="db-card-title">📈 作业运行曲线</span>
+          <div class="db-legend">
+            <span class="db-leg"><i style="background:#3b82f6"></i>运行</span>
+            <span class="db-leg"><i style="background:#f59e0b"></i>排队</span>
+          </div>
+        </div>
+        <div ref="jobCurveEl" class="db-chart-bottom"></div>
+      </div>
+      
+      <!-- 资源趋势 -->
+      <div class="db-card db-card-bottom">
+        <div class="db-card-header">
+          <span class="db-card-title">⚡ 资源趋势</span>
+          <div class="db-tabs">
+            <button :class="['db-tab',trendTab==='cpu'&&'active']" @click="trendTab='cpu';drawTrend()">CPU</button>
+            <button :class="['db-tab',trendTab==='mem'&&'active']" @click="trendTab='mem';drawTrend()">内存</button>
+            <button :class="['db-tab',trendTab==='gpu'&&'active']" @click="trendTab='gpu';drawTrend()">GPU</button>
+          </div>
+        </div>
+        <div ref="trendEl" class="db-chart-bottom"></div>
+      </div>
+      
+      <!-- 告警监控 -->
+      <div class="db-card db-card-bottom">
+        <div class="db-card-header">
+          <span class="db-card-title">🔔 告警监控</span>
+          <span class="db-rank-meta">实时</span>
+        </div>
+        <div class="db-alert-list">
+          <div v-if="recentAlerts.length===0" class="db-alert-empty">
+            <div class="db-alert-ok-icon">✓</div>
+            <div class="db-alert-ok-text">系统正常</div>
+            <div class="db-alert-ok-sub">无异常告警</div>
+          </div>
+          <div v-for="a in recentAlerts" :key="a.id" :class="['db-alert-item','db-alert-'+a.level]">
+            <div class="db-alert-icon">
+              <span v-if="a.level==='error'">⚠️</span>
+              <span v-else-if="a.level==='warning'">⚡</span>
+              <span v-else>ℹ️</span>
+            </div>
+            <div class="db-alert-content">
+              <span class="db-alert-name">{{ a.name }}</span>
+              <span class="db-alert-time">{{ a.time }}</span>
             </div>
           </div>
         </div>
@@ -274,6 +334,39 @@ const userRankList = computed(() => {
     .slice(0, 8)
 })
 
+// 用户使用节点数量排名（按节点数降序，取前8）
+const userNodeRankList = computed(() => {
+  const map: Record<string, number> = {}
+  for (const j of jobHistoryForRank.value) {
+    const u = j.user_name || j.user_id || j.user || ''
+    const nodeCount = j.num_nodes || j.nodes || 1
+    if (u) map[u] = (map[u] || 0) + nodeCount
+  }
+  return Object.entries(map)
+    .map(([name, nodes]) => ({ name, nodes }))
+    .sort((a, b) => b.nodes - a.nodes)
+    .slice(0, 8)
+})
+
+// 用户存储使用排名（模拟数据，实际需要从API获取）
+const userStorageRankList = computed(() => {
+  // TODO: 从 /api/users 或 /api/files/quota 获取真实存储数据
+  // 这里先用模拟数据展示
+  const mockData = [
+    { name: 'admin', storage: 1024 },
+    { name: 'user1', storage: 856 },
+    { name: 'user2', storage: 642 },
+    { name: 'user3', storage: 512 },
+    { name: 'user4', storage: 384 },
+    { name: 'user5', storage: 256 },
+    { name: 'user6', storage: 128 },
+    { name: 'user7', storage: 96 },
+    { name: 'user8', storage: 64 },
+    { name: 'user9', storage: 32 },
+  ]
+  return mockData.sort((a, b) => b.storage - a.storage)
+})
+
 const clusterNodeStates = computed(() => {
   const r = { unschedulable:0, busy:0, normal:0, idle:0 }
   for (const n of nodes.value) {
@@ -333,10 +426,12 @@ const topoEl     = ref<HTMLElement>()
 const topoFlowEl = ref<HTMLCanvasElement>()
 const jobCurveEl = ref<HTMLElement>()
 const trendEl    = ref<HTMLElement>()
+const storageChartEl = ref<HTMLElement>()
 let jobPie:      echarts.ECharts|null=null
 let queueChart:  echarts.ECharts|null=null
 let clusterChart:echarts.ECharts|null=null
 let topoChart:   echarts.ECharts|null=null
+let storageChart: echarts.ECharts|null=null
 // 流量粒子动画
 let flowRaf: number = 0
 type FlowLink = { x1:number; y1:number; x2:number; y2:number; color:string; active:boolean }
@@ -568,32 +663,44 @@ const drawJobPie = async () => {
   if (!jobPie) jobPie = echarts.init(jobPieEl.value)
   const tv = themeVars.value
   const t = stats.value.jobTypes
-  const total = t.mpi + t.openmp + t.gpu + t.array + t.serial || 1
   const data = [
-    { name:'MPI',    value:t.mpi,    itemStyle:{color:'#3b82f6'} },
-    { name:'OpenMP', value:t.openmp, itemStyle:{color:'#8b5cf6'} },
-    { name:'GPU',    value:t.gpu,    itemStyle:{color:'#10b981'} },
-    { name:'Array',  value:t.array,  itemStyle:{color:'#f59e0b'} },
-    { name:'Serial', value:t.serial, itemStyle:{color:'#64748b'} },
-  ].filter(d => d.value > 0)
+    { name:'MPI',    value:t.mpi,    color:'#3b82f6' },
+    { name:'OpenMP', value:t.openmp, color:'#8b5cf6' },
+    { name:'GPU',    value:t.gpu,    color:'#10b981' },
+    { name:'Array',  value:t.array,  color:'#f59e0b' },
+    { name:'Serial', value:t.serial, color:'#64748b' },
+  ]
   // 无数据时显示占位
-  const chartData = data.length > 0 ? data : [
-    { name:'MPI',    value:3, itemStyle:{color:'#3b82f6'} },
-    { name:'OpenMP', value:2, itemStyle:{color:'#8b5cf6'} },
-    { name:'GPU',    value:2, itemStyle:{color:'#10b981'} },
-    { name:'Array',  value:1, itemStyle:{color:'#f59e0b'} },
-    { name:'Serial', value:4, itemStyle:{color:'#64748b'} },
+  const chartData = data.some(d => d.value > 0) ? data : [
+    { name:'MPI',    value:3, color:'#3b82f6' },
+    { name:'OpenMP', value:2, color:'#8b5cf6' },
+    { name:'GPU',    value:2, color:'#10b981' },
+    { name:'Array',  value:1, color:'#f59e0b' },
+    { name:'Serial', value:4, color:'#64748b' },
   ]
   jobPie.setOption({
     backgroundColor:'transparent',
-    tooltip:{ trigger:'item', formatter:(p:any)=>`${p.name}: ${p.value} (${((p.value/total)*100).toFixed(1)}%)` },
-    legend:{ orient:'vertical', right:4, top:'center', textStyle:{color:tv.chartText,fontSize:9}, itemWidth:8, itemHeight:8, itemGap:5 },
+    tooltip:{ trigger:'axis', axisPointer:{type:'shadow'} },
+    grid:{top:10,right:10,bottom:25,left:35},
+    xAxis:{
+      type:'category',
+      data:chartData.map(d=>d.name),
+      axisLabel:{fontSize:9,color:tv.chartText},
+      axisLine:{lineStyle:{color:tv.axisLine}},
+      axisTick:{show:false}
+    },
+    yAxis:{
+      type:'value',
+      axisLabel:{fontSize:9,color:tv.chartText},
+      splitLine:{lineStyle:{color:tv.splitLine,type:'dashed'}},
+      axisLine:{show:false}
+    },
     series:[{
-      type:'pie', radius:['35%','62%'], center:['38%','50%'],
-      data:chartData,
-      label:{ show:true, position:'inside', formatter:'{d}%', fontSize:9, color:'#fff', fontWeight:600 },
-      labelLine:{ show:false },
-      animationType:'scale' as const,
+      type:'bar',
+      data:chartData.map(d=>({value:d.value,itemStyle:{color:d.color}})),
+      barWidth:'50%',
+      label:{show:true,position:'top',fontSize:10,color:tv.chartText,fontWeight:600},
+      animationDelay:(idx:number)=>idx*100
     }],
   })
 }
@@ -621,16 +728,21 @@ const drawJobCurve = async () => {
   jobCurve.resize()
   const times = trendData.value.map(d=>d.time)
   const tv = themeVars.value
+  // 如果没有数据，生成一些默认时间点
+  const displayTimes = times.length > 0 ? times : Array.from({length:10}, (_,i) => {
+    const d = new Date(Date.now() - (9-i)*60000)
+    return d.toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})
+  })
   jobCurve.setOption({
     backgroundColor:'transparent',
     tooltip:{trigger:'axis' as const},
     legend:{top:2,right:4,textStyle:{color:tv.chartText,fontSize:9},itemWidth:10,itemHeight:6,itemGap:8},
-    grid:{top:22,right:5,bottom:18,left:28},
-    xAxis:{type:'category' as const,data:times,axisLabel:{fontSize:9,color:tv.chartText},axisLine:{lineStyle:{color:tv.axisLine}},splitLine:{show:false}},
+    grid:{top:28,right:10,bottom:25,left:35},
+    xAxis:{type:'category' as const,data:displayTimes,axisLabel:{fontSize:9,color:tv.chartText},axisLine:{lineStyle:{color:tv.axisLine}},splitLine:{show:false}},
     yAxis:{type:'value' as const,axisLabel:{fontSize:9,color:tv.chartText},splitLine:{lineStyle:{color:tv.splitLine}},axisLine:{show:false}},
     series:[
-      {name:'运行',type:'line',smooth:true,symbol:'none',data:trendData.value.map(()=>stats.value.runningJobs),lineStyle:{color:'#3b82f6',width:2},areaStyle:{color:'#3b82f6',opacity:0.15}},
-      {name:'排队',type:'line',smooth:true,symbol:'none',data:trendData.value.map(()=>stats.value.pendingJobs),lineStyle:{color:'#f59e0b',width:2},areaStyle:{color:'#f59e0b',opacity:0.15}},
+      {name:'运行',type:'line',smooth:true,symbol:'circle',symbolSize:4,data:trendData.value.length>0?trendData.value.map(()=>stats.value.runningJobs):Array(10).fill(stats.value.runningJobs),lineStyle:{color:'#3b82f6',width:2},areaStyle:{color:'#3b82f6',opacity:0.15}},
+      {name:'排队',type:'line',smooth:true,symbol:'circle',symbolSize:4,data:trendData.value.length>0?trendData.value.map(()=>stats.value.pendingJobs):Array(10).fill(stats.value.pendingJobs),lineStyle:{color:'#f59e0b',width:2},areaStyle:{color:'#f59e0b',opacity:0.15}},
     ],
   })
 }
@@ -645,18 +757,66 @@ const drawTrend = async () => {
   const colorMap = {cpu:'#3b82f6',mem:'#8b5cf6',gpu:'#10b981'}
   const dataMap = {cpu:trendData.value.map(d=>d.cpu),mem:trendData.value.map(d=>d.mem),gpu:trendData.value.map(()=>stats.value.cpuUtil)}
   const color = colorMap[trendTab.value]
+  // 如果没有数据，生成一些默认时间点
+  const displayTimes = times.length > 0 ? times : Array.from({length:10}, (_,i) => {
+    const d = new Date(Date.now() - (9-i)*60000)
+    return d.toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})
+  })
+  const displayData = dataMap[trendTab.value].length > 0 ? dataMap[trendTab.value] : Array(10).fill(stats.value.cpuUtil)
   trendChart.setOption({
     backgroundColor:'transparent',
-    grid:{top:5,right:5,bottom:18,left:28},
+    grid:{top:28,right:10,bottom:25,left:35},
     tooltip:{trigger:'axis' as const},
-    xAxis:{type:'category' as const,data:times,axisLabel:{fontSize:9,color:tv.chartText},axisLine:{lineStyle:{color:tv.axisLine}},splitLine:{show:false}},
+    xAxis:{type:'category' as const,data:displayTimes,axisLabel:{fontSize:9,color:tv.chartText},axisLine:{lineStyle:{color:tv.axisLine}},splitLine:{show:false}},
     yAxis:{type:'value' as const,axisLabel:{fontSize:9,color:tv.chartText},splitLine:{lineStyle:{color:tv.splitLine}},axisLine:{show:false}},
-    series:[{type:'line',smooth:true,symbol:'none',data:dataMap[trendTab.value],lineStyle:{color,width:2},areaStyle:{color,opacity:0.15}}],
+    series:[{type:'line',smooth:true,symbol:'circle',symbolSize:4,data:displayData,lineStyle:{color,width:2},areaStyle:{color,opacity:0.15}}],
+  })
+}
+
+const drawStorageChart = async () => {
+  await nextTick()
+  if (!storageChartEl.value) return
+  if (!storageChart) storageChart = echarts.init(storageChartEl.value)
+  const tv = themeVars.value
+  const data = userStorageRankList.value.slice(0, 10)
+  if (data.length === 0) return
+  
+  storageChart.setOption({
+    backgroundColor:'transparent',
+    tooltip:{ trigger:'axis', axisPointer:{type:'shadow'} },
+    grid:{top:15,right:15,bottom:30,left:45},
+    xAxis:{
+      type:'category',
+      data:data.map(d=>d.name),
+      axisLabel:{fontSize:9,color:tv.chartText,rotate:0,interval:0},
+      axisLine:{lineStyle:{color:tv.axisLine}},
+      axisTick:{show:false}
+    },
+    yAxis:{
+      type:'value',
+      name:'GB',
+      nameTextStyle:{fontSize:9,color:tv.chartText},
+      axisLabel:{fontSize:9,color:tv.chartText},
+      splitLine:{lineStyle:{color:tv.splitLine,type:'dashed'}},
+      axisLine:{show:false}
+    },
+    series:[{
+      type:'bar',
+      data:data.map((d,i)=>({
+        value:d.storage,
+        itemStyle:{
+          color:i===0?'#8b5cf6':i===1?'#3b82f6':i===2?'#10b981':'#64748b'
+        }
+      })),
+      barWidth:'60%',
+      label:{show:true,position:'top',fontSize:9,color:tv.chartText,fontWeight:600},
+      animationDelay:(idx:number)=>idx*50
+    }],
   })
 }
 
 const drawAll = async () => {
-  await drawTopo(); await drawJobPie(); await drawQueue(); await drawJobCurve(); await drawTrend()
+  await drawTopo(); await drawJobPie(); await drawJobCurve(); await drawTrend(); await drawStorageChart()
 }
 
 const api = (path:string) =>
@@ -766,16 +926,16 @@ onUnmounted(()=>{
 })
 </script>
 <style scoped>
-.db{display:flex;flex-direction:column;flex:1;min-height:0;background:var(--db-bg,linear-gradient(135deg,#0f172a 0%,#1e293b 50%,#0f172a 100%));overflow:hidden;color:var(--db-text,#e2e8f0);font-family:system-ui,sans-serif}
-.db-header{display:flex;align-items:center;padding:.6rem 1.25rem;background:var(--db-header-bg,rgba(15,23,42,.8));border-bottom:1px solid var(--db-header-border,rgba(99,102,241,.3));flex-shrink:0}
+.db{display:flex;flex-direction:column;flex:1;min-height:0;background:var(--db-bg,linear-gradient(135deg,#0f172a 0%,#1e293b 50%,#0f172a 100%));overflow:auto;color:var(--db-text,#e2e8f0);font-family:system-ui,sans-serif}
+.db-header{display:flex;align-items:center;padding:.7rem 1.5rem;background:var(--db-header-bg,rgba(15,23,42,.8));border-bottom:1px solid var(--db-header-border,rgba(99,102,241,.3));flex-shrink:0;backdrop-filter:blur(10px)}
 .db-header-left{display:flex;align-items:center;gap:.75rem;flex:1}
 .db-header-center{flex:1;text-align:center}
 .db-header-right{display:flex;align-items:center;gap:.6rem;flex:1;justify-content:flex-end}
-.db-logo{width:32px;height:32px;background:linear-gradient(135deg,#6366f1,#8b5cf6);border-radius:8px;box-shadow:0 0 12px rgba(99,102,241,.6)}
-.db-title{font-size:1.1rem;font-weight:700;background:linear-gradient(90deg,#60a5fa,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
-.db-subtitle{font-size:.65rem;color:var(--db-sub,#64748b);letter-spacing:.05em}
-.db-time{font-size:1.4rem;font-weight:700;color:#60a5fa;font-variant-numeric:tabular-nums;text-shadow:0 0 20px rgba(96,165,250,.5)}
-.db-date{font-size:.68rem;color:var(--db-sub,#64748b);text-align:center}
+.db-logo{width:36px;height:36px;background:linear-gradient(135deg,#6366f1,#8b5cf6);border-radius:8px;box-shadow:0 0 16px rgba(99,102,241,.6)}
+.db-title{font-size:1.2rem;font-weight:700;background:linear-gradient(90deg,#60a5fa,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:.02em}
+.db-subtitle{font-size:.7rem;color:var(--db-sub,#64748b);letter-spacing:.08em;margin-top:.1rem}
+.db-time{font-size:1.5rem;font-weight:700;color:#60a5fa;font-variant-numeric:tabular-nums;text-shadow:0 0 20px rgba(96,165,250,.5)}
+.db-date{font-size:.7rem;color:var(--db-sub,#64748b);text-align:center;margin-top:.15rem}
 .db-status{display:flex;align-items:center;gap:.4rem;padding:.25rem .75rem;border-radius:20px;font-size:.72rem;font-weight:600}
 .db-status-ok{background:rgba(16,185,129,.15);color:#10b981;border:1px solid rgba(16,185,129,.3)}
 .db-status-warn{background:rgba(239,68,68,.15);color:#ef4444;border:1px solid rgba(239,68,68,.3)}
@@ -783,20 +943,21 @@ onUnmounted(()=>{
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 .db-btn{padding:.25rem .6rem;border:1px solid rgba(99,102,241,.4);border-radius:5px;background:rgba(99,102,241,.1);color:#a5b4fc;cursor:pointer;font-size:.85rem}
 .db-btn:hover{background:rgba(99,102,241,.25)}
-.db-kpi-row{display:grid;grid-template-columns:repeat(5,1fr);gap:.6rem;padding:.6rem 1rem;flex-shrink:0}
-.db-kpi{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.18rem;padding:.7rem .5rem .6rem;min-height:76px;background:var(--db-kpi-bg,rgba(30,41,59,.8));border-radius:8px;border:1px solid var(--db-card-border,rgba(255,255,255,.06));overflow:hidden;text-align:center}
-.db-kpi-accent{position:absolute;top:0;left:0;right:0;height:3px;background:var(--kc);border-radius:8px 8px 0 0}
-.db-kpi-val{font-size:1.6rem;font-weight:800;color:var(--db-text,#f1f5f9);line-height:1;letter-spacing:-.02em}
-.db-kpi-label{font-size:.65rem;color:var(--db-sub,#64748b);margin-top:.1rem;white-space:nowrap}
-.db-kpi-bar{width:80%;height:2px;background:rgba(128,128,128,.12);border-radius:2px;margin-top:.35rem;overflow:hidden}
-.db-kpi-bar-fill{height:100%;background:var(--kc);border-radius:2px;transition:width .6s ease;box-shadow:0 0 4px var(--kc)}
-.db-kpi-bar-fill{height:100%;background:var(--kc);border-radius:1px;transition:width .5s;box-shadow:0 0 6px var(--kc)}
-.db-main{display:grid;grid-template-columns:220px 1fr 480px;gap:.5rem;padding:0 1rem .5rem;flex:1;min-height:0;overflow:hidden}
+.db-kpi-row{display:grid;grid-template-columns:repeat(5,1fr);gap:.8rem;padding:.8rem 1.5rem;flex-shrink:0}
+.db-kpi{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.2rem;padding:.85rem .6rem .7rem;min-height:82px;background:var(--db-kpi-bg,rgba(30,41,59,.8));border-radius:10px;border:1px solid var(--db-card-border,rgba(255,255,255,.06));overflow:hidden;text-align:center;transition:all .3s ease;backdrop-filter:blur(8px)}
+.db-kpi:hover{transform:translateY(-3px);box-shadow:0 8px 24px rgba(0,0,0,.3),0 0 20px var(--kc)}
+.db-kpi-accent{position:absolute;top:0;left:0;right:0;height:3px;background:var(--kc);border-radius:10px 10px 0 0;box-shadow:0 0 10px var(--kc)}
+.db-kpi-val{font-size:1.7rem;font-weight:800;color:var(--db-text,#f1f5f9);line-height:1;letter-spacing:-.02em;text-shadow:0 2px 8px rgba(0,0,0,.3)}
+.db-kpi-label{font-size:.68rem;color:var(--db-sub,#64748b);margin-top:.15rem;white-space:nowrap;font-weight:500}
+.db-kpi-bar{width:85%;height:3px;background:rgba(128,128,128,.12);border-radius:3px;margin-top:.4rem;overflow:hidden}
+.db-kpi-bar-fill{height:100%;background:var(--kc);border-radius:3px;transition:width .8s cubic-bezier(.4,0,.2,1);box-shadow:0 0 8px var(--kc)}
+.db-main{display:grid;grid-template-columns:280px 1fr 420px;gap:.8rem;padding:0 1.2rem .8rem;flex:1;min-height:400px;overflow:hidden}
 .db-col{display:flex;flex-direction:column;gap:.5rem;overflow:hidden;flex:1;min-height:0}
 .db-col-right{overflow:hidden;display:flex;flex-direction:column}
-.db-card{background:var(--db-card-bg,rgba(30,41,59,.7));border:1px solid var(--db-card-border,rgba(255,255,255,.06));border-radius:10px;padding:.65rem .75rem;display:flex;flex-direction:column;overflow:hidden}
+.db-card{background:var(--db-card-bg,rgba(30,41,59,.7));border:1px solid var(--db-card-border,rgba(255,255,255,.06));border-radius:8px;padding:.5rem .6rem;display:flex;flex-direction:column;overflow:hidden;backdrop-filter:blur(8px);transition:all .3s ease}
+.db-card:hover{border-color:rgba(99,102,241,.15);box-shadow:0 4px 16px rgba(0,0,0,.2)}
 .db-card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:.3rem}
-.db-card-title{font-size:.72rem;font-weight:600;color:var(--db-sub,#94a3b8);margin-bottom:.3rem}
+.db-card-title{font-size:.65rem;font-weight:600;color:var(--db-sub,#94a3b8);margin-bottom:.3rem;letter-spacing:.02em}
 .db-chart-h180{flex:1;min-height:0;max-height:180px;width:100%}
 .db-chart-h160{width:100%;height:160px;flex-shrink:0}
 .db-chart-h120{width:100%;height:100px;flex-shrink:0}
@@ -817,30 +978,32 @@ onUnmounted(()=>{
 .db-gauge-label{font-size:.65rem;color:var(--db-sub,#64748b);margin-top:.1rem}
 /* 算力统计 */
 .db-compute-section{padding:.3rem 0}
-.db-compute-type{font-size:.68rem;font-weight:600;color:var(--db-sub,#94a3b8);margin-bottom:.4rem;letter-spacing:.04em}
-.db-compute-items{display:grid;grid-template-columns:1fr 1fr;gap:.3rem;margin-bottom:.35rem}
+.db-compute-type{font-size:.6rem;font-weight:600;color:var(--db-sub,#94a3b8);margin-bottom:.35rem;letter-spacing:.03em;text-transform:uppercase}
+.db-compute-items{display:grid;grid-template-columns:1fr 1fr;gap:.3rem;margin-bottom:.3rem}
 .db-compute-items-3{grid-template-columns:1fr 1fr 1fr}
-.db-compute-item{background:var(--db-res-bg,rgba(255,255,255,.03));border-radius:6px;padding:.3rem .4rem;text-align:center}
-.db-compute-label{font-size:.6rem;color:var(--db-sub,#64748b);margin-bottom:.1rem}
-.db-compute-val{font-size:1.05rem;font-weight:800;line-height:1.1}
-.db-compute-unit{font-size:.55rem;color:var(--db-sub,#64748b);margin-top:.05rem}
-.db-compute-used{display:flex;justify-content:space-between;align-items:center;padding:.2rem .1rem}
-.db-compute-used-label{font-size:.62rem;color:var(--db-sub,#64748b)}
-.db-compute-used-val{font-size:.72rem;font-weight:600;color:var(--db-text,#e2e8f0)}
+.db-compute-item{background:var(--db-res-bg,rgba(255,255,255,.03));border-radius:6px;padding:.3rem .4rem;text-align:center;transition:all .3s ease;border:1px solid transparent}
+.db-compute-item:hover{background:var(--db-res-bg,rgba(255,255,255,.05));border-color:rgba(99,102,241,.2);transform:translateY(-2px)}
+.db-compute-label{font-size:.55rem;color:var(--db-sub,#64748b);margin-bottom:.1rem;font-weight:500}
+.db-compute-val{font-size:.95rem;font-weight:800;line-height:1.1;text-shadow:0 2px 8px rgba(0,0,0,.3)}
+.db-compute-unit{font-size:.52rem;color:var(--db-sub,#64748b);margin-top:.08rem;font-weight:500}
+.db-compute-used{display:flex;justify-content:space-between;align-items:center;padding:.25rem .1rem}
+.db-compute-used-label{font-size:.58rem;color:var(--db-sub,#64748b);font-weight:500}
+.db-compute-used-val{font-size:.68rem;font-weight:600;color:var(--db-text,#e2e8f0)}
 .db-compute-divider{height:1px;background:var(--db-card-border,rgba(255,255,255,.06));margin:.3rem 0}
-.db-res-grid{display:grid;grid-template-columns:1fr 1fr;gap:.3rem}
-.db-res-item{text-align:center;padding:.3rem;background:var(--db-res-bg,rgba(255,255,255,.03));border-radius:6px}
-.db-res-val{font-size:1rem;font-weight:700;color:var(--db-text,#f1f5f9)}
-.db-res-label{font-size:.6rem;color:var(--db-sub,#64748b)}
-.db-stat-list{display:flex;flex-direction:column;gap:.2rem}
-.db-stat-row{display:flex;justify-content:space-between;font-size:.72rem;padding:.2rem 0;border-bottom:1px solid rgba(128,128,128,.1);color:var(--db-sub,#64748b)}
+.db-res-grid{display:grid;grid-template-columns:1fr 1fr;gap:.25rem}
+.db-res-item{text-align:center;padding:.25rem;background:var(--db-res-bg,rgba(255,255,255,.03));border-radius:5px;transition:all .3s ease;border:1px solid transparent}
+.db-res-item:hover{background:var(--db-res-bg,rgba(255,255,255,.05));border-color:rgba(99,102,241,.2);transform:translateY(-2px)}
+.db-res-val{font-size:.8rem;font-weight:700;color:var(--db-text,#f1f5f9);text-shadow:0 2px 8px rgba(0,0,0,.3)}
+.db-res-label{font-size:.5rem;color:var(--db-sub,#64748b);margin-top:.08rem;font-weight:500}
+.db-stat-list{display:flex;flex-direction:column;gap:.15rem}
+.db-stat-row{display:flex;justify-content:space-between;font-size:.65rem;padding:.15rem 0;border-bottom:1px solid rgba(128,128,128,.1);color:var(--db-sub,#64748b)}
 .db-stat-val{font-weight:600;color:var(--db-text,#e2e8f0)}
 .db-col-center .db-card{flex:1}
 .db-chart-cluster{flex:1;min-height:0;width:100%}
-.db-node-stats{display:flex;justify-content:space-around;padding:.4rem 0;border-top:1px solid var(--db-card-border,rgba(255,255,255,.06));flex-shrink:0}
+.db-node-stats{display:flex;justify-content:space-around;padding:.6rem 0;border-top:1px solid var(--db-card-border,rgba(255,255,255,.06));flex-shrink:0}
 .db-ns-item{text-align:center}
-.db-ns-num{font-size:1.3rem;font-weight:800;text-shadow:0 0 10px currentColor}
-.db-ns-label{font-size:.6rem;color:var(--db-sub,#64748b)}
+.db-ns-num{font-size:1.3rem;font-weight:800;text-shadow:0 0 12px currentColor;line-height:1}
+.db-ns-label{font-size:.6rem;color:var(--db-sub,#64748b);margin-top:.2rem;font-weight:500}
 .db-legend{display:flex;align-items:center;gap:.4rem;font-size:.62rem;color:var(--db-sub,#64748b)}
 .db-leg{display:flex;align-items:center;gap:.2rem}
 .db-leg i{display:inline-block;width:7px;height:7px;border-radius:50%}
@@ -848,29 +1011,68 @@ onUnmounted(()=>{
 .db-tab{padding:.15rem .5rem;font-size:.68rem;border:1px solid rgba(99,102,241,.3);background:transparent;color:var(--db-sub,#64748b);cursor:pointer;border-right:none}
 .db-tab:first-child{border-radius:4px 0 0 4px}.db-tab:last-child{border-radius:0 4px 4px 0;border-right:1px solid rgba(99,102,241,.3)}
 .db-tab.active{background:rgba(99,102,241,.3);color:#a5b4fc;border-color:#6366f1}
-.db-alert-list{display:flex;flex-direction:column;gap:.2rem;overflow-y:auto;flex:1;min-height:0}
-.db-alert-empty{font-size:.72rem;color:#10b981;text-align:center;padding:.5rem}
-.db-alert-item{display:flex;align-items:center;gap:.4rem;font-size:.7rem;padding:.22rem .4rem;border-radius:5px;background:var(--db-res-bg,rgba(255,255,255,.03))}
-.db-alert-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;background:#ef4444;box-shadow:0 0 6px #ef4444}
-.db-alert-name{flex:1;color:var(--db-text,#cbd5e1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.db-alert-time{font-size:.62rem;color:var(--db-sub,#475569);flex-shrink:0}
-/* 右列 2×2 网格 */
-.db-right-grid{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:.5rem;flex:1;min-height:0}
-.db-right-card{display:flex;flex-direction:column;overflow:hidden;min-height:0;height:100%}
-.db-chart-right{flex:1;min-height:0;width:100%}
-/* 用户排行 */
-.db-card-rank{overflow:hidden}
-.db-rank-meta{font-size:.6rem;color:var(--db-sub,#64748b)}
-.db-rank-list{display:flex;flex-direction:column;gap:.22rem;overflow-y:auto;flex:1;min-height:0;padding-top:.1rem}
-.db-rank-item{display:flex;align-items:center;gap:.35rem;font-size:.7rem}
-.db-rank-no{width:16px;height:16px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:.62rem;font-weight:700;background:rgba(99,102,241,.15);color:#a5b4fc;flex-shrink:0}
-.rank-gold{background:rgba(245,158,11,.2);color:#f59e0b}
-.rank-silver{background:rgba(148,163,184,.2);color:#94a3b8}
-.rank-bronze{background:rgba(180,83,9,.2);color:#b45309}
-.db-rank-name{width:52px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--db-text,#e2e8f0);flex-shrink:0}
-.db-rank-bar-wrap{flex:1;height:5px;background:rgba(255,255,255,.06);border-radius:3px;overflow:hidden}
-.db-rank-bar{height:100%;border-radius:3px;transition:width .5s ease}
-.db-rank-count{font-size:.68rem;font-weight:600;color:var(--db-sub,#94a3b8);flex-shrink:0;width:22px;text-align:right}
+/* 告警列表 - 优化设计 */
+.db-card-alert{min-height:0}
+.db-alert-list{display:flex;flex-direction:column;gap:.4rem;overflow-y:auto;flex:1;min-height:0}
+.db-alert-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:1.2rem;gap:.4rem;flex:1}
+.db-alert-ok-icon{width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#10b981,#34d399);display:flex;align-items:center;justify-content:center;font-size:2rem;color:#fff;box-shadow:0 4px 20px rgba(16,185,129,.4);animation:pulse-ok 2s infinite}
+@keyframes pulse-ok{0%,100%{transform:scale(1);box-shadow:0 4px 20px rgba(16,185,129,.4)}50%{transform:scale(1.08);box-shadow:0 6px 28px rgba(16,185,129,.6)}}
+.db-alert-ok-text{font-size:.8rem;color:#10b981;font-weight:700;letter-spacing:.02em}
+.db-alert-ok-sub{font-size:.65rem;color:var(--db-sub,#64748b);font-weight:500}
+.db-alert-item{display:flex;align-items:center;gap:.5rem;padding:.5rem .6rem;border-radius:8px;background:var(--db-res-bg,rgba(255,255,255,.02));border:1px solid rgba(255,255,255,.03);transition:all .3s ease}
+.db-alert-item:hover{background:var(--db-res-bg,rgba(255,255,255,.06));transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,.2)}
+.db-alert-error{border-left:3px solid #ef4444;background:rgba(239,68,68,.05)}
+.db-alert-error:hover{border-left-color:#ef4444;box-shadow:0 4px 12px rgba(239,68,68,.3)}
+.db-alert-warning{border-left:3px solid #f59e0b;background:rgba(245,158,11,.05)}
+.db-alert-warning:hover{border-left-color:#f59e0b;box-shadow:0 4px 12px rgba(245,158,11,.3)}
+.db-alert-info{border-left:3px solid #3b82f6;background:rgba(59,130,246,.05)}
+.db-alert-info:hover{border-left-color:#3b82f6;box-shadow:0 4px 12px rgba(59,130,246,.3)}
+.db-alert-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:1.1rem;flex-shrink:0}
+.db-alert-error .db-alert-icon{background:rgba(239,68,68,.2);box-shadow:0 0 10px rgba(239,68,68,.4)}
+.db-alert-warning .db-alert-icon{background:rgba(245,158,11,.2);box-shadow:0 0 10px rgba(245,158,11,.4)}
+.db-alert-info .db-alert-icon{background:rgba(59,130,246,.2);box-shadow:0 0 10px rgba(59,130,246,.4)}
+.db-alert-content{display:flex;flex-direction:column;gap:.15rem;flex:1;min-width:0}
+.db-alert-name{font-size:.72rem;color:var(--db-text,#e2e8f0);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.db-alert-time{font-size:.62rem;color:var(--db-sub,#64748b);font-weight:500}
+/* 右列布局 - 重新设计 */
+.db-col-right{gap:.7rem;width:100%;max-width:450px;display:flex;flex-direction:column;height:100%}
+.db-right-row{display:grid;grid-template-columns:1fr 1fr;gap:.8rem}
+.db-right-row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.7rem}
+
+/* 底部区域 */
+.db-bottom{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.8rem;padding:0 1.5rem .8rem;flex-shrink:0}
+.db-card-bottom{min-height:200px;display:flex;flex-direction:column}
+.db-chart-bottom{flex:1;min-height:150px;width:100%}
+
+/* 图表卡片 */
+.db-card-chart{min-height:180px}
+.db-chart-main{flex:1;min-height:0;width:100%}
+.db-card-trend{min-height:0}
+.db-chart-trend{flex:1;min-height:0;width:100%}
+
+/* 图例 */
+.db-legend{display:flex;align-items:center;gap:.5rem;font-size:.65rem;color:var(--db-sub,#64748b)}
+.db-leg{display:flex;align-items:center;gap:.25rem}
+.db-leg i{display:inline-block;width:8px;height:8px;border-radius:2px}
+
+/* 用户排行 - 横向条形图样式 */
+.db-card-rank{min-height:0;flex:1;display:flex;flex-direction:column}
+.db-rank-header-left{display:flex;align-items:center;gap:.4rem}
+.db-rank-list-bar{display:flex;flex-direction:column;gap:.35rem;overflow-y:auto;flex:1;min-height:0;padding:.4rem .2rem}
+.db-rank-empty{text-align:center;padding:2rem;color:var(--db-sub,#64748b);font-size:.65rem}
+.db-rank-bar-item{display:flex;align-items:center;gap:.4rem;transition:all .2s ease;padding:0}
+.db-rank-bar-item:hover{transform:translateX(2px);opacity:.95}
+.db-rank-badge{width:24px;height:24px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:700;flex-shrink:0;background:rgba(71,85,105,.5);color:rgba(203,213,225,.8);transition:all .3s ease}
+.db-rank-badge.rank-1{background:linear-gradient(135deg,#fbbf24 0%,#f59e0b 100%);color:#fff;box-shadow:0 2px 6px rgba(251,191,36,.3),inset 0 1px 0 rgba(255,255,255,.2)}
+.db-rank-badge.rank-2{background:linear-gradient(135deg,#cbd5e1 0%,#94a3b8 100%);color:#1e293b;box-shadow:0 1px 4px rgba(148,163,184,.25),inset 0 1px 0 rgba(255,255,255,.25)}
+.db-rank-badge.rank-3{background:linear-gradient(135deg,#a78bfa 0%,#8b5cf6 100%);color:#fff;box-shadow:0 1px 4px rgba(139,92,246,.25),inset 0 1px 0 rgba(255,255,255,.15)}
+.db-rank-bar-label{min-width:65px;max-width:65px;font-size:.65rem;color:var(--db-text,#e2e8f0);font-weight:500;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0}
+.db-rank-bar-container{flex:1;display:flex;align-items:center;gap:.4rem;position:relative}
+.db-rank-bar-fill{height:16px;border-radius:8px;position:relative;overflow:hidden;transition:all .6s cubic-bezier(.34,.46,.45,.94);box-shadow:0 1px 3px rgba(0,0,0,.18),inset 0 1px 0 rgba(255,255,255,.1);min-width:30px}
+.db-rank-bar-fill:hover{box-shadow:0 2px 5px rgba(0,0,0,.25),inset 0 1px 0 rgba(255,255,255,.12)}
+.db-rank-bar-shine{position:absolute;inset:0;background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,.18) 50%,transparent 100%);animation:bar-shine 3s ease-in-out infinite}
+@keyframes bar-shine{0%,100%{transform:translateX(-100%)}50%{transform:translateX(200%)}}
+.db-rank-bar-value{font-size:.65rem;font-weight:700;color:var(--db-text,#f1f5f9);min-width:30px;text-align:left;text-shadow:0 1px 2px rgba(0,0,0,.2)}
 </style>
 
 
