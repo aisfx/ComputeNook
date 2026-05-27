@@ -54,7 +54,7 @@
         </div>
         <div class="modal-body">
           <div class="form-group">
-            <label>Account (OpenLDAP 用户组) *</label>
+            <label>{{ isEditing ? 'Account' : 'Account (OpenLDAP 用户组)' }} *</label>
             <select v-model="formData.name" :disabled="isEditing" v-if="!isEditing">
               <option value="">-- 选择 LDAP 用户组 --</option>
               <option v-for="group in ldapGroups" :key="group.gid" :value="group.groupName">
@@ -62,7 +62,7 @@
               </option>
             </select>
             <input v-else v-model="formData.name" disabled />
-            <small>选择一个 LDAP 用户组作为 Slurm 账户名称</small>
+            <small>{{ isEditing ? 'Slurm Account 名称不可修改' : '选择一个 LDAP 用户组作为 Slurm Account 名称' }}</small>
           </div>
           <div class="form-group">
             <label>Descr</label>
@@ -174,7 +174,12 @@ const saveAccount = async () => {
   saving.value = true
   try {
     if (isEditing.value) {
-      await slurmAccountAPI.updateAccount(formData.value.name, formData.value)
+      await slurmAccountAPI.updateAccount(formData.value.name, {
+        name: formData.value.name,
+        description: formData.value.description,
+        organization: formData.value.organization,
+        parent: formData.value.parent
+      })
       showSuccess('账户更新成功')
     } else {
       const response = await slurmAccountAPI.createAccount(formData.value)

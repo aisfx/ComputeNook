@@ -79,7 +79,7 @@
 
           <!-- 资源管理 -->
           <a
-            :class="['nav-item', { active: ['associations','qos','hours','quota'].includes(adminTab) }]"
+            :class="['nav-item', { active: ['slurm-accounts','associations','qos','partitions','hours','quota'].includes(adminTab) }]"
             @click="groupExpanded.resource = !groupExpanded.resource"
             :title="sidebarCollapsed ? '资源管理' : ''"
           >
@@ -92,8 +92,10 @@
             </span>
           </a>
           <div v-if="groupExpanded.resource && !sidebarCollapsed" class="nav-sub">
+            <a :class="['nav-sub-item', { active: adminTab === 'slurm-accounts' }]" @click.stop="adminTab = 'slurm-accounts'">账户配置</a>
             <a :class="['nav-sub-item', { active: adminTab === 'associations' }]" @click.stop="adminTab = 'associations'">资源绑定</a>
             <a :class="['nav-sub-item', { active: adminTab === 'qos' }]" @click.stop="adminTab = 'qos'">QoS配置</a>
+            <a :class="['nav-sub-item', { active: adminTab === 'partitions' }]" @click.stop="adminTab = 'partitions'">分区配置</a>
             <a :class="['nav-sub-item', { active: adminTab === 'hours' }]" @click.stop="adminTab = 'hours'">机时管理</a>
             <a :class="['nav-sub-item', { active: adminTab === 'quota' }]" @click.stop="adminTab = 'quota'">存储配额</a>
           </div>
@@ -223,6 +225,7 @@
         <div v-else-if="adminTab === 'users'" class="pad-view"><AdminUsers /></div>
         <div v-else-if="adminTab === 'groups'" class="pad-view"><AdminGroups /></div>
         <div v-else-if="adminTab === 'qos'" class="pad-view"><AdminQoS /></div>
+        <div v-else-if="adminTab === 'partitions'" class="pad-view"><AdminPartitions /></div>
         <div v-else-if="adminTab === 'associations'" class="pad-view"><AdminAssociations /></div>
         <div v-else-if="adminTab === 'hours'" class="pad-view"><AdminHours /></div>
         <div v-else-if="adminTab === 'quota'" class="pad-view"><AdminQuota /></div>
@@ -241,6 +244,7 @@ import { useRouter } from 'vue-router'
 import AdminUsers from './AdminUsers.vue'
 import AdminGroups from './AdminGroups.vue'
 import AdminQoS from './AdminQoS.vue'
+import AdminPartitions from './AdminPartitions.vue'
 import AdminHours from './AdminHours.vue'
 import AdminQuota from './AdminQuota.vue'
 import AdminAudit from './AdminAudit.vue'
@@ -326,8 +330,10 @@ onMounted(() => {
 <style scoped>
 .app-shell {
   display: flex;
-  height: 100vh;
+  min-height: 100vh;
+  height: 100%;
   background: hsl(var(--background));
+  overflow: hidden;
   color: hsl(var(--foreground));
   overflow: hidden;
 }
@@ -577,17 +583,19 @@ onMounted(() => {
 
 .content-area {
   flex: 1;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
   background: hsl(var(--background));
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
 
 /* 撑满型：占满全部空间，无 padding */
 .fill-view {
   flex: 1;
   min-height: 0;
-  overflow: hidden;
+  overflow: visible;
   display: flex;
   flex-direction: column;
   position: relative;
@@ -602,7 +610,7 @@ onMounted(() => {
 }
 
 /* integrated-view 撑满 */
-.integrated-view { display: flex; flex-direction: column; flex: 1; overflow: hidden; min-height: 0; }
+.integrated-view { display: flex; flex-direction: column; flex: 1; overflow: visible; min-height: 0; }
 
 .integrated-subtabs {
   display: flex; gap: 0; flex-shrink: 0;
@@ -679,7 +687,8 @@ onMounted(() => {
   flex-shrink: 0;
 }
 
-.integrated-body { flex: 1; overflow-y: auto; min-height: 0; }
+.integrated-body { flex: 1; overflow: visible; min-height: 0; display: flex; flex-direction: column; }
+.fill-view { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: visible; }
 
 .sidebar.collapsed .nav-item-label,
 .sidebar.collapsed .nav-item-chevron,

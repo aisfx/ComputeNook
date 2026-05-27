@@ -120,7 +120,7 @@
       <div class="db-col db-col-center">
         <div class="db-card db-card-fill">
           <div class="db-card-header">
-            <span class="db-card-title">🌐 集群网络拓扑</span>
+            <span class="db-card-title">🌐 集群3D拓扑</span>
             <div class="db-legend">
               <span class="db-leg"><i style="background:#10b981"></i>空闲</span>
               <span class="db-leg"><i style="background:#f59e0b"></i>繁忙</span>
@@ -129,8 +129,7 @@
             </div>
           </div>
           <div class="db-topo-wrap">
-            <div ref="topoEl" class="db-chart-fill"></div>
-            <canvas ref="topoFlowEl" class="db-topo-flow"></canvas>
+            <Cluster3DTopology :nodes="nodes" :isDark="isDark" />
           </div>
           <div class="db-node-stats">
             <div class="db-ns-item"><div class="db-ns-num" style="color:#ef4444">{{ clusterNodeStates.unschedulable }}</div><div class="db-ns-label">不可调度</div></div>
@@ -149,22 +148,7 @@
             <span class="db-card-title">🏆 用户活跃 TOP10</span>
             <span class="db-rank-meta">作业数</span>
           </div>
-          <div class="db-rank-list-bar">
-            <div v-if="userRankList.length === 0" class="db-rank-empty">暂无数据</div>
-            <div v-for="(u, i) in userRankList.slice(0,10)" :key="u.name" class="db-rank-bar-item">
-              <div class="db-rank-badge" :class="'rank-'+(i+1)">{{ i+1 }}</div>
-              <div class="db-rank-bar-label">{{ u.name }}</div>
-              <div class="db-rank-bar-container">
-                <div class="db-rank-bar-fill" :style="{
-                  width: (u.count/userRankList[0].count*100)+'%',
-                  background: `linear-gradient(90deg, ${i===0?'#f59e0b':'#3b82f6'}, ${i===0?'#fb923c':'#60a5fa'})`
-                }">
-                  <div class="db-rank-bar-shine"></div>
-                </div>
-                <div class="db-rank-bar-value">{{ u.count }}</div>
-              </div>
-            </div>
-          </div>
+          <div ref="userRankChartEl" class="db-chart-fill"></div>
         </div>
         
         <!-- 节点使用排行 -->
@@ -173,22 +157,7 @@
             <span class="db-card-title">🖥️ 节点使用 TOP10</span>
             <span class="db-rank-meta">节点数</span>
           </div>
-          <div class="db-rank-list-bar">
-            <div v-if="userNodeRankList.length === 0" class="db-rank-empty">暂无数据</div>
-            <div v-for="(u, i) in userNodeRankList.slice(0,10)" :key="u.name" class="db-rank-bar-item">
-              <div class="db-rank-badge" :class="'rank-'+(i+1)">{{ i+1 }}</div>
-              <div class="db-rank-bar-label">{{ u.name }}</div>
-              <div class="db-rank-bar-container">
-                <div class="db-rank-bar-fill" :style="{
-                  width: (u.nodes/userNodeRankList[0].nodes*100)+'%',
-                  background: `linear-gradient(90deg, ${i===0?'#10b981':'#3b82f6'}, ${i===0?'#34d399':'#60a5fa'})`
-                }">
-                  <div class="db-rank-bar-shine"></div>
-                </div>
-                <div class="db-rank-bar-value">{{ u.nodes }}</div>
-              </div>
-            </div>
-          </div>
+          <div ref="nodeRankChartEl" class="db-chart-fill"></div>
         </div>
         
         <!-- 存储使用排行 -->
@@ -265,6 +234,8 @@ import * as echarts from 'echarts/core'
 import { PieChart, BarChart, LineChart, ScatterChart, GaugeChart, GraphChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'
 import { CanvasRenderer } from 'echarts/renderers'
+import 'echarts-gl'
+import Cluster3DTopology from './Cluster3DTopology.vue'
 echarts.use([PieChart, BarChart, LineChart, ScatterChart, GaugeChart, GraphChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer])
 
 // ── 主题感知 ──────────────────────────────────────────────
@@ -348,23 +319,12 @@ const userNodeRankList = computed(() => {
     .slice(0, 8)
 })
 
-// 用户存储使用排名（模拟数据，实际需要从API获取）
+// 用户存储使用排名 - 从 API 获取真实数据
+const realStorageList = ref<{name: string, storage: number}[]>([])
+
 const userStorageRankList = computed(() => {
-  // TODO: 从 /api/users 或 /api/files/quota 获取真实存储数据
-  // 这里先用模拟数据展示
-  const mockData = [
-    { name: 'admin', storage: 1024 },
-    { name: 'user1', storage: 856 },
-    { name: 'user2', storage: 642 },
-    { name: 'user3', storage: 512 },
-    { name: 'user4', storage: 384 },
-    { name: 'user5', storage: 256 },
-    { name: 'user6', storage: 128 },
-    { name: 'user7', storage: 96 },
-    { name: 'user8', storage: 64 },
-    { name: 'user9', storage: 32 },
-  ]
-  return mockData.sort((a, b) => b.storage - a.storage)
+  if (realStorageList.value.length > 0) return realStorageList.value
+  return [] // 没有数据时返回空，不显示假数据
 })
 
 const clusterNodeStates = computed(() => {
@@ -427,11 +387,15 @@ const topoFlowEl = ref<HTMLCanvasElement>()
 const jobCurveEl = ref<HTMLElement>()
 const trendEl    = ref<HTMLElement>()
 const storageChartEl = ref<HTMLElement>()
+const userRankChartEl = ref<HTMLElement>()
+const nodeRankChartEl = ref<HTMLElement>()
 let jobPie:      echarts.ECharts|null=null
 let queueChart:  echarts.ECharts|null=null
 let clusterChart:echarts.ECharts|null=null
 let topoChart:   echarts.ECharts|null=null
 let storageChart: echarts.ECharts|null=null
+let userRankChart: echarts.ECharts|null=null
+let nodeRankChart: echarts.ECharts|null=null
 // 流量粒子动画
 let flowRaf: number = 0
 type FlowLink = { x1:number; y1:number; x2:number; y2:number; color:string; active:boolean }
@@ -779,16 +743,27 @@ const drawStorageChart = async () => {
   if (!storageChart) storageChart = echarts.init(storageChartEl.value)
   const tv = themeVars.value
   const data = userStorageRankList.value.slice(0, 10)
-  if (data.length === 0) return
+
+  if (data.length === 0) {
+    storageChart.setOption({
+      backgroundColor: 'transparent',
+      graphic: [{
+        type: 'text',
+        left: 'center', top: 'middle',
+        style: { text: '暂无配额数据', fill: tv.chartText, fontSize: 12 }
+      }]
+    })
+    return
+  }
   
   storageChart.setOption({
     backgroundColor:'transparent',
     tooltip:{ trigger:'axis', axisPointer:{type:'shadow'} },
-    grid:{top:15,right:15,bottom:30,left:45},
+    grid:{top:15,right:15,bottom:35,left:45},
     xAxis:{
       type:'category',
       data:data.map(d=>d.name),
-      axisLabel:{fontSize:9,color:tv.chartText,rotate:0,interval:0},
+      axisLabel:{fontSize:8,color:tv.chartText,rotate:25,interval:0},
       axisLine:{lineStyle:{color:tv.axisLine}},
       axisTick:{show:false}
     },
@@ -815,8 +790,92 @@ const drawStorageChart = async () => {
   })
 }
 
+const drawUserRankChart = async () => {
+  await nextTick()
+  if (!userRankChartEl.value) return
+  if (!userRankChart) userRankChart = echarts.init(userRankChartEl.value)
+  const tv = themeVars.value
+  const data = userRankList.value.slice(0, 10)
+  if (data.length === 0) return
+  
+  userRankChart.setOption({
+    backgroundColor:'transparent',
+    tooltip:{ trigger:'axis', axisPointer:{type:'shadow'} },
+    grid:{top:15,right:15,bottom:35,left:45},
+    xAxis:{
+      type:'category',
+      data:data.map(d=>d.name),
+      axisLabel:{fontSize:8,color:tv.chartText,rotate:25,interval:0},
+      axisLine:{lineStyle:{color:tv.axisLine}},
+      axisTick:{show:false}
+    },
+    yAxis:{
+      type:'value',
+      name:'作业数',
+      nameTextStyle:{fontSize:9,color:tv.chartText},
+      axisLabel:{fontSize:9,color:tv.chartText},
+      splitLine:{lineStyle:{color:tv.splitLine,type:'dashed'}},
+      axisLine:{show:false}
+    },
+    series:[{
+      type:'bar',
+      data:data.map((d,i)=>({
+        value:d.count,
+        itemStyle:{
+          color:i===0?'#f59e0b':i===1?'#3b82f6':i===2?'#10b981':'#64748b'
+        }
+      })),
+      barWidth:'60%',
+      label:{show:true,position:'top',fontSize:9,color:tv.chartText,fontWeight:600},
+      animationDelay:(idx:number)=>idx*50
+    }],
+  })
+}
+
+const drawNodeRankChart = async () => {
+  await nextTick()
+  if (!nodeRankChartEl.value) return
+  if (!nodeRankChart) nodeRankChart = echarts.init(nodeRankChartEl.value)
+  const tv = themeVars.value
+  const data = userNodeRankList.value.slice(0, 10)
+  if (data.length === 0) return
+  
+  nodeRankChart.setOption({
+    backgroundColor:'transparent',
+    tooltip:{ trigger:'axis', axisPointer:{type:'shadow'} },
+    grid:{top:15,right:15,bottom:35,left:45},
+    xAxis:{
+      type:'category',
+      data:data.map(d=>d.name),
+      axisLabel:{fontSize:8,color:tv.chartText,rotate:25,interval:0},
+      axisLine:{lineStyle:{color:tv.axisLine}},
+      axisTick:{show:false}
+    },
+    yAxis:{
+      type:'value',
+      name:'节点数',
+      nameTextStyle:{fontSize:9,color:tv.chartText},
+      axisLabel:{fontSize:9,color:tv.chartText},
+      splitLine:{lineStyle:{color:tv.splitLine,type:'dashed'}},
+      axisLine:{show:false}
+    },
+    series:[{
+      type:'bar',
+      data:data.map((d,i)=>({
+        value:d.nodes,
+        itemStyle:{
+          color:i===0?'#10b981':i===1?'#3b82f6':i===2?'#8b5cf6':'#64748b'
+        }
+      })),
+      barWidth:'60%',
+      label:{show:true,position:'top',fontSize:9,color:tv.chartText,fontWeight:600},
+      animationDelay:(idx:number)=>idx*50
+    }],
+  })
+}
+
 const drawAll = async () => {
-  await drawTopo(); await drawJobPie(); await drawJobCurve(); await drawTrend(); await drawStorageChart()
+  await drawTopo(); await drawJobPie(); await drawJobCurve(); await drawTrend(); await drawStorageChart(); await drawUserRankChart(); await drawNodeRankChart()
 }
 
 const api = (path:string) =>
@@ -826,12 +885,13 @@ const api = (path:string) =>
 const loadAll = async () => {
   loading.value = true
   const sevenDaysAgo = Math.floor((Date.now() - 7 * 86400000) / 1000)
-  const [nodeData, jobData, userData, dashData, historyData] = await Promise.all([
+  const [nodeData, jobData, userData, dashData, historyData, quotaData] = await Promise.all([
     api('/api/monitoring/node-metrics'),
     api('/api/jobs?page_size=100'),
     api('/api/users'),
     api('/api/dashboard/stats'),
     api(`/api/jobs?page_size=2000&start_time=${sevenDaysAgo}`),
+    api('/api/files/quota/all'),
   ])
 
   // 从 dashboard/stats 拿真实核数、内存、GPU
@@ -898,6 +958,25 @@ const loadAll = async () => {
   }
   if (userData?.data) stats.value.totalUsers=userData.data.length
   if (historyData?.data) jobHistoryForRank.value = historyData.data
+
+  // 存储配额真实数据
+  if (quotaData?.data && Array.isArray(quotaData.data)) {
+    realStorageList.value = quotaData.data
+      .map((q: any) => {
+        // quotas 是数组，取第一个有效的配额信息
+        const quota = Array.isArray(q.quotas) ? q.quotas[0] : null
+        const usedKB = quota?.block_used_kb || 0
+        const usedGB = Math.round(usedKB / 1024 / 1024 * 100) / 100
+        return {
+          name: q.username || q.user || '',
+          storage: usedGB
+        }
+      })
+      .filter((q: any) => q.name && q.storage > 0)
+      .sort((a: any, b: any) => b.storage - a.storage)
+      .slice(0, 10)
+  }
+
   trendData.value.push({ time:new Date().toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'}), cpu:stats.value.cpuUtil, mem:stats.value.memUtil })
   if (trendData.value.length>20) trendData.value.shift()
   loading.value = false
@@ -911,8 +990,8 @@ onMounted(()=>{
   themeObserver = new MutationObserver(()=>{
     currentTheme.value = document.documentElement.getAttribute('data-theme') || 'light'
     // 销毁所有图表实例，强制用新主题色重建
-    ;[jobPie,queueChart,clusterChart,topoChart,jobCurve,trendChart].forEach(c=>c?.dispose())
-    jobPie=null; queueChart=null; clusterChart=null; topoChart=null; jobCurve=null; trendChart=null
+    ;[jobPie,queueChart,clusterChart,topoChart,jobCurve,trendChart,storageChart,userRankChart,nodeRankChart].forEach(c=>c?.dispose())
+    jobPie=null; queueChart=null; clusterChart=null; topoChart=null; jobCurve=null; trendChart=null; storageChart=null; userRankChart=null; nodeRankChart=null
     drawAll()
   })
   themeObserver.observe(document.documentElement, { attributes:true, attributeFilter:['data-theme'] })
@@ -922,11 +1001,11 @@ onUnmounted(()=>{
   clearInterval(clockTimer); clearInterval(refreshTimer)
   cancelAnimationFrame(flowRaf)
   themeObserver?.disconnect()
-  ;[jobPie,queueChart,clusterChart,jobCurve,trendChart].forEach(c=>c?.dispose())
+  ;[jobPie,queueChart,clusterChart,jobCurve,trendChart,storageChart,userRankChart,nodeRankChart].forEach(c=>c?.dispose())
 })
 </script>
 <style scoped>
-.db{display:flex;flex-direction:column;flex:1;min-height:0;background:var(--db-bg,linear-gradient(135deg,#0f172a 0%,#1e293b 50%,#0f172a 100%));overflow:auto;color:var(--db-text,#e2e8f0);font-family:system-ui,sans-serif}
+.db{display:flex;flex-direction:column;width:100%;height:auto;min-height:100%;background:var(--db-bg,linear-gradient(135deg,#0f172a 0%,#1e293b 50%,#0f172a 100%));color:var(--db-text,#e2e8f0);font-family:system-ui,sans-serif}
 .db-header{display:flex;align-items:center;padding:.7rem 1.5rem;background:var(--db-header-bg,rgba(15,23,42,.8));border-bottom:1px solid var(--db-header-border,rgba(99,102,241,.3));flex-shrink:0;backdrop-filter:blur(10px)}
 .db-header-left{display:flex;align-items:center;gap:.75rem;flex:1}
 .db-header-center{flex:1;text-align:center}
@@ -951,13 +1030,15 @@ onUnmounted(()=>{
 .db-kpi-label{font-size:.68rem;color:var(--db-sub,#64748b);margin-top:.15rem;white-space:nowrap;font-weight:500}
 .db-kpi-bar{width:85%;height:3px;background:rgba(128,128,128,.12);border-radius:3px;margin-top:.4rem;overflow:hidden}
 .db-kpi-bar-fill{height:100%;background:var(--kc);border-radius:3px;transition:width .8s cubic-bezier(.4,0,.2,1);box-shadow:0 0 8px var(--kc)}
-.db-main{display:grid;grid-template-columns:280px 1fr 420px;gap:.8rem;padding:0 1.2rem .8rem;flex:1;min-height:400px;overflow:hidden}
-.db-col{display:flex;flex-direction:column;gap:.5rem;overflow:hidden;flex:1;min-height:0}
-.db-col-right{overflow:hidden;display:flex;flex-direction:column}
+.db-main{display:grid;grid-template-columns:minmax(200px,25%) 1fr minmax(200px,25%);gap:.8rem;padding:.8rem 1.2rem;flex:2;min-height:500px}
+.db-col{display:flex;flex-direction:column;gap:.5rem;overflow:visible;flex:1;min-height:0}
+.db-col-left{gap:.5rem}
+.db-col-right{gap:.5rem;overflow:visible;display:flex;flex-direction:column;flex:1;height:100%}
 .db-card{background:var(--db-card-bg,rgba(30,41,59,.7));border:1px solid var(--db-card-border,rgba(255,255,255,.06));border-radius:8px;padding:.5rem .6rem;display:flex;flex-direction:column;overflow:hidden;backdrop-filter:blur(8px);transition:all .3s ease}
 .db-card:hover{border-color:rgba(99,102,241,.15);box-shadow:0 4px 16px rgba(0,0,0,.2)}
 .db-card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:.3rem}
 .db-card-title{font-size:.65rem;font-weight:600;color:var(--db-sub,#94a3b8);margin-bottom:.3rem;letter-spacing:.02em}
+.db-rank-meta{font-size:.6rem;color:var(--db-sub,#64748b);font-weight:500;padding:.15rem .4rem;background:rgba(99,102,241,.1);border-radius:4px;border:1px solid rgba(99,102,241,.2)}
 .db-chart-h180{flex:1;min-height:0;max-height:180px;width:100%}
 .db-chart-h160{width:100%;height:160px;flex-shrink:0}
 .db-chart-h120{width:100%;height:100px;flex-shrink:0}
@@ -1035,20 +1116,22 @@ onUnmounted(()=>{
 .db-alert-name{font-size:.72rem;color:var(--db-text,#e2e8f0);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .db-alert-time{font-size:.62rem;color:var(--db-sub,#64748b);font-weight:500}
 /* 右列布局 - 重新设计 */
-.db-col-right{gap:.7rem;width:100%;max-width:450px;display:flex;flex-direction:column;height:100%}
+.db-col-right{gap:.5rem;display:flex;flex-direction:column;flex:1;min-height:0;height:100%}
 .db-right-row{display:grid;grid-template-columns:1fr 1fr;gap:.8rem}
 .db-right-row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.7rem}
 
 /* 底部区域 */
-.db-bottom{display:grid;grid-template-columns:1fr 1fr 1fr;gap:.8rem;padding:0 1.5rem .8rem;flex-shrink:0}
-.db-card-bottom{min-height:200px;display:flex;flex-direction:column}
-.db-chart-bottom{flex:1;min-height:150px;width:100%}
+.db-bottom{display:grid;grid-template-columns:1.2fr 1.2fr 0.8fr;gap:1rem;padding:0 1.2rem .8rem;flex:1;min-height:0;max-height:280px}
+.db-card-bottom{min-height:0;height:100%;display:flex;flex-direction:column}
+.db-chart-bottom{flex:1;min-height:180px;width:100%}
 
 /* 图表卡片 */
 .db-card-chart{min-height:180px}
 .db-chart-main{flex:1;min-height:0;width:100%}
 .db-card-trend{min-height:0}
 .db-chart-trend{flex:1;min-height:0;width:100%}
+.db-card-fill{flex:1;min-height:0;display:flex;flex-direction:column}
+.db-chart-fill{flex:1;min-height:0;width:100%}
 
 /* 图例 */
 .db-legend{display:flex;align-items:center;gap:.5rem;font-size:.65rem;color:var(--db-sub,#64748b)}
@@ -1056,7 +1139,7 @@ onUnmounted(()=>{
 .db-leg i{display:inline-block;width:8px;height:8px;border-radius:2px}
 
 /* 用户排行 - 横向条形图样式 */
-.db-card-rank{min-height:0;flex:1;display:flex;flex-direction:column}
+.db-card-rank{flex:0 0 auto;min-height:0;height:280px;display:flex;flex-direction:column}
 .db-rank-header-left{display:flex;align-items:center;gap:.4rem}
 .db-rank-list-bar{display:flex;flex-direction:column;gap:.35rem;overflow-y:auto;flex:1;min-height:0;padding:.4rem .2rem}
 .db-rank-empty{text-align:center;padding:2rem;color:var(--db-sub,#64748b);font-size:.65rem}
@@ -1073,6 +1156,33 @@ onUnmounted(()=>{
 .db-rank-bar-shine{position:absolute;inset:0;background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,.18) 50%,transparent 100%);animation:bar-shine 3s ease-in-out infinite}
 @keyframes bar-shine{0%,100%{transform:translateX(-100%)}50%{transform:translateX(200%)}}
 .db-rank-bar-value{font-size:.65rem;font-weight:700;color:var(--db-text,#f1f5f9);min-width:30px;text-align:left;text-shadow:0 1px 2px rgba(0,0,0,.2)}
+
+/* 响应式布局 */
+@media (max-width: 1600px) {
+  .db-main{grid-template-columns:minmax(200px,16%) 1fr minmax(300px,26%)}
+  .db-kpi-row{grid-template-columns:repeat(5,1fr);gap:.6rem}
+}
+@media (max-width: 1400px) {
+  .db-main{grid-template-columns:minmax(180px,15%) 1fr minmax(280px,25%)}
+  .db-bottom{grid-template-columns:1fr 1fr 1fr;gap:.6rem}
+}
+@media (max-width: 1200px) {
+  .db-main{grid-template-columns:1fr;gap:.6rem}
+  .db-col{max-width:100%}
+  .db-bottom{grid-template-columns:1fr 1fr;gap:.6rem}
+  .db-kpi-row{grid-template-columns:repeat(3,1fr)}
+}
+@media (max-width: 900px) {
+  .db-kpi-row{grid-template-columns:repeat(2,1fr);gap:.5rem;padding:.6rem 1rem}
+  .db-bottom{grid-template-columns:1fr;gap:.5rem}
+  .db-main{padding:0 .8rem .6rem}
+  .db-bottom{padding:0 .8rem .6rem}
+}
+@media (max-width: 600px) {
+  .db-kpi-row{grid-template-columns:1fr;gap:.4rem;padding:.5rem .8rem}
+  .db-main{padding:0 .5rem .5rem;gap:.5rem}
+  .db-bottom{padding:0 .5rem .5rem;gap:.5rem}
+}
 </style>
 
 

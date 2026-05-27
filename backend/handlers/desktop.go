@@ -163,6 +163,18 @@ func max1(a, b int) int {
 	return b
 }
 
+func canAccessDesktopSession(c *gin.Context, session *DesktopSession) bool {
+	username, exists := c.Get("username")
+	if !exists || session == nil {
+		return false
+	}
+	if session.Username == username.(string) {
+		return true
+	}
+	isAdmin, _ := c.Get("isAdmin")
+	return isAdmin == true
+}
+
 // TerminateDesktopSession 取消 Slurm 作业并将会话标为 stopped
 // 用于代理连接失败等异常场景的主动清理
 func TerminateDesktopSession(sessionID int, username string) {
@@ -210,7 +222,7 @@ func GetDesktopSessions(c *gin.Context) {
 		return
 	}
 	username, _ := c.Get("username")
-	isAdmin, _ := c.Get("is_admin")
+	isAdmin, _ := c.Get("isAdmin")
 	if isAdmin != true {
 		filtered := []DesktopSession{}
 		for _, s := range sessions {
@@ -328,7 +340,7 @@ func StartDesktopSession(c *gin.Context) {
 
 	username, _ := c.Get("username")
 	if session.Username != username.(string) {
-		isAdmin, _ := c.Get("is_admin")
+		isAdmin, _ := c.Get("isAdmin")
 		if isAdmin != true {
 			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 			return
@@ -447,6 +459,10 @@ func GetDesktopSessionStatus(c *gin.Context) {
 
 	for _, s := range sessions {
 		if s.ID == id {
+			if !canAccessDesktopSession(c, &s) {
+				c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+				return
+			}
 			c.JSON(http.StatusOK, gin.H{"data": s})
 			return
 		}
@@ -471,6 +487,10 @@ func StopDesktopSession(c *gin.Context) {
 
 	for i := range sessions {
 		if sessions[i].ID == id {
+			if !canAccessDesktopSession(c, &sessions[i]) {
+				c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+				return
+			}
 			if sessions[i].SlurmJobID > 0 {
 				username, _ := c.Get("username")
 				client, err := GetSlurmClientForUser(username.(string))
@@ -501,6 +521,10 @@ func DeleteDesktopSession(c *gin.Context) {
 	}
 	for _, s := range sessions {
 		if fmt.Sprintf("%d", s.ID) == idStr {
+			if !canAccessDesktopSession(c, &s) {
+				c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+				return
+			}
 			if s.Status == "running" || s.Status == "pending" {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "会话正在运行中，请先停止后再删除"})
 				return
@@ -581,13 +605,13 @@ func buildDesktopScript(session *DesktopSession) string {
 	// ── 以 SLURM_JOB_ID 命名的独立工作目录 ──
 	b.WriteString("JOB_ID=${SLURM_JOB_ID:-$$}\n")
 	b.WriteString(fmt.Sprintf("XPRA_JOB_DIR=\"$HOME/.xpra/job-${JOB_ID}\"\n"))
-	
+
 	// ── 清理旧的 xpra 作业目录（保留最近5个）──
 	b.WriteString("# 清理旧的 xpra 作业目录，避免占用过多磁盘空间\n")
 	b.WriteString("if [ -d \"$HOME/.xpra\" ]; then\n")
 	b.WriteString("  ls -dt \"$HOME/.xpra/job-\"* 2>/dev/null | tail -n +6 | xargs rm -rf 2>/dev/null || true\n")
 	b.WriteString("fi\n\n")
-	
+
 	b.WriteString("mkdir -p \"$XPRA_JOB_DIR\"\n")
 	b.WriteString(fmt.Sprintf("mkdir -p \"%s\"\n\n", statusDir))
 
@@ -791,7 +815,7 @@ func pollDesktopJob(sessionID int, jobID int64, username string) {
 		}
 
 		state := strings.ToUpper(strings.TrimSpace(job.GetJobState()))
-		
+
 		// 作业异常结束：区分是启动失败还是正常停止
 		if state == "FAILED" || state == "CANCELLED" || state == "TIMEOUT" || state == "COMPLETED" || state == "NODE_FAIL" || state == "PREEMPTED" {
 			logger.Info("Desktop session %d: job %d ended with state %s during startup phase", sessionID, jobID, state)
@@ -1008,7 +1032,7 @@ func GetDesktopSessionLogs(c *gin.Context) {
 	}
 
 	username, _ := c.Get("username")
-	isAdmin, _ := c.Get("is_admin")
+	isAdmin, _ := c.Get("isAdmin")
 	if session.Username != username.(string) && isAdmin != true {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
@@ -1077,7 +1101,7 @@ func GetDesktopScript(c *gin.Context) {
 	}
 
 	username, _ := c.Get("username")
-	isAdmin, _ := c.Get("is_admin")
+	isAdmin, _ := c.Get("isAdmin")
 	if session.Username != username.(string) && isAdmin != true {
 		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
@@ -1239,19 +1263,19 @@ func DeleteDesktopApp(c *gin.Context) {
 // POST /api/desktop/cleanup - 清理用户的旧文件释放磁盘空间
 func CleanupUserSpace(c *gin.Context) {
 	username, _ := c.Get("username")
-	
+
 	homeBase := os.Getenv("HOME_BASE_PATH")
 	if homeBase == "" {
 		homeBase = "/home"
 	}
 	userHome := fmt.Sprintf("%s/%s", homeBase, username.(string))
-	
+
 	cleaned := struct {
-		XpraDirs   int `json:"xpraDirs"`
-		LogFiles   int `json:"logFiles"`
+		XpraDirs   int   `json:"xpraDirs"`
+		LogFiles   int   `json:"logFiles"`
 		TotalBytes int64 `json:"totalBytes"`
 	}{}
-	
+
 	// 1. 清理旧的 xpra 作业目录（保留最近3个）
 	xpraDir := fmt.Sprintf("%s/.xpra", userHome)
 	if info, err := os.Stat(xpraDir); err == nil && info.IsDir() {
@@ -1274,7 +1298,7 @@ func CleanupUserSpace(c *gin.Context) {
 			}
 		}
 	}
-	
+
 	// 2. 清理旧的桌面日志文件（保留最近10个）
 	desktopDir := fmt.Sprintf("%s/.desktop", userHome)
 	if info, err := os.Stat(desktopDir); err == nil && info.IsDir() {
@@ -1298,7 +1322,7 @@ func CleanupUserSpace(c *gin.Context) {
 			}
 		}
 	}
-	
+
 	c.JSON(http.StatusOK, gin.H{
 		"message": "清理完成",
 		"cleaned": cleaned,

@@ -419,6 +419,9 @@ func (c *Client) GetUserAssociations(username string) ([]Association, error) {
 		return nil, err
 	}
 	
+	// 打印原始响应用于调试
+	logger.Debug("GetUserAssociations raw response: %s", string(respBody))
+	
 	var response AssociationsResponse
 	if err := json.Unmarshal(respBody, &response); err != nil {
 		logger.Error("Failed to parse associations response: %v", err)
@@ -430,6 +433,20 @@ func (c *Client) GetUserAssociations(username string) ([]Association, error) {
 		return nil, fmt.Errorf("slurm API error: %s", response.Errors[0].Error)
 	}
 	
-	logger.Info("GetUserAssociations returned %d associations for user %s", len(response.Associations), username)
-	return response.Associations, nil
+	// 手动过滤：只保留 user 字段匹配的 associations
+	// Slurm API 的 ?users= 参数不可靠，会返回所有 associations
+	filteredAssocs := []Association{}
+	for _, assoc := range response.Associations {
+		if assoc.User == username {
+			filteredAssocs = append(filteredAssocs, assoc)
+		}
+	}
+	
+	logger.Info("GetUserAssociations returned %d associations for user %s (filtered from %d)", 
+		len(filteredAssocs), username, len(response.Associations))
+	for i, assoc := range filteredAssocs {
+		logger.Debug("  Association[%d]: user=%s account=%s partition=%s cluster=%s", 
+			i, assoc.User, assoc.Account, assoc.Partition, assoc.Cluster)
+	}
+	return filteredAssocs, nil
 }

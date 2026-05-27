@@ -482,7 +482,6 @@ const loadLogs = async () => {
     logs.value = response.data.data || []
   } catch (err: any) {
     error.value = err.response?.data?.error || '加载日志失败'
-    console.error('Failed to load audit logs:', err)
   } finally {
     loading.value = false
   }

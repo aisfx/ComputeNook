@@ -95,9 +95,9 @@ const downloadHTML = `<!DOCTYPE html>
     linux:  {name:'hpc-client-linux',        icon:'🐧',label:'Linux',  desc:'x86_64',              disabled:false},
   };
   const installCmds = {
-    windows:'<pre># 以管理员身份运行 PowerShell\n.\\hpc-client-windows.exe install</pre>',
-    darwin: '<pre>chmod +x hpc-client-mac && ./hpc-client-mac install</pre>',
-    linux:  '<pre>chmod +x hpc-client-linux && ./hpc-client-linux install</pre>',
+    windows:'# 以管理员身份运行 PowerShell\n.\\hpc-client-windows.exe install',
+    darwin: 'chmod +x hpc-client-mac && ./hpc-client-mac install',
+    linux:  'chmod +x hpc-client-linux && ./hpc-client-linux install',
   };
 
   const det = document.getElementById('detected');
@@ -106,15 +106,30 @@ const downloadHTML = `<!DOCTYPE html>
   const cards = document.getElementById('cards');
   [os, ...Object.keys(files).filter(k=>k!==os)].forEach(k => {
     const f = files[k], cur = k===os;
-    const btnDisabled = !token;
-    const btnText = '下载';
-    cards.innerHTML += '<div class="card" style="'+(cur?'border-color:#6366f1;box-shadow:0 0 0 2px #e0e7ff':'')+'">'+
-      '<div class="icon">'+f.icon+'</div>'+
-      '<h3>'+f.label+(cur?' ⭐':'')+'</h3>'+
-      '<p>'+f.desc+'</p>'+
-      '<button class="btn" '+(btnDisabled?'disabled':'')+' onclick="dl(\''+f.name+'\')">'+btnText+'</button></div>';
+    const card = document.createElement('div');
+    card.className = 'card';
+    if (cur) {
+      card.style.borderColor = '#6366f1';
+      card.style.boxShadow = '0 0 0 2px #e0e7ff';
+    }
+    const icon = document.createElement('div');
+    icon.className = 'icon';
+    icon.textContent = f.icon;
+    const title = document.createElement('h3');
+    title.textContent = f.label + (cur ? ' ⭐' : '');
+    const desc = document.createElement('p');
+    desc.textContent = f.desc;
+    const btn = document.createElement('button');
+    btn.className = 'btn';
+    btn.disabled = !token;
+    btn.textContent = '下载';
+    btn.addEventListener('click', () => dl(f.name));
+    card.append(icon, title, desc, btn);
+    cards.appendChild(card);
   });
-  document.getElementById('install-cmd').innerHTML = installCmds[os];
+  const installBlock = document.createElement('pre');
+  installBlock.textContent = installCmds[os];
+  document.getElementById('install-cmd').replaceChildren(installBlock);
 
   function dl(filename) {
     const t = localStorage.getItem('token') || sessionStorage.getItem('token');

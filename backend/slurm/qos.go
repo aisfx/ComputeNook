@@ -33,9 +33,9 @@ type QoS struct {
 	Name        string      `json:"name"`
 	Description string      `json:"description,omitempty"`
 	ID          int         `json:"id,omitempty"`
-	Priority    interface{} `json:"priority,omitempty"`      // 优先级（可能是对象或整数）
-	Flags       interface{} `json:"flags,omitempty"`         // 标志（可能是数组或字符串）
-	
+	Priority    interface{} `json:"priority,omitempty"` // 优先级（可能是对象或整数）
+	Flags       interface{} `json:"flags,omitempty"`    // 标志（可能是数组或字符串）
+
 	// v0.0.43 新的嵌套结构
 	Limits struct {
 		GraceTime int `json:"grace_time,omitempty"`
@@ -90,7 +90,7 @@ type QoS struct {
 			} `json:"tres"`
 		} `json:"min,omitempty"`
 	} `json:"limits,omitempty"`
-	
+
 	// 保留旧字段以兼容，同时支持前端发送的字段名
 	MaxJobs     interface{} `json:"max_jobs_pu,omitempty"`   // 每用户最大作业数
 	MaxSubmit   interface{} `json:"max_submit_pu,omitempty"` // 每用户最大提交数
@@ -101,20 +101,20 @@ type QoS struct {
 	MaxTRES     string      `json:"max_tres_pu,omitempty"`   // 每用户最大 TRES (包含 GPU 等资源)
 	MaxWall     interface{} `json:"max_wall_pj,omitempty"`   // 每作业最大运行时间（分钟）
 	GrpTRESMins string      `json:"grp_tres_mins,omitempty"` // 组总机时（TRES-minutes）
-	
+
 	// 新增字段：最小资源要求
-	MinCPUs     interface{} `json:"min_cpus_pj,omitempty"`   // 每作业最小 CPU 核心数
-	MinNodes    interface{} `json:"min_nodes_pj,omitempty"`  // 每作业最小节点数
-	MinTRES     string      `json:"min_tres_pj,omitempty"`   // 每作业最小 TRES
-	
+	MinCPUs  interface{} `json:"min_cpus_pj,omitempty"`  // 每作业最小 CPU 核心数
+	MinNodes interface{} `json:"min_nodes_pj,omitempty"` // 每作业最小节点数
+	MinTRES  string      `json:"min_tres_pj,omitempty"`  // 每作业最小 TRES
+
 	// 新增字段：抢占和优先级控制
-	Preempt     []string    `json:"preempt,omitempty"`       // 可以抢占的 QoS 列表
-	PreemptMode string      `json:"preempt_mode,omitempty"`  // 抢占模式：off, suspend, requeue, cancel
-	PreemptExemptTime int   `json:"preempt_exempt_time,omitempty"` // 抢占豁免时间（秒）
-	
+	Preempt           interface{} `json:"preempt,omitempty"`             // 可以抢占的 QoS 列表或 Slurm 返回的对象
+	PreemptMode       string      `json:"preempt_mode,omitempty"`        // 抢占模式：off, suspend, requeue, cancel
+	PreemptExemptTime int         `json:"preempt_exempt_time,omitempty"` // 抢占豁免时间（秒）
+
 	// 新增字段：使用因子（影响公平共享调度）
-	UsageFactor float64     `json:"usage_factor,omitempty"`  // 使用因子，默认 1.0
-	UsageThreshold float64  `json:"usage_threshold,omitempty"` // 使用阈值
+	UsageFactor    interface{} `json:"usage_factor,omitempty"`    // 使用因子，默认 1.0
+	UsageThreshold interface{} `json:"usage_threshold,omitempty"` // 使用阈值
 }
 
 // QoSResponse Slurm QoS 列表响应
@@ -176,17 +176,25 @@ func buildQoSLimits(qos *QoS) map[string]interface{} {
 	// per-user TRES 限制
 	userLimits := []TRESItem{}
 
-	if qos.MaxCPUs != nil && extractNumber(qos.MaxCPUs) > 0 {
-		userLimits = append(userLimits, TRESItem{Type: "cpu", Name: "", ID: 1, Count: int64(extractNumber(qos.MaxCPUs))})
+	// CPU：值为 0 时发送 0 让 Slurm 清除限制
+	cpuCount := 0
+	if qos.MaxCPUs != nil {
+		cpuCount = extractNumber(qos.MaxCPUs)
 	}
-	// 内存：优先从 MaxTRES 字符串解析，单位 GB -> MB
-	if memGB := extractMemoryFromTRES(qos.MaxTRES); memGB > 0 {
-		userLimits = append(userLimits, TRESItem{Type: "mem", Name: "", ID: 2, Count: int64(memGB * 1024)})
+	userLimits = append(userLimits, TRESItem{Type: "cpu", Name: "", ID: 1, Count: int64(cpuCount)})
+
+	// 内存：从 MaxTRES 字符串解析，单位 GB -> MB，值为 0 时清除限制
+	memGB := extractMemoryFromTRES(qos.MaxTRES)
+	userLimits = append(userLimits, TRESItem{Type: "mem", Name: "", ID: 2, Count: int64(memGB * 1024)})
+
+	// 节点：值为 0 时清除限制
+	nodeCount := 0
+	if qos.MaxNodes != nil {
+		nodeCount = extractNumber(qos.MaxNodes)
 	}
-	if qos.MaxNodes != nil && extractNumber(qos.MaxNodes) > 0 {
-		userLimits = append(userLimits, TRESItem{Type: "node", Name: "", ID: 4, Count: int64(extractNumber(qos.MaxNodes))})
-	}
-	// GPU：优先用独立字段 MaxGPUs，其次从 MaxTRES 字符串解析
+	userLimits = append(userLimits, TRESItem{Type: "node", Name: "", ID: 4, Count: int64(nodeCount)})
+
+	// GPU：优先用独立字段 MaxGPUs，其次从 MaxTRES 字符串解析，值为 0 时清除限制
 	gpuCount := 0
 	if qos.MaxGPUs != nil {
 		gpuCount = extractNumber(qos.MaxGPUs)
@@ -194,9 +202,7 @@ func buildQoSLimits(qos *QoS) map[string]interface{} {
 	if gpuCount == 0 {
 		gpuCount = extractGPUCountFromTRES(qos.MaxTRES)
 	}
-	if gpuCount > 0 {
-		userLimits = append(userLimits, TRESItem{Type: "gres/gpu", Name: "", ID: 6, Count: int64(gpuCount)})
-	}
+	userLimits = append(userLimits, TRESItem{Type: "gres/gpu", Name: "", ID: 6, Count: int64(gpuCount)})
 
 	// 总机时限制 (GrpTRESMins -> minutes.total)
 	minutesTotal := []TRESItem{}
@@ -256,7 +262,7 @@ func buildQoSLimits(qos *QoS) map[string]interface{} {
 	// ========== MIN LIMITS ==========
 	// per-job 最小 TRES 限制
 	jobMinLimits := []TRESItem{}
-	
+
 	if qos.MinCPUs != nil && extractNumber(qos.MinCPUs) > 0 {
 		jobMinLimits = append(jobMinLimits, TRESItem{Type: "cpu", Name: "", ID: 1, Count: int64(extractNumber(qos.MinCPUs))})
 	}
@@ -292,11 +298,11 @@ func buildQoSData(qos *QoS) map[string]interface{} {
 		"flags":  []string{},
 		"limits": buildQoSLimits(qos),
 	}
-	
+
 	if qos.Description != "" {
 		qosData["description"] = qos.Description
 	}
-	
+
 	// 优先级
 	if qos.Priority != nil {
 		if priority := extractNumber(qos.Priority); priority > 0 {
@@ -306,34 +312,34 @@ func buildQoSData(qos *QoS) map[string]interface{} {
 			}
 		}
 	}
-	
-	// 抢占配置
-	if len(qos.Preempt) > 0 {
-		qosData["preempt"] = map[string]interface{}{
-			"list": qos.Preempt,
-			"mode": qos.PreemptMode,
+
+	preemptList := GetPreemptList(qos)
+	preemptMode := GetPreemptMode(qos)
+	preemptExemptTime := GetPreemptExemptTime(qos)
+	if len(preemptList) > 0 || preemptMode != "" || preemptExemptTime > 0 {
+		preemptData := map[string]interface{}{}
+		if len(preemptList) > 0 {
+			preemptData["list"] = preemptList
 		}
-	}
-	
-	// 抢占豁免时间
-	if qos.PreemptExemptTime > 0 {
-		qosData["preempt"] = map[string]interface{}{
-			"exempt_time": map[string]interface{}{
+		if preemptMode != "" {
+			preemptData["mode"] = preemptMode
+		}
+		if preemptExemptTime > 0 {
+			preemptData["exempt_time"] = map[string]interface{}{
 				"set":    true,
-				"number": qos.PreemptExemptTime,
-			},
+				"number": preemptExemptTime,
+			}
 		}
+		qosData["preempt"] = preemptData
 	}
-	
-	// 使用因子
-	if qos.UsageFactor > 0 {
-		qosData["usage_factor"] = qos.UsageFactor
+
+	if usageFactor := GetUsageFactor(qos); usageFactor > 0 {
+		qosData["usage_factor"] = usageFactor
 	}
-	
-	if qos.UsageThreshold > 0 {
-		qosData["usage_threshold"] = qos.UsageThreshold
+
+	if usageThreshold := GetUsageThreshold(qos); usageThreshold > 0 {
+		qosData["usage_threshold"] = usageThreshold
 	}
-	
 	return qosData
 }
 
@@ -514,7 +520,7 @@ func ValidateQoS(qos *QoS) error {
 	if qos.Name == "" {
 		return fmt.Errorf("QoS name is required")
 	}
-	
+
 	// 验证优先级范围 (通常 0-65535)
 	if qos.Priority != nil {
 		priority := extractNumber(qos.Priority)
@@ -522,7 +528,7 @@ func ValidateQoS(qos *QoS) error {
 			return fmt.Errorf("priority must be between 0 and 65535")
 		}
 	}
-	
+
 	// 验证最小值不超过最大值
 	if qos.MinCPUs != nil && qos.MaxCPUs != nil {
 		minCPU := extractNumber(qos.MinCPUs)
@@ -531,7 +537,7 @@ func ValidateQoS(qos *QoS) error {
 			return fmt.Errorf("min_cpus_pj (%d) cannot exceed max_cpus_pu (%d)", minCPU, maxCPU)
 		}
 	}
-	
+
 	if qos.MinNodes != nil && qos.MaxNodes != nil {
 		minNodes := extractNumber(qos.MinNodes)
 		maxNodes := extractNumber(qos.MaxNodes)
@@ -539,7 +545,7 @@ func ValidateQoS(qos *QoS) error {
 			return fmt.Errorf("min_nodes_pj (%d) cannot exceed max_nodes_pu (%d)", minNodes, maxNodes)
 		}
 	}
-	
+
 	// 验证抢占模式
 	if qos.PreemptMode != "" {
 		validModes := map[string]bool{
@@ -552,16 +558,17 @@ func ValidateQoS(qos *QoS) error {
 			return fmt.Errorf("invalid preempt_mode: %s (must be off, suspend, requeue, or cancel)", qos.PreemptMode)
 		}
 	}
-	
+
 	// 验证使用因子范围
-	if qos.UsageFactor < 0 {
+	if GetUsageFactor(qos) < 0 {
 		return fmt.Errorf("usage_factor cannot be negative")
 	}
-	
-	if qos.UsageThreshold < 0 || qos.UsageThreshold > 1 {
+
+	usageThreshold := GetUsageThreshold(qos)
+	if usageThreshold < 0 || usageThreshold > 1 {
 		return fmt.Errorf("usage_threshold must be between 0 and 1")
 	}
-	
+
 	return nil
 }
 
@@ -599,4 +606,92 @@ func GetQoSTRESLimit(qos *QoS, tresType string) int64 {
 		}
 	}
 	return 0
+}
+
+func GetPreemptList(qos *QoS) []string {
+	if qos.Preempt == nil {
+		return []string{}
+	}
+	switch v := qos.Preempt.(type) {
+	case []string:
+		return v
+	case []interface{}:
+		result := make([]string, 0, len(v))
+		for _, item := range v {
+			if s, ok := item.(string); ok {
+				result = append(result, s)
+			}
+		}
+		return result
+	case map[string]interface{}:
+		if list, ok := v["list"]; ok {
+			switch items := list.(type) {
+			case []string:
+				return items
+			case []interface{}:
+				result := make([]string, 0, len(items))
+				for _, item := range items {
+					if s, ok := item.(string); ok {
+						result = append(result, s)
+					}
+				}
+				return result
+			}
+		}
+	}
+	return []string{}
+}
+
+func GetPreemptMode(qos *QoS) string {
+	if qos.PreemptMode != "" {
+		return qos.PreemptMode
+	}
+	if m, ok := qos.Preempt.(map[string]interface{}); ok {
+		if mode, ok := m["mode"].(string); ok {
+			return mode
+		}
+	}
+	return ""
+}
+
+func GetPreemptExemptTime(qos *QoS) int {
+	if qos.PreemptExemptTime > 0 {
+		return qos.PreemptExemptTime
+	}
+	if m, ok := qos.Preempt.(map[string]interface{}); ok {
+		if exempt, ok := m["exempt_time"]; ok {
+			return extractNumber(exempt)
+		}
+	}
+	return 0
+}
+
+func extractFloat(value interface{}) float64 {
+	switch v := value.(type) {
+	case nil:
+		return 0
+	case float64:
+		return v
+	case int:
+		return float64(v)
+	case string:
+		n, _ := strconv.ParseFloat(v, 64)
+		return n
+	case map[string]interface{}:
+		if n, ok := v["number"].(float64); ok {
+			return n
+		}
+		if n, ok := v["number"].(int); ok {
+			return float64(n)
+		}
+	}
+	return 0
+}
+
+func GetUsageFactor(qos *QoS) float64 {
+	return extractFloat(qos.UsageFactor)
+}
+
+func GetUsageThreshold(qos *QoS) float64 {
+	return extractFloat(qos.UsageThreshold)
 }

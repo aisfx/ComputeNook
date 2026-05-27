@@ -286,20 +286,7 @@ func jobToRecord(job map[string]interface{}) UsageRecord {
 		}
 	}
 
-	// 打印原始 TRES 数据，帮助调试
-	fmt.Printf("[USAGE-RAW] job_id=%d tres_count=%d elapsed=%d cpuTime=%d\n",
-		record.JobID, len(allocTRES), elapsed, cpuTime)
-	for _, t := range allocTRES {
-		fmt.Printf("[USAGE-TRES] type=%s name=%s count=%d\n", t.Type, t.Name, t.Count)
-	}
-	// 如果 TRES 为空，打印原始 tres 字段
-	if len(allocTRES) == 0 {
-		if tresRaw, ok := job["tres"]; ok {
-			fmt.Printf("[USAGE-TRES-RAW] %+v\n", tresRaw)
-		} else {
-			fmt.Printf("[USAGE-TRES-RAW] no tres field in job\n")
-		}
-	}
+
 
 	for _, tres := range allocTRES {
 		switch tres.Type {
@@ -326,10 +313,6 @@ func jobToRecord(job map[string]interface{}) UsageRecord {
 	}
 
 	record.BillingMins = record.BillingHours * 60
-
-	fmt.Printf("[USAGE] job_id=%d name=%s user=%s state=%s elapsed=%ds billing=%.4fh (%.2fmins) cpu=%.4fh\n",
-		record.JobID, record.JobName, record.User, record.State,
-		elapsed, record.BillingHours, record.BillingMins, record.CPUHours)
 
 	return record
 }
@@ -582,9 +565,6 @@ func (c *Client) GetUserUsage(user string, startTime, endTime time.Time) ([]Usag
 		}
 	}
 
-	fmt.Printf("[USAGE-API] GetUserUsage returned %d jobs (history=%d running=%d) for user=%s start=%d end=%d\n",
-		len(allJobs), len(historyJobs), len(runningJobs), user, startTime.Unix(), endTime.Unix())
-
 	var records []UsageRecord
 	for _, job := range allJobs {
 		records = append(records, jobToRecord(job))
@@ -612,9 +592,6 @@ func (c *Client) GetAllUsersUsage(startTime, endTime time.Time) ([]UsageRecord, 
 	if len(response.Errors) > 0 {
 		return []UsageRecord{}, nil
 	}
-
-	fmt.Printf("[USAGE-API] GetAllUsersUsage returned %d jobs start=%d end=%d\n",
-		len(response.Jobs), startTime.Unix(), endTime.Unix())
 
 	var records []UsageRecord
 	for _, job := range response.Jobs {

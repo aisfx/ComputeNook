@@ -1,0 +1,7 @@
+./keys.go
+./lock.go
+./manager.go
+./metrics.go
+./middleware.go
+./redis.go
+./redis_test.go

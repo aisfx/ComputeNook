@@ -2,6 +2,11 @@
   <div class="admin-hours">
     <div class="page-header">
       <h3>⏱️ 机时管理</h3>
+      <div class="header-actions">
+        <button class="btn btn-secondary" @click="syncFromSlurm" :disabled="syncing">
+          {{ syncing ? '同步中...' : '🔄 从 Slurm 同步' }}
+        </button>
+      </div>
     </div>
 
     <div class="filters-bar">
@@ -121,26 +126,56 @@
             <small class="form-hint">当前QoS</small>
           </div>
 
+          <!-- 当前余额信息 -->
+          <div class="balance-info">
+            <div class="balance-row">
+              <span class="balance-label">累计充值：</span>
+              <span class="balance-value">{{ formData.totalRecharged.toLocaleString() }} 小时</span>
+            </div>
+            <div class="balance-row">
+              <span class="balance-label">已使用：</span>
+              <span class="balance-value used">{{ formData.used.toLocaleString() }} 小时</span>
+            </div>
+            <div class="balance-row highlight">
+              <span class="balance-label">当前余额：</span>
+              <span class="balance-value current">{{ formData.currentBalance.toLocaleString() }} 小时</span>
+            </div>
+            <div class="balance-row" v-if="formData.slurmBillingValue >= 0">
+              <span class="balance-label">Slurm billing：</span>
+              <span class="balance-value" :class="{ 'slurm-mismatch': Math.abs(formData.slurmBillingValue - formData.currentBalance) > 1 }">
+                {{ formData.slurmBillingValue.toLocaleString() }} 小时
+              </span>
+            </div>
+          </div>
+
           <div class="form-group">
             <label>充值金额（小时） *</label>
             <input 
               type="number" 
               v-model.number="formData.total" 
               placeholder="例如: 100" 
-              min="1"
-            />
-            <small class="form-hint">充值金额将累加到当前配额</small>
-          </div>
-
-          <div class="form-group">
-            <label>初始billing值（小时）</label>
-            <input 
-              type="number" 
-              v-model.number="formData.initialBilling" 
-              placeholder="可选，例如: 61200" 
               min="0"
             />
-            <small class="form-hint">如果填写，将直接设置QoS的billing配额为此值（覆盖原有配额）</small>
+            <small class="form-hint">充值后余额：{{ (formData.currentBalance + (formData.total || 0)).toLocaleString() }} 小时</small>
+          </div>
+
+          <!-- 设置 Slurm billing 初始值 -->
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" v-model="formData.setSlurmBilling" />
+              <span>设置 Slurm billing 初始值</span>
+            </label>
+            <input 
+              v-if="formData.setSlurmBilling"
+              type="number" 
+              v-model.number="formData.slurmBillingValue" 
+              placeholder="例如: 1000" 
+              min="0"
+              class="slurm-billing-input"
+            />
+            <small class="form-hint" v-if="formData.setSlurmBilling">
+              将直接设置 Slurm QoS 的 GrpTRESMins billing 值为 {{ (formData.slurmBillingValue || 0).toLocaleString() }} 小时
+            </small>
           </div>
 
           <div class="form-group">
@@ -167,12 +202,14 @@
 import { ref, onMounted, computed } from 'vue'
 import { qosAPI, slurmAccountAPI, usageAPI } from '../api'
 import dialog from '../utils/dialog'
+import axios from 'axios'
 
 const hoursList = ref<any[]>([])
 const loading = ref(false)
 const error = ref('')
 const showModal = ref(false)
 const saving = ref(false)
+const syncing = ref(false)
 const modalError = ref('')
 const searchQuery = ref('')
 
@@ -188,9 +225,12 @@ const formData = ref({
   type: 'qos',
   name: '',
   total: 0,
-  initialBilling: 0,
-  expireDate: '',
-  notes: ''
+  notes: '',
+  currentBalance: 0,
+  totalRecharged: 0,
+  used: 0,
+  setSlurmBilling: false,
+  slurmBillingValue: 0
 })
 
 const loadQoSAndAccounts = async () => {
@@ -287,51 +327,30 @@ const loadHoursList = async () => {
   loading.value = true
   error.value = ''
   try {
-    const qosData = await qosAPI.getQoSList()
-    qosList.value = qosData || []
-
-    // 同时获取今年的使用量汇总
-    const now = new Date()
-    const end = now.toISOString().split('T')[0]
-    const start = new Date(now.getFullYear(), 0, 1).toISOString().split('T')[0]
-    let allRecords: any[] = []
-    try {
-      const usageRes = await usageAPI.getAllUsersRecords(start, end)
-      allRecords = usageRes.data || usageRes || []
-    } catch (e) {
-      console.warn('Failed to load usage data:', e)
-    }
-
-    // 按 QoS 聚合 billing-minutes
-    const qosUsedMap: Record<string, number> = {}
-    for (const r of allRecords) {
-      const qos = r.qos
-      if (!qos) continue
-      const mins = (r.billing_mins || 0) + (r.billing_hours || 0) * 60
-      qosUsedMap[qos] = (qosUsedMap[qos] || 0) + mins
-    }
-
-    hoursList.value = qosList.value
-      .filter((qos: any) => extractBillingHours(qos) > 0)
-      .map((qos: any) => {
-        const total = Math.round(extractBillingHours(qos))
-        const usedMins = qosUsedMap[qos.name] || 0
-        const used = Math.round(usedMins / 60 * 100) / 100
-        const remaining = Math.max(0, Math.round((total - used) * 100) / 100)
-        const usage = total > 0 ? Math.min(100, Math.round(used / total * 100)) : 0
-        return {
-          id: qos.name,
-          type: 'qos',
-          name: qos.name,
-          description: qos.description || '',
-          total,
-          used,
-          remaining,
-          usage,
-          expireDate: '-',
-          notes: qos.description || ''
-        }
-      })
+    // 使用新的 API 获取机时账户（注意：axios.defaults.baseURL 已经包含 /api）
+    const res = await axios.get('/billing/v2/accounts')
+    const accounts = res.data.data || []
+    
+    hoursList.value = accounts.map((account: any) => {
+      const total = account.total_recharged || 0
+      const balance = account.current_balance || 0
+      const used = total - balance
+      const usage = total > 0 ? Math.min(100, Math.round(used / total * 100)) : 0
+      
+      return {
+        id: account.qos_name,
+        type: 'qos',
+        name: account.qos_name,
+        description: '',
+        total: Math.round(total * 100) / 100,
+        used: Math.round(used * 100) / 100,
+        remaining: Math.round(balance * 100) / 100,
+        usage,
+        expireDate: '-',
+        notes: '',
+        actualUsed: account.actual_used || 0, // Slurm 实际消费
+      }
+    })
   } catch (err: any) {
     error.value = err.response?.data?.error || '加载机时列表失败'
   } finally {
@@ -357,15 +376,37 @@ const getStatusText = (item: any) => {
   return '正常'
 }
 
-const editHours = (item: any) => {
+const editHours = async (item: any) => {
   formData.value = {
     type: item.type,
     name: item.name,
     total: 0,
-    initialBilling: 0,
-    expireDate: '',
-    notes: ''
+    notes: '',
+    currentBalance: item.remaining || 0,
+    totalRecharged: item.total || 0,
+    used: item.used || 0,
+    setSlurmBilling: false,
+    slurmBillingValue: item.remaining || 0
   }
+  
+  // 获取 Slurm QoS 的实际 billing 值
+  try {
+    const qosRes = await qosAPI.getQoS(item.name)
+    const qos = qosRes
+    let slurmBilling = 0
+    
+    // 解析 grp_tres_mins 中的 billing 值
+    if (qos.grp_tres_mins) {
+      const match = qos.grp_tres_mins.match(/billing=(\d+)/)
+      if (match) {
+        slurmBilling = parseInt(match[1]) / 60 // 转换为小时
+      }
+    }
+    
+    formData.value.slurmBillingValue = slurmBilling
+  } catch (err) {
+  }
+  
   showModal.value = true
 }
 
@@ -373,32 +414,27 @@ const saveHours = async () => {
   modalError.value = ''
   if (!formData.value.name) { modalError.value = '请选择 QoS'; return }
   
-  // 如果设置了初始billing值，则优先使用
-  if (formData.value.initialBilling > 0) {
-    if (formData.value.total > 0) {
-      modalError.value = '不能同时设置充值金额和初始billing值，请只填写其中一个'
-      return
-    }
-  } else if (formData.value.total <= 0) {
-    modalError.value = '请填写充值金额或初始billing值'
+  if (formData.value.total <= 0 && !formData.value.setSlurmBilling) {
+    modalError.value = '请填写充值金额'
+    return
+  }
+
+  if (formData.value.setSlurmBilling && formData.value.slurmBillingValue < 0) {
+    modalError.value = '请填写有效的 Slurm billing 值'
     return
   }
   
   saving.value = true
   try {
-    if (formData.value.initialBilling > 0) {
-      // 直接设置billing配额
-      const billingMinutes = Math.round(formData.value.initialBilling * 60)
-      const qosPayload = {
-        name: formData.value.name,
-        description: formData.value.notes,
-        grp_tres_mins: String(billingMinutes)
-      }
-      await qosAPI.updateQoS(formData.value.name, qosPayload)
-    } else {
-      // 调用充值接口（自动累加）
-      await qosAPI.rechargeQoS(formData.value.name, formData.value.total, formData.value.notes)
-    }
+    // 使用新的充值 API
+    await axios.post('/billing/v2/recharge', {
+      qos_name: formData.value.name,
+      amount: formData.value.total,
+      notes: formData.value.notes,
+      set_slurm_billing: formData.value.setSlurmBilling,
+      slurm_billing_value: formData.value.slurmBillingValue
+    })
+    
     closeModal()
     await loadHoursList()
   } catch (err: any) {
@@ -409,11 +445,11 @@ const saveHours = async () => {
 }
 
 const deleteHours = async (item: any) => {
-  const ok = await dialog.confirm(`确定要清除 ${item.name} 的机时限制吗？（将 GrpTRESMins 设为无限制）`, { title: '清除机时限制' })
+  const ok = await dialog.confirm(`确定要清除 ${item.name} 的机时余额吗？`, { title: '清除机时' })
   if (!ok) return
   try {
-    await qosAPI.updateQoS(item.name, { name: item.name, grp_tres_mins: '0' })
-    await loadHoursList()
+    // 这个操作需要管理员手动在数据库中操作，或者提供专门的 API
+    dialog.error('此功能暂未实现，请联系系统管理员')
   } catch (err: any) {
     dialog.error(err.response?.data?.error || '操作失败')
   }
@@ -424,6 +460,21 @@ const closeModal = () => {
   modalError.value = ''
 }
 
+// 从 Slurm 同步消费记录
+const syncFromSlurm = async () => {
+  syncing.value = true
+  try {
+    const res = await axios.post('/billing/v2/sync')
+    const data = res.data
+    dialog.success(`同步完成！\n已同步: ${data.synced} 条\n跳过: ${data.skipped} 条\n总计: ${data.total} 条`)
+    await loadHoursList()
+  } catch (err: any) {
+    dialog.error(err.response?.data?.error || '同步失败')
+  } finally {
+    syncing.value = false
+  }
+}
+
 onMounted(() => {
   loadHoursList()
   loadQoSAndAccounts()
@@ -432,6 +483,17 @@ onMounted(() => {
 
 <style scoped>
 .admin-hours { padding: 1.5rem; display: flex; flex-direction: column; gap: 1.25rem; }
+
+.page-header { display: flex; justify-content: space-between; align-items: center; }
+.header-actions { display: flex; gap: 0.75rem; }
+
+.btn-secondary {
+  padding: 8px 18px; background: hsl(var(--muted)); color: hsl(var(--foreground));
+  border: 1.5px solid hsl(var(--border)); border-radius: 10px;
+  font-size: 0.85rem; font-weight: 500; cursor: pointer; transition: all 0.15s;
+}
+.btn-secondary:hover { background: hsl(var(--accent)); }
+.btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* 展开图标和用户行样式 */
 .expand-icon { font-size: 0.65rem; color: hsl(var(--muted-foreground)); margin-right: 6px; }
@@ -577,5 +639,66 @@ onMounted(() => {
 
 .loading { text-align: center; padding: 2rem; color: hsl(var(--muted-foreground)); font-size: 0.88rem; }
 .error-message { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; border-radius: 10px; padding: 10px 14px; font-size: 0.85rem; }
+
+/* 余额信息卡片 */
+.balance-info {
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  border: 1.5px solid #bae6fd;
+  border-radius: 12px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+.balance-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.4rem 0;
+  font-size: 0.88rem;
+}
+.balance-row.highlight {
+  margin-top: 0.5rem;
+  padding-top: 0.75rem;
+  border-top: 1.5px dashed #7dd3fc;
+}
+.balance-label {
+  color: #0369a1;
+  font-weight: 500;
+}
+.balance-value {
+  color: #0c4a6e;
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+.balance-value.used {
+  color: #ea580c;
+}
+.balance-value.current {
+  color: #0891b2;
+  font-size: 1.1rem;
+}
+.balance-value.slurm-mismatch {
+  color: #dc2626;
+  font-weight: 700;
+}
+
+/* Checkbox 样式 */
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+  margin-bottom: 8px;
+}
+.checkbox-label input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+.slurm-billing-input {
+  margin-top: 8px;
+}
 </style>
 

@@ -10,12 +10,15 @@ import (
 	"time"
 
 	"hpc-backend/audit"
+	"hpc-backend/middleware"
 	"hpc-backend/models"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/websocket"
 )
+
+const xpraAuthCookiePrefix = "xpra_auth_"
 
 // writeDesktopAudit 记录远程桌面隧道审计日志
 func writeDesktopAudit(username, clientIP string, sessionID int, action, detail string) {
@@ -157,6 +160,70 @@ func VNCWebSocketProxy(c *gin.Context) {
 	XpraWebSocketProxy(c)
 }
 
+func authenticateXpraHTTPProxy(c *gin.Context, session *DesktopSession, sessionID int) (string, bool) {
+	tokenString := c.Query("token")
+	if tokenString == "" {
+		if cookie, err := c.Cookie(xpraAuthCookiePrefix + strconv.Itoa(sessionID)); err == nil {
+			tokenString = cookie
+		}
+	}
+	if tokenString == "" || middleware.IsTokenRevoked(tokenString) {
+		return "", false
+	}
+
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, jwt.ErrSignatureInvalid
+		}
+		return []byte(os.Getenv("JWT_SECRET")), nil
+	})
+	if err != nil || !token.Valid {
+		return "", false
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return "", false
+	}
+	if iss, ok := claims["iss"].(string); ok && iss != "" && iss != "hpc-platform" {
+		return "", false
+	}
+	username, ok := claims["username"].(string)
+	if !ok || username == "" {
+		return "", false
+	}
+	isAdmin, _ := claims["isAdmin"].(bool)
+	if session.Username != username && !isAdmin {
+		return "", false
+	}
+
+	c.SetCookie(
+		xpraAuthCookiePrefix+strconv.Itoa(sessionID),
+		tokenString,
+		3600,
+		fmt.Sprintf("/api/desktop/sessions/%d/xpra-html", sessionID),
+		"",
+		c.Request.TLS != nil,
+		true,
+	)
+	return username, true
+}
+
+func findDesktopSessionByID(c *gin.Context, sessionID int) (*DesktopSession, bool) {
+	sessions, err := loadDesktopSessions()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return nil, false
+	}
+	for i := range sessions {
+		if sessions[i].ID == sessionID {
+			return &sessions[i], true
+		}
+	}
+	c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
+	return nil, false
+}
+
 // clientExitSignals 存储各 session 的退出信号（内存，重启后清空）
 var clientExitSignals = struct {
 	sync.Mutex
@@ -173,7 +240,15 @@ func NotifyClientExit(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
-	
+	session, ok := findDesktopSessionByID(c, id)
+	if !ok {
+		return
+	}
+	if !canAccessDesktopSession(c, session) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+		return
+	}
+
 	// 从请求体中获取 token 并验证
 	var body struct {
 		Token string `json:"token"`
@@ -192,7 +267,7 @@ func NotifyClientExit(c *gin.Context) {
 		}
 	}
 	// 如果没有 body token，这只是一个通知信号，不强制要求认证
-	
+
 	clientExitSignals.Lock()
 	clientExitSignals.m[id] = true
 	clientExitSignals.Unlock()
@@ -213,6 +288,14 @@ func GetClientSignal(c *gin.Context) {
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+	session, ok := findDesktopSessionByID(c, id)
+	if !ok {
+		return
+	}
+	if !canAccessDesktopSession(c, session) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
 	clientExitSignals.Lock()
@@ -256,6 +339,15 @@ func XpraHTTPProxy(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "session not found"})
 		return
 	}
+	username, ok := authenticateXpraHTTPProxy(c, session, id)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	if session.Status != "running" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "session is not running"})
+		return
+	}
 
 	// WebSocket 升级请求 → 转发到 Xpra WS 端口（VNCPort = ws_port）
 	if websocket.IsWebSocketUpgrade(c.Request) {
@@ -285,6 +377,7 @@ func XpraHTTPProxy(c *gin.Context) {
 				websocket.FormatCloseMessage(websocket.CloseInternalServerErr, "xpra ws connect failed: "+err.Error()))
 			clientWs.Close()
 			log.Printf("[XPRA-HTML-WS] session %d: ws connect failed: %v", id, err)
+			writeDesktopAudit(username, c.ClientIP(), id, "connect_failed", err.Error())
 			return
 		}
 

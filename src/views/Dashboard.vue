@@ -173,15 +173,15 @@
             <div class="legend-row">
               <span class="dot" :style="{ background: machineTime.usageRate > 90 ? '#ef4444' : machineTime.usageRate > 70 ? '#f59e0b' : '#667eea' }"></span>
               <span class="leg-label">已用</span>
-              <span class="leg-val">{{ machineTime.used }} 核时</span>
+              <span class="leg-val">{{ machineTime.used }} 小时</span>
             </div>
             <div class="legend-row">
               <span class="dot" style="background:#10b981"></span>
               <span class="leg-label">剩余</span>
-              <span class="leg-val">{{ machineTime.remaining }} 核时</span>
+              <span class="leg-val">{{ machineTime.remaining }} 小时</span>
             </div>
             <div class="legend-row-full">
-              <span class="leg-small">总配额: {{ machineTime.totalQuota.toLocaleString() }} 核时</span>
+              <span class="leg-small">总配额: {{ machineTime.totalQuota.toLocaleString() }} 小时</span>
             </div>
           </div>
         </div>
@@ -506,7 +506,7 @@
                   <div class="column-selector-header">选择显示列</div>
                   <div class="column-options-list">
                     <label v-for="col in visibleColumns" :key="col.key" class="column-option">
-                      <input type="checkbox" v-model="col.visible" @change="toggleColumnVisibility(col.key)" />
+                      <input type="checkbox" v-model="col.visible" />
                       <span>{{ col.label }}</span>
                     </label>
                   </div>
@@ -601,7 +601,7 @@
               <div class="billing-summary">
                 <div class="bs-item">
                   <div class="bs-label">总消耗</div>
-                  <div class="bs-val" style="color:#667eea">{{ billingTotalMins.toFixed(1) }} 核时</div>
+                  <div class="bs-val" style="color:#667eea">{{ (billingTotalMins / 60).toFixed(1) }} 小时</div>
                 </div>
                 <div class="bs-item">
                   <div class="bs-label">有效作业数</div>
@@ -632,7 +632,7 @@
                     <th>运行时长</th>
                     <th>CPU 小时</th>
                     <th>GPU 小时</th>
-                    <th>消耗核时</th>
+                    <th>消耗小时</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -652,7 +652,7 @@
                     <td>{{ formatElapsed(r.elapsed_secs) }}</td>
                     <td>{{ (r.cpu_hours || 0).toFixed(2) }}</td>
                     <td>{{ (r.gpu_hours || 0).toFixed(2) }}</td>
-                    <td><strong style="color:#667eea">{{ ((r.billing_mins || 0) || (r.billing_hours || 0) * 60 || (r.cpu_hours || 0) * 60).toFixed(1) }}</strong></td>
+                    <td><strong style="color:#667eea">{{ (((r.billing_mins || 0) || (r.billing_hours || 0) * 60 || (r.cpu_hours || 0) * 60) / 60).toFixed(1) }}</strong></td>
                   </tr>
                   <tr v-if="billingValidRecords.length === 0">
                     <td colspan="12" class="empty-cell">暂无消费记录</td>
@@ -669,6 +669,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { getUser, getApiBase } from '../utils/auth'
 import axios from 'axios'
 import { usageAPI } from '../api'
@@ -680,6 +681,7 @@ const myResources = ref<any>({ associations: [], qos_limits: [] })
 const resourcesLoading = ref(false)
 const selectedAccountIdx = ref(0)
 const lastUpdateTime = ref('')
+const router = useRouter()
 
 const refreshAll = async () => {
   await Promise.all([loadDashboardStats(), loadNodes(), loadJobStats()])
@@ -687,10 +689,22 @@ const refreshAll = async () => {
   lastUpdateTime.value = now.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 }
 
+const switchToHouse = () => {
+  router.push('/house-dashboard')
+}
+
 // 账户资源配额列表（association + qos_limits 合并）
 const accountQuotaList = computed(() => {
   const assocs: any[] = myResources.value.associations || []
   const qosList: any[] = myResources.value.qos_limits || []
+  
+  console.log('[DEBUG] accountQuotaList computed:', {
+    assocs_count: assocs.length,
+    qos_count: qosList.length,
+    assocs: assocs,
+    qosList: qosList
+  })
+  
   // 按 account 合并，同一账户的所有 qos_list 合并去重
   const accountMap = new Map<string, string[]>()
   for (const a of assocs) {
@@ -807,11 +821,6 @@ const getSortIcon = (column: string) => {
 
 const isColumnVisible = (key: string) => {
   return visibleColumns.value.find(c => c.key === key)?.visible ?? false
-}
-
-const toggleColumnVisibility = (key: string) => {
-  const col = visibleColumns.value.find(c => c.key === key)
-  if (col) col.visible = !col.visible
 }
 
 const openJobList = async (state: string) => {
@@ -1218,32 +1227,116 @@ const loadJobStats = async () => {
 const loadMyResources = async () => {
   resourcesLoading.value = true
   try {
-    const res = await axios.get('me/resources')
-    myResources.value = res.data.data || {}
-    const qosList: any[] = myResources.value.qos_limits || []
-    const toHours = (mins: number) => Math.round(mins / 60 * 100) / 100
-    const bqList = qosList.filter((q: any) => q.billing_limit_mins > 0).map((bq: any) => {
-      const total: number = bq.billing_limit_mins
-      const used: number = bq.billing_used_mins || 0
-      const remain = Math.max(0, total - used)
-      const usageRate = total > 0 ? parseFloat((used / total * 100).toFixed(2)) : 0
-      return {
-        qosName: bq.name || '',
-        totalQuota: toHours(total),
-        used: toHours(used),
-        remaining: toHours(remain),
-        usageRate,
-        hasLimit: true
+    // 判断是否是管理员
+    const isAdmin = currentUser.value?.isAdmin === true || currentUser.value?.is_admin === true
+    
+    if (isAdmin) {
+      // 管理员：显示所有 QoS 的汇总
+      const res = await axios.get('/billing/v2/accounts')
+      const accounts: any[] = res.data.data || []
+      
+      const toHours = (hours: number) => Math.round(hours * 100) / 100
+      const bqList = accounts.map((account: any) => {
+        const total = account.total_recharged || 0
+        const balance = account.current_balance || 0
+        const used = total - balance
+        const usageRate = total > 0 ? parseFloat(((used / total) * 100).toFixed(2)) : 0
+        
+        return {
+          qosName: account.qos_name || '',
+          totalQuota: toHours(total),
+          used: toHours(used),
+          remaining: toHours(balance),
+          usageRate,
+          hasLimit: total > 0
+        }
+      })
+      
+      machineTimeList.value = bqList
+      machineTimeIndex.value = 0
+      if (bqList.length > 0) {
+        machineTime.value = bqList[0]
+      } else {
+        machineTime.value = { totalQuota: 0, used: 0, remaining: 0, usageRate: 0, hasLimit: false }
       }
-    })
-    machineTimeList.value = bqList
-    machineTimeIndex.value = 0
-    if (bqList.length > 0) {
-      machineTime.value = bqList[0]
     } else {
-      machineTime.value = { totalQuota: 0, used: 0, remaining: 0, usageRate: 0, hasLimit: false }
+      // 普通用户：显示自己的机时
+      const res = await axios.get('/me/billing')
+      const billingData: any[] = res.data.data || []
+      
+      const toHours = (hours: number) => Math.round(hours * 100) / 100
+      const bqList = billingData.map((bq: any) => {
+        const total = bq.total_recharged || 0
+        const used = bq.used || 0
+        const remain = bq.current_balance || 0
+        const usageRate = bq.usage_percent || 0
+        
+        return {
+          qosName: bq.qos_name || '',
+          totalQuota: toHours(total),
+          used: toHours(used),
+          remaining: toHours(remain),
+          usageRate: parseFloat(usageRate.toFixed(2)),
+          hasLimit: total > 0
+        }
+      })
+      
+      machineTimeList.value = bqList
+      machineTimeIndex.value = 0
+      if (bqList.length > 0) {
+        machineTime.value = bqList[0]
+      } else {
+        machineTime.value = { totalQuota: 0, used: 0, remaining: 0, usageRate: 0, hasLimit: false }
+      }
     }
-  } catch (e) { console.error(e) } finally { resourcesLoading.value = false }
+    
+    // 加载 associations 和 qos_limits（用于账户配额显示）
+    try {
+      const resRes = await axios.get('/me/resources')
+      myResources.value = resRes.data.data || {}
+      console.log('[DEBUG] myResources loaded:', {
+        associations: myResources.value.associations?.length || 0,
+        qos_limits: myResources.value.qos_limits?.length || 0,
+        data: myResources.value
+      })
+    } catch (e) {
+      console.error('Failed to load resources:', e)
+    }
+  } catch (e) { 
+    console.error(e)
+    // 如果新 API 失败，尝试旧 API（兼容）
+    try {
+      const res = await axios.get('me/resources')
+      myResources.value = res.data.data || {}
+      const qosList: any[] = myResources.value.qos_limits || []
+      const toHours = (mins: number) => Math.round(mins / 60 * 100) / 100
+      const bqList = qosList.filter((q: any) => q.billing_limit_mins > 0).map((bq: any) => {
+        const total: number = bq.billing_limit_mins
+        const used: number = bq.billing_used_mins || 0
+        const remain = Math.max(0, total - used)
+        const usageRate = total > 0 ? parseFloat((used / total * 100).toFixed(2)) : 0
+        return {
+          qosName: bq.name || '',
+          totalQuota: toHours(total),
+          used: toHours(used),
+          remaining: toHours(remain),
+          usageRate,
+          hasLimit: true
+        }
+      })
+      machineTimeList.value = bqList
+      machineTimeIndex.value = 0
+      if (bqList.length > 0) {
+        machineTime.value = bqList[0]
+      } else {
+        machineTime.value = { totalQuota: 0, used: 0, remaining: 0, usageRate: 0, hasLimit: false }
+      }
+    } catch (e2) {
+      console.error(e2)
+    }
+  } finally { 
+    resourcesLoading.value = false 
+  }
 }
 
 const loadStorageQuota = async () => {
@@ -1313,6 +1406,18 @@ onMounted(() => {
 }
 .btn-refresh:hover { background: #f9fafb; border-color: #d1d5db; }
 .btn-refresh:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.btn-house {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 14px; border: 1px solid #667eea; background: linear-gradient(135deg, #667eea, #764ba2);
+  border-radius: 8px; font-size: 0.82rem; color: white; cursor: pointer;
+  transition: all 0.15s; font-weight: 500;
+}
+.btn-house:hover { 
+  background: linear-gradient(135deg, #5a6fd6, #6a4190); 
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+}
 
 /* ── 统计卡片 ── */
 .stats-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 1rem; }

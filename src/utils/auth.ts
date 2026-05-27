@@ -138,7 +138,6 @@ export const fetchCurrentUser = async () => {
     
     return user
   } catch (error) {
-    console.error('Failed to fetch current user:', error)
     return null
   }
 }
@@ -161,7 +160,6 @@ export const refreshToken = async () => {
     axios.defaults.headers.common['Authorization'] = `Bearer ${token}`
     return true
   } catch (error) {
-    console.error('Failed to refresh token:', error)
     return false
   }
 }

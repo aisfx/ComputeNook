@@ -53,7 +53,7 @@
 
     <!-- 对话区 -->
     <div class="chat-area">
-      <div class="chat-messages" ref="messagesEl">
+      <div class="chat-messages" ref="messagesEl" @click="handleMessageClick">
         <div v-if="messages.length === 0" class="chat-empty">
           <div class="chat-empty-icon">📡</div>
           <div class="chat-empty-text">Prometheus 监控数据已就绪。点击快捷按钮开始分析，或直接描述你观察到的异常现象。</div>
@@ -253,12 +253,34 @@ function renderContent(text: string): string {
   return escaped
     .replace(/```(\w*)\n?([\s\S]*?)```/g, (_m, lang, code) => {
       const id = 'cb-' + Math.random().toString(36).slice(2, 8)
-      return `<div class="code-block"><div class="code-header"><span class="code-lang">${lang || 'code'}</span><button class="copy-btn" onclick="(function(){var el=document.getElementById('${id}');navigator.clipboard.writeText(el.innerText).then(function(){var b=el.parentElement.querySelector('.copy-btn');b.textContent='✓ 已复制';setTimeout(function(){b.textContent='复制'},1500)})})()">复制</button></div><pre id="${id}"><code>${code.trim()}</code></pre></div>`
+      return `<div class="code-block"><div class="code-header"><span class="code-lang">${lang || 'code'}</span><button class="copy-btn" type="button" data-copy-target="${id}">复制</button></div><pre id="${id}"><code>${code.trim()}</code></pre></div>`
     })
     .replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>')
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
     .replace(/^#{1,3} (.+)$/gm, '<div class="msg-heading">$1</div>')
     .replace(/\n/g, '<br>')
+}
+
+async function handleMessageClick(event: MouseEvent) {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>('.copy-btn[data-copy-target]')
+  if (!button) return
+
+  const targetId = button.dataset.copyTarget
+  const target = targetId ? document.getElementById(targetId) : null
+  if (!target) return
+
+  try {
+    await navigator.clipboard.writeText(target.innerText)
+    button.textContent = '已复制'
+    window.setTimeout(() => {
+      button.textContent = '复制'
+    }, 1500)
+  } catch {
+    button.textContent = '复制失败'
+    window.setTimeout(() => {
+      button.textContent = '复制'
+    }, 1500)
+  }
 }
 
 onMounted(() => loadSnapshot())

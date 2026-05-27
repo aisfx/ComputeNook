@@ -16,10 +16,10 @@ type Account struct {
 
 // SlurmUser Slurm 用户
 type SlurmUser struct {
-	Name           string   `json:"name"`
-	DefaultAccount string   `json:"default_account,omitempty"` // 用于前端显示
-	AdminLevel     string   `json:"admin_level,omitempty"` // 用于前端显示
-	
+	Name           string `json:"name"`
+	DefaultAccount string `json:"default_account,omitempty"` // 用于前端显示
+	AdminLevel     string `json:"admin_level,omitempty"`     // 用于前端显示
+
 	// Slurm API 原始字段 - 使用指针以便 omitempty 正确工作
 	Default *struct {
 		Account string `json:"account,omitempty"`
@@ -40,20 +40,20 @@ type Association struct {
 	User      string   `json:"user"`
 	QoS       []string `json:"qos,omitempty"`
 	IsDefault bool     `json:"is_default,omitempty"`
-	
+
 	// Slurm API 返回的额外字段（用于解析完整响应）
 	// ID 可能是数字或对象，使用 interface{} 兼容两种情况
-	ID            interface{}    `json:"id,omitempty"`
-	ParentAccount string         `json:"parent_account,omitempty"`
-	SharesRaw     int            `json:"shares_raw,omitempty"`
-	Priority      interface{}    `json:"priority,omitempty"`
-	Comment       string         `json:"comment,omitempty"`
-	Flags         []string       `json:"flags,omitempty"`
-	Default       interface{}    `json:"default,omitempty"`
-	Max           interface{}    `json:"max,omitempty"`
-	Min           interface{}    `json:"min,omitempty"`
-	Accounting    []interface{}  `json:"accounting,omitempty"`
-	Lineage       string         `json:"lineage,omitempty"`
+	ID            interface{}   `json:"id,omitempty"`
+	ParentAccount string        `json:"parent_account,omitempty"`
+	SharesRaw     int           `json:"shares_raw,omitempty"`
+	Priority      interface{}   `json:"priority,omitempty"`
+	Comment       string        `json:"comment,omitempty"`
+	Flags         []string      `json:"flags,omitempty"`
+	Default       interface{}   `json:"default,omitempty"`
+	Max           interface{}   `json:"max,omitempty"`
+	Min           interface{}   `json:"min,omitempty"`
+	Accounting    []interface{} `json:"accounting,omitempty"`
+	Lineage       string        `json:"lineage,omitempty"`
 }
 
 // AssociationID Slurm 关联 ID 信息
@@ -137,7 +137,7 @@ func (c *Client) CreateAccount(account *Account) error {
 	if account.Coordinators == nil {
 		account.Coordinators = []string{}
 	}
-	
+
 	// 如果没有指定父账户，默认使用 root
 	if account.Parent == "" {
 		account.Parent = "root"
@@ -278,14 +278,14 @@ func (c *Client) GetSlurmUsers() ([]SlurmUser, error) {
 	// 转换数据：将嵌套字段提取到顶层
 	for i := range response.Users {
 		user := &response.Users[i]
-		
+
 		// 优先使用 default.account，如果为空则从 associations 中查找
 		if user.Default != nil && user.Default.Account != "" {
 			user.DefaultAccount = user.Default.Account
 		} else if account, exists := userAccountMap[user.Name]; exists {
 			user.DefaultAccount = account
 		}
-		
+
 		// 提取 administrator_level 数组的第一个元素到 admin_level
 		if len(user.AdministratorLevel) > 0 {
 			user.AdminLevel = user.AdministratorLevel[0]
@@ -319,7 +319,7 @@ func (c *Client) GetSlurmUser(name string) (*SlurmUser, error) {
 	}
 
 	user := &response.Users[0]
-	
+
 	// 转换数据：将嵌套字段提取到顶层
 	if user.Default != nil && user.Default.Account != "" {
 		user.DefaultAccount = user.Default.Account
@@ -417,7 +417,7 @@ func (c *Client) UpdateSlurmUser(name string, user *SlurmUser) error {
 	updateUser := &SlurmUser{
 		Name: user.Name,
 	}
-	
+
 	if user.AdminLevel != "" {
 		updateUser.AdministratorLevel = []string{user.AdminLevel}
 	} else {
@@ -669,16 +669,16 @@ func (c *Client) CreateAccountAssociation(account string) error {
 
 // UpdateAssociation 更新关联
 func (c *Client) UpdateAssociation(account, user, cluster string, assoc *Association) error {
-	if assoc.Account == "" || assoc.User == "" {
-		return fmt.Errorf("account and user are required")
+	if assoc.Account == "" {
+		return fmt.Errorf("account is required")
 	}
 
 	// 设置默认值
 	if assoc.Cluster == "" {
-		assoc.Cluster = "cluster"
+		assoc.Cluster = GetDefaultClusterName()
 	}
 	if cluster == "" {
-		cluster = "cluster"
+		cluster = GetDefaultClusterName()
 	}
 
 	// 只发送需要更新的字段
@@ -687,6 +687,9 @@ func (c *Client) UpdateAssociation(account, user, cluster string, assoc *Associa
 		"user":      assoc.User,
 		"cluster":   assoc.Cluster,
 		"partition": assoc.Partition,
+	}
+	if user != "" {
+		updateData["user"] = user
 	}
 
 	// 如果指定了 QoS，添加到更新数据中
@@ -719,13 +722,13 @@ func (c *Client) UpdateAssociation(account, user, cluster string, assoc *Associa
 func (c *Client) DeleteAssociation(account, user, cluster, partition string) error {
 	// 构建查询参数，必须提供足够的参数来唯一标识一个association
 	path := c.buildAPIPath(fmt.Sprintf("/association?account=%s&user=%s", account, user))
-	
+
 	// cluster 是必需的，如果为空则使用默认值
 	if cluster == "" {
 		cluster = "cluster"
 	}
 	path += fmt.Sprintf("&cluster=%s", cluster)
-	
+
 	// 如果提供了 partition，也加入查询参数
 	if partition != "" {
 		path += fmt.Sprintf("&partition=%s", partition)

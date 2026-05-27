@@ -22,6 +22,11 @@ const (
 	PrefixAssociation = "slurm:assoc:"
 	PrefixReport      = "report:"
 	PrefixMonitoring  = "monitoring:"
+	PrefixAppTemplate = "app:template:"
+	PrefixDesktop     = "desktop:"
+	PrefixRegistry    = "registry:"
+	PrefixBilling     = "billing:"
+	PrefixCMDB        = "cmdb:"
 )
 
 // UserKey 用户信息缓存Key

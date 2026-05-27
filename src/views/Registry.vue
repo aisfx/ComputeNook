@@ -150,7 +150,7 @@ const loadConfig = async () => {
     const data = await res.json()
     harborHost.value = (data.harbor_url || '').replace(/^https?:\/\//, '').replace(/\/$/, '')
     userProject.value = data.user_project || ''
-    isAdmin.value = data.is_admin || false
+    isAdmin.value = data.isAdmin === true || data.is_admin === true
   } catch { /* ignore */ }
 }
 

@@ -15,82 +15,8 @@
 
     <!-- Dashboard 总览 / 集群监控 / 用量报表 / 审计日志 整合 -->
     <div v-if="currentTab === 'dashboard'" class="tab-content tab-content-flush">
-      <!-- 子 tab -->
-      <div class="dash-subtabs">
-        <button :class="['dash-subtab', dashSubTab==='overview' && 'active']" @click="dashSubTab='overview'">📊 总览</button>
-        <!-- 集群监控子项直接展开 -->
-        <button :class="['dash-subtab', dashSubTab==='mon-mgmt' && 'active']"    @click="dashSubTab='mon-mgmt'">🖥️ 管理节点</button>
-        <button :class="['dash-subtab', dashSubTab==='mon-cluster' && 'active']" @click="dashSubTab='mon-cluster'">⚡ 计算节点</button>
-        <button :class="['dash-subtab', dashSubTab==='mon-network' && 'active']" @click="dashSubTab='mon-network'">🌐 网络监控</button>
-        <button :class="['dash-subtab', dashSubTab==='mon-jobs' && 'active']"    @click="dashSubTab='mon-jobs'">📋 作业管理</button>
-        <button :class="['dash-subtab', dashSubTab==='mon-alerts' && 'active']"  @click="dashSubTab='mon-alerts'">🔔 告警规则</button>
-        <button :class="['dash-subtab', dashSubTab==='reports' && 'active']" @click="dashSubTab='reports'">📈 用量报表</button>
-        <button :class="['dash-subtab', dashSubTab==='audit' && 'active']" @click="dashSubTab='audit'">📝 审计日志</button>
-      </div>
-      <div class="dash-sub-content">
-        <AdminDashboard v-if="dashSubTab==='overview'" />
-        <Monitoring v-if="dashSubTab==='mon-mgmt'"    active-tab="mgmt" />
-        <Monitoring v-if="dashSubTab==='mon-cluster'" active-tab="cluster" />
-        <Monitoring v-if="dashSubTab==='mon-network'" active-tab="network" />
-        <Monitoring v-if="dashSubTab==='mon-jobs'"    active-tab="jobs" />
-        <Monitoring v-if="dashSubTab==='mon-alerts'"  active-tab="alerts" />
-        <Reports v-if="dashSubTab==='reports'" />
-        <!-- 审计日志 -->
-        <div v-if="dashSubTab==='audit'" class="tab-content">
-          <div class="page-header">
-            <h3>📝 审计日志</h3>
-          </div>
-          <div class="card filters-card">
-            <div class="filters-row">
-              <div class="filter-group">
-                <select v-model="auditFilters.action">
-                  <option value="">全部操作</option>
-                  <option value="login">登录</option>
-                  <option value="logout">登出</option>
-                  <option value="create">创建</option>
-                  <option value="update">更新</option>
-                  <option value="delete">删除</option>
-                  <option value="submit">提交作业</option>
-                </select>
-              </div>
-              <div class="filter-group">
-                <input type="text" v-model="auditFilters.user" placeholder="用户名" />
-              </div>
-              <div class="filter-group">
-                <input type="date" v-model="auditFilters.startDate" />
-              </div>
-              <div class="filter-group">
-                <input type="date" v-model="auditFilters.endDate" />
-              </div>
-              <button class="btn-secondary" @click="searchAuditLogs">🔍 查询</button>
-            </div>
-          </div>
-          <div class="card">
-            <table class="data-table">
-              <thead>
-                <tr>
-                  <th>时间</th><th>用户</th><th>操作类型</th><th>资源</th><th>详情</th><th>IP 地址</th><th>状态</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="log in filteredAuditLogs" :key="log.id">
-                  <td>{{ log.timestamp }}</td>
-                  <td><strong>{{ log.user }}</strong></td>
-                  <td><span class="action-badge">{{ log.action }}</span></td>
-                  <td>{{ log.resource }}</td>
-                  <td>{{ log.details }}</td>
-                  <td><code>{{ log.ip }}</code></td>
-                  <td>
-                    <span :class="['status-badge', log.success ? 'status-success' : 'status-failed']">
-                      {{ log.success ? '成功' : '失败' }}
-                    </span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
+      <!-- 直接显示房子仪表盘，不需要子标签 -->
+      <AdminHouseDashboard />
     </div>
 
     <!-- 用户管理 -->
@@ -544,6 +470,7 @@ import axios from 'axios'
 import AdminAssociations from './AdminAssociations.vue'
 import AdminSlurmAccounts from './AdminSlurmAccounts.vue'
 import AdminDashboard from '../components/AdminDashboard.vue'
+import AdminHouseDashboard from '../components/AdminHouseDashboard.vue'
 import Monitoring from './Monitoring.vue'
 import Reports from './Reports.vue'
 import { dialog } from '../utils/dialog'
@@ -595,7 +522,6 @@ const loadUsers = async () => {
     const response = await axios.get(`${API_BASE_URL}/users`)
     users.value = response.data.data || []
   } catch (error) {
-    console.error('Failed to load users:', error)
     dialog.error('加载用户列表失败')
   } finally {
     loading.value = false
@@ -642,7 +568,6 @@ const loadGroups = async () => {
     const response = await axios.get(`${API_BASE_URL}/groups`)
     groups.value = response.data.data || []
   } catch (error) {
-    console.error('Failed to load groups:', error)
     dialog.error('加载用户组列表失败')
   } finally {
     loading.value = false
@@ -674,7 +599,6 @@ const loadQosList = async () => {
     const response = await axios.get(`${API_BASE_URL}/slurm/qos`)
     qosList.value = response.data.data || []
   } catch (error) {
-    console.error('Failed to load QoS list:', error)
     dialog.error('加载 QoS 列表失败')
   } finally {
     loading.value = false
@@ -778,7 +702,6 @@ const toggleLock = async (user: any) => {
     user.locked = !user.locked
     dialog.success(`用户 ${user.username} 已${user.locked ? '锁定' : '解锁'}`)
   } catch (error) {
-    console.error('Failed to toggle lock:', error)
     dialog.error('操作失败')
   }
 }
@@ -791,7 +714,6 @@ const resetPassword = async (user: any) => {
     await axios.post(`${API_BASE_URL}/users/${user.username}/reset-password`, { newPassword })
     dialog.success(`用户 ${user.username} 密码已重置`)
   } catch (error) {
-    console.error('Failed to reset password:', error)
     dialog.error('密码重置失败')
   }
 }
@@ -803,7 +725,6 @@ const deleteUser = async (username: string) => {
     await loadUsers()
     dialog.success('用户已删除')
   } catch (error) {
-    console.error('Failed to delete user:', error)
     dialog.error('删除失败')
   }
 }
@@ -822,7 +743,6 @@ const saveUser = async () => {
     await loadUsers()
     userForm.value = { username: '', uid: 1005, gid: 1005, cnName: '', phone: '', shell: '/bin/bash', homeDir: '', password: '', locked: false }
   } catch (error) {
-    console.error('Failed to save user:', error)
     dialog.error('保存失败')
   }
 }
@@ -844,7 +764,6 @@ const deleteGroup = async (groupName: string) => {
     await loadGroups()
     dialog.success('用户组已删除')
   } catch (error) {
-    console.error('Failed to delete group:', error)
     dialog.error('删除失败')
   }
 }
@@ -863,7 +782,6 @@ const saveGroup = async () => {
     await loadGroups()
     groupForm.value = { groupName: '', gid: 2005, members: [] }
   } catch (error) {
-    console.error('Failed to save group:', error)
     dialog.error('保存失败')
   }
 }
@@ -910,7 +828,7 @@ const refreshMetrics = () => {
 }
 
 const searchAuditLogs = () => {
-  console.log('查询审计日志:', auditFilters.value)
+  // 查询审计日志
 }
 
 const drawMetricChart = (canvas: HTMLCanvasElement | undefined, data: number[]) => {

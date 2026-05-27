@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/gin-gonic/gin"
+	"hpc-backend/cache"
 	"hpc-backend/slurm"
 )
 
@@ -132,6 +133,10 @@ func CreateQoS(c *gin.Context) {
 		return
 	}
 
+	// 清除缓存
+	mgr := cache.NewManager()
+	mgr.DeletePattern(cache.PrefixQoS + "*")
+
 	c.JSON(http.StatusCreated, gin.H{"message": "QoS created successfully", "data": qos})
 }
 
@@ -174,6 +179,10 @@ func UpdateQoS(c *gin.Context) {
 		return
 	}
 
+	// 清除缓存
+	mgr := cache.NewManager()
+	mgr.DeletePattern(cache.PrefixQoS + "*")
+
 	c.JSON(http.StatusOK, gin.H{"message": "QoS updated successfully"})
 }
 
@@ -197,6 +206,10 @@ func DeleteQoS(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
+	// 清除缓存
+	mgr := cache.NewManager()
+	mgr.DeletePattern(cache.PrefixQoS + "*")
 
 	c.JSON(http.StatusOK, gin.H{"message": "QoS deleted successfully"})
 }

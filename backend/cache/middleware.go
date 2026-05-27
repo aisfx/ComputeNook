@@ -26,21 +26,22 @@ func CacheMiddleware(keyPrefix string, ttl time.Duration) gin.HandlerFunc {
 		}
 
 		// 生成缓存Key（包含路径和查询参数）
-		cacheKey := generateCacheKey(keyPrefix, c.Request.URL.String())
+		// Include caller identity because many GET endpoints return user-scoped data.
+		cacheKey := generateCacheKey(keyPrefix, cacheScope(c)+":"+c.Request.URL.String())
 
 		// 尝试从缓存获取
 		mgr := NewManager()
-		var cachedData interface{}
-		
+
 		start := time.Now()
-		err := mgr.Get(cacheKey, &cachedData)
+		cachedData, err := mgr.GetString(cacheKey)
 		RecordOperation(time.Since(start))
 
 		if err == nil {
-			// 缓存命中
+			// 缓存命中，直接返回字符串（JSON 格式）
 			RecordHit()
 			c.Header("X-Cache", "HIT")
-			c.JSON(http.StatusOK, cachedData)
+			c.Header("Content-Type", "application/json; charset=utf-8")
+			c.Writer.WriteString(cachedData)
 			c.Abort()
 			return
 		}
@@ -62,7 +63,8 @@ func CacheMiddleware(keyPrefix string, ttl time.Duration) gin.HandlerFunc {
 		// 如果响应成功，缓存结果
 		if c.Writer.Status() == http.StatusOK && len(writer.body) > 0 {
 			start := time.Now()
-			mgr.Set(cacheKey, writer.body, ttl)
+			// 直接存储字符串而不是字节数组，避免 JSON 序列化时被 Base64 编码
+			mgr.SetString(cacheKey, string(writer.body), ttl)
 			RecordSet()
 			RecordOperation(time.Since(start))
 		}
@@ -84,6 +86,12 @@ func (w *responseWriter) Write(b []byte) (int, error) {
 func generateCacheKey(prefix, url string) string {
 	hash := md5.Sum([]byte(url))
 	return fmt.Sprintf("%s%s", prefix, hex.EncodeToString(hash[:]))
+}
+
+func cacheScope(c *gin.Context) string {
+	username, _ := c.Get("username")
+	isAdmin, _ := c.Get("isAdmin")
+	return fmt.Sprintf("user=%v;admin=%v", username, isAdmin)
 }
 
 // InvalidateCache 缓存失效中间件（用于写操作）

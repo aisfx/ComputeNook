@@ -744,8 +744,6 @@ const pendingInitCommand = ref('')
 
 // 初始化
 onMounted(async () => {
-  console.log('WebShell component mounted, initializing...')
-
   // 每次挂载重置 MFA 缓存，防止退出再登录时用到旧用户的状态
   mfaStatusCache.value = null
 
@@ -753,7 +751,6 @@ onMounted(async () => {
   loadSettings()
   
   await loadCurrentUser()
-  console.log('Current username after mount:', currentUsername.value)
   await loadNodes()
   await checkPrivateKey()
 
@@ -854,7 +851,6 @@ const resetSettings = () => {
 const loadCurrentUser = async () => {
   try {
     const token = localStorage.getItem('token') || sessionStorage.getItem('token')
-    console.log('Loading current user, token:', token ? 'exists' : 'missing')
     
     if (!token) {
       console.warn('No token found, user not logged in')
@@ -869,35 +865,26 @@ const loadCurrentUser = async () => {
       }
     })
     
-    console.log('Response status:', response.status)
-    
     if (response.ok) {
       const result = await response.json()
-      console.log('User data received:', result)
       
       // 后端返回格式: {"data": {"username": "sunfx", "uid": 1001, ...}}
       if (result.data) {
         // 优先使用 username 字段（小写）
         if (result.data.username) {
           currentUsername.value = result.data.username
-          console.log('Current username set to:', currentUsername.value)
         } 
         // 兼容大写的 Username 字段
         else if (result.data.Username) {
           currentUsername.value = result.data.Username
-          console.log('Current username set to (from Username):', currentUsername.value)
         } else {
-          console.warn('Username not found in response:', result)
           currentUsername.value = 'unknown'
         }
       } else {
-        console.warn('Data field not found in response:', result)
         currentUsername.value = 'unknown'
       }
     } else {
-      console.error('Failed to load user, status:', response.status)
       const errorText = await response.text()
-      console.error('Error response:', errorText)
       
       if (response.status === 401) {
         notification.error('登录已过期，请重新登录')
@@ -1096,11 +1083,7 @@ const selectNode = async (node: any) => {
   
   // 确保用户信息已加载
   if (!currentUsername.value || currentUsername.value === 'unknown') {
-    console.log('Username not loaded, loading now...')
     await loadCurrentUser()
-    console.log('Username after loading:', currentUsername.value)
-  } else {
-    console.log('Username already loaded:', currentUsername.value)
   }
   
   // 显示认证方式选择对话框

@@ -51,6 +51,13 @@
   border-collapse: collapse;
 }
 
+.data-table-wrap,
+.table-card,
+.card:has(> table) {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
 .data-table th, table th {
   background: hsl(var(--muted) / 0.5) !important;
   color: hsl(var(--muted-foreground)) !important;
@@ -508,6 +515,25 @@ code {
   }
   .modal-overlay {
     align-items: flex-end !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .stats-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .filter-bar,
+  .search-bar,
+  .toolbar,
+  .page-header {
+    width: 100%;
+  }
+
+  .modal-footer,
+  .form-actions,
+  .action-buttons {
+    flex-wrap: wrap !important;
   }
 }
 

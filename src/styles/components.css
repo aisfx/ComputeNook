@@ -116,6 +116,7 @@
   border-radius: var(--radius-lg);
   padding: var(--spacing-lg);
   width: 100%;
+  min-width: 0;
   box-sizing: border-box;
 }
 
@@ -127,6 +128,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  min-width: 0;
 }
 
 .card-title {
@@ -134,6 +136,8 @@
   font-weight: 600;
   color: hsl(var(--card-foreground));
   margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .card-footer {
@@ -149,7 +153,7 @@
 .table-container {
   border: 1px solid hsl(var(--border));
   border-radius: var(--radius-md);
-  overflow: hidden;
+  overflow-x: auto;
   background: hsl(var(--card));
 }
 
@@ -342,6 +346,7 @@
   padding: 22px;
   overflow-y: auto;
   flex: 1;
+  min-width: 0;
 }
 
 .modal-footer {
@@ -534,11 +539,24 @@
 @media (max-width: 767px) {
   .hide-mobile { display: none !important; }
   .card { padding: var(--spacing-md); }
+  .card-header, .card-footer, .modal-footer { flex-wrap: wrap; }
   .modal-overlay { padding: 12px; }
   .modal-content, .modal { max-width: 100%; border-radius: var(--radius-lg); }
   .table th, .table td { padding: 8px 10px; }
   .page-header { flex-wrap: wrap; gap: 8px; }
   .modal-header, .modal-body, .modal-footer { padding-left: 16px; padding-right: 16px; }
+}
+
+@media (max-width: 480px) {
+  .btn { min-height: 36px; padding-inline: 12px; }
+  .btn-lg { padding-inline: 16px; }
+  .form-row { grid-template-columns: 1fr; }
+  .modal-overlay { padding: 0; }
+  .modal-content, .modal {
+    width: 100%;
+    max-height: 100dvh;
+    border-radius: 0;
+  }
 }
 
 @media (min-width: 768px) and (max-width: 1279px) {

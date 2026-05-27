@@ -16,9 +16,9 @@ import (
 func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		devMode := os.Getenv("DEV_MODE")
-		
+
 		var tokenString string
-		
+
 		// 首先检查 Authorization header
 		authHeader := c.GetHeader("Authorization")
 		if authHeader != "" {
@@ -27,12 +27,12 @@ func AuthMiddleware() gin.HandlerFunc {
 				tokenString = parts[1]
 			}
 		}
-		
+
 		// 如果 header 中没有 token，检查 URL 参数（用于 WebSocket 连接）
 		if tokenString == "" {
 			tokenString = c.Query("token")
 		}
-		
+
 		// 如果有 JWT token，优先使用 JWT 认证（即使在开发模式下）
 		if tokenString != "" {
 			token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
@@ -58,8 +58,13 @@ func AuthMiddleware() gin.HandlerFunc {
 						return
 					}
 
-					username := claims["username"].(string)
-					
+					username, ok := claims["username"].(string)
+					if !ok || username == "" {
+						c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token claims"})
+						c.Abort()
+						return
+					}
+
 					// 从 LDAP 获取用户最新状态
 					client, err := ldap.NewClient()
 					if err != nil {
@@ -80,7 +85,7 @@ func AuthMiddleware() gin.HandlerFunc {
 					if user.Disabled {
 						c.JSON(http.StatusForbidden, gin.H{
 							"error": "账户已被禁用，请联系管理员",
-							"code": "ACCOUNT_DISABLED",
+							"code":  "ACCOUNT_DISABLED",
 						})
 						c.Abort()
 						return
@@ -89,19 +94,30 @@ func AuthMiddleware() gin.HandlerFunc {
 					// 检查是否需要强制修改密码（除了修改密码的 API 外）
 					if user.PasswordMustChange && !strings.Contains(c.Request.URL.Path, "/password") {
 						c.JSON(http.StatusForbidden, gin.H{
-							"error": "您需要先修改密码才能继续使用系统",
-							"code": "PASSWORD_MUST_CHANGE",
+							"error":              "您需要先修改密码才能继续使用系统",
+							"code":               "PASSWORD_MUST_CHANGE",
 							"passwordMustChange": true,
 						})
 						c.Abort()
 						return
 					}
 
-					uid := int(claims["uid"].(float64))
-					isAdmin := claims["isAdmin"].(bool)
-					
+					uidFloat, ok := claims["uid"].(float64)
+					if !ok {
+						c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token claims"})
+						c.Abort()
+						return
+					}
+					isAdmin, ok := claims["isAdmin"].(bool)
+					if !ok {
+						c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token claims"})
+						c.Abort()
+						return
+					}
+					uid := int(uidFloat)
+
 					log.Printf("AuthMiddleware: Authenticated user - Username: %s, UID: %d, IsAdmin: %v", username, uid, isAdmin)
-					
+
 					// 设置用户对象和单独的字段（兼容两种访问方式）
 					c.Set("user", map[string]interface{}{
 						"username": username,
@@ -118,7 +134,7 @@ func AuthMiddleware() gin.HandlerFunc {
 				log.Printf("AuthMiddleware: Token validation failed - Error: %v", err)
 			}
 		}
-		
+
 		// 开发模式：如果没有有效的 JWT token，使用默认用户
 		if devMode == "true" {
 			log.Println("DEV_MODE is enabled, using default dev user")

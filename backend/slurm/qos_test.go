@@ -217,3 +217,27 @@ func TestExtractMemoryFromTRES(t *testing.T) {
 		})
 	}
 }
+
+func TestBuildQoSLimitsUsesSlurmGPUTRES(t *testing.T) {
+	qos := &QoS{MaxGPUs: 4}
+
+	limits := buildQoSLimits(qos)
+	maxLimits := limits["max"].(map[string]interface{})
+	tres := maxLimits["tres"].(map[string]interface{})
+	per := tres["per"].(map[string]interface{})
+	userLimits := per["user"].([]TRESItem)
+
+	for _, item := range userLimits {
+		if item.Type == "gres/gpu" {
+			if item.Count != 4 {
+				t.Fatalf("GPU count = %d, want 4", item.Count)
+			}
+			if item.ID != 6 {
+				t.Fatalf("GPU TRES id = %d, want 6", item.ID)
+			}
+			return
+		}
+	}
+
+	t.Fatalf("GPU TRES limit not found in %#v", userLimits)
+}

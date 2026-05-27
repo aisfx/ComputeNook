@@ -296,7 +296,7 @@
                 <div class="section">
                     <div class="section-title">
                         使用示例:
-                        <button class="copy-btn" onclick="copyCode(this)">复制</button>
+                        <button class="copy-btn" type="button">复制</button>
                     </div>
                     <pre class="code-block">{{ .Example }}</pre>
                 </div>
@@ -334,7 +334,7 @@
                 <div class="section">
                     <div class="section-title">
                         使用示例:
-                        <button class="copy-btn" onclick="copyCode(this)">复制</button>
+                        <button class="copy-btn" type="button">复制</button>
                     </div>
                     <pre class="code-block">{{ .Example }}</pre>
                 </div>
@@ -372,7 +372,7 @@
                 <div class="section">
                     <div class="section-title">
                         使用示例:
-                        <button class="copy-btn" onclick="copyCode(this)">复制</button>
+                        <button class="copy-btn" type="button">复制</button>
                     </div>
                     <pre class="code-block">{{ .Example }}</pre>
                 </div>
@@ -405,6 +405,11 @@
                 }, 2000);
             });
         }
+
+        document.addEventListener('click', function(event) {
+            const btn = event.target.closest('.copy-btn');
+            if (btn) copyCode(btn);
+        });
     </script>
 </body>
 </html>

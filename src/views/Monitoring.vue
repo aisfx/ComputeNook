@@ -454,7 +454,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
-import { getApiBase, isAdmin } from '../utils/auth'
+import { getApiBase } from '../utils/auth'
 import * as echarts from 'echarts/core'
 import { LineChart, PieChart, BarChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent, LegendComponent, DataZoomComponent, PolarComponent } from 'echarts/components'
@@ -596,6 +596,11 @@ const jobTrendEl = ref<HTMLElement>()
 const jobActiveEl  = ref<HTMLElement>()
 const jobDoneEl    = ref<HTMLElement>()
 const jobSubmitEl  = ref<HTMLElement>()
+let jobPieChart: echarts.ECharts | null = null
+let jobTrendChart: echarts.ECharts | null = null
+let jobActiveChart: echarts.ECharts | null = null
+let jobDoneChart: echarts.ECharts | null = null
+let jobSubmitChart: echarts.ECharts | null = null
 
 const jobStatusLabel = (s: string) => {
   const m: Record<string, string> = { RUNNING: '运行中', PENDING: '等待中', COMPLETED: '已完成', FAILED: '失败', CANCELLED: '已取消', SUSPENDED: '已挂起' }
@@ -648,8 +653,8 @@ const drawJobCharts = async () => {
 
   // 饼图
   if (jobPieEl.value) {
-    const c = echarts.init(jobPieEl.value, undefined, { renderer: 'canvas' })
-    c.setOption({
+    jobPieChart = initChart(jobPieEl.value, jobPieChart)
+    jobPieChart?.setOption({
       backgroundColor: 'transparent',
       tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
       series: [{
@@ -660,9 +665,9 @@ const drawJobCharts = async () => {
     })
   }
 
-  // 趋势图（用状态分布模拟时序）
+  // 作业趋势快照：没有真实历史接口时保持稳定数据，不生成随机曲线。
   if (jobTrendEl.value) {
-    const c = echarts.init(jobTrendEl.value, undefined, { renderer: 'canvas' })
+    jobTrendChart = initChart(jobTrendEl.value, jobTrendChart)
     const times = Array.from({ length: 12 }, (_, i) => {
       const d = new Date(Date.now() - (11 - i) * 5 * 60000)
       return `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`
@@ -674,9 +679,9 @@ const drawJobCharts = async () => {
     const mkSeries = (name: string, val: number, color: string, dash = false) => ({
       name, type: 'line', smooth: true, symbol: 'none',
       lineStyle: { color, width: 2, type: dash ? 'dashed' as const : 'solid' as const },
-      data: times.map((_, i) => Math.max(0, val + Math.round((Math.random() - 0.5) * Math.max(1, val * 0.2)) * (i % 3 === 0 ? 1 : 0))),
+      data: times.map(() => val),
     })
-    c.setOption({
+    jobTrendChart?.setOption({
       backgroundColor: 'transparent',
       grid: { top: 8, right: 8, bottom: 24, left: 36 },
       tooltip: { trigger: 'axis', confine: true },
@@ -688,39 +693,39 @@ const drawJobCharts = async () => {
 
   // 活动作业柱图
   if (jobActiveEl.value) {
-    const c = echarts.init(jobActiveEl.value, undefined, { renderer: 'canvas' })
+    jobActiveChart = initChart(jobActiveEl.value, jobActiveChart)
     const times = Array.from({ length: 10 }, (_, i) => {
       const d = new Date(Date.now() - (9 - i) * 5 * 60000)
       return `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`
     })
     const running = list.filter(j => j.status === 'RUNNING').length
-    c.setOption({
+    jobActiveChart?.setOption({
       backgroundColor: 'transparent',
       grid: { top: 8, right: 8, bottom: 24, left: 36 },
       tooltip: { trigger: 'axis', confine: true },
       xAxis: { type: 'category', data: times, axisLabel: { fontSize: 9, color: '#9ca3af' }, splitLine: { show: false } },
       yAxis: { type: 'value', min: 0, axisLabel: { fontSize: 9, color: '#9ca3af' }, splitLine: { lineStyle: { color: '#f3f4f6' } } },
-      series: [{ name: 'RUNNING', type: 'bar', barWidth: '60%', itemStyle: { color: '#10b981', borderRadius: [2,2,0,0] }, data: times.map((_, i) => Math.max(0, running + (i % 4 === 0 ? Math.round((Math.random()-0.5)*2) : 0))) }],
+      series: [{ name: 'RUNNING', type: 'bar', barWidth: '60%', itemStyle: { color: '#10b981', borderRadius: [2,2,0,0] }, data: times.map(() => running) }],
     })
   }
 
   // 完成作业柱图
   if (jobDoneEl.value) {
-    const c = echarts.init(jobDoneEl.value, undefined, { renderer: 'canvas' })
+    jobDoneChart = initChart(jobDoneEl.value, jobDoneChart)
     const times = Array.from({ length: 10 }, (_, i) => {
       const d = new Date(Date.now() - (9 - i) * 5 * 60000)
       return `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`
     })
     const done = list.filter(j => j.status === 'COMPLETED').length
     const failed = list.filter(j => j.status === 'FAILED').length
-    c.setOption({
+    jobDoneChart?.setOption({
       backgroundColor: 'transparent',
       grid: { top: 8, right: 8, bottom: 24, left: 36 },
       tooltip: { trigger: 'axis', confine: true },
       xAxis: { type: 'category', data: times, axisLabel: { fontSize: 9, color: '#9ca3af' }, splitLine: { show: false } },
       yAxis: { type: 'value', min: 0, axisLabel: { fontSize: 9, color: '#9ca3af' }, splitLine: { lineStyle: { color: '#f3f4f6' } } },
       series: [
-        { name: 'SUCCEEDED', type: 'bar', stack: 'done', barWidth: '60%', itemStyle: { color: '#667eea', borderRadius: [0,0,0,0] }, data: times.map(() => done > 0 ? done + Math.round((Math.random()-0.5)*2) : 0) },
+        { name: 'SUCCEEDED', type: 'bar', stack: 'done', barWidth: '60%', itemStyle: { color: '#667eea', borderRadius: [0,0,0,0] }, data: times.map(() => done) },
         { name: 'FAILED',    type: 'bar', stack: 'done', itemStyle: { color: '#ef4444', borderRadius: [2,2,0,0] }, data: times.map(() => failed > 0 ? failed : 0) },
       ],
     })
@@ -728,19 +733,19 @@ const drawJobCharts = async () => {
 
   // 提交作业折线
   if (jobSubmitEl.value) {
-    const c = echarts.init(jobSubmitEl.value, undefined, { renderer: 'canvas' })
+    jobSubmitChart = initChart(jobSubmitEl.value, jobSubmitChart)
     const times = Array.from({ length: 10 }, (_, i) => {
       const d = new Date(Date.now() - (9 - i) * 5 * 60000)
       return `${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`
     })
     const total = list.length
-    c.setOption({
+    jobSubmitChart?.setOption({
       backgroundColor: 'transparent',
       grid: { top: 8, right: 8, bottom: 24, left: 36 },
       tooltip: { trigger: 'axis', confine: true },
       xAxis: { type: 'category', data: times, axisLabel: { fontSize: 9, color: '#9ca3af' }, splitLine: { show: false } },
       yAxis: { type: 'value', min: 0, axisLabel: { fontSize: 9, color: '#9ca3af' }, splitLine: { lineStyle: { color: '#f3f4f6' } } },
-      series: [{ name: '提交数', type: 'line', smooth: true, symbol: 'none', lineStyle: { color: '#667eea', width: 2 }, areaStyle: { color: '#667eea', opacity: 0.1 }, data: times.map((_, i) => Math.max(0, total + (i % 3 === 0 ? Math.round((Math.random()-0.5)*3) : 0))) }],
+      series: [{ name: '提交数', type: 'line', smooth: true, symbol: 'none', lineStyle: { color: '#667eea', width: 2 }, areaStyle: { color: '#667eea', opacity: 0.1 }, data: times.map(() => total) }],
     })
   }
 }
@@ -860,9 +865,62 @@ const filteredRuleGroups = computed(() => {
   return ruleGroups.value.map((g: any) => ({ ...g, rules: (g.rules || []).filter((r: any) => r.name?.toLowerCase().includes(q) || r.query?.toLowerCase().includes(q)) })).filter((g: any) => g.rules.length > 0)
 })
 
+const appendHistoryPoint = () => {
+  if (nodeMetrics.value.length === 0) return
+  const point: HistoryPoint = { time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }), nodes: {} }
+  for (const n of nodeMetrics.value) point.nodes[n.instance] = {
+    cpu: n.cpu_usage,
+    mem: n.mem_usage,
+    mem_used: n.mem_used_gb ?? (n.mem_total_gb * n.mem_usage / 100),
+    mem_total: n.mem_total_gb ?? 0,
+    disk: n.disk_usage,
+    disk_used: n.disk_used_gb ?? (n.disk_total_gb * n.disk_usage / 100),
+    disk_total: n.disk_total_gb ?? 0,
+    net_rx: n.net_rx_bps,
+    net_tx: n.net_tx_bps,
+    swap_used: n.swap_used_gb ?? 0,
+    swap_total: n.swap_total_gb ?? 0,
+    swap_usage: n.swap_usage ?? 0,
+    tmp_used: n.tmp_used_gb ?? 0,
+    tmp_total: n.tmp_total_gb ?? 0,
+    tmp_usage: n.tmp_usage ?? 0,
+    load1: n.load1 ?? 0,
+    load5: n.load5 ?? 0,
+  }
+  history.value.push(point)
+  if (history.value.length > 60) history.value.shift()
+}
+
 const loadAll = async () => {
   loading.value = true
   try {
+    const overviewRes = await fetch(`${getApiBase()}/api/monitoring/overview`, { headers: { Authorization: `Bearer ${token()}` } })
+    if (overviewRes.ok) {
+      const overview = await overviewRes.json()
+      clusterStats.value = overview.cluster_stats || {}
+      slurmNodes.value = overview.slurm_nodes || []
+      nodeMetrics.value = overview.node_metrics || []
+      promOk.value = overview.prometheus_connected === true
+      promAlerts.value = overview.alerts || []
+      promAlertsOk.value = overview.alerts_connected !== false
+
+      const [lRes, svRes] = await Promise.allSettled([
+        fetch(`${getApiBase()}/api/monitoring/local-metrics`, { headers: { Authorization: `Bearer ${token()}` } }),
+        fetch(`${getApiBase()}/api/monitoring/mgmt-services`, { headers: { Authorization: `Bearer ${token()}` } }),
+      ])
+      if (lRes.status === 'fulfilled' && lRes.value.ok) localMetrics.value = await lRes.value.json()
+      if (svRes.status === 'fulfilled' && svRes.value.ok) {
+        const d = await svRes.value.json()
+        mgmtServices.value = (d.services || []).map((s: any) => ({ ...s, cpu: s.cpu ?? 0, mem_mb: s.mem_mb ?? 0, fds: s.fds ?? 0 }))
+      }
+
+      lastRefresh.value = new Date().toLocaleTimeString('zh-CN')
+      appendHistoryPoint()
+      checkAlerts()
+      drawAllCharts()
+      return
+    }
+
     const [sRes, nRes, mRes, lRes, svRes] = await Promise.allSettled([
       fetch(`${getApiBase()}/api/dashboard/stats`, { headers: { Authorization: `Bearer ${token()}` } }),
       fetch(`${getApiBase()}/api/dashboard/nodes`, { headers: { Authorization: `Bearer ${token()}` } }),
@@ -876,30 +934,7 @@ const loadAll = async () => {
     if (lRes.status === 'fulfilled' && lRes.value.ok) localMetrics.value = await lRes.value.json()
     if (svRes.status === 'fulfilled' && svRes.value.ok) { const d = await svRes.value.json(); mgmtServices.value = (d.services || []).map((s: any) => ({ ...s, cpu: s.cpu ?? 0, mem_mb: s.mem_mb ?? 0, fds: s.fds ?? 0 })) }
     lastRefresh.value = new Date().toLocaleTimeString('zh-CN')
-    if (nodeMetrics.value.length > 0) {
-      const point: HistoryPoint = { time: new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }), nodes: {} }
-      for (const n of nodeMetrics.value) point.nodes[n.instance] = {
-          cpu: n.cpu_usage,
-          mem: n.mem_usage,
-          mem_used: n.mem_used_gb ?? (n.mem_total_gb * n.mem_usage / 100),
-          mem_total: n.mem_total_gb ?? 0,
-          disk: n.disk_usage,
-          disk_used: n.disk_used_gb ?? (n.disk_total_gb * n.disk_usage / 100),
-          disk_total: n.disk_total_gb ?? 0,
-          net_rx: n.net_rx_bps,
-          net_tx: n.net_tx_bps,
-          swap_used: n.swap_used_gb ?? 0,
-          swap_total: n.swap_total_gb ?? 0,
-          swap_usage: n.swap_usage ?? 0,
-          tmp_used: n.tmp_used_gb ?? 0,
-          tmp_total: n.tmp_total_gb ?? 0,
-          tmp_usage: n.tmp_usage ?? 0,
-          load1: n.load1 ?? 0,
-          load5: n.load5 ?? 0,
-        }
-      history.value.push(point)
-      if (history.value.length > 60) history.value.shift()
-    }
+    appendHistoryPoint()
     await loadPromAlerts()
     checkAlerts()
     drawAllCharts()
@@ -986,7 +1021,10 @@ const dismissPopup = () => { alertPopup.value.show = false; stopAlertSound() }
 
 const initChart = (el: HTMLElement | undefined, instance: echarts.ECharts | null) => {
   if (!el) return instance
-  if (instance) instance.dispose()
+  if (instance) {
+    instance.resize()
+    return instance
+  }
   return echarts.init(el, undefined, { renderer: 'canvas' })
 }
 
@@ -1233,7 +1271,12 @@ const loadCfg = () => { const s = localStorage.getItem('mon_cfg'); if (s) try { 
 
 let timer: ReturnType<typeof setInterval> | null = null
 onMounted(() => { loadCfg(); loadAll(); loadTargets(); loadRules(); timer = setInterval(loadAll, cfg.value.interval * 1000) })
-onUnmounted(() => { if (timer) clearInterval(timer); stopAlertSound(); clearSound(); [cpuChart, memChart, diskChart, netChart, cpuSchedChart, cpuLoadChart, cpuCoresChart, memUsedChart, swapChart, swapRateChart, tmpChart, tmpRateChart].forEach(c => c?.dispose()) })
+onUnmounted(() => {
+  if (timer) clearInterval(timer)
+  stopAlertSound()
+  clearSound()
+  ;[cpuChart, memChart, diskChart, netChart, cpuSchedChart, cpuLoadChart, cpuCoresChart, memUsedChart, swapChart, swapRateChart, tmpChart, tmpRateChart, jobPieChart, jobTrendChart, jobActiveChart, jobDoneChart, jobSubmitChart].forEach(c => c?.dispose())
+})
 </script>
 
 
@@ -2534,7 +2577,3 @@ onUnmounted(() => { if (timer) clearInterval(timer); stopAlertSound(); clearSoun
   .cv-charts-grid4, .cv-charts-grid3 { grid-template-columns: 1fr; }
 }
 </style>
-
-
-
-

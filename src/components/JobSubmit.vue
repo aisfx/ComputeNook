@@ -688,9 +688,6 @@ const submitJob = async () => {
     // 不发送workdir、output、error，让Slurm使用默认值
     // 这样可以避免路径权限问题
     
-    console.log('Submitting job with script content length:', scriptContent.length)
-    console.log('Using Slurm default paths for working directory and output files')
-    
     const response = await fetch(`${getApiBase()}/api/jobs`, {
       method: 'POST',
       headers: {

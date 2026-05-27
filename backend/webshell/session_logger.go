@@ -46,7 +46,7 @@ func NewSessionLogger(sessionID, userID, username, host string) *SessionLogger {
 		lastFlush: time.Now(),
 	}
 	if err := logger.initLogFile(); err != nil {
-		fmt.Printf("Failed to initialize log file: %v\n", err)
+		// 日志初始化失败，静默处理
 	}
 	return logger
 }

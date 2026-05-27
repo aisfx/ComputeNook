@@ -19,6 +19,8 @@ import (
 	"hpc-backend/slurm"
 )
 
+var promHTTPClient = &http.Client{Timeout: 5 * time.Second}
+
 // ─────────────────────────────────────────────
 // Prometheus 客户端
 // ─────────────────────────────────────────────
@@ -46,7 +48,7 @@ func promQueryAgg(query string, sum bool) (map[string]float64, error) {
 		return nil, fmt.Errorf("PROMETHEUS_URL not configured")
 	}
 	apiURL := base + "/api/v1/query?query=" + url.QueryEscape(query)
-	resp, err := http.Get(apiURL)
+	resp, err := promHTTPClient.Get(apiURL)
 	if err != nil {
 		return nil, err
 	}
@@ -254,11 +256,11 @@ func lookupMetric(m map[string]float64, nodeName string) float64 {
 
 type RackDevice struct {
 	ID       string `json:"id"`
-	Unit     int    `json:"unit"`    // 起始 U（从下往上，1=最底）
-	Height   int    `json:"height"`  // 占用 U 数
-	Name     string `json:"name"`    // 显示名称
+	Unit     int    `json:"unit"`      // 起始 U（从下往上，1=最底）
+	Height   int    `json:"height"`    // 占用 U 数
+	Name     string `json:"name"`      // 显示名称
 	NodeName string `json:"node_name"` // 关联 Slurm 节点（可空）
-	Type     string `json:"type"`    // compute|gpu|storage|switch|pdu|empty
+	Type     string `json:"type"`      // compute|gpu|storage|switch|pdu|empty
 	Model    string `json:"model"`
 }
 
@@ -486,7 +488,7 @@ func fetchPromRackLabels() map[string]string {
 		return map[string]string{}
 	}
 
-	resp, err := http.Get(base + "/api/v1/targets?state=any")
+	resp, err := promHTTPClient.Get(base + "/api/v1/targets?state=any")
 	if err != nil {
 		return map[string]string{}
 	}
@@ -534,11 +536,11 @@ func fetchPromRackLabels() map[string]string {
 type MgmtServiceStatus struct {
 	Name    string  `json:"name"`
 	Display string  `json:"display"`
-	Active  bool    `json:"active"`   // systemctl is-active
-	State   string  `json:"state"`    // active / inactive / failed / unknown
-	CPU     float64 `json:"cpu"`      // % from Prometheus process_cpu_seconds_total
-	MemMB   float64 `json:"mem_mb"`   // MB from process_resident_memory_bytes
-	FDs     float64 `json:"fds"`      // process_open_fds
+	Active  bool    `json:"active"` // systemctl is-active
+	State   string  `json:"state"`  // active / inactive / failed / unknown
+	CPU     float64 `json:"cpu"`    // % from Prometheus process_cpu_seconds_total
+	MemMB   float64 `json:"mem_mb"` // MB from process_resident_memory_bytes
+	FDs     float64 `json:"fds"`    // process_open_fds
 }
 
 // GetMgmtServices GET /api/monitoring/mgmt-services
@@ -651,7 +653,7 @@ func promQueryWithLabel(query, labelKey string) (map[string]float64, error) {
 		return nil, fmt.Errorf("PROMETHEUS_URL not configured")
 	}
 	apiURL := base + "/api/v1/query?query=" + url.QueryEscape(query)
-	resp, err := http.Get(apiURL)
+	resp, err := promHTTPClient.Get(apiURL)
 	if err != nil {
 		return nil, err
 	}
@@ -712,7 +714,7 @@ func GetPromAlerts(c *gin.Context) {
 		return
 	}
 
-	resp, err := http.Get(base + "/api/v1/alerts")
+	resp, err := promHTTPClient.Get(base + "/api/v1/alerts")
 	if err != nil {
 		logger.Warn("Prometheus alerts fetch failed: %v", err)
 		c.JSON(http.StatusOK, gin.H{"connected": false, "alerts": []interface{}{}})
@@ -772,7 +774,7 @@ func GetPromTargets(c *gin.Context) {
 		return
 	}
 
-	resp, err := http.Get(base + "/api/v1/targets?state=any")
+	resp, err := promHTTPClient.Get(base + "/api/v1/targets?state=any")
 	if err != nil {
 		logger.Warn("Prometheus targets fetch failed: %v", err)
 		c.JSON(http.StatusOK, gin.H{"connected": false, "targets": []PromTarget{}})
@@ -785,12 +787,12 @@ func GetPromTargets(c *gin.Context) {
 		Status string `json:"status"`
 		Data   struct {
 			ActiveTargets []struct {
-				Labels          map[string]string `json:"labels"`
+				Labels           map[string]string `json:"labels"`
 				DiscoveredLabels map[string]string `json:"discoveredLabels"`
-				ScrapeURL       string            `json:"scrapeUrl"`
-				Health          string            `json:"health"`
-				LastScrape      string            `json:"lastScrape"`
-				LastError       string            `json:"lastError"`
+				ScrapeURL        string            `json:"scrapeUrl"`
+				Health           string            `json:"health"`
+				LastScrape       string            `json:"lastScrape"`
+				LastError        string            `json:"lastError"`
 			} `json:"activeTargets"`
 		} `json:"data"`
 	}
@@ -826,29 +828,281 @@ func GetPromTargets(c *gin.Context) {
 
 // NodeExporterMetrics 单节点全量指标
 type NodeExporterMetrics struct {
-	Instance      string  `json:"instance"`
-	CPUUsage      float64 `json:"cpu_usage"`       // %
-	MemUsage      float64 `json:"mem_usage"`       // %
-	MemTotal      float64 `json:"mem_total_gb"`    // GB
-	MemFree       float64 `json:"mem_free_gb"`     // GB
-	MemUsed       float64 `json:"mem_used_gb"`     // GB
-	DiskUsage     float64 `json:"disk_usage"`      // % (root fs)
-	DiskTotal     float64 `json:"disk_total_gb"`
-	DiskFree      float64 `json:"disk_free_gb"`
-	DiskUsed      float64 `json:"disk_used_gb"`    // GB
-	NetRxBytes    float64 `json:"net_rx_bps"`      // bytes/s
-	NetTxBytes    float64 `json:"net_tx_bps"`      // bytes/s
-	Load1         float64 `json:"load1"`
-	Load5         float64 `json:"load5"`
-	Uptime        float64 `json:"uptime_seconds"`
-	SwapTotal     float64 `json:"swap_total_gb"`   // GB
-	SwapFree      float64 `json:"swap_free_gb"`    // GB
-	SwapUsed      float64 `json:"swap_used_gb"`    // GB
-	SwapUsage     float64 `json:"swap_usage"`      // %
-	TmpTotal      float64 `json:"tmp_total_gb"`    // GB
-	TmpFree       float64 `json:"tmp_free_gb"`     // GB
-	TmpUsed       float64 `json:"tmp_used_gb"`     // GB
-	TmpUsage      float64 `json:"tmp_usage"`       // %
+	Instance   string  `json:"instance"`
+	CPUUsage   float64 `json:"cpu_usage"`    // %
+	MemUsage   float64 `json:"mem_usage"`    // %
+	MemTotal   float64 `json:"mem_total_gb"` // GB
+	MemFree    float64 `json:"mem_free_gb"`  // GB
+	MemUsed    float64 `json:"mem_used_gb"`  // GB
+	DiskUsage  float64 `json:"disk_usage"`   // % (root fs)
+	DiskTotal  float64 `json:"disk_total_gb"`
+	DiskFree   float64 `json:"disk_free_gb"`
+	DiskUsed   float64 `json:"disk_used_gb"` // GB
+	NetRxBytes float64 `json:"net_rx_bps"`   // bytes/s
+	NetTxBytes float64 `json:"net_tx_bps"`   // bytes/s
+	Load1      float64 `json:"load1"`
+	Load5      float64 `json:"load5"`
+	Uptime     float64 `json:"uptime_seconds"`
+	SwapTotal  float64 `json:"swap_total_gb"` // GB
+	SwapFree   float64 `json:"swap_free_gb"`  // GB
+	SwapUsed   float64 `json:"swap_used_gb"`  // GB
+	SwapUsage  float64 `json:"swap_usage"`    // %
+	TmpTotal   float64 `json:"tmp_total_gb"`  // GB
+	TmpFree    float64 `json:"tmp_free_gb"`   // GB
+	TmpUsed    float64 `json:"tmp_used_gb"`   // GB
+	TmpUsage   float64 `json:"tmp_usage"`     // %
+}
+
+// GetMonitoringOverview GET /api/monitoring/overview
+// Returns the core monitoring dashboard payload in one request so the frontend
+// does not need to fan out across Slurm and Prometheus for every refresh.
+func GetMonitoringOverview(c *gin.Context) {
+	usernameValue, exists := c.Get("username")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	username := usernameValue.(string)
+	client, err := GetSlurmClientForUser(username)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to connect to Slurm"})
+		return
+	}
+
+	clusterStats := gin.H{}
+	if stats, err := client.GetClusterStatistics(); err == nil {
+		totalMemoryGB := float64(stats.TotalMemoryMB) / 1024
+		freeMemoryGB := float64(stats.FreeMemoryMB) / 1024
+		clusterStats = gin.H{
+			"total_nodes":          stats.TotalNodes,
+			"online_nodes":         stats.OnlineNodes,
+			"idle_nodes":           stats.IdleNodes,
+			"down_nodes":           stats.DownNodes,
+			"total_cpus":           stats.TotalCPUs,
+			"allocated_cpus":       stats.AllocatedCPUs,
+			"idle_cpus":            stats.IdleCPUs,
+			"cpu_usage_percent":    stats.CPUUsagePercent,
+			"total_memory_gb":      totalMemoryGB,
+			"total_memory_tb":      totalMemoryGB / 1024,
+			"allocated_memory_gb":  float64(stats.AllocatedMemoryMB) / 1024,
+			"free_memory_gb":       freeMemoryGB,
+			"free_memory_tb":       freeMemoryGB / 1024,
+			"memory_usage_percent": stats.MemoryUsagePercent,
+			"total_gpus":           stats.TotalGPUs,
+			"allocated_gpus":       stats.AllocatedGPUs,
+			"idle_gpus":            stats.IdleGPUs,
+		}
+	}
+
+	slurmNodes := []NodeInfo{}
+	if nodes, err := client.GetNodes(); err == nil {
+		nodeJobCount := map[string]int{}
+		if jobs, err := client.GetJobs("", 0, 0); err == nil {
+			for _, job := range jobs {
+				state := job.GetJobState()
+				if state != "RUNNING" && state != "COMPLETING" {
+					continue
+				}
+				for _, nodeName := range parseNodeList(job.Nodes) {
+					nodeJobCount[nodeName]++
+				}
+			}
+		}
+		for _, node := range nodes {
+			slurmNodes = append(slurmNodes, NodeInfo{
+				Name:               node.Name,
+				State:              node.GetNodeState(),
+				CPUTotal:           node.GetTotalCPUs(),
+				CPUAllocated:       node.AllocCPUs,
+				CPUUsagePercent:    node.GetCPUUsagePercent(),
+				MemoryTotalMB:      node.RealMemory,
+				MemoryAllocatedMB:  node.AllocMemory,
+				MemoryUsagePercent: node.GetMemoryUsagePercent(),
+				GPUInfo:            node.Gres,
+				GPUUsed:            node.GresUsed,
+				Partitions:         node.Partitions,
+				RunningJobs:        nodeJobCount[node.Name],
+			})
+		}
+	}
+
+	promConnected, nodeMetrics := collectNodeExporterSnapshot()
+	alertsConnected, alerts := collectPromAlertsSnapshot()
+
+	c.JSON(http.StatusOK, gin.H{
+		"cluster_stats":        clusterStats,
+		"slurm_nodes":          slurmNodes,
+		"node_metrics":         nodeMetrics,
+		"prometheus_connected": promConnected,
+		"alerts_connected":     alertsConnected,
+		"alerts":               alerts,
+		"updated_at":           time.Now().Format(time.RFC3339),
+	})
+}
+
+func collectPromAlertsSnapshot() (bool, []json.RawMessage) {
+	base := getPrometheusURL()
+	if base == "" {
+		return false, []json.RawMessage{}
+	}
+	resp, err := promHTTPClient.Get(base + "/api/v1/alerts")
+	if err != nil {
+		logger.Warn("Prometheus alerts fetch failed: %v", err)
+		return false, []json.RawMessage{}
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+
+	var result struct {
+		Status string `json:"status"`
+		Data   struct {
+			Alerts []json.RawMessage `json:"alerts"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil || result.Status != "success" {
+		return false, []json.RawMessage{}
+	}
+
+	firing := []json.RawMessage{}
+	for _, raw := range result.Data.Alerts {
+		var a struct {
+			State string `json:"state"`
+		}
+		if json.Unmarshal(raw, &a) == nil && a.State == "firing" {
+			firing = append(firing, raw)
+		}
+	}
+	return true, firing
+}
+
+func collectNodeExporterSnapshot() (bool, []NodeExporterMetrics) {
+	base := getPrometheusURL()
+	if base == "" {
+		return false, []NodeExporterMetrics{}
+	}
+
+	type queryDef struct {
+		q   string
+		key string
+	}
+	queries := []queryDef{
+		{`100 - (rate(node_cpu_seconds_total{mode="idle"}[2m]) * 100)`, "cpu_raw"},
+		{`100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)`, "mem_pct"},
+		{`node_memory_MemTotal_bytes / 1073741824`, "mem_total"},
+		{`node_memory_MemAvailable_bytes / 1073741824`, "mem_free"},
+		{`(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / 1073741824`, "mem_used"},
+		{`100 - (node_filesystem_avail_bytes{mountpoint="/",fstype!="tmpfs"} / node_filesystem_size_bytes{mountpoint="/",fstype!="tmpfs"} * 100)`, "disk_pct"},
+		{`node_filesystem_size_bytes{mountpoint="/",fstype!="tmpfs"} / 1073741824`, "disk_total"},
+		{`node_filesystem_avail_bytes{mountpoint="/",fstype!="tmpfs"} / 1073741824`, "disk_free"},
+		{`(node_filesystem_size_bytes{mountpoint="/",fstype!="tmpfs"} - node_filesystem_avail_bytes{mountpoint="/",fstype!="tmpfs"}) / 1073741824`, "disk_used"},
+		{`rate(node_network_receive_bytes_total{device!~"lo|docker.*|veth.*"}[2m])`, "net_rx"},
+		{`rate(node_network_transmit_bytes_total{device!~"lo|docker.*|veth.*"}[2m])`, "net_tx"},
+		{`node_load1`, "load1"},
+		{`node_load5`, "load5"},
+		{`time() - node_boot_time_seconds`, "uptime"},
+		{`node_memory_SwapTotal_bytes / 1073741824`, "swap_total"},
+		{`node_memory_SwapFree_bytes / 1073741824`, "swap_free"},
+		{`(node_memory_SwapTotal_bytes - node_memory_SwapFree_bytes) / 1073741824`, "swap_used"},
+		{`100 * (1 - node_memory_SwapFree_bytes / node_memory_SwapTotal_bytes)`, "swap_pct"},
+		{`node_filesystem_size_bytes{mountpoint="/tmp"} / 1073741824`, "tmp_total"},
+		{`node_filesystem_avail_bytes{mountpoint="/tmp"} / 1073741824`, "tmp_free"},
+		{`(node_filesystem_size_bytes{mountpoint="/tmp"} - node_filesystem_avail_bytes{mountpoint="/tmp"}) / 1073741824`, "tmp_used"},
+		{`100 - (node_filesystem_avail_bytes{mountpoint="/tmp"} / node_filesystem_size_bytes{mountpoint="/tmp"} * 100)`, "tmp_pct"},
+	}
+
+	results := make(map[string]map[string]float64)
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	for _, q := range queries {
+		wg.Add(1)
+		go func(qd queryDef) {
+			defer wg.Done()
+			m, err := promQuery(qd.q)
+			if err != nil {
+				return
+			}
+			mu.Lock()
+			results[qd.key] = m
+			mu.Unlock()
+		}(q)
+	}
+	wg.Wait()
+	results["cpu"] = results["cpu_raw"]
+
+	instanceSet := map[string]bool{}
+	for _, m := range results {
+		for k := range m {
+			instanceSet[k] = true
+		}
+	}
+
+	nodes := make([]NodeExporterMetrics, 0, len(instanceSet))
+	for inst := range instanceSet {
+		get := func(key string) float64 {
+			if m, ok := results[key]; ok {
+				if v, ok2 := m[inst]; ok2 {
+					return v
+				}
+			}
+			return 0
+		}
+		netRx := 0.0
+		netTx := 0.0
+		if m, ok := results["net_rx"]; ok {
+			for k, v := range m {
+				if strings.HasPrefix(k, inst) || k == inst {
+					netRx += v
+				}
+			}
+		}
+		if m, ok := results["net_tx"]; ok {
+			for k, v := range m {
+				if strings.HasPrefix(k, inst) || k == inst {
+					netTx += v
+				}
+			}
+		}
+		swapTotal := get("swap_total")
+		tmpTotal := get("tmp_total")
+		nodes = append(nodes, NodeExporterMetrics{
+			Instance:   inst,
+			CPUUsage:   get("cpu"),
+			MemUsage:   get("mem_pct"),
+			MemTotal:   get("mem_total"),
+			MemFree:    get("mem_free"),
+			MemUsed:    get("mem_used"),
+			DiskUsage:  get("disk_pct"),
+			DiskTotal:  get("disk_total"),
+			DiskFree:   get("disk_free"),
+			DiskUsed:   get("disk_used"),
+			NetRxBytes: netRx,
+			NetTxBytes: netTx,
+			Load1:      get("load1"),
+			Load5:      get("load5"),
+			Uptime:     get("uptime"),
+			SwapTotal:  swapTotal,
+			SwapFree:   get("swap_free"),
+			SwapUsed:   get("swap_used"),
+			SwapUsage: func() float64 {
+				if swapTotal > 0 {
+					return get("swap_pct")
+				}
+				return 0
+			}(),
+			TmpTotal: tmpTotal,
+			TmpFree:  get("tmp_free"),
+			TmpUsed:  get("tmp_used"),
+			TmpUsage: func() float64 {
+				if tmpTotal > 0 {
+					return get("tmp_pct")
+				}
+				return 0
+			}(),
+		})
+	}
+
+	return true, nodes
 }
 
 // GetNodeExporterMetrics GET /api/monitoring/node-metrics
@@ -1020,7 +1274,7 @@ func GetPromRules(c *gin.Context) {
 		return
 	}
 
-	resp, err := http.Get(base + "/api/v1/rules?type=alert")
+	resp, err := promHTTPClient.Get(base + "/api/v1/rules?type=alert")
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"connected": false, "groups": []interface{}{}, "error": err.Error()})
 		return
@@ -1043,21 +1297,21 @@ func GetPromRules(c *gin.Context) {
 
 // LocalHostMetrics 本机实时指标
 type LocalHostMetrics struct {
-	Hostname   string  `json:"hostname"`
-	CPUUsage   float64 `json:"cpu_usage"`
-	MemUsage   float64 `json:"mem_usage"`
-	MemTotalGB float64 `json:"mem_total_gb"`
-	MemUsedGB  float64 `json:"mem_used_gb"`
-	DiskUsage  float64 `json:"disk_usage"`
+	Hostname    string  `json:"hostname"`
+	CPUUsage    float64 `json:"cpu_usage"`
+	MemUsage    float64 `json:"mem_usage"`
+	MemTotalGB  float64 `json:"mem_total_gb"`
+	MemUsedGB   float64 `json:"mem_used_gb"`
+	DiskUsage   float64 `json:"disk_usage"`
 	DiskTotalGB float64 `json:"disk_total_gb"`
 	DiskUsedGB  float64 `json:"disk_used_gb"`
-	NetRxBps   float64 `json:"net_rx_bps"`
-	NetTxBps   float64 `json:"net_tx_bps"`
-	Load1      float64 `json:"load1"`
-	Load5      float64 `json:"load5"`
-	Load15     float64 `json:"load15"`
-	UptimeSecs float64 `json:"uptime_seconds"`
-	Connected  bool    `json:"connected"`
+	NetRxBps    float64 `json:"net_rx_bps"`
+	NetTxBps    float64 `json:"net_tx_bps"`
+	Load1       float64 `json:"load1"`
+	Load5       float64 `json:"load5"`
+	Load15      float64 `json:"load15"`
+	UptimeSecs  float64 `json:"uptime_seconds"`
+	Connected   bool    `json:"connected"`
 }
 
 // GetLocalMetrics GET /api/monitoring/local-metrics
@@ -1177,13 +1431,17 @@ func PromQueryInstant(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "query is required"})
 		return
 	}
+	if len(query) > 4096 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "query is too long"})
+		return
+	}
 	base := getPrometheusURL()
 	if base == "" {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "PROMETHEUS_URL not configured"})
 		return
 	}
 	apiURL := base + "/api/v1/query?query=" + url.QueryEscape(query)
-	resp, err := http.Get(apiURL)
+	resp, err := promHTTPClient.Get(apiURL)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 		return
@@ -1200,18 +1458,47 @@ func PromQueryRange(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "query is required"})
 		return
 	}
+	if len(query) > 4096 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "query is too long"})
+		return
+	}
 	base := getPrometheusURL()
 	if base == "" {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "PROMETHEUS_URL not configured"})
 		return
 	}
-	start := c.DefaultQuery("start", fmt.Sprintf("%d", time.Now().Add(-1*time.Hour).Unix()))
-	end := c.DefaultQuery("end", fmt.Sprintf("%d", time.Now().Unix()))
-	step := c.DefaultQuery("step", "60")
+	now := time.Now()
+	startUnix := now.Add(-1 * time.Hour).Unix()
+	endUnix := now.Unix()
+	if v := c.Query("start"); v != "" {
+		parsed, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid start"})
+			return
+		}
+		startUnix = parsed
+	}
+	if v := c.Query("end"); v != "" {
+		parsed, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid end"})
+			return
+		}
+		endUnix = parsed
+	}
+	stepSeconds, err := strconv.ParseInt(c.DefaultQuery("step", "60"), 10, 64)
+	if err != nil || stepSeconds < 15 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "step must be at least 15 seconds"})
+		return
+	}
+	if endUnix < startUnix || endUnix-startUnix > int64(24*time.Hour/time.Second) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "range must be between 0 and 24 hours"})
+		return
+	}
 
 	apiURL := fmt.Sprintf("%s/api/v1/query_range?query=%s&start=%s&end=%s&step=%s",
-		base, url.QueryEscape(query), start, end, step)
-	resp, err := http.Get(apiURL)
+		base, url.QueryEscape(query), strconv.FormatInt(startUnix, 10), strconv.FormatInt(endUnix, 10), strconv.FormatInt(stepSeconds, 10))
+	resp, err := promHTTPClient.Get(apiURL)
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 		return

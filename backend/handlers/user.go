@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 	"unicode"
 
@@ -226,7 +227,7 @@ func CreateUser(c *gin.Context) {
 				assoc := &slurm.Association{
 					User:    user.Username,
 					Account: user.Username,
-					Cluster: "cluster",
+					Cluster: slurm.GetDefaultClusterName(),
 					QoS:     []string{q.Name},
 				}
 				_ = slurmClient.CreateAssociation(assoc)
@@ -237,6 +238,11 @@ func CreateUser(c *gin.Context) {
 
 	// 不返回密码
 	user.Password = ""
+	
+	// 清除缓存
+	mgr := cache.NewManager()
+	mgr.Delete(cache.UserListKey())
+	
 	c.JSON(http.StatusCreated, gin.H{"message": "User created successfully", "data": user})
 }
 
@@ -279,6 +285,11 @@ func UpdateUser(c *gin.Context) {
 		return
 	}
 
+	// 清除缓存
+	mgr := cache.NewManager()
+	mgr.Delete(cache.UserListKey())
+	mgr.Delete(cache.UserKey(username))
+
 	c.JSON(http.StatusOK, gin.H{"message": "User updated successfully"})
 }
 
@@ -303,6 +314,11 @@ func DeleteUser(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
+	// 清除缓存
+	mgr := cache.NewManager()
+	mgr.Delete(cache.UserListKey())
+	mgr.Delete(cache.UserKey(username))
 
 	c.JSON(http.StatusOK, gin.H{"message": "User deleted successfully"})
 }
@@ -706,15 +722,17 @@ func GetMyResources(c *gin.Context) {
 				},
 				"qos_limits": []map[string]interface{}{
 					{
-						"name":        "normal",
-						"max_cpus":    128,
-						"max_nodes":   4,
-						"max_memory":  256,
-						"max_gpus":    0,
-						"max_jobs":    100,
-						"max_submit":  200,
-						"max_wall":    72,
-						"grp_tres_mins": 0,
+						"name":               "normal",
+						"max_cpus":           128,
+						"max_nodes":          4,
+						"max_memory":         256,
+						"max_gpus":           0,
+						"max_jobs":           100,
+						"max_submit":         200,
+						"max_wall":           72,
+						"grp_tres_mins":      0,
+						"billing_limit_mins": 60600,  // 1010 小时 = 60600 分钟
+						"billing_used_mins":  15621.6, // 260.36 小时 = 15621.6 分钟
 					},
 				},
 			},
@@ -753,6 +771,7 @@ func GetMyResources(c *gin.Context) {
 		item := map[string]interface{}{
 			"account":   a.Account,
 			"partition": a.Partition,
+			"cluster":   a.Cluster,
 			"qos":       "",
 			"qos_list":  qosList,
 			"max_jobs":  0,
@@ -771,11 +790,14 @@ func GetMyResources(c *gin.Context) {
 		// 获取所有用户的历史作业（用于统计 QoS 总使用量）
 		// 因为一个 account 对应一个 QoS，需要统计该 QoS 下所有用户的使用量
 		var allUsersRecords []slurm.UsageRecord
-		startTime := time.Now().AddDate(-1, 0, 0) // 近一年
-		endTime := time.Now()
-		// 使用空字符串获取所有用户的记录
-		allUsersRecords, _ = client.GetUserUsage("", startTime, endTime)
-		fmt.Printf("[BILLING] fetched all users records, total=%d\n", len(allUsersRecords))
+		// 使用今年的数据（与 AdminHours 保持一致）
+		now := time.Now()
+		startTime := time.Date(now.Year(), 1, 1, 0, 0, 0, 0, now.Location())
+		endTime := now
+		// 使用 GetAllUsersUsage 获取所有用户的记录
+		allUsersRecords, _ = client.GetAllUsersUsage(startTime, endTime)
+		fmt.Printf("[BILLING] fetched all users records, total=%d (from %s to %s)\n", 
+			len(allUsersRecords), startTime.Format("2006-01-02"), endTime.Format("2006-01-02"))
 
 		for _, q := range allQoS {
 			if !qosNames[q.Name] {
@@ -799,23 +821,26 @@ func GetMyResources(c *gin.Context) {
 			// 注意：一个 account 对应一个 QoS，统计该 QoS 下所有用户的使用量
 			var usedBillingMins float64
 			if billingLimit > 0 {
+				matchedCount := 0
 				for _, r := range allUsersRecords {
-					// 按 QoS 过滤（因为一个 account 对应一个 QoS）
-					if r.QoS == q.Name {
+					// 按 QoS 过滤（不区分大小写）
+					if strings.EqualFold(r.QoS, q.Name) {
 						usedBillingMins += r.BillingMins
+						matchedCount++
 					}
 				}
 				// 如果按 QoS 过滤后为 0，可能是 slurmdb 不返回 QoS 字段
 				// 尝试按 account 过滤（假设 QoS 名称 == account 名称）
 				if usedBillingMins == 0 {
 					for _, r := range allUsersRecords {
-						if r.Account == q.Name {
+						if strings.EqualFold(r.Account, q.Name) {
 							usedBillingMins += r.BillingMins
+							matchedCount++
 						}
 					}
 				}
-				fmt.Printf("[BILLING] qos=%s limit=%d used=%.4f mins (all users in this account)\n",
-					q.Name, billingLimit, usedBillingMins)
+				fmt.Printf("[BILLING] qos=%s limit=%d used=%.4f mins matched_jobs=%d (all users in this account)\n",
+					q.Name, billingLimit, usedBillingMins, matchedCount)
 			}
 
 			item := map[string]interface{}{
@@ -842,4 +867,7 @@ func GetMyResources(c *gin.Context) {
 			"qos_limits":   qosLimits,
 		},
 	})
+	
+	fmt.Printf("[RESOURCES] Response for user=%s: associations=%d qos_limits=%d\n", 
+		username, len(assocList), len(qosLimits))
 }

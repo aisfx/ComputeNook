@@ -43,6 +43,21 @@ func main() {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
 
+	// 启动时自动从 partition.conf 导入分区配置（仅导入不存在的）
+	confPath := os.Getenv("SLURM_PARTITION_CONF")
+	if confPath == "" {
+		confPath = "/etc/slurm/partition.conf"
+	}
+	if _, err := os.Stat(confPath); err == nil {
+		if n, err := models.ImportPartitionsFromConfFile(confPath); err != nil {
+			log.Printf("Warning: failed to import partitions from %s: %v", confPath, err)
+		} else if n > 0 {
+			log.Printf("Auto-imported %d partition(s) from %s", n, confPath)
+		}
+	} else {
+		log.Printf("partition.conf not found at %s, skipping auto-import", confPath)
+	}
+
 	// 初始化Redis缓存
 	if os.Getenv("REDIS_ENABLE") == "true" {
 		if err := cache.InitRedis(); err != nil {
@@ -135,7 +150,7 @@ func main() {
 	auth.Use(middleware.AuthMiddleware())
 	{
 		auth.GET("/me", handlers.GetCurrentUser)
-		auth.GET("/me/resources", handlers.GetMyResources)
+		auth.GET("/me/resources", cache.CacheMiddleware(cache.PrefixUser+"resources:", 1*time.Minute), handlers.GetMyResources)
 		auth.POST("/logout", handlers.Logout)
 		auth.POST("/ai/chat", handlers.AIChat)
 		auth.POST("/ai/admin/chat", middleware.AdminMiddleware(), handlers.AIAdminChat)
@@ -143,7 +158,7 @@ func main() {
 		// MFA 管理（登录用户自助）
 		auth.GET("/mfa/status", handlers.GetMFAStatus)
 		auth.DELETE("/mfa", handlers.DisableMFA)
-		auth.POST("/mfa/setup-auth", handlers.SetupMFAAuth)   // 已登录用户自助绑定
+		auth.POST("/mfa/setup-auth", handlers.SetupMFAAuth)     // 已登录用户自助绑定
 		auth.POST("/mfa/confirm-auth", handlers.ConfirmMFAAuth) // 已登录用户确认绑定
 		// 管理员 MFA 管理
 		auth.GET("/mfa/admin/list", middleware.AdminMiddleware(), handlers.AdminListMFA)
@@ -162,7 +177,7 @@ func main() {
 		{
 			users.GET("", handlers.GetUsers)
 			users.GET("/next-uid", handlers.GetNextUID)
-			users.GET("/:username", handlers.GetUser)
+			users.GET("/:username", cache.CacheMiddleware(cache.PrefixUser, 3*time.Minute), handlers.GetUser)
 			users.POST("", handlers.CreateUser)
 			users.PUT("/:username", handlers.UpdateUser)
 			users.DELETE("/:username", handlers.DeleteUser)
@@ -175,9 +190,9 @@ func main() {
 		groups := auth.Group("/groups")
 		groups.Use(middleware.AdminMiddleware())
 		{
-			groups.GET("", handlers.GetGroups)
+			groups.GET("", cache.CacheMiddleware(cache.PrefixGroup+"list:", 5*time.Minute), handlers.GetGroups)
 			groups.GET("/next-gid", handlers.GetNextGID)
-			groups.GET("/:gid", handlers.GetGroup)
+			groups.GET("/:gid", cache.CacheMiddleware(cache.PrefixGroup, 3*time.Minute), handlers.GetGroup)
 			groups.POST("", handlers.CreateGroup)
 			groups.PUT("/:gid", handlers.UpdateGroup)
 			groups.DELETE("/:gid", handlers.DeleteGroup)
@@ -216,7 +231,25 @@ func main() {
 			qos.DELETE("/:name", handlers.DeleteQoS)
 		}
 
-		// 机时充值管理
+		// Slurm 分区配置管理
+		partitions := auth.Group("/partitions")
+		partitions.Use(middleware.AdminMiddleware())
+		{
+			partitions.GET("", handlers.GetPartitionConfigs)
+			partitions.GET("/:name", handlers.GetPartitionConfig)
+			partitions.POST("", handlers.CreatePartitionConfig)
+			partitions.PUT("/:name", handlers.UpdatePartitionConfig)
+			partitions.DELETE("/:name", handlers.DeletePartitionConfig)
+			partitions.POST("/generate", handlers.GeneratePartitionConf)
+			partitions.POST("/apply", handlers.ApplyPartitionConfig)
+			partitions.POST("/reload", handlers.ReloadSlurmConfig)
+			partitions.POST("/restart", handlers.RestartSlurmService)
+			partitions.GET("/export", handlers.ExportPartitionConfigs)
+			partitions.POST("/import", handlers.ImportPartitionConfigs)
+			partitions.POST("/import-conf", handlers.ImportFromConfFile)
+		}
+
+		// 机时充值管理（旧接口，保留兼容）
 		billing := auth.Group("/billing")
 		billing.Use(middleware.AdminMiddleware())
 		{
@@ -224,12 +257,26 @@ func main() {
 			billing.GET("/recharge/history", handlers.GetRechargeHistory)
 		}
 
+		// 新的机时管理系统
+		billingV2 := auth.Group("/billing/v2")
+		billingV2.Use(middleware.AdminMiddleware())
+		{
+			billingV2.GET("/accounts", cache.CacheMiddleware(cache.PrefixBilling+"accounts:", 2*time.Minute), handlers.GetBillingAccounts) // 获取所有机时账户
+			billingV2.POST("/recharge", handlers.RechargeBilling)                                                                          // 充值
+			billingV2.GET("/recharge/records", handlers.GetRechargeRecords)                                                                // 充值记录
+			billingV2.GET("/records", handlers.GetBillingRecords)                                                                          // 消费记录
+			billingV2.POST("/sync", handlers.SyncBillingFromSlurm)                                                                         // 从 Slurm 同步
+		}
+
+		// 用户查看自己的机时信息
+		auth.GET("/me/billing", handlers.GetMyBillingInfo)
+
 		// Slurm 资源绑定管理
 		associations := auth.Group("/slurm/associations")
 		associations.Use(middleware.AdminMiddleware())
 		{
-			associations.GET("", handlers.GetAssociations)
-			associations.GET("/single", handlers.GetAssociation)
+			associations.GET("", cache.CacheMiddleware(cache.PrefixAssociation+"list:", 3*time.Minute), handlers.GetAssociations)
+			associations.GET("/single", cache.CacheMiddleware(cache.PrefixAssociation+"single:", 3*time.Minute), handlers.GetAssociation)
 			associations.POST("", handlers.CreateAssociation)
 			associations.PUT("", handlers.UpdateAssociation)
 			associations.DELETE("", handlers.DeleteAssociation)
@@ -260,7 +307,7 @@ func main() {
 			// debug 接口限管理员
 			usage.GET("/debug", middleware.AdminMiddleware(), handlers.DebugUserUsage)
 			usage.GET("/debug/raw", middleware.AdminMiddleware(), handlers.DebugRawJobs)
-			
+
 			// 管理员可以查看所有使用情况
 			usage.GET("/account", middleware.AdminMiddleware(), handlers.GetAccountUsageWithBilling)
 			usage.GET("/account/user", middleware.AdminMiddleware(), handlers.GetUserUsageByAccount)
@@ -285,7 +332,7 @@ func main() {
 		// 作业模板 API
 		appTemplates := auth.Group("/app-templates")
 		{
-			appTemplates.GET("", handlers.ListAppTemplates)
+			appTemplates.GET("", cache.CacheMiddleware(cache.PrefixAppTemplate+"list:", 10*time.Minute), handlers.ListAppTemplates)
 			appTemplates.POST("", handlers.CreateAppTemplate)
 			appTemplates.PUT("/:id", handlers.UpdateAppTemplate)
 			appTemplates.DELETE("/:id", handlers.DeleteAppTemplate)
@@ -295,25 +342,25 @@ func main() {
 		webshell := auth.Group("/webshell")
 		{
 			// 获取可用节点
-			webshell.GET("/nodes", handlers.GetNodes)
-			
+			webshell.GET("/nodes", cache.CacheMiddleware(cache.PrefixNode+"webshell:", 2*time.Minute), handlers.GetNodes)
+
 			// WebSocket连接
 			webshell.GET("/connect", handlers.ConnectWebShell)
-			
+
 			// 会话管理
 			webshell.GET("/sessions", handlers.GetSessions)
 			webshell.DELETE("/sessions/:session_id", handlers.CloseSession)
-			
+
 			// 日志管理
 			webshell.GET("/logs", handlers.GetSessionLogs)
 			webshell.GET("/logs/:log_file/download", handlers.DownloadSessionLog)
-			
+
 			// 私钥管理
 			webshell.GET("/keys/check", handlers.CheckPrivateKey)
 			webshell.POST("/keys/upload", handlers.UploadPrivateKey)
 			webshell.POST("/keys/generate", handlers.GenerateKeyPair)
 			webshell.POST("/keys/deploy", handlers.DeployPublicKey)
-			
+
 			// 连接测试
 			webshell.POST("/nodes/:node_name/test", handlers.TestNodeConnection)
 		}
@@ -329,7 +376,7 @@ func main() {
 			desktop.DELETE("/sessions/:id", handlers.DeleteDesktopSession)
 			desktop.GET("/sessions/:id/logs", handlers.GetDesktopSessionLogs)
 			desktop.GET("/sessions/:id/script", handlers.GetDesktopScript)
-			desktop.GET("/resource-presets", handlers.GetDesktopResourcePresets)
+			desktop.GET("/resource-presets", cache.CacheMiddleware(cache.PrefixDesktop+"presets:", 10*time.Minute), handlers.GetDesktopResourcePresets)
 			desktop.POST("/cleanup", handlers.CleanupUserSpace)
 			// 应用管理
 			desktop.GET("/apps", handlers.GetDesktopApps)
@@ -341,9 +388,9 @@ func main() {
 			desktop.POST("/sessions/:id/client-exit", handlers.NotifyClientExit)
 			desktop.GET("/sessions/:id/client-signal", handlers.GetClientSignal)
 
-		// Xpra HTML5 代理：独立路由，不强制 JWT（子资源无法带 header）
-		// 安全性依赖 session ID 的不可猜测性
-		r.GET("/api/desktop/sessions/:id/xpra-html/*path", handlers.XpraHTTPProxy)
+			// Xpra HTML5 代理：独立路由，不强制 JWT（子资源无法带 header）
+			// 安全性依赖 session ID 的不可猜测性
+			r.GET("/api/desktop/sessions/:id/xpra-html/*path", handlers.XpraHTTPProxy)
 		}
 
 		// SSH WebSocket 隧道：转发到计算节点 SSH 端口
@@ -386,23 +433,25 @@ func main() {
 
 		// 监控 API
 		monitoring := auth.Group("/monitoring")
+		monitoring.Use(middleware.AdminMiddleware())
 		{
 			monitoring.GET("/metrics", cache.CacheMiddleware(cache.PrefixMonitoring+"metrics:", 15*time.Second), handlers.GetNodeMetrics)
+			monitoring.GET("/overview", cache.CacheMiddleware(cache.PrefixMonitoring+"overview:", 15*time.Second), handlers.GetMonitoringOverview)
 			monitoring.GET("/node-metrics", cache.CacheMiddleware(cache.PrefixMonitoring+"node-metrics:", 15*time.Second), handlers.GetNodeExporterMetrics)
 			monitoring.GET("/local-metrics", cache.CacheMiddleware(cache.PrefixMonitoring+"local-metrics:", 15*time.Second), handlers.GetLocalMetrics)
 			monitoring.GET("/mgmt-services", cache.CacheMiddleware(cache.PrefixMonitoring+"mgmt-services:", 15*time.Second), handlers.GetMgmtServices)
 			monitoring.GET("/rack", handlers.GetRackLayout)
-			monitoring.POST("/rack", handlers.CreateRack)
-			monitoring.PUT("/rack/:id", handlers.UpdateRack)
-			monitoring.DELETE("/rack/:id", handlers.DeleteRack)
-			monitoring.POST("/rack/auto", handlers.AutoGenerateRacks)
+			monitoring.POST("/rack", middleware.AdminMiddleware(), handlers.CreateRack)
+			monitoring.PUT("/rack/:id", middleware.AdminMiddleware(), handlers.UpdateRack)
+			monitoring.DELETE("/rack/:id", middleware.AdminMiddleware(), handlers.DeleteRack)
+			monitoring.POST("/rack/auto", middleware.AdminMiddleware(), handlers.AutoGenerateRacks)
 			monitoring.GET("/prom-alerts", cache.CacheMiddleware(cache.PrefixMonitoring+"prom-alerts:", 15*time.Second), handlers.GetPromAlerts)
 			monitoring.GET("/prom-targets", cache.CacheMiddleware(cache.PrefixMonitoring+"prom-targets:", 30*time.Second), handlers.GetPromTargets)
 			monitoring.GET("/prom-rules", cache.CacheMiddleware(cache.PrefixMonitoring+"prom-rules:", 60*time.Second), handlers.GetPromRules)
 			monitoring.GET("/promql", handlers.PromQueryInstant)
 			monitoring.GET("/promql/range", handlers.PromQueryRange)
 		}
-		
+
 		// 缓存监控API（管理员）
 		cacheAPI := auth.Group("/cache")
 		cacheAPI.Use(middleware.AdminMiddleware())
@@ -415,10 +464,10 @@ func main() {
 		// 报表中心 API
 		reports := auth.Group("/reports")
 		{
-			reports.GET("/jobs",      handlers.GetJobStats)
-			reports.GET("/usage",     handlers.GetUsageStats)
-			reports.GET("/storage",   handlers.GetStorageStats)
-			reports.GET("/quota",     handlers.GetQuotaStats)
+			reports.GET("/jobs", handlers.GetJobStats)
+			reports.GET("/usage", handlers.GetUsageStats)
+			reports.GET("/storage", handlers.GetStorageStats)
+			reports.GET("/quota", handlers.GetQuotaStats)
 			reports.GET("/qos-usage", handlers.GetQoSUsage)
 		}
 
@@ -442,8 +491,8 @@ func main() {
 		// 镜像仓库 API（Harbor 代理）
 		registry := auth.Group("/registry")
 		{
-			registry.GET("/config", handlers.GetRegistryConfig)
-			registry.GET("/projects", handlers.ListProjects)
+			registry.GET("/config", cache.CacheMiddleware(cache.PrefixRegistry+"config:", 5*time.Minute), handlers.GetRegistryConfig)
+			registry.GET("/projects", cache.CacheMiddleware(cache.PrefixRegistry+"projects:", 2*time.Minute), handlers.ListProjects)
 			registry.GET("/projects/:project/repositories", handlers.ListRepositories)
 			registry.GET("/projects/:project/repositories/:repo/tags", handlers.ListTags)
 			registry.DELETE("/projects/:project/repositories/:repo", handlers.DeleteRepository)
@@ -456,7 +505,7 @@ func main() {
 		cmdb := auth.Group("/cmdb")
 		cmdb.Use(middleware.AdminMiddleware())
 		{
-			cmdb.GET("/hosts", handlers.GetHosts)
+			cmdb.GET("/hosts", cache.CacheMiddleware(cache.PrefixCMDB+"hosts:", 5*time.Minute), handlers.GetHosts)
 			cmdb.POST("/hosts", handlers.CreateHost)
 			cmdb.PUT("/hosts/:id", handlers.UpdateHost)
 			cmdb.DELETE("/hosts/:id", handlers.DeleteHost)
@@ -512,8 +561,11 @@ func main() {
 
 	log.Printf("Server starting on port %s", port)
 	log.Printf("API Documentation: http://localhost:%s/api", port)
-	
-	if err := r.Run(":" + port); err != nil {
+
+	// 明确监听 IPv4 地址，避免只监听 IPv6
+	addr := "0.0.0.0:" + port
+	log.Printf("Listening on %s", addr)
+	if err := r.Run(addr); err != nil {
 		log.Fatal("Failed to start server:", err)
 	}
 }

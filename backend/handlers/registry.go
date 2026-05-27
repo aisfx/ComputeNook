@@ -19,8 +19,8 @@ import (
 // SaveImageTask 保存镜像任务状态
 type SaveImageTask struct {
 	TaskID      string `json:"task_id"`
-	Status      string `json:"status"`   // pending / running / done / error
-	Step        int    `json:"step"`     // 1-4
+	Status      string `json:"status"` // pending / running / done / error
+	Step        int    `json:"step"`   // 1-4
 	TotalSteps  int    `json:"total_steps"`
 	StepDesc    string `json:"step_desc"`
 	TargetImage string `json:"target_image"`
@@ -203,6 +203,7 @@ func GetRegistryConfig(c *gin.Context) {
 		"harbor_url":      harborURL,
 		"user_project":    username,
 		"public_projects": publicProjects,
+		"isAdmin":         isAdmin,
 		"is_admin":        isAdmin,
 	})
 }

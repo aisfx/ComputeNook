@@ -115,6 +115,11 @@ func (c *Client) doRequest(method, path string, body interface{}) ([]byte, error
 		return nil, fmt.Errorf("failed to read response body: %w", err)
 	}
 
+	// 304 Not Modified 在某些删除操作中是正常的（资源已不存在或未改变）
+	if resp.StatusCode == 304 {
+		return respBody, nil
+	}
+
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		// 尝试解析 Slurm API 错误响应
 		var errorResp struct {

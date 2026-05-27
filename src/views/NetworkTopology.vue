@@ -16,6 +16,7 @@
         <button class="btn-sec" :class="{active:linkMode}" @click="toggleLinkMode">{{ linkMode ? "连线中..." : "手动连线" }}</button>
         <button class="btn-sec" @click="clearLinks" :disabled="edges.length===0">清空连线</button>
         <button class="btn-sec" @click="loadData" :disabled="loading">{{ loading?"加载中...":"刷新" }}</button>
+        <button class="btn-sec" @click="rebuildTopo" :disabled="loading">重新生成</button>
         <button class="btn-sec" @click="resetView">重置视图</button>
       </div>
     </div>
@@ -156,17 +157,98 @@ function load() {
   } catch {}
 }
 
+// 根据真实节点自动布局生成拓扑
+const buildTopoFromNodes = (nodes: any[], healthMap: Record<string, any>) => {
+  const newNodes: TopoNode[] = []
+  const newEdges: Edge[] = []
+
+  // 核心交换机（中心）
+  const coreId = 'core-switch'
+  newNodes.push({
+    id: coreId, label: '核心交换机', type: 'switch', model: 'Core Switch',
+    ip: '', promHealth: 'up', promError: '', latency: null, cpu: null, mem: null,
+    x: 500, y: 300, r: 26,
+  })
+
+  // 按分区/类型分组
+  const groups: Record<string, any[]> = {}
+  for (const n of nodes) {
+    const partitions: string[] = n.partitions || []
+    const key = partitions.length > 0 ? partitions[0] : (n.name?.toLowerCase().includes('gpu') ? 'gpu' : 'compute')
+    if (!groups[key]) groups[key] = []
+    groups[key].push(n)
+  }
+
+  const groupKeys = Object.keys(groups)
+  const groupCount = groupKeys.length
+
+  groupKeys.forEach((gKey, gi) => {
+    const angle = (gi / groupCount) * Math.PI * 2 - Math.PI / 2
+    const swX = 500 + Math.cos(angle) * 200
+    const swY = 300 + Math.sin(angle) * 180
+    const swId = `sw-${gKey}`
+
+    // 汇聚交换机
+    newNodes.push({
+      id: swId, label: `${gKey}`, type: 'switch', model: '',
+      ip: '', promHealth: 'up', promError: '', latency: null, cpu: null, mem: null,
+      x: swX, y: swY, r: 20,
+    })
+    newEdges.push({ id: `e-core-${swId}`, from: coreId, to: swId, dashed: false })
+
+    // 该组的节点
+    const groupNodes = groups[gKey]
+    const cols = Math.min(groupNodes.length, 5)
+    groupNodes.forEach((n: any, ni: number) => {
+      const col = ni % cols
+      const row = Math.floor(ni / cols)
+      const spread = Math.min(cols, groupNodes.length) * 50
+      const nx = swX + (col - (cols - 1) / 2) * 55
+      const ny = swY + 70 + row * 55
+
+      const hk = n.name || ''
+      const h = healthMap[hk] || { health: 'unknown', error: '', latency: null }
+      const state = (n.state || '').toUpperCase()
+      let health = h.health
+      if (health === 'unknown') {
+        if (state.includes('DOWN') || state.includes('DRAIN')) health = 'down'
+        else if (state.includes('ALLOC') || state.includes('MIX') || state.includes('IDLE')) health = 'up'
+      }
+
+      const isGpu = n.gpu_info && n.gpu_info !== '' && n.gpu_info !== 'N/A'
+      const nodeType = isGpu ? 'gpu' : 'compute'
+      const nid = `node-${n.name}`
+      const prev = topoNodes.value.find(x => x.id === nid)
+
+      newNodes.push({
+        id: nid, label: n.name, type: nodeType, model: '',
+        ip: '', promHealth: health, promError: h.error || '', latency: h.latency,
+        cpu: Math.round(n.cpu_usage_percent || 0),
+        mem: Math.round(n.memory_usage_percent || 0),
+        x: prev?.x ?? nx, y: prev?.y ?? ny, r: 18,
+      })
+      newEdges.push({ id: `e-${swId}-${nid}`, from: swId, to: nid, dashed: false })
+    })
+  })
+
+  return { newNodes, newEdges }
+}
+
 const loadData = async () => {
   loading.value = true; error.value = ''
   try {
-    const [rRes, tRes] = await Promise.allSettled([
+    const [rRes, tRes, nRes] = await Promise.allSettled([
       fetch(getApiBase() + '/api/monitoring/rack', { headers: { Authorization: 'Bearer ' + token() } }),
       fetch(getApiBase() + '/api/monitoring/prom-targets', { headers: { Authorization: 'Bearer ' + token() } }),
+      fetch(getApiBase() + '/api/dashboard/nodes', { headers: { Authorization: 'Bearer ' + token() } }),
     ])
+
     const racks = rRes.status === 'fulfilled' && rRes.value.ok ? (await rRes.value.json()).data || [] : []
     const targetsData = tRes.status === 'fulfilled' && tRes.value.ok ? await tRes.value.json() : { targets: [] }
+    const realNodes = nRes.status === 'fulfilled' && nRes.value.ok ? (await nRes.value.json()).data || [] : []
     const targets: any[] = targetsData.targets || []
 
+    // 构建健康状态 map（来自 Prometheus）
     const healthMap: Record<string, { health: string; error: string; latency: number | null }> = {}
     for (const t of targets) {
       const key = (t.instance || '').replace(/:\d+$/, '')
@@ -176,24 +258,34 @@ const loadData = async () => {
       if (t.labels?.hostname) healthMap[t.labels.hostname] = healthMap[key]
     }
 
-    const newNodes: TopoNode[] = []
-    for (const rack of racks) {
-      for (const dev of (rack.devices || [])) {
-        if (dev.type === 'empty' || dev.type === 'pdu') continue
-        const hk = (dev.ip || dev.name || '').replace(/:\d+$/, '')
-        const h = healthMap[hk] || healthMap[dev.name] || { health: 'unknown', error: '', latency: null }
-        const prev = topoNodes.value.find(n => n.id === dev.id)
-        newNodes.push({
-          id: dev.id, label: dev.name, type: dev.type, model: dev.model || '',
-          ip: dev.ip || '', promHealth: h.health, promError: h.error, latency: h.latency,
-          cpu: null, mem: null,
-          x: prev?.x ?? (Math.random() * 600 + 100),
-          y: prev?.y ?? (Math.random() * 400 + 80),
-          r: dev.type === 'switch' ? 24 : 18,
-        })
+    if (racks.length > 0) {
+      // 有机柜数据：用原有逻辑
+      const newNodes: TopoNode[] = []
+      for (const rack of racks) {
+        for (const dev of (rack.devices || [])) {
+          if (dev.type === 'empty' || dev.type === 'pdu') continue
+          const hk = (dev.ip || dev.name || '').replace(/:\d+$/, '')
+          const h = healthMap[hk] || healthMap[dev.name] || { health: 'unknown', error: '', latency: null }
+          const prev = topoNodes.value.find(n => n.id === dev.id)
+          newNodes.push({
+            id: dev.id, label: dev.name, type: dev.type, model: dev.model || '',
+            ip: dev.ip || '', promHealth: h.health, promError: h.error, latency: h.latency,
+            cpu: null, mem: null,
+            x: prev?.x ?? (Math.random() * 600 + 100),
+            y: prev?.y ?? (Math.random() * 400 + 80),
+            r: dev.type === 'switch' ? 24 : 18,
+          })
+        }
       }
+      topoNodes.value = newNodes
+    } else if (realNodes.length > 0) {
+      // 无机柜数据：用真实 Slurm 节点自动生成拓扑
+      const { newNodes, newEdges } = buildTopoFromNodes(realNodes, healthMap)
+      topoNodes.value = newNodes
+      // 只在首次加载时覆盖连线，避免用户手动连线被清除
+      if (edges.value.length === 0) edges.value = newEdges
     }
-    topoNodes.value = newNodes
+
     save()
   } catch (e: any) { error.value = e.message }
   finally { loading.value = false }
@@ -237,6 +329,14 @@ function clearLinks() {
     edges.value = []
     save()
   })
+}
+
+// 强制重建拓扑（清除位置缓存）
+const rebuildTopo = async () => {
+  localStorage.removeItem(STORAGE_KEY)
+  topoNodes.value = []
+  edges.value = []
+  await loadData()
 }
 
 function startDrag(e: MouseEvent, n: TopoNode) {

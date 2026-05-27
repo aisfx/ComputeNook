@@ -31,7 +31,8 @@
             <td>
               <div class="user-cell">
                 <div v-if="assoc.user" class="user-avatar">{{ assoc.user[0]?.toUpperCase() }}</div>
-                <span class="user-name">{{ assoc.user }}</span>
+                <div v-else class="user-avatar account-level-avatar">A</div>
+                <span class="user-name">{{ assoc.user || '账户级' }}</span>
               </div>
             </td>
             <td>
@@ -52,14 +53,7 @@
               <span v-else class="text-muted">-</span>
             </td>
             <td>
-              <div class="action-dropdown">
-                <button class="btn-action-toggle" @click.stop="openMenu = openMenu === `${assoc.account}-${assoc.user}` ? null : `${assoc.account}-${assoc.user}`">操作 ▾</button>
-                <div v-if="openMenu === `${assoc.account}-${assoc.user}`" class="dropdown-menu" @click.stop>
-                  <button class="dropdown-item" @click="editAssociation(assoc); openMenu = null">✏️ 编辑</button>
-                  <div class="dropdown-divider"></div>
-                  <button class="dropdown-item danger" @click="deleteAssociation(assoc); openMenu = null">🗑️ 删除</button>
-                </div>
-              </div>
+              <button class="btn-action-toggle" @click.stop="toggleMenu(assoc, $event)">操作 ▾</button>
             </td>
           </tr>
         </tbody>
@@ -69,24 +63,36 @@
   </div>
 
   <Teleport to="body">
+    <div v-if="openMenuAssoc" class="dropdown-menu dropdown-menu-fixed" :style="menuStyle" @click.stop>
+      <button class="dropdown-item" @click="editAssociation(openMenuAssoc); openMenu = null">✏️ 编辑</button>
+      <div class="dropdown-divider"></div>
+      <button class="dropdown-item danger" @click="deleteAssociation(openMenuAssoc); openMenu = null">🗑️ 删除</button>
+    </div>
     <div v-if="showCreateDialog" class="modal-overlay">
-      <div class="modal" style="max-width:480px">
+      <div class="modal association-modal">
         <div class="modal-header">
           <h3>{{ isEditing ? '编辑资源绑定' : '创建资源绑定' }}</h3>
           <button class="btn-close" @click="showCreateDialog = false">×</button>
         </div>
         <div class="modal-body">
-          <div class="form-group">
+          <div v-if="!isAccountAssociationEdit" class="form-group">
             <label>用户 <span class="required">*</span></label>
-            <select v-model="newAssociation.user" :disabled="isEditing">
+            <input v-if="isEditing" v-model="newAssociation.user" readonly style="background-color: #f5f5f5; cursor: not-allowed;" />
+            <select v-else v-model="newAssociation.user">
               <option value="">-- 请选择用户 --</option>
               <option v-for="user in slurmUsers" :key="user.name" :value="user.name">{{ user.name }}</option>
             </select>
             <small>{{ isEditing ? '编辑时不可更改' : '从 Slurm 用户列表中选择' }}</small>
           </div>
+          <div v-else class="form-group">
+            <label>绑定类型</label>
+            <input value="账户级绑定" readonly style="background-color: #f5f5f5; cursor: not-allowed;" />
+            <small>Slurm 账户级 Association 不关联具体用户</small>
+          </div>
           <div class="form-group">
             <label>账户 <span class="required">*</span></label>
-            <select v-model="newAssociation.account" :disabled="isEditing">
+            <input v-if="isEditing" v-model="newAssociation.account" readonly style="background-color: #f5f5f5; cursor: not-allowed;" />
+            <select v-else v-model="newAssociation.account">
               <option value="">-- 请选择账户 --</option>
               <option v-for="account in slurmAccounts" :key="account.name" :value="account.name">{{ account.name }}</option>
             </select>
@@ -95,7 +101,7 @@
           <div class="form-row">
             <div class="form-group">
               <label>集群 <span class="required">*</span></label>
-              <input v-model="newAssociation.cluster" placeholder="cluster" :disabled="isEditing" />
+              <input v-model="newAssociation.cluster" placeholder="cluster" :readonly="isEditing" :style="isEditing ? 'background-color: #f5f5f5; cursor: not-allowed;' : ''" />
               <small>{{ isEditing ? '编辑时不可更改' : '默认: cluster' }}</small>
             </div>
             <div class="form-group">
@@ -118,14 +124,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { computed, ref, onMounted, onUnmounted, watch } from 'vue'
 import { getAssociations, createAssociation as apiCreateAssociation, updateAssociation as apiUpdateAssociation, deleteAssociation as apiDeleteAssociation } from '../api'
 import { slurmUserAPI, slurmAccountAPI } from '../api'
 import { showSuccess, showError } from '../utils/notification'
 import dialog from '../utils/dialog'
 
 interface Association {
-  user: string; account: string; cluster?: string; partition?: string; qos?: string[]; is_default?: boolean
+  user?: string; account: string; cluster?: string; partition?: string; qos?: string[]; is_default?: boolean
 }
 
 const associations = ref<Association[]>([])
@@ -137,14 +143,52 @@ const qosInput = ref('')
 const originalAssociation = ref<Association | null>(null)
 const loading = ref(false)
 const openMenu = ref<string | null>(null)
+const menuPosition = ref({ top: 0, left: 0 })
 
 const newAssociation = ref<Association>({ user: '', account: '', cluster: 'cluster', partition: '', qos: [] })
+
+const associationKey = (assoc: Association) => `${assoc.account}-${assoc.user}-${assoc.cluster || ''}-${assoc.partition || ''}`
+
+const openMenuAssoc = computed(() => associations.value.find(assoc => associationKey(assoc) === openMenu.value) || null)
+const isAccountAssociationEdit = computed(() => isEditing.value && !newAssociation.value.user)
+
+const menuStyle = computed(() => ({
+  top: `${menuPosition.value.top}px`,
+  left: `${menuPosition.value.left}px`
+}))
+
+const toggleMenu = (assoc: Association, event: MouseEvent) => {
+  const key = associationKey(assoc)
+  if (openMenu.value === key) {
+    openMenu.value = null
+    return
+  }
+
+  const trigger = event.currentTarget as HTMLElement
+  const rect = trigger.getBoundingClientRect()
+  const menuWidth = 130
+  const gap = 6
+  menuPosition.value = {
+    top: Math.round(rect.bottom + gap),
+    left: Math.round(Math.max(8, rect.right - menuWidth))
+  }
+  openMenu.value = key
+}
+
+const normalizeList = (value: any): any[] => {
+  if (Array.isArray(value)) return value
+  if (Array.isArray(value?.data)) return value.data
+  if (Array.isArray(value?.accounts)) return value.accounts
+  if (Array.isArray(value?.users)) return value.users
+  return []
+}
 
 const loadAssociations = async () => {
   loading.value = true
   try {
     const response = await getAssociations()
-    associations.value = response.data.data || []
+    associations.value = normalizeList(response.data.data)
+      .map(normalizeAssociation)
   } catch (error: any) {
     showError('加载资源绑定失败: ' + (error.response?.data?.error || error.message))
   } finally {
@@ -152,24 +196,37 @@ const loadAssociations = async () => {
   }
 }
 
+const normalizeAssociation = (assoc: any): Association => {
+  const qos = assoc.qos || assoc.QoS || assoc.Qos || []
+  return {
+    user: assoc.user || assoc.User || '',
+    account: assoc.account || assoc.Account || '',
+    cluster: assoc.cluster || assoc.Cluster || 'cluster',
+    partition: assoc.partition || assoc.Partition || '',
+    qos: Array.isArray(qos) ? qos : String(qos || '').split(',').map(q => q.trim()).filter(Boolean),
+    is_default: assoc.is_default || assoc.IsDefault || false
+  }
+}
+
 const editAssociation = (assoc: Association) => {
+  const normalizedAssoc = normalizeAssociation(assoc)
   isEditing.value = true
-  originalAssociation.value = { ...assoc }
-  newAssociation.value = { ...assoc }
-  qosInput.value = assoc.qos?.length ? assoc.qos.join(', ') : ''
+  originalAssociation.value = { ...normalizedAssoc }
+  newAssociation.value = { ...normalizedAssoc }
+  qosInput.value = normalizedAssoc.qos?.length ? normalizedAssoc.qos.join(', ') : ''
   showCreateDialog.value = true
 }
 
 const saveAssociation = async () => {
-  if (!newAssociation.value.user || !newAssociation.value.account) {
-    showError('用户和账户不能为空')
+  if (!newAssociation.value.account || (!isEditing.value && !newAssociation.value.user)) {
+    showError(isEditing.value ? '账户不能为空' : '用户和账户不能为空')
     return
   }
   try {
     const qosList = qosInput.value.split(',').map(q => q.trim()).filter(q => q.length > 0)
     const assocData = { ...newAssociation.value, cluster: newAssociation.value.cluster || 'cluster', qos: qosList.length > 0 ? qosList : undefined }
     if (isEditing.value && originalAssociation.value) {
-      await apiUpdateAssociation(originalAssociation.value.account, originalAssociation.value.user, originalAssociation.value.cluster || '', assocData)
+      await apiUpdateAssociation(originalAssociation.value.account, originalAssociation.value.user || '', originalAssociation.value.cluster || '', assocData)
       showSuccess('资源绑定更新成功')
     } else {
       await apiCreateAssociation(assocData)
@@ -184,11 +241,13 @@ const saveAssociation = async () => {
 }
 
 const deleteAssociation = async (assoc: Association) => {
-  if (!assoc.account || !assoc.user) { showError('参数错误'); return }
+  if (!assoc.account) { showError('参数错误'); return }
 
   const userAssocs = associations.value.filter(a => a.user === assoc.user)
-  const isOnly = userAssocs.length === 1
-  const msg = isOnly
+  const isOnly = !!assoc.user && userAssocs.length === 1
+  const msg = !assoc.user
+    ? `确定要删除账户 ${assoc.account} 的账户级绑定吗？`
+    : isOnly
     ? `这是用户 ${assoc.user} 的唯一账户绑定，删除后将无法使用任何账户。确定继续吗？`
     : `确定要删除用户 ${assoc.user} 与账户 ${assoc.account} 的绑定吗？`
 
@@ -196,7 +255,7 @@ const deleteAssociation = async (assoc: Association) => {
   if (!ok) return
 
   try {
-    await apiDeleteAssociation(assoc.account, assoc.user, assoc.cluster || '', assoc.partition || '')
+    await apiDeleteAssociation(assoc.account, assoc.user || '', assoc.cluster || '', assoc.partition || '')
     showSuccess('资源绑定删除成功')
     await loadAssociations()
   } catch (error: any) {
@@ -219,21 +278,35 @@ const resetForm = () => {
 watch(showCreateDialog, (val) => {
   if (val) {
     if (!isEditing.value) newAssociation.value.cluster = 'cluster'
-    slurmUserAPI.getUsers().then(r => { slurmUsers.value = r }).catch(() => {})
-    slurmAccountAPI.getAccounts().then(r => { slurmAccounts.value = r }).catch(() => {})
+    slurmUserAPI.getUsers().then(r => { slurmUsers.value = normalizeList(r) }).catch(() => {})
+    slurmAccountAPI.getAccounts().then(r => { slurmAccounts.value = normalizeList(r) }).catch(() => {})
   } else {
     resetForm()
   }
 })
 
 const closeMenu = () => { openMenu.value = null }
-onMounted(() => { loadAssociations(); document.addEventListener('click', closeMenu) })
-onUnmounted(() => { document.removeEventListener('click', closeMenu) })
+onMounted(() => {
+  loadAssociations()
+  document.addEventListener('click', closeMenu)
+  window.addEventListener('scroll', closeMenu, true)
+  window.addEventListener('resize', closeMenu)
+})
+onUnmounted(() => {
+  document.removeEventListener('click', closeMenu)
+  window.removeEventListener('scroll', closeMenu, true)
+  window.removeEventListener('resize', closeMenu)
+})
 </script>
 
 <style scoped>
 .admin-associations { padding: 1.5rem; }
 .page-desc { margin: 2px 0 0; color: hsl(var(--muted-foreground)); font-size: 0.82rem; }
+
+.association-modal {
+  width: min(92vw, 420px);
+  max-width: 420px;
+}
 
 .user-cell { display: flex; align-items: center; gap: 8px; }
 .user-avatar {
@@ -241,6 +314,10 @@ onUnmounted(() => { document.removeEventListener('click', closeMenu) })
   background: hsl(var(--primary) / 0.1); color: hsl(var(--primary));
   display: flex; align-items: center; justify-content: center;
   font-size: 0.75rem; font-weight: 700; flex-shrink: 0;
+}
+.account-level-avatar {
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
 }
 .user-name { font-weight: 600; font-size: 0.85rem; }
 
@@ -256,7 +333,6 @@ onUnmounted(() => { document.removeEventListener('click', closeMenu) })
 .text-muted { color: hsl(var(--muted-foreground)); font-size: 0.8rem; }
 .required { color: hsl(var(--destructive)); }
 
-.action-dropdown { position: relative; display: inline-block; }
 .btn-action-toggle {
   height: 28px; padding: 0 10px;
   background: hsl(var(--background)); border: 1px solid hsl(var(--border));
@@ -265,10 +341,13 @@ onUnmounted(() => { document.removeEventListener('click', closeMenu) })
 }
 .btn-action-toggle:hover { background: hsl(var(--accent)); }
 .dropdown-menu {
-  position: absolute; right: 0; top: calc(100% + 4px);
   background: hsl(var(--card)); border: 1px solid hsl(var(--border));
   border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.12);
-  min-width: 130px; z-index: 1000; overflow: hidden;
+  width: 130px; min-width: 130px; z-index: 9999; overflow: hidden;
+}
+.dropdown-menu-fixed {
+  position: fixed;
+  z-index: 2147483647;
 }
 .dropdown-item {
   display: block; width: 100%; padding: 7px 14px;

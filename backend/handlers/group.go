@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"hpc-backend/cache"
 	"hpc-backend/ldap"
 	"hpc-backend/models"
 )
@@ -108,6 +109,10 @@ func CreateGroup(c *gin.Context) {
 		return
 	}
 
+	// 清除缓存
+	mgr := cache.NewManager()
+	mgr.Delete(cache.GroupListKey())
+
 	c.JSON(http.StatusCreated, gin.H{"message": "Group created successfully", "data": group})
 }
 
@@ -144,6 +149,11 @@ func UpdateGroup(c *gin.Context) {
 		return
 	}
 
+	// 清除缓存
+	mgr := cache.NewManager()
+	mgr.Delete(cache.GroupListKey())
+	mgr.Delete(cache.GroupKey(gidStr))
+
 	c.JSON(http.StatusOK, gin.H{"message": "Group updated successfully"})
 }
 
@@ -173,6 +183,11 @@ func DeleteGroup(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
+
+	// 清除缓存
+	mgr := cache.NewManager()
+	mgr.Delete(cache.GroupListKey())
+	mgr.Delete(cache.GroupKey(gidStr))
 
 	c.JSON(http.StatusOK, gin.H{"message": "Group deleted successfully"})
 }

@@ -58,10 +58,10 @@
             </td>
             <td>
               <div class="action-dropdown">
-                <button class="btn-action-toggle" @click.stop="toggleDropdown(user)">
+                <button class="btn-action-toggle" @click.stop="toggleDropdown(user, $event)">
                   操作 ▾
                 </button>
-                <div v-if="openDropdown[user.username]" class="dropdown-menu" @click.stop>
+                <div v-if="openDropdown[user.username]" class="dropdown-menu" :style="{ top: dropdownPos[user.username]?.top + 'px', left: dropdownPos[user.username]?.left + 'px' }" @click.stop>
                   <button class="dropdown-item" @click="editUser(user); closeDropdown(user)">✏️ 编辑</button>
                   <button class="dropdown-item" @click="showResetPasswordModal(user); closeDropdown(user)">🔑 重置密码</button>
                   <button v-if="!user.disabled" class="dropdown-item warning" @click="toggleUserStatus(user); closeDropdown(user)">🚫 禁用</button>
@@ -175,6 +175,27 @@ const getHomeBasePath = () => {
 
 const users = ref<any[]>([])
 const openDropdown = reactive<Record<string, boolean>>({})
+const dropdownPos = reactive<Record<string, {top: number, left: number}>>({})
+
+const toggleDropdown = (user: any, event: MouseEvent) => {
+  const current = openDropdown[user.username]
+  Object.keys(openDropdown).forEach(k => { openDropdown[k] = false })
+  if (!current) {
+    const btn = event.currentTarget as HTMLElement
+    const rect = btn.getBoundingClientRect()
+    const menuWidth = 160
+    const viewportWidth = window.innerWidth
+    // 右对齐按钮右边，但不超出视口
+    let left = rect.right - menuWidth
+    if (left + menuWidth > viewportWidth - 8) left = viewportWidth - menuWidth - 8
+    if (left < 8) left = 8
+    dropdownPos[user.username] = {
+      top: rect.bottom + 4,
+      left
+    }
+    openDropdown[user.username] = true
+  }
+}
 const loading = ref(false)
 const error = ref('')
 const saving = ref(false)
@@ -385,11 +406,7 @@ const togglePasswordMustChange = async (user: any) => {
   }
 }
 
-const toggleDropdown = (user: any) => {
-  const current = openDropdown[user.username]
-  Object.keys(openDropdown).forEach(k => { openDropdown[k] = false })
-  openDropdown[user.username] = !current
-}
+
 
 const closeDropdown = (user: any) => {
   openDropdown[user.username] = false
@@ -446,25 +463,29 @@ onUnmounted(() => {
   border-radius: 12px;
   padding: 1.5rem;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  overflow-x: auto;
 }
 
 .data-table {
   width: 100%;
+  min-width: 900px;
   border-collapse: collapse;
 }
 
 .data-table th {
   background: #f9fafb;
-  padding: 1rem;
+  padding: 0.75rem 0.6rem;
   text-align: left;
   font-weight: 600;
   color: #555;
   border-bottom: 2px solid #e5e7eb;
+  white-space: nowrap;
 }
 
 .data-table td {
-  padding: 1rem;
+  padding: 0.75rem 0.6rem;
   border-bottom: 1px solid #e5e7eb;
+  white-space: nowrap;
 }
 
 .data-table tbody tr:hover {
@@ -533,15 +554,13 @@ onUnmounted(() => {
 }
 
 .dropdown-menu {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 4px);
+  position: fixed;
   background: white;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   box-shadow: 0 4px 16px rgba(0,0,0,0.12);
-  min-width: 150px;
-  z-index: 100;
+  width: 160px;
+  z-index: 9999;
   overflow: hidden;
 }
 

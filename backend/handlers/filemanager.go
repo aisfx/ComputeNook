@@ -24,21 +24,70 @@ func getUserHomeBase(username string) string {
 
 // isPathAllowed 检查 path 是否在 allowedBase 目录下（防止路径穿越）
 func isPathAllowed(path, allowedBase string) bool {
-	cleanPath := filepath.Clean(path)
-	cleanBase := filepath.Clean(allowedBase)
-	return cleanPath == cleanBase || strings.HasPrefix(cleanPath, cleanBase+"/")
+	if path == "" || allowedBase == "" {
+		return false
+	}
+
+	cleanBase, err := filepath.Abs(filepath.Clean(allowedBase))
+	if err != nil {
+		return false
+	}
+	resolvedBase, err := filepath.EvalSymlinks(cleanBase)
+	if err != nil {
+		return false
+	}
+
+	cleanPath, err := filepath.Abs(filepath.Clean(path))
+	if err != nil {
+		return false
+	}
+	resolvedPath, err := filepath.EvalSymlinks(cleanPath)
+	if err != nil {
+		resolvedPath, err = resolvePathThroughExistingParent(cleanPath)
+		if err != nil {
+			return false
+		}
+	}
+
+	rel, err := filepath.Rel(resolvedBase, resolvedPath)
+	if err != nil {
+		return false
+	}
+	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)) && !filepath.IsAbs(rel))
+}
+
+func resolvePathThroughExistingParent(path string) (string, error) {
+	parent := path
+	for {
+		if _, err := os.Lstat(parent); err == nil {
+			resolvedParent, err := filepath.EvalSymlinks(parent)
+			if err != nil {
+				return "", err
+			}
+			rel, err := filepath.Rel(parent, path)
+			if err != nil {
+				return "", err
+			}
+			return filepath.Join(resolvedParent, rel), nil
+		}
+		next := filepath.Dir(parent)
+		if next == parent {
+			return "", os.ErrNotExist
+		}
+		parent = next
+	}
 }
 
 // FileInfo 文件信息
 type FileInfo struct {
-	Name         string    `json:"name"`
-	Path         string    `json:"path"`
-	Size         int64     `json:"size"`
-	IsDir        bool      `json:"is_dir"`
-	ModTime      time.Time `json:"mod_time"`
-	Permissions  string    `json:"permissions"`
-	Owner        string    `json:"owner,omitempty"`
-	Group        string    `json:"group,omitempty"`
+	Name        string    `json:"name"`
+	Path        string    `json:"path"`
+	Size        int64     `json:"size"`
+	IsDir       bool      `json:"is_dir"`
+	ModTime     time.Time `json:"mod_time"`
+	Permissions string    `json:"permissions"`
+	Owner       string    `json:"owner,omitempty"`
+	Group       string    `json:"group,omitempty"`
 }
 
 // ListDirectory 列出目录内容
@@ -83,7 +132,7 @@ func ListDirectory(c *gin.Context) {
 		}
 
 		fullPath := filepath.Join(path, entry.Name())
-		
+
 		fileInfo := FileInfo{
 			Name:        entry.Name(),
 			Path:        fullPath,
@@ -290,7 +339,7 @@ func UploadFile(c *gin.Context) {
 		return
 	}
 
-	logger.Debug("UploadFile: user=%s, filename=%s, size=%d, target=%s", 
+	logger.Debug("UploadFile: user=%s, filename=%s, size=%d, target=%s",
 		username, file.Filename, file.Size, targetPath)
 
 	// 构建完整路径，并再次验证防止文件名包含路径穿越（如 ../../etc/passwd）

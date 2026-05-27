@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"hpc-backend/cache"
 	"hpc-backend/ldap"
 	"hpc-backend/models"
 	"hpc-backend/slurm"
@@ -57,13 +58,13 @@ func GetSlurmAccounts(c *gin.Context) {
 	accounts, err := client.GetAccounts()
 	if err != nil {
 		// 检查是否是数据库连接错误
-		if strings.Contains(err.Error(), "Unable to connect to database") || 
-		   strings.Contains(err.Error(), "slurmdbd connection") {
+		if strings.Contains(err.Error(), "Unable to connect to database") ||
+			strings.Contains(err.Error(), "slurmdbd connection") {
 			// 返回友好的错误信息，提示用户slurmdbd未配置
 			c.JSON(http.StatusServiceUnavailable, gin.H{
-				"error": "Slurm数据库服务(slurmdbd)未配置或不可用。账户管理功能需要slurmdbd支持。",
+				"error":  "Slurm数据库服务(slurmdbd)未配置或不可用。账户管理功能需要slurmdbd支持。",
 				"detail": "请联系系统管理员配置slurmdbd服务，或使用sacctmgr命令行工具管理账户。",
-				"code": "SLURMDBD_UNAVAILABLE",
+				"code":   "SLURMDBD_UNAVAILABLE",
 			})
 			return
 		}
@@ -99,7 +100,7 @@ func GetSlurmAccount(c *gin.Context) {
 
 	// 获取当前用户
 	username, _ := c.Get("username")
-	
+
 	client, err := GetSlurmClientForUser(username.(string))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法连接到 Slurm API: " + err.Error()})
@@ -307,12 +308,12 @@ func GetSlurmUsers(c *gin.Context) {
 	users, err := client.GetSlurmUsers()
 	if err != nil {
 		// 检查是否是数据库连接错误
-		if strings.Contains(err.Error(), "Unable to connect to database") || 
-		   strings.Contains(err.Error(), "slurmdbd connection") {
+		if strings.Contains(err.Error(), "Unable to connect to database") ||
+			strings.Contains(err.Error(), "slurmdbd connection") {
 			c.JSON(http.StatusServiceUnavailable, gin.H{
-				"error": "Slurm数据库服务(slurmdbd)未配置或不可用。用户管理功能需要slurmdbd支持。",
+				"error":  "Slurm数据库服务(slurmdbd)未配置或不可用。用户管理功能需要slurmdbd支持。",
 				"detail": "请联系系统管理员配置slurmdbd服务，或使用sacctmgr命令行工具管理用户。",
-				"code": "SLURMDBD_UNAVAILABLE",
+				"code":   "SLURMDBD_UNAVAILABLE",
 			})
 			return
 		}
@@ -347,7 +348,7 @@ func GetSlurmUser(c *gin.Context) {
 
 	// 获取当前用户
 	username, _ := c.Get("username")
-	
+
 	client, err := GetSlurmClientForUser(username.(string))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法连接到 Slurm API: " + err.Error()})
@@ -531,7 +532,7 @@ func GetAssociations(c *gin.Context) {
 
 	// 获取当前用户
 	username, _ := c.Get("username")
-	
+
 	client, err := GetSlurmClientForUser(username.(string))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法连接到 Slurm API: " + err.Error()})
@@ -573,7 +574,7 @@ func GetAssociation(c *gin.Context) {
 
 	// 获取当前用户
 	username, _ := c.Get("username")
-	
+
 	client, err := GetSlurmClientForUser(username.(string))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法连接到 Slurm API: " + err.Error()})
@@ -637,19 +638,19 @@ func CreateAssociation(c *gin.Context) {
 			Description:  assoc.Account,
 			Organization: "Default",
 		}
-		
+
 		if err := client.CreateAccount(newAccount); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "创建账户失败: " + err.Error()})
 			return
 		}
-		
+
 		// 为root用户创建到新账户的绑定
 		rootAssoc := &slurm.Association{
 			Account: assoc.Account,
 			User:    "root",
 			Cluster: assoc.Cluster,
 		}
-		
+
 		if err := client.CreateAssociation(rootAssoc); err != nil {
 			// root绑定失败不影响后续操作，只记录日志
 			// 继续创建用户的绑定
@@ -665,7 +666,7 @@ func CreateAssociation(c *gin.Context) {
 	// 创建成功后，返回创建的数据
 	c.JSON(http.StatusCreated, gin.H{
 		"message": "资源绑定创建成功",
-		"data": assoc,
+		"data":    assoc,
 	})
 }
 
@@ -675,14 +676,14 @@ func UpdateAssociation(c *gin.Context) {
 	user := c.Query("user")
 	cluster := c.Query("cluster")
 
-	if account == "" || user == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "账户和用户参数不能为空"})
+	if account == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "账户参数不能为空"})
 		return
 	}
 
 	// 设置默认 cluster
 	if cluster == "" {
-		cluster = "cluster"
+		cluster = slurm.GetDefaultClusterName()
 	}
 
 	var assoc slurm.Association
@@ -714,6 +715,9 @@ func UpdateAssociation(c *gin.Context) {
 		return
 	}
 
+	mgr := cache.NewManager()
+	mgr.DeletePattern(cache.PrefixAssociation + "*")
+
 	c.JSON(http.StatusOK, gin.H{"message": "资源绑定更新成功"})
 }
 
@@ -725,11 +729,11 @@ func DeleteAssociation(c *gin.Context) {
 	partition := c.Query("partition")
 
 	// 添加详细的参数日志
-	fmt.Printf("DeleteAssociation called with: account='%s', user='%s', cluster='%s', partition='%s'\n", 
+	fmt.Printf("DeleteAssociation called with: account='%s', user='%s', cluster='%s', partition='%s'\n",
 		account, user, cluster, partition)
 
-	if account == "" || user == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("账户和用户参数不能为空 - account: '%s', user: '%s'", account, user)})
+	if account == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("账户参数不能为空 - account: '%s'", account)})
 		return
 	}
 
@@ -750,6 +754,9 @@ func DeleteAssociation(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "删除资源绑定失败: " + err.Error()})
 		return
 	}
+
+	mgr := cache.NewManager()
+	mgr.DeletePattern(cache.PrefixAssociation + "*")
 
 	c.JSON(http.StatusOK, gin.H{"message": "资源绑定删除成功"})
 }

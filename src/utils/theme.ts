@@ -9,7 +9,7 @@ export const THEMES: { value: Theme; label: string; icon: string }[] = [
 export function getStoredTheme(): Theme {
   const saved = localStorage.getItem('theme') as Theme | null
   if (saved && ['light', 'dark', 'ocean'].includes(saved)) return saved
-  return 'dark'
+  return 'light'
 }
 
 export function applyTheme(theme: Theme) {

@@ -329,7 +329,7 @@ const extractGPULimit = (qos: any): number => {
   // 优先从 tres.per.user 获取
   if (qos.limits?.max?.tres?.per?.user) {
     const userTres = qos.limits.max.tres.per.user
-    const gpuTres = userTres.find((tres: any) => tres.type === 'gres/gpu')
+    const gpuTres = userTres.find(isGPUTres)
     if (gpuTres) return gpuTres.count
   }
   // 兼容旧结构
@@ -476,8 +476,14 @@ const formatWallTimeLimit = (minutes: number): string => {
 const extractGPUCount = (value: string): number => {
   if (!value || value === '') return 0
   // 格式: gres/gpu=4 或 gres/gpu:a100=2
-  const match = value.match(/gres\/gpu[^=]*=(\d+)/)
+  const match = value.match(/(?:gres\/gpu|gpu)[^=]*=(\d+)/)
   return match ? parseInt(match[1]) : 0
+}
+
+const isGPUTres = (tres: any): boolean => {
+  const type = String(tres?.type || '').toLowerCase()
+  const name = String(tres?.name || '').toLowerCase()
+  return type === 'gres/gpu' || type === 'gpu' || (type === 'gres' && name === 'gpu')
 }
 
 // 从 grp_tres_mins 中提取 billing 数值（兼容旧格式）
@@ -532,12 +538,16 @@ const saveQoS = async () => {
       // grp_tres_mins 不在此处提交，由机时管理页面单独维护
     }
 
-    // 内存限制通过 max_tres_pu 传递
+    const maxTres: string[] = []
     if (formData.value.max_memory > 0) {
-      qosData.max_tres_pu = `mem=${formData.value.max_memory}G`
+      maxTres.push(`mem=${formData.value.max_memory}G`)
     }
-    
-    console.log('Submitting QoS data:', qosData)
+    if (formData.value.max_gpus > 0) {
+      maxTres.push(`gres/gpu=${formData.value.max_gpus}`)
+    }
+    if (maxTres.length > 0) {
+      qosData.max_tres_pu = maxTres.join(',')
+    }
     
     if (isEdit.value) {
       await qosAPI.updateQoS(formData.value.name, qosData)
@@ -612,4 +622,3 @@ onMounted(() => {
 
 .qos-name { font-weight: 500; color: hsl(var(--foreground)); }
 </style>
-

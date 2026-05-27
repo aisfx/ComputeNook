@@ -1,0 +1,46 @@
+[
+  {
+    "name": "all",
+    "nodes": "ALL",
+    "over_subscribe": "Exclusive",
+    "is_default": true,
+    "max_time": "INFINITE",
+    "state": "UP",
+    "allow_groups": "root,test1,hpc-admin",
+    "allow_accounts": "root,test1,hpc-admin",
+    "tres_billing_weights": "node=0,CPU=1.0,mem=1.0G"
+  },
+  {
+    "name": "gpu",
+    "nodes": "gpu[01-04]",
+    "over_subscribe": "NO",
+    "is_default": false,
+    "max_time": "7-00:00:00",
+    "state": "UP",
+    "allow_groups": "gpu-users,hpc-admin",
+    "allow_accounts": "gpu-account,hpc-admin",
+    "tres_billing_weights": "node=0,CPU=1.0,mem=1.0G,gres/gpu=10.0"
+  },
+  {
+    "name": "high",
+    "nodes": "node[01-10]",
+    "over_subscribe": "NO",
+    "is_default": false,
+    "max_time": "3-00:00:00",
+    "state": "UP",
+    "allow_groups": "vip-users,hpc-admin",
+    "allow_accounts": "vip-account,hpc-admin",
+    "tres_billing_weights": "node=0,CPU=2.0,mem=2.0G"
+  },
+  {
+    "name": "debug",
+    "nodes": "debug[01-02]",
+    "over_subscribe": "YES",
+    "is_default": false,
+    "max_time": "01:00:00",
+    "state": "UP",
+    "allow_groups": "ALL",
+    "allow_accounts": "ALL",
+    "tres_billing_weights": "node=0,CPU=0.5,mem=0.5G"
+  }
+]

@@ -21,6 +21,13 @@
           </div>
           <div class="ai-header-actions">
             <button class="ai-icon-btn" @click="clearMessages" title="清空对话">🗑️</button>
+            <button 
+              class="ai-icon-btn" 
+              @click="autoSendVoice = !autoSendVoice" 
+              :title="autoSendVoice ? '语音自动发送：开启' : '语音自动发送：关闭'"
+            >
+              {{ autoSendVoice ? '🔊' : '🔇' }}
+            </button>
             <button class="ai-icon-btn" @click="maximized = !maximized" :title="maximized ? '还原' : '最大化'">
               {{ maximized ? '⊡' : '⊞' }}
             </button>
@@ -73,22 +80,69 @@
 
         <!-- Input -->
         <div class="ai-input-area">
-          <textarea
-            ref="inputEl"
-            v-model="input"
-            class="ai-input"
-            placeholder="问俺老孙任何 HPC 问题..."
-            rows="1"
-            @keydown.enter.exact.prevent="send"
-            @keydown.enter.shift.exact="input += '\n'"
-            @input="autoResize"
-            :disabled="loading"
-          ></textarea>
-          <button class="ai-send-btn" @click="send" :disabled="loading || !input.trim()">
-            {{ loading ? '⏳' : '➤' }}
-          </button>
+          <!-- 文字输入模式 -->
+          <template v-if="inputMode === 'text'">
+            <textarea
+              ref="inputEl"
+              v-model="input"
+              class="ai-input"
+              placeholder="问俺老孙任何 HPC 问题..."
+              rows="1"
+              @keydown.enter.exact.prevent="send"
+              @keydown.enter.shift.exact="input += '\n'"
+              @input="autoResize"
+              :disabled="loading"
+            ></textarea>
+            <button 
+              class="ai-mode-switch-btn" 
+              @click="switchToVoiceMode"
+              :disabled="loading"
+              title="切换到语音输入"
+            >
+              🎤
+            </button>
+            <button class="ai-send-btn" @click="send" :disabled="loading || !input.trim()">
+              {{ loading ? '⏳' : '➤' }}
+            </button>
+          </template>
+
+          <!-- 语音输入模式 -->
+          <template v-else>
+            <button 
+              class="ai-mode-switch-btn" 
+              @click="switchToTextMode"
+              title="切换到文字输入"
+            >
+              ⌨️
+            </button>
+            <button 
+              class="ai-voice-hold-btn" 
+              @touchstart.prevent="startVoiceRecording"
+              @touchend.prevent="stopVoiceRecording"
+              @touchcancel.prevent="cancelVoiceRecording"
+              @mousedown.prevent="startVoiceRecording"
+              @mouseup.prevent="stopVoiceRecording"
+              @mouseleave="cancelVoiceRecording"
+              :class="{ 'ai-voice-recording': isRecording, 'ai-voice-cancel': isCancelZone }"
+            >
+              <span class="ai-voice-icon">{{ isRecording ? '🔴' : '🎤' }}</span>
+              <span class="ai-voice-text">
+                {{ isRecording ? (isCancelZone ? '松开取消' : '松开发送') : '按住说话' }}
+              </span>
+            </button>
+          </template>
         </div>
-        <div class="ai-footer">Enter 发送 · Shift+Enter 换行</div>
+        <div class="ai-footer">
+          <template v-if="isRecording">
+            🎙️ {{ recordingDuration }}s {{ isCancelZone ? '松开取消发送' : '正在录音...' }}
+          </template>
+          <template v-else-if="inputMode === 'text'">
+            Enter 发送 · Shift+Enter 换行
+          </template>
+          <template v-else>
+            按住说话 · 上滑取消
+          </template>
+        </div>
       </div>
     </Transition>
   </div>
@@ -128,6 +182,14 @@ const messages = ref<Message[]>([])
 const unread = ref(0)
 const messagesEl = ref<HTMLElement>()
 const inputEl = ref<HTMLTextAreaElement>()
+const isRecording = ref(false)
+const inputMode = ref<'text' | 'voice'>('text') // 输入模式：文字或语音
+const isCancelZone = ref(false) // 是否在取消区域
+const recordingDuration = ref(0) // 录音时长
+const autoSendVoice = ref(true) // 语音识别后是否自动发送
+let recognition: any = null
+let recordingTimer: any = null
+let touchStartY = 0
 
 const suggestions = [
   '查看我的作业列表',
@@ -137,6 +199,211 @@ const suggestions = [
   '帮我生成一个 GPU 作业脚本',
   '如何使用 module 加载软件？',
 ]
+
+// ── 语音识别 ──
+let finalTranscript = '' // 移到外部作用域
+
+const initVoiceRecognition = () => {
+  // 检查浏览器是否支持语音识别
+  const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+  if (!SpeechRecognition) {
+    return null
+  }
+
+  const rec = new SpeechRecognition()
+  rec.lang = 'zh-CN' // 设置为中文
+  rec.continuous = false // 改为 false，单次识别后自动停止
+  rec.interimResults = false // 改为 false，只要最终结果
+  rec.maxAlternatives = 1
+
+  rec.onstart = () => {
+    finalTranscript = ''
+  }
+
+  rec.onresult = (event: any) => {
+    if (event.results.length > 0) {
+      finalTranscript = event.results[0][0].transcript
+    }
+  }
+
+  rec.onerror = (event: any) => {
+    stopRecordingTimer()
+    isRecording.value = false
+    document.removeEventListener('touchmove', handleTouchMove)
+    
+    if (event.error === 'not-allowed' || event.error === 'permission-denied') {
+      dialog.alert('请在浏览器设置中允许麦克风权限\n\n设置 → 隐私和安全 → 网站设置 → 麦克风', { title: '需要麦克风权限' })
+    } else if (event.error !== 'no-speech' && event.error !== 'aborted') {
+      dialog.alert(`语音识别失败: ${event.error}\n\n请确保：\n1. 已授权麦克风权限\n2. 使用 HTTPS 或 localhost\n3. 浏览器支持语音识别`, { title: '识别错误' })
+    }
+  }
+
+  rec.onend = () => {
+    stopRecordingTimer()
+    isRecording.value = false
+    document.removeEventListener('touchmove', handleTouchMove)
+    
+    // 获取最终识别结果
+    if (finalTranscript.trim() && !isCancelZone.value) {
+      const recognizedText = finalTranscript.trim()
+      input.value = recognizedText
+      
+      nextTick(() => {
+        // 根据设置决定是否自动发送
+        if (autoSendVoice.value) {
+          send()
+        } else {
+          // 切换到文字模式，让用户确认后再发送
+          inputMode.value = 'text'
+          inputEl.value?.focus()
+        }
+      })
+    }
+    
+    // 重置状态
+    isCancelZone.value = false
+    finalTranscript = ''
+  }
+
+  return rec
+}
+
+// 切换输入模式
+const switchToVoiceMode = () => {
+  inputMode.value = 'voice'
+}
+
+const switchToTextMode = () => {
+  inputMode.value = 'text'
+  if (isRecording.value && recognition) {
+    recognition.abort()
+    isRecording.value = false
+    stopRecordingTimer()
+  }
+}
+
+// 开始录音计时
+const startRecordingTimer = () => {
+  recordingDuration.value = 0
+  recordingTimer = setInterval(() => {
+    recordingDuration.value++
+    // 最长60秒自动停止
+    if (recordingDuration.value >= 60) {
+      stopVoiceRecording()
+    }
+  }, 1000)
+}
+
+const stopRecordingTimer = () => {
+  if (recordingTimer) {
+    clearInterval(recordingTimer)
+    recordingTimer = null
+  }
+  recordingDuration.value = 0
+}
+
+// 按住开始录音
+const startVoiceRecording = (e: TouchEvent | MouseEvent) => {
+  if (loading.value) return
+  
+  // 记录起始位置
+  if (e instanceof TouchEvent && e.touches.length > 0) {
+    touchStartY = e.touches[0].clientY
+  } else if (e instanceof MouseEvent) {
+    touchStartY = e.clientY
+  }
+  
+  isCancelZone.value = false
+  
+  // 初始化语音识别
+  if (!recognition) {
+    recognition = initVoiceRecognition()
+    if (!recognition) {
+      dialog.alert('您的浏览器不支持语音识别\n\n支持的浏览器：\n• Android: Chrome, Edge\n• iOS 14.5+: Safari, Chrome\n• 桌面: Chrome, Edge, Safari', { title: '不支持语音识别' })
+      return
+    }
+  }
+
+  try {
+    recognition.start()
+    isRecording.value = true
+    startRecordingTimer()
+    
+    // 监听滑动
+    if (e instanceof TouchEvent) {
+      document.addEventListener('touchmove', handleTouchMove, { passive: false })
+    }
+  } catch (e: any) {
+    if (!e.message?.includes('already started')) {
+      return
+    }
+    dialog.alert('启动录音失败，请重试', { title: '录音失败' })
+  }
+}
+
+// 处理滑动
+const handleTouchMove = (e: TouchEvent) => {
+  if (!isRecording.value || e.touches.length === 0) return
+  
+  const currentY = e.touches[0].clientY
+  const deltaY = touchStartY - currentY
+  
+  // 上滑超过 50px 进入取消区域
+  if (deltaY > 50) {
+    isCancelZone.value = true
+  } else {
+    isCancelZone.value = false
+  }
+}
+
+// 松开停止录音
+const stopVoiceRecording = () => {
+  document.removeEventListener('touchmove', handleTouchMove)
+  
+  if (!isRecording.value || !recognition) {
+    return
+  }
+  
+  // 如果在取消区域，调用取消方法
+  if (isCancelZone.value) {
+    cancelVoiceRecording()
+    return
+  }
+  
+  try {
+    recognition.stop() // 停止识别，会触发 onend 回调
+  } catch (e) {
+    // 手动清理状态
+    isRecording.value = false
+    stopRecordingTimer()
+  }
+}
+
+// 取消录音
+const cancelVoiceRecording = () => {
+  document.removeEventListener('touchmove', handleTouchMove)
+  
+  if (!recognition) return
+  
+  // 先设置取消标志
+  isCancelZone.value = true
+  
+  try {
+    recognition.abort() // 中止识别，不会触发 onend
+  } catch (e) {
+    // 忽略错误
+  }
+  
+  // 立即清理状态
+  isRecording.value = false
+  stopRecordingTimer()
+  input.value = '' // 清空输入
+  
+  // 延迟重置取消标志
+  setTimeout(() => {
+    isCancelZone.value = false
+  }, 100)
+}
 
 // ── 快捷操作 ──
 const promptAnalyzeJob = () => {
@@ -1052,6 +1319,79 @@ const renderContent = (text: string): string => {
 }
 .ai-input:focus { border-color: hsl(var(--ring)); }
 .ai-input:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* 模式切换按钮 */
+.ai-mode-switch-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: hsl(var(--secondary));
+  color: hsl(var(--foreground));
+  border: 1px solid hsl(var(--border));
+  cursor: pointer;
+  font-size: 1.1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+.ai-mode-switch-btn:hover:not(:disabled) { 
+  background: hsl(var(--accent)); 
+}
+.ai-mode-switch-btn:disabled { 
+  opacity: 0.4; 
+  cursor: not-allowed; 
+}
+
+/* 按住说话按钮 */
+.ai-voice-hold-btn {
+  flex: 1;
+  height: 44px;
+  border-radius: 10px;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: all 0.2s;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+
+.ai-voice-hold-btn:active {
+  transform: scale(0.98);
+}
+
+.ai-voice-recording {
+  background: hsl(var(--destructive));
+  animation: ai-pulse 1.5s infinite;
+}
+
+.ai-voice-cancel {
+  background: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+}
+
+.ai-voice-icon {
+  font-size: 1.3rem;
+  line-height: 1;
+}
+
+.ai-voice-text {
+  font-size: 0.85rem;
+}
+
+@keyframes ai-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.85; }
+}
 
 .ai-send-btn {
   width: 36px;
