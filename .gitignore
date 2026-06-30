@@ -1,47 +1,73 @@
-# Node
+# ── Node ───────────────────────────────────────────────────
 node_modules/
 dist/
 release/
+frontend/node_modules/
+frontend/dist/
 
-# Env
+# ── 环境变量 ────────────────────────────────────────────────
 .env
 *.env.local
 
-# Go
+# ── Go 编译产物 & 缓存 ────────────────────────────────────────
+# ELF / PE 可执行文件（无扩展名视为 ELF）
+backend/computenook
+backend/computenook.exe
 backend/hpc-backend
-backend/logs/
+backend/hpc-backend.exe
+# 旧版本编译产物
+old/backend/backend/computenook
+old/backend/backend/computenook.exe
+old/backend/backend/hpc-backend
+old/backend/backend/hpc-backend.exe
+# Go 编译缓存（gocache）
+backend/.tmp-gocache/
+backend/.tmp-gomodcache/
+.gocache/
+.gomodcache/
+old/backend/backend/.tmp-gocache/
+old/backend/backend/.tmp-gomodcache/
+# Go 客户端二进制
 backend/clients/
-backend/tools/rdp-tunnel/go.sum
+# 工具编译产物
+backend/tools/generate_token
+backend/tools/rdp-tunnel/
 
-# OS
-.DS_Store
+# ── 日志 ──────────────────────────────────────────────────
+backend/logs/
 *.log
 
-# Editor
-.vscode/settings.json
+# ── 数据库文件 ──────────────────────────────────────────────
+backend/data/*.db
+backend/data/*.db-shm
+backend/data/*.db-wal
+old/backend/backend/data/*.db
+old/backend/backend/data/*.db-shm
+old/backend/backend/data/*.db-wal
 
-# 编译产物
+# ── SSH 密钥 ────────────────────────────────────────────────
+backend/keys/
+
+# ── OS / Editor ────────────────────────────────────────────
+.DS_Store
+.vscode/settings.json
+.vscode/*.code-workspace
+
+# ── 旧 Vue3 前端编译产物（已迁移到 frontend/） ─────────────────
 src/**/*.vue.js
 src/**/*.ts.js
 *.js.map
 
-# 临时文件
+# ── 临时文件 ────────────────────────────────────────────────
 src/**/_*.txt
 src/**/*.tmp
 src/**/*.template.txt
 src/**/*_script.txt
 
-# 数据库文件
-backend/data/*.db
-backend/data/*.db-shm
-backend/data/*.db-wal
-
-# Kiro IDE
-.kiro/
-
-# SSH Keys
-backend/keys/
-
-# 项目文档（不打包）
-presentation.html
+# ── 项目文档（不入库） ──────────────────────────────────────
 算力小筑-项目介绍PPT大纲.md
+presentation.html
+
+# ── Kiro IDE ───────────────────────────────────────────────
+# 注意：保留 .kiro/specs/ 和 .kiro/skills/ 入库，仅排除其他
+.kiro/settings/

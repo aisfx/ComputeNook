@@ -1,6 +1,0 @@
-./check_condition_func.go
-./convert_result.go
-./doc.go
-./error.go
-./forall.go
-./forall_no_shrink.go

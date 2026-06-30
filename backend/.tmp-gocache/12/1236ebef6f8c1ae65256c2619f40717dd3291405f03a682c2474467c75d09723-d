@@ -1,9 +1,0 @@
-./audio.go
-./captcha.go
-./font.go
-./image.go
-./random.go
-./server.go
-./siprng.go
-./sounds.go
-./store.go
