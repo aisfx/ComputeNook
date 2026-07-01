@@ -440,6 +440,17 @@ elif command -v sha256sum &> /dev/null; then
     sha256sum "${ARCHIVE_PATH}" | sed "s|${RELEASE_DIR}/||" > "${ARCHIVE_PATH}.sha256"
 fi
 
+# 清理 release 目录中的其他文件，只保留压缩包和校验和
+echo "========================================"
+echo "7. 清理临时文件..."
+echo "========================================"
+
+cd "${RELEASE_DIR}"
+# 删除除了 .tar.gz 和 .sha256 之外的所有文件和目录
+find . -maxdepth 1 ! -name '*.tar.gz' ! -name '*.sha256' ! -name '.' -exec rm -rf {} + 2>/dev/null || true
+
+echo "清理完成，release 目录只保留压缩包"
+
 echo "========================================"
 echo "✅ 发布版本构建完成！"
 echo "========================================"
@@ -449,16 +460,14 @@ echo "   文件: ${ARCHIVE_NAME}"
 echo "   大小: $(du -h "${ARCHIVE_PATH}" | cut -f1)"
 echo "   位置: ${RELEASE_DIR}/"
 echo ""
-echo "📂 Release 目录: ${RELEASE_DIR}"
-echo ""
-echo "📋 安装包内容:"
-ls -lh "${RELEASE_DIR}" | grep -v "^d"
-echo ""
 if [ -f "${ARCHIVE_PATH}.sha256" ]; then
     echo "🔒 SHA256 校验和:"
     cat "${ARCHIVE_PATH}.sha256"
     echo ""
 fi
+echo "📂 Release 目录内容:"
+ls -lh "${RELEASE_DIR}"
+echo ""
 echo "🎉 构建完成！"
 echo "   - 解压: tar -xzf ${ARCHIVE_NAME}"
 echo "   - 安装: sudo ./computenook/install.sh"
