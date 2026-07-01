@@ -2,7 +2,7 @@
 
 > 小而美的高性能计算集群管理平台
 
-**算力小筑**是一个面向科研与工程团队的轻量级 HPC 集群管理平台，基于 Vue 3 + TypeScript + Go 构建，支持亮色/暗色双主题。
+**算力小筑**是一个面向科研与工程团队的轻量级 HPC 集群管理平台，基于 React 18 + TypeScript + Go 构建，支持亮色/暗色双主题。
 
 不追求大而全，只做好用的那几件事：提交作业、看日志、管文件、进容器、看监控。
 
@@ -68,7 +68,7 @@
 
 | 层 | 技术 |
 |---|---|
-| 前端 | Vue 3 + TypeScript + Vite |
+| 前端 | React 18 + TypeScript + Vite + Ant Design 5 |
 | 后端 | Go + Gin |
 | 认证 | LDAP + JWT |
 | 调度 | Slurm REST API |
@@ -85,15 +85,19 @@
 ## 项目结构
 
 ```
-├── src/                  # 前端源码
-│   ├── views/            # 页面组件
-│   ├── components/       # 通用组件
-│   ├── api/              # axios 封装
-│   ├── utils/            # 工具函数
-│   └── styles/           # 全局样式
-├── backend/
+├── frontend/             # 前端源码（React + TypeScript）
+│   ├── src/
+│   │   ├── pages/        # 页面组件
+│   │   │   ├── user/     # 用户页面
+│   │   │   └── admin/    # 管理员页面
+│   │   ├── layouts/      # 布局组件
+│   │   ├── hooks/        # 自定义 Hooks
+│   │   ├── utils/        # 工具函数
+│   │   └── styles/       # 全局样式
+│   └── package.json
+├── backend/              # 后端源码（Go + Gin）
 │   ├── handlers/         # API 处理器
-│   ├── middleware/        # 认证、审计、CORS、只读模式、token 黑名单
+│   ├── middleware/       # 认证、审计、CORS、只读模式、token 黑名单
 │   ├── models/           # 数据模型
 │   ├── audit/            # 审计日志
 │   ├── knowledge/        # AI 知识库（Obsidian 写入 + RAG 检索）
@@ -168,9 +172,10 @@ vagrant up
 ### 前端
 
 ```bash
+cd frontend
 npm install
 npm run dev        # 开发模式，访问 http://localhost:3000
-npm run build      # 构建到 dist/
+npm run build      # 构建到 backend/static/
 ```
 
 ### 后端
@@ -181,7 +186,7 @@ cp ../.env.example ../.env   # 复制配置文件并填写实际值
 go run main.go               # 启动，默认端口 8080
 ```
 
-后端自动查找前端静态文件：优先 `backend/static/`，其次 `../dist/`。
+后端自动查找前端静态文件：优先 `backend/static/`，其次 `../frontend/dist/`。
 
 ---
 
@@ -464,7 +469,7 @@ systemctl enable --now computenook
 
 我们需要：
 
-- **前端工程师** — Vue 3 / TypeScript，有 HPC 或科研工具使用经验更佳
+- **前端工程师** — React 18 / TypeScript / Ant Design，有 HPC 或科研工具使用经验更佳
 - **后端工程师** — Go，熟悉 Slurm / Linux 系统管理 / 容器技术
 - **系统架构师** — 有大规模集群或云原生架构经验
 - **科研用户** — 计算化学、生物信息、AI/ML、CFD、物理模拟等领域，提需求、测功能、写文档都算贡献

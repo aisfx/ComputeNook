@@ -32,6 +32,9 @@ backend/clients/
 # 工具编译产物
 backend/tools/generate_token
 backend/tools/rdp-tunnel/
+# 前端构建产物（用于后端静态服务）
+backend/static/
+backend/backend/
 
 # ── 日志 ──────────────────────────────────────────────────
 backend/logs/

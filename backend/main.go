@@ -49,56 +49,34 @@ func main() {
 		confPath = "/etc/slurm/partition.conf"
 	}
 	if _, err := os.Stat(confPath); err == nil {
-		if n, err := models.ImportPartitionsFromConfFile(confPath); err != nil {
-			log.Printf("Warning: failed to import partitions from %s: %v", confPath, err)
-		} else if n > 0 {
+		if n, err := models.ImportPartitionsFromConfFile(confPath); err == nil && n > 0 {
 			log.Printf("Auto-imported %d partition(s) from %s", n, confPath)
 		}
-	} else {
-		log.Printf("partition.conf not found at %s, skipping auto-import", confPath)
 	}
 
 	// 初始化Redis缓存
 	if os.Getenv("REDIS_ENABLE") == "true" {
 		if err := cache.InitRedis(); err != nil {
 			log.Printf("Warning: Redis connection failed: %v (continuing without cache)", err)
-			logger.Warn("Redis connection failed: %v (continuing without cache)", err)
 		} else {
 			log.Println("Redis connected successfully")
-			logger.Info("Redis connected: %s", os.Getenv("REDIS_ADDR"))
 			defer cache.Close()
 		}
-	} else {
-		log.Println("Redis cache disabled")
-		logger.Info("Redis cache disabled")
 	}
 
 	logger.Info("========================================")
 	logger.Info("HPC Backend Starting")
 	logger.Info("========================================")
-	logger.Info("LDAP_HOST: %s", os.Getenv("LDAP_HOST"))
-	logger.Info("LDAP_PORT: %s", os.Getenv("LDAP_PORT"))
-	logger.Info("DEV_MODE: %s", os.Getenv("DEV_MODE"))
 
 	// JWT_SECRET 安全检查
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if len(jwtSecret) < 32 {
-		log.Printf("WARNING: JWT_SECRET 长度不足 32 字节（当前 %d 字节），建议使用更长的随机字符串", len(jwtSecret))
+		log.Printf("WARNING: JWT_SECRET length insufficient (%d bytes), recommend 32+ bytes", len(jwtSecret))
 	}
-	logFile := os.Getenv("LOG_FILE")
-	if logFile == "" {
-		logFile = "slurm-web.log"
-	}
-	logger.Info("LOG_FILE: %s", logFile)
-	logger.Info("========================================")
 
 	log.Println("========================================")
 	log.Println("HPC Backend Starting")
 	log.Println("========================================")
-	log.Printf("LDAP_HOST: %s", os.Getenv("LDAP_HOST"))
-	log.Printf("LDAP_PORT: %s", os.Getenv("LDAP_PORT"))
-	log.Printf("LDAP_USE_SSL: %s", os.Getenv("LDAP_USE_SSL"))
-	log.Printf("LDAP_BASE_DN: %s", os.Getenv("LDAP_BASE_DN"))
 	log.Printf("DEV_MODE: %s", os.Getenv("DEV_MODE"))
 	log.Println("========================================")
 
@@ -357,8 +335,11 @@ func main() {
 
 			// 私钥管理
 			webshell.GET("/keys/check", handlers.CheckPrivateKey)
+			webshell.GET("/has-key", handlers.CheckPrivateKey) // 别名兼容
 			webshell.POST("/keys/upload", handlers.UploadPrivateKey)
+			webshell.POST("/upload-key", handlers.UploadPrivateKey) // 别名兼容
 			webshell.POST("/keys/generate", handlers.GenerateKeyPair)
+			webshell.POST("/generate-key", handlers.GenerateKeyPair) // 别名兼容
 			webshell.POST("/keys/deploy", handlers.DeployPublicKey)
 
 			// 连接测试
@@ -399,7 +380,7 @@ func main() {
 		// WebDAV 文件系统挂载（暂时禁用）
 		// r.Any("/api/webdav/*path", middleware.WebDAVAuthMiddleware(), handlers.WebDAVHandler)
 
-		// 文件管理 API
+		// 文件管理 API (兼容旧的 filemanager 路径)
 		files := auth.Group("/files")
 		{
 			files.GET("/list", handlers.ListDirectory)
@@ -418,6 +399,21 @@ func main() {
 			files.GET("/quota/all", cache.CacheMiddleware(cache.PrefixQuota+"all:", 2*time.Minute), handlers.GetAllQuotas)
 			files.POST("/quota", handlers.SetQuota)
 			files.GET("/compress", handlers.CompressDownload)
+		}
+
+		// 文件管理 API - 别名路由 (兼容旧前端)
+		filemanager := auth.Group("/filemanager")
+		{
+			filemanager.GET("/list", handlers.ListDirectory)
+			filemanager.GET("/info", handlers.GetFileInfo)
+			filemanager.GET("/read", handlers.ReadFile)
+			filemanager.GET("/download", handlers.DownloadFile)
+			filemanager.POST("/write", handlers.WriteFile)
+			filemanager.POST("/upload", handlers.UploadFile)
+			filemanager.DELETE("/delete", handlers.DeleteFile)
+			filemanager.POST("/mkdir", handlers.CreateDirectory)
+			filemanager.POST("/rename", handlers.RenameFile)
+			filemanager.POST("/copy", handlers.CopyFile)
 		}
 
 		// 仪表盘统计 API
@@ -500,35 +496,20 @@ func main() {
 			registry.POST("/images/save", handlers.SaveContainerImage)
 			registry.GET("/images/save/task/:task_id", handlers.GetSaveImageTask)
 		}
-
-		// CMDB 主机资产管理
-		cmdb := auth.Group("/cmdb")
-		cmdb.Use(middleware.AdminMiddleware())
-		{
-			cmdb.GET("/hosts", cache.CacheMiddleware(cache.PrefixCMDB+"hosts:", 5*time.Minute), handlers.GetHosts)
-			cmdb.POST("/hosts", handlers.CreateHost)
-			cmdb.PUT("/hosts/:id", handlers.UpdateHost)
-			cmdb.DELETE("/hosts/:id", handlers.DeleteHost)
-			cmdb.POST("/hosts/import", handlers.ImportHosts)
-			cmdb.GET("/hosts/template", handlers.DownloadTemplate)
-			cmdb.GET("/hosts/export", handlers.ExportHosts)
-		}
 	}
 
-	// noVNC 静态文件，优先从 static/novnc，其次从 node_modules
+	// noVNC 静态文件
 	for _, novncDir := range []string{"static/novnc", "../node_modules/@novnc/novnc", "novnc"} {
 		if _, err := os.Stat(novncDir); err == nil {
 			r.Static("/novnc", novncDir)
-			log.Printf("noVNC served from %s", novncDir)
 			break
 		}
 	}
 
-	// xpra-html5 静态文件：放在 static/xpra 或 xpra-html5 目录
+	// xpra-html5 静态文件
 	for _, xpraDir := range []string{"static/xpra", "../static/xpra", "xpra-html5", "../xpra-html5"} {
 		if _, err := os.Stat(xpraDir); err == nil {
 			r.Static("/xpra", xpraDir)
-			log.Printf("xpra-html5 served from %s", xpraDir)
 			break
 		}
 	}
@@ -556,15 +537,12 @@ func main() {
 				c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 			}
 		})
-		log.Printf("Frontend static files served from %s", frontendDir)
 	}
 
 	log.Printf("Server starting on port %s", port)
-	log.Printf("API Documentation: http://localhost:%s/api", port)
 
-	// 明确监听 IPv4 地址，避免只监听 IPv6
+	// 明确监听 IPv4 地址
 	addr := "0.0.0.0:" + port
-	log.Printf("Listening on %s", addr)
 	if err := r.Run(addr); err != nil {
 		log.Fatal("Failed to start server:", err)
 	}
