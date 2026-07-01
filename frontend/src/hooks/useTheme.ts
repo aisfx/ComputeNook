@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import { theme as antTheme } from 'antd'
 
-export type ThemeMode = 'light'
+export type ThemeMode = 'light' | 'dark' | 'ocean'
 
 const THEME_KEY = 'cn_theme'
 

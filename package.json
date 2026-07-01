@@ -1,0 +1,11 @@
+{
+  "name": "computenook",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "release": "cd frontend && npm run build",
+    "dev": "cd frontend && npm run dev",
+    "build": "cd frontend && npm run build",
+    "preview": "cd frontend && npm run preview"
+  }
+}

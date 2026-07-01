@@ -268,13 +268,13 @@ export default function FileManager() {
   const renameFile = (file: FileItem) => {
     let newName = file.name
     
-    modal.confirm({
+    const instance = modal.confirm({
       title: '重命名',
       content: (
         <Input
           defaultValue={file.name}
           onChange={(e) => (newName = e.target.value)}
-          onPressEnter={() => modal.destroyAll()}
+          onPressEnter={() => instance.destroy()}
         />
       ),
       okText: '确定',
@@ -304,13 +304,13 @@ export default function FileManager() {
   const createFolder = () => {
     let folderName = ''
     
-    modal.confirm({
+    const instance = modal.confirm({
       title: '新建文件夹',
       content: (
         <Input
           placeholder="请输入文件夹名称"
           onChange={(e) => (folderName = e.target.value)}
-          onPressEnter={() => modal.destroyAll()}
+          onPressEnter={() => instance.destroy()}
         />
       ),
       okText: '创建',
@@ -339,13 +339,13 @@ export default function FileManager() {
   const createFile = () => {
     let fileName = ''
     
-    modal.confirm({
+    const instance = modal.confirm({
       title: '新建文件',
       content: (
         <Input
           placeholder="请输入文件名称"
           onChange={(e) => (fileName = e.target.value)}
-          onPressEnter={() => modal.destroyAll()}
+          onPressEnter={() => instance.destroy()}
         />
       ),
       okText: '创建',
