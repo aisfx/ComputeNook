@@ -32,7 +32,11 @@ echo "========================================"
 echo "1. 构建前端..."
 echo "========================================"
 cd "${FRONTEND_DIR}"
-npm run build:release
+# 先构建到 backend/static（保持开发环境正常工作）
+npm run build
+# 然后复制到 release/static
+mkdir -p "${RELEASE_DIR}/static"
+cp -r "${BACKEND_DIR}/static/." "${RELEASE_DIR}/static/"
 
 # 编译后端
 echo "========================================"
@@ -55,14 +59,11 @@ else
     exit 1
 fi
 
-# 复制静态文件（已经在 release/static 目录了，无需再复制）
-echo "========================================"
-echo "3. 静态文件已生成到 ${RELEASE_DIR}/static"
-echo "========================================"
+echo "静态文件已复制到 ${RELEASE_DIR}/static"
 
 # 复制配置文件和脚本
 echo "========================================"
-echo "4. 复制配置文件和脚本..."
+echo "3. 复制配置文件和脚本..."
 echo "========================================"
 
 # 复制环境变量示例
@@ -102,7 +103,7 @@ touch "${RELEASE_DIR}/logs/.gitkeep"
 
 # 创建版本信息
 echo "========================================"
-echo "5. 创建版本信息..."
+echo "4. 创建版本信息..."
 echo "========================================"
 
 cat > "${RELEASE_DIR}/VERSION.txt" <<EOF
@@ -409,7 +410,7 @@ EOFREADME
 
 # 打包成 tar.gz
 echo "========================================"
-echo "6. 创建压缩包..."
+echo "5. 创建压缩包..."
 echo "========================================"
 
 ARCHIVE_NAME="computenook-${SHORT_VERSION}-$(uname -s | tr '[:upper:]' '[:lower:]')-$(date +%Y%m%d-%H%M%S).tar.gz"
@@ -442,7 +443,7 @@ fi
 
 # 清理 release 目录中的其他文件，只保留压缩包和校验和
 echo "========================================"
-echo "7. 清理临时文件..."
+echo "6. 清理临时文件..."
 echo "========================================"
 
 cd "${RELEASE_DIR}"
