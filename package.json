@@ -3,9 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "release": "cd frontend && npm run build",
+    "release": "bash scripts/build-release.sh",
     "dev": "cd frontend && npm run dev",
     "build": "cd frontend && npm run build",
-    "preview": "cd frontend && npm run preview"
+    "build:release": "cd frontend && npm run build:release",
+    "preview": "cd frontend && npm run preview",
+    "setup-hooks": "chmod +x .git/hooks/post-commit && chmod +x scripts/build-release.sh"
   }
 }
