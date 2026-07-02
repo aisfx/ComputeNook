@@ -53,11 +53,16 @@ interface RunningJob {
 interface NodeInfo {
   name: string
   state: string
-  cpus: number
-  cpu_load: number
-  real_memory: number
-  alloc_memory: number
-  jobs: number
+  cpu_total: number
+  cpu_allocated: number
+  cpu_usage_percent: number
+  memory_total_mb: number
+  memory_allocated_mb: number
+  memory_usage_percent: number
+  gpu_info: string
+  gpu_used: string
+  partitions: string[]
+  running_jobs: number
 }
 
 interface AccountQuota {
@@ -1173,26 +1178,26 @@ export default function UserDashboard() {
               },
               {
                 title: 'CPU 总数',
-                dataIndex: 'cpus',
-                key: 'cpus',
+                dataIndex: 'cpu_total',
+                key: 'cpu_total',
                 width: 100,
                 align: 'center' as const,
                 render: (cpus: number) => <span style={{ fontWeight: 500 }}>{cpus}</span>
               },
               {
                 title: 'CPU 已用',
-                dataIndex: 'cpu_load',
-                key: 'cpu_load',
+                dataIndex: 'cpu_allocated',
+                key: 'cpu_allocated',
                 width: 100,
                 align: 'center' as const,
-                render: (load: number, record: NodeInfo) => {
-                  const usage = record.cpus > 0 ? Math.round((load / record.cpus) * 100) : 0
+                render: (allocated: number, record: NodeInfo) => {
+                  const usage = record.cpu_usage_percent
                   return (
                     <span style={{ 
                       fontWeight: 500,
                       color: usage > 80 ? '#ef4444' : usage > 50 ? '#f59e0b' : '#10b981'
                     }}>
-                      {load}
+                      {allocated}
                     </span>
                   )
                 }
@@ -1202,7 +1207,7 @@ export default function UserDashboard() {
                 key: 'cpu_usage',
                 width: 150,
                 render: (_, record: NodeInfo) => {
-                  const usage = record.cpus > 0 ? Math.round((record.cpu_load / record.cpus) * 100) : 0
+                  const usage = Math.round(record.cpu_usage_percent)
                   return (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <Progress 
@@ -1218,16 +1223,16 @@ export default function UserDashboard() {
               },
               {
                 title: '内存总量',
-                dataIndex: 'real_memory',
-                key: 'real_memory',
+                dataIndex: 'memory_total_mb',
+                key: 'memory_total_mb',
                 width: 120,
                 align: 'center' as const,
                 render: (mem: number) => `${(mem / 1024).toFixed(1)} GB`
               },
               {
                 title: '内存已用',
-                dataIndex: 'alloc_memory',
-                key: 'alloc_memory',
+                dataIndex: 'memory_allocated_mb',
+                key: 'memory_allocated_mb',
                 width: 120,
                 align: 'center' as const,
                 render: (mem: number) => `${(mem / 1024).toFixed(1)} GB`
@@ -1237,7 +1242,7 @@ export default function UserDashboard() {
                 key: 'mem_usage',
                 width: 150,
                 render: (_, record: NodeInfo) => {
-                  const usage = record.real_memory > 0 ? Math.round((record.alloc_memory / record.real_memory) * 100) : 0
+                  const usage = Math.round(record.memory_usage_percent)
                   return (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <Progress 
@@ -1253,8 +1258,8 @@ export default function UserDashboard() {
               },
               {
                 title: '作业数',
-                dataIndex: 'jobs',
-                key: 'jobs',
+                dataIndex: 'running_jobs',
+                key: 'running_jobs',
                 width: 80,
                 align: 'center' as const,
                 render: (jobs: number) => (
@@ -1313,10 +1318,10 @@ export default function UserDashboard() {
         ]}
       >
         {selectedNode && (() => {
-          const cpuUsage = selectedNode.cpus > 0 ? Math.round((selectedNode.cpu_load / selectedNode.cpus) * 100) : 0
-          const memUsage = selectedNode.real_memory > 0 ? Math.round((selectedNode.alloc_memory / selectedNode.real_memory) * 100) : 0
-          const memUsageGB = (selectedNode.alloc_memory / 1024).toFixed(1)
-          const memTotalGB = (selectedNode.real_memory / 1024).toFixed(1)
+          const cpuUsage = Math.round(selectedNode.cpu_usage_percent)
+          const memUsage = Math.round(selectedNode.memory_usage_percent)
+          const memUsageGB = (selectedNode.memory_allocated_mb / 1024).toFixed(1)
+          const memTotalGB = (selectedNode.memory_total_mb / 1024).toFixed(1)
           
           return (
             <Space direction="vertical" style={{ width: '100%' }} size="large">
@@ -1332,7 +1337,7 @@ export default function UserDashboard() {
                   <Col span={12}>
                     <div style={{ marginBottom: 12 }}>
                       <div style={{ color: '#64748b', fontSize: 12, marginBottom: 4 }}>运行作业数</div>
-                      <div style={{ fontWeight: 600, color: '#3b82f6' }}>{selectedNode.jobs} 个</div>
+                      <div style={{ fontWeight: 600, color: '#3b82f6' }}>{selectedNode.running_jobs} 个</div>
                     </div>
                   </Col>
                 </Row>
@@ -1344,7 +1349,7 @@ export default function UserDashboard() {
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                     <span>CPU 负载</span>
                     <span style={{ fontWeight: 600, color: '#3b82f6' }}>
-                      {selectedNode.cpu_load} / {selectedNode.cpus} 核
+                      {selectedNode.cpu_allocated} / {selectedNode.cpu_total} 核
                     </span>
                   </div>
                   <Progress 
