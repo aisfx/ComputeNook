@@ -1105,85 +1105,177 @@ export default function UserDashboard() {
         title={
           <Space>
             <CloudServerOutlined />
-            节点状态
+            节点
             <Tag>{nodes.length} 个节点</Tag>
           </Space>
+        }
+        extra={
+          <Button
+            type="link"
+            size="small"
+            icon={<ReloadOutlined />}
+            onClick={loadNodes}
+          >
+            刷新
+          </Button>
         }
       >
         {nodes.length === 0 ? (
           <Empty description="暂无节点数据" />
         ) : (
-          <Row gutter={[16, 16]}>
-            {nodes.map(node => {
-              const cpuUsage = node.cpus > 0 ? Math.round((node.cpu_load / node.cpus) * 100) : 0
-              const memUsage = node.real_memory > 0 ? Math.round((node.alloc_memory / node.real_memory) * 100) : 0
-              
-              const stateColor: Record<string, string> = {
-                idle: '#10b981',
-                allocated: '#3b82f6',
-                mixed: '#f59e0b',
-                down: '#ef4444',
-                drain: '#94a3b8'
-              }
-              
-              return (
-                <Col span={6} key={node.name}>
-                  <Card 
-                    size="small" 
-                    style={{ 
-                      height: '100%',
-                      cursor: 'pointer',
-                      transition: 'all 0.3s',
-                      border: '1px solid #e5e7eb'
-                    }}
-                    hoverable
-                    onClick={() => {
-                      setSelectedNode(node)
-                      setNodeDetailOpen(true)
-                    }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                      <span style={{ fontWeight: 600, fontSize: 13 }}>{node.name}</span>
+          <Table
+            columns={[
+              {
+                title: '节点名称',
+                dataIndex: 'name',
+                key: 'name',
+                width: 200,
+                render: (name: string, record: NodeInfo) => {
+                  const stateColors: Record<string, string> = {
+                    idle: '#10b981',
+                    allocated: '#3b82f6',
+                    mixed: '#f59e0b',
+                    down: '#ef4444',
+                    drain: '#94a3b8'
+                  }
+                  return (
+                    <Space>
                       <div style={{
                         width: 8,
                         height: 8,
                         borderRadius: '50%',
-                        background: stateColor[node.state.toLowerCase()] || '#94a3b8'
+                        background: stateColors[record.state.toLowerCase()] || '#94a3b8'
                       }} />
-                    </div>
-                    
-                    <div style={{ marginBottom: 8 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                        <span style={{ fontSize: 12, color: '#64748b' }}>CPU</span>
-                        <span style={{ fontSize: 12, fontWeight: 600 }}>{cpuUsage}%</span>
-                      </div>
-                      <Progress percent={cpuUsage} strokeColor="#3b82f6" showInfo={false} size="small" />
-                    </div>
-                    
-                    <div style={{ marginBottom: 8 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                        <span style={{ fontSize: 12, color: '#64748b' }}>MEM</span>
-                        <span style={{ fontSize: 12, fontWeight: 600 }}>{memUsage}%</span>
-                      </div>
-                      <Progress percent={memUsage} strokeColor="#10b981" showInfo={false} size="small" />
-                    </div>
-                    
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 8 }}>
-                      <span style={{ color: '#64748b' }}>作业数</span>
-                      <span style={{ fontWeight: 600 }}>{node.jobs}</span>
-                    </div>
-                    
-                    <Tag
-                      color={stateColor[node.state.toLowerCase()] || 'default'}
-                      style={{ width: '100%', textAlign: 'center', margin: 0 }}
-                    >
-                      {node.state}
+                      <span style={{ fontWeight: 500 }}>{name}</span>
+                    </Space>
+                  )
+                }
+              },
+              {
+                title: '状态',
+                dataIndex: 'state',
+                key: 'state',
+                width: 100,
+                render: (state: string) => {
+                  const stateColorMap: Record<string, string> = {
+                    idle: 'success',
+                    allocated: 'processing',
+                    mixed: 'warning',
+                    down: 'error',
+                    drain: 'default'
+                  }
+                  return (
+                    <Tag color={stateColorMap[state.toLowerCase()] || 'default'}>
+                      {state.toUpperCase()}
                     </Tag>
-                  </Card>
-                </Col>
-              )
+                  )
+                }
+              },
+              {
+                title: 'CPU 总数',
+                dataIndex: 'cpus',
+                key: 'cpus',
+                width: 100,
+                align: 'center' as const,
+                render: (cpus: number) => <span style={{ fontWeight: 500 }}>{cpus}</span>
+              },
+              {
+                title: 'CPU 已用',
+                dataIndex: 'cpu_load',
+                key: 'cpu_load',
+                width: 100,
+                align: 'center' as const,
+                render: (load: number, record: NodeInfo) => {
+                  const usage = record.cpus > 0 ? Math.round((load / record.cpus) * 100) : 0
+                  return (
+                    <span style={{ 
+                      fontWeight: 500,
+                      color: usage > 80 ? '#ef4444' : usage > 50 ? '#f59e0b' : '#10b981'
+                    }}>
+                      {load}
+                    </span>
+                  )
+                }
+              },
+              {
+                title: 'CPU 使用率',
+                key: 'cpu_usage',
+                width: 150,
+                render: (_, record: NodeInfo) => {
+                  const usage = record.cpus > 0 ? Math.round((record.cpu_load / record.cpus) * 100) : 0
+                  return (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Progress 
+                        percent={usage} 
+                        size="small" 
+                        strokeColor={usage > 80 ? '#ef4444' : usage > 50 ? '#f59e0b' : '#3b82f6'}
+                        style={{ flex: 1, margin: 0 }}
+                      />
+                      <span style={{ fontSize: 12, minWidth: 35 }}>{usage}%</span>
+                    </div>
+                  )
+                }
+              },
+              {
+                title: '内存总量',
+                dataIndex: 'real_memory',
+                key: 'real_memory',
+                width: 120,
+                align: 'center' as const,
+                render: (mem: number) => `${(mem / 1024).toFixed(1)} GB`
+              },
+              {
+                title: '内存已用',
+                dataIndex: 'alloc_memory',
+                key: 'alloc_memory',
+                width: 120,
+                align: 'center' as const,
+                render: (mem: number) => `${(mem / 1024).toFixed(1)} GB`
+              },
+              {
+                title: '内存使用率',
+                key: 'mem_usage',
+                width: 150,
+                render: (_, record: NodeInfo) => {
+                  const usage = record.real_memory > 0 ? Math.round((record.alloc_memory / record.real_memory) * 100) : 0
+                  return (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Progress 
+                        percent={usage} 
+                        size="small" 
+                        strokeColor={usage > 80 ? '#ef4444' : usage > 50 ? '#f59e0b' : '#10b981'}
+                        style={{ flex: 1, margin: 0 }}
+                      />
+                      <span style={{ fontSize: 12, minWidth: 35 }}>{usage}%</span>
+                    </div>
+                  )
+                }
+              },
+              {
+                title: '作业数',
+                dataIndex: 'jobs',
+                key: 'jobs',
+                width: 80,
+                align: 'center' as const,
+                render: (jobs: number) => (
+                  <span style={{ fontWeight: 500, color: jobs > 0 ? '#3b82f6' : '#9ca3af' }}>
+                    {jobs}
+                  </span>
+                )
+              }
+            ]}
+            dataSource={nodes}
+            rowKey="name"
+            pagination={false}
+            size="small"
+            onRow={(record) => ({
+              onClick: () => {
+                setSelectedNode(record)
+                setNodeDetailOpen(true)
+              },
+              style: { cursor: 'pointer' }
             })}
-          </Row>
+          />
         )}
       </Card>
       
