@@ -377,11 +377,11 @@ func GetMyBillingInfo(c *gin.Context) {
 		userUsed := userUsedMap[qosName]
 
 		result = append(result, map[string]interface{}{
-			"qos_name":        account.QoSName,
-			"total_recharged": account.TotalRecharged,     // QoS 总充值
-			"used":            userUsed,                    // 用户个人已用
-			"current_balance": account.CurrentBalance,      // QoS 剩余余额
-			"usage_percent":   0,
+			"qos_name":     account.QoSName,
+			"total_quota":  account.TotalRecharged,  // 前端期望字段
+			"used_hours":   userUsed,                 // 前端期望字段
+			"balance":      account.CurrentBalance,
+			"usage_percent": 0,
 		})
 
 		if account.TotalRecharged > 0 {

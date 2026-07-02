@@ -65,10 +65,27 @@ func GetQuota(c *gin.Context) {
 	quotas, err := queryQuota(user, mountpoint)
 	if err != nil {
 		logger.Error("GetQuota error for user %s: %v", user, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		// 返回空数据而不是错误，避免前端显示"暂无存储配额"
+		c.JSON(http.StatusOK, gin.H{"data": map[string]interface{}{}})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"username": user, "quotas": quotas})
+	
+	// 如果有配额数据，转换为前端期望的格式
+	if len(quotas) > 0 {
+		quota := quotas[0] // 取第一个配额信息
+		c.JSON(http.StatusOK, gin.H{
+			"data": map[string]interface{}{
+				"quota_used":  quota.BlockUsed,   // KB
+				"quota_limit": quota.BlockHard,   // KB
+				"files_used":  quota.InodeUsed,
+				"files_limit": quota.InodeHard,
+			},
+		})
+		return
+	}
+	
+	// 没有配额数据
+	c.JSON(http.StatusOK, gin.H{"data": map[string]interface{}{}})
 }
 
 // GetFSInfo GET /api/files/quota/fsinfo  返回挂载点的真实容量
