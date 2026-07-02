@@ -140,7 +140,7 @@ export default function AdminOverview() {
     loadData()
     const timer = setInterval(loadData, 30_000)
     return () => clearInterval(timer)
-  }, [loadData])
+  }, [])
 
   // CPU 利用率折线图
   useEffect(() => {

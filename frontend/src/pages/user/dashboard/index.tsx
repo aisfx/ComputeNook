@@ -348,7 +348,7 @@ export default function UserDashboard() {
   
   useEffect(() => {
     refreshAll()
-  }, [refreshAll])
+  }, [])
   
   // 继续在下一段...
   
