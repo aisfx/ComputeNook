@@ -148,6 +148,10 @@ export default function UserDashboard() {
     files: { used: 0, total: 0, percentage: 0, no_limit: true }
   })
   
+  // 节点详情弹窗
+  const [selectedNode, setSelectedNode] = useState<NodeInfo | null>(null)
+  const [nodeDetailOpen, setNodeDetailOpen] = useState(false)
+  
   // 作业历史弹窗
   const [jobHistoryOpen, setJobHistoryOpen] = useState(false)
   const [jobHistoryLoading, setJobHistoryLoading] = useState(false)
@@ -815,13 +819,24 @@ export default function UserDashboard() {
           >
             {accountQuotas.length > 0 ? (
               <div style={{ textAlign: 'center', paddingTop: 20 }}>
-                <div style={{ fontSize: 48, fontWeight: 700, marginBottom: 8 }}>
-                  <span style={{ color: currentAccountQuota.cpu_pct > 90 ? '#ef4444' : currentAccountQuota.cpu_pct > 70 ? '#f59e0b' : '#667eea' }}>
-                    {currentAccountQuota.cpu_pct}
-                  </span>
-                  <span style={{ fontSize: 24, color: '#9ca3af' }}>%</span>
-                </div>
-                <div style={{ fontSize: 13, color: '#9ca3af', marginBottom: 8 }}>CPU 使用</div>
+                {currentAccountQuota.max_cpus > 0 ? (
+                  <>
+                    <div style={{ fontSize: 48, fontWeight: 700, marginBottom: 8 }}>
+                      <span style={{ color: currentAccountQuota.cpu_pct > 90 ? '#ef4444' : currentAccountQuota.cpu_pct > 70 ? '#f59e0b' : '#667eea' }}>
+                        {currentAccountQuota.cpu_pct}
+                      </span>
+                      <span style={{ fontSize: 24, color: '#9ca3af' }}>%</span>
+                    </div>
+                    <div style={{ fontSize: 13, color: '#9ca3af', marginBottom: 8 }}>CPU 使用率</div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ fontSize: 48, fontWeight: 700, marginBottom: 8, color: '#667eea' }}>
+                      {currentAccountQuota.used_cpus}
+                    </div>
+                    <div style={{ fontSize: 13, color: '#9ca3af', marginBottom: 8 }}>当前使用 CPU</div>
+                  </>
+                )}
                 <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 24 }}>{currentAccountQuota.account}</div>
                 
                 <Space direction="vertical" style={{ width: '100%' }} size="small">
@@ -1094,9 +1109,22 @@ export default function UserDashboard() {
               
               return (
                 <Col span={6} key={node.name}>
-                  <Card size="small" style={{ height: '100%' }}>
+                  <Card 
+                    size="small" 
+                    style={{ 
+                      height: '100%',
+                      cursor: 'pointer',
+                      transition: 'all 0.3s',
+                      border: '1px solid #e5e7eb'
+                    }}
+                    hoverable
+                    onClick={() => {
+                      setSelectedNode(node)
+                      setNodeDetailOpen(true)
+                    }}
+                  >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                      <span style={{ fontWeight: 600 }}>{node.name}</span>
+                      <span style={{ fontWeight: 600, fontSize: 13 }}>{node.name}</span>
                       <div style={{
                         width: 8,
                         height: 8,
@@ -1121,14 +1149,14 @@ export default function UserDashboard() {
                       <Progress percent={memUsage} strokeColor="#10b981" showInfo={false} size="small" />
                     </div>
                     
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 8 }}>
                       <span style={{ color: '#64748b' }}>作业数</span>
                       <span style={{ fontWeight: 600 }}>{node.jobs}</span>
                     </div>
                     
                     <Tag
                       color={stateColor[node.state.toLowerCase()] || 'default'}
-                      style={{ marginTop: 8, width: '100%', textAlign: 'center' }}
+                      style={{ width: '100%', textAlign: 'center', margin: 0 }}
                     >
                       {node.state}
                     </Tag>
@@ -1139,6 +1167,113 @@ export default function UserDashboard() {
           </Row>
         )}
       </Card>
+      
+      {/* 节点详情弹窗 */}
+      <Modal
+        title={
+          <Space>
+            <CloudServerOutlined />
+            <span>节点详情</span>
+            {selectedNode && (
+              <Tag color={
+                selectedNode.state.toLowerCase() === 'idle' ? 'success' :
+                selectedNode.state.toLowerCase() === 'allocated' ? 'processing' :
+                selectedNode.state.toLowerCase() === 'mixed' ? 'warning' :
+                selectedNode.state.toLowerCase() === 'down' ? 'error' : 'default'
+              }>
+                {selectedNode.state}
+              </Tag>
+            )}
+          </Space>
+        }
+        open={nodeDetailOpen}
+        onCancel={() => {
+          setNodeDetailOpen(false)
+          setSelectedNode(null)
+        }}
+        width={700}
+        footer={[
+          <Button key="close" onClick={() => {
+            setNodeDetailOpen(false)
+            setSelectedNode(null)
+          }}>
+            关闭
+          </Button>
+        ]}
+      >
+        {selectedNode && (() => {
+          const cpuUsage = selectedNode.cpus > 0 ? Math.round((selectedNode.cpu_load / selectedNode.cpus) * 100) : 0
+          const memUsage = selectedNode.real_memory > 0 ? Math.round((selectedNode.alloc_memory / selectedNode.real_memory) * 100) : 0
+          const memUsageGB = (selectedNode.alloc_memory / 1024).toFixed(1)
+          const memTotalGB = (selectedNode.real_memory / 1024).toFixed(1)
+          
+          return (
+            <Space direction="vertical" style={{ width: '100%' }} size="large">
+              {/* 基本信息 */}
+              <Card size="small" title="基本信息">
+                <Row gutter={[16, 16]}>
+                  <Col span={12}>
+                    <div style={{ marginBottom: 12 }}>
+                      <div style={{ color: '#64748b', fontSize: 12, marginBottom: 4 }}>节点名称</div>
+                      <div style={{ fontWeight: 600 }}>{selectedNode.name}</div>
+                    </div>
+                  </Col>
+                  <Col span={12}>
+                    <div style={{ marginBottom: 12 }}>
+                      <div style={{ color: '#64748b', fontSize: 12, marginBottom: 4 }}>运行作业数</div>
+                      <div style={{ fontWeight: 600, color: '#3b82f6' }}>{selectedNode.jobs} 个</div>
+                    </div>
+                  </Col>
+                </Row>
+              </Card>
+              
+              {/* CPU 使用情况 */}
+              <Card size="small" title="CPU 使用情况">
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <span>CPU 负载</span>
+                    <span style={{ fontWeight: 600, color: '#3b82f6' }}>
+                      {selectedNode.cpu_load} / {selectedNode.cpus} 核
+                    </span>
+                  </div>
+                  <Progress 
+                    percent={cpuUsage} 
+                    strokeColor={{
+                      '0%': '#3b82f6',
+                      '100%': cpuUsage > 90 ? '#ef4444' : cpuUsage > 70 ? '#f59e0b' : '#10b981'
+                    }}
+                  />
+                </div>
+                <div style={{ fontSize: 12, color: '#64748b' }}>
+                  使用率: {cpuUsage}%
+                </div>
+              </Card>
+              
+              {/* 内存使用情况 */}
+              <Card size="small" title="内存使用情况">
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <span>内存占用</span>
+                    <span style={{ fontWeight: 600, color: '#10b981' }}>
+                      {memUsageGB} GB / {memTotalGB} GB
+                    </span>
+                  </div>
+                  <Progress 
+                    percent={memUsage} 
+                    strokeColor={{
+                      '0%': '#10b981',
+                      '100%': memUsage > 90 ? '#ef4444' : memUsage > 70 ? '#f59e0b' : '#10b981'
+                    }}
+                  />
+                </div>
+                <div style={{ fontSize: 12, color: '#64748b' }}>
+                  使用率: {memUsage}%
+                </div>
+              </Card>
+            </Space>
+          )
+        })()}
+      </Modal>
       
       {/* 作业历史弹窗 */}
       <Modal
