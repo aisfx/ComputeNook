@@ -282,6 +282,10 @@ func main() {
 		{
 			// 普通用户可以查看自己的使用情况
 			usage.GET("/user", handlers.GetUserUsage)
+			usage.GET("/my-resources", cache.CacheMiddleware(cache.PrefixUser+"resources:", 2*time.Minute), handlers.GetMyResources)
+			usage.GET("/billing-summary", cache.CacheMiddleware(cache.PrefixUser+"billing:", 2*time.Minute), handlers.GetMyBillingInfo)
+			usage.GET("/billing", handlers.GetUserUsage) // 兼容旧接口
+			
 			// debug 接口限管理员
 			usage.GET("/debug", middleware.AdminMiddleware(), handlers.DebugUserUsage)
 			usage.GET("/debug/raw", middleware.AdminMiddleware(), handlers.DebugRawJobs)
@@ -400,6 +404,9 @@ func main() {
 			files.POST("/quota", handlers.SetQuota)
 			files.GET("/compress", handlers.CompressDownload)
 		}
+		
+		// 配额 API（兼容路由）
+		auth.GET("/quota", cache.CacheMiddleware(cache.PrefixQuota, 2*time.Minute), handlers.GetQuota)
 
 		// 文件管理 API - 别名路由 (兼容旧前端)
 		filemanager := auth.Group("/filemanager")
