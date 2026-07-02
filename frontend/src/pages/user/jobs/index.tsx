@@ -49,9 +49,25 @@ interface Template {
   id: string
   name: string
   icon: string
+  category?: string
+  appType?: string
+  jobType?: string
+  description?: string
+  nodes: number
   cpus: number
-  memory: string
+  gpus?: number
+  memory: number  // 改为number类型（MB）
+  time: number    // 改为number类型（分钟）
+  partition: string
+  moduleLoad?: string
+  executable?: string
+  inputFile?: string
+  containerImage?: string
+  appParams?: Record<string, string>
+  owner?: string
+  isPublic?: boolean
   showInQuick?: boolean
+  script?: string  // 如果后端返回了script字段
 }
 
 function formatTime(ts: number): string {
@@ -132,6 +148,14 @@ export default function JobManagement() {
   const [submitOpen, setSubmitOpen] = useState(false)
   const [submitTab, setSubmitTab] = useState<'manual' | 'template'>('manual')
   const [jobMode, setJobMode] = useState<'normal' | 'container'>('normal') // 作业模式
+  
+  // 当前表单资源统计
+  const [currentResources, setCurrentResources] = useState({
+    nodes: 0,
+    cpus: 0,
+    gpus: 0,
+    memory: 0
+  })
   const [templateJobType, setTemplateJobType] = useState<'normal' | 'container'>('normal') // 模板管理中的作业类型
   const [submitForm] = Form.useForm()
   
@@ -139,6 +163,12 @@ export default function JobManagement() {
   const [createTemplateOpen, setCreateTemplateOpen] = useState(false)
   const [createTemplateForm] = Form.useForm()
   const [templates, setTemplates] = useState<Template[]>([])
+  
+  // 查看/编辑模板
+  const [viewTemplateOpen, setViewTemplateOpen] = useState(false)
+  const [editTemplateOpen, setEditTemplateOpen] = useState(false)
+  const [currentTemplate, setCurrentTemplate] = useState<Template | null>(null)
+  const [editTemplateForm] = Form.useForm()
   
   // Harbor镜像相关
   const [harborProjects, setHarborProjects] = useState<any[]>([])
@@ -387,15 +417,177 @@ export default function JobManagement() {
       Message.error(e.response?.data?.error || '创建模板失败')
     }
   }
+  
+  // 查看模板详情
+  const handleViewTemplate = useCallback(async (tpl: Template) => {
+    try {
+      // 如果需要从后端获取完整信息
+      const res = await axios.get(`/app-templates/${tpl.id}`)
+      setCurrentTemplate(res.data.data || tpl)
+      setViewTemplateOpen(true)
+    } catch (e: any) {
+      // 如果API失败，直接使用现有数据
+      setCurrentTemplate(tpl)
+      setViewTemplateOpen(true)
+    }
+  }, [])
+  
+  // 编辑模板
+  const handleEditTemplate = useCallback(async (tpl: Template) => {
+    try {
+      // 如果需要从后端获取完整信息
+      const res = await axios.get(`/app-templates/${tpl.id}`)
+      const templateData = res.data.data || tpl
+      setCurrentTemplate(templateData)
+      
+      // 填充编辑表单
+      editTemplateForm.setFieldsValue({
+        name: templateData.name,
+        appType: templateData.appType,
+        jobType: templateData.jobType || 'normal',
+        icon: templateData.icon,
+        category: templateData.category || 'general',
+        description: templateData.description,
+        partition: templateData.partition,
+        nodes: templateData.nodes,
+        cpus: templateData.cpus,
+        gpus: templateData.gpus || 0,
+        memory: Math.floor(templateData.memory / 1024), // 转换为GB
+        time: Math.floor(templateData.time / 60), // 转换为小时
+        moduleLoad: templateData.moduleLoad,
+        executable: templateData.executable,
+        inputFile: templateData.inputFile,
+        containerImage: templateData.containerImage,
+        showInQuick: templateData.showInQuick || false
+      })
+      
+      setEditTemplateOpen(true)
+    } catch (e: any) {
+      // 如果API失败，直接使用现有数据
+      setCurrentTemplate(tpl)
+      editTemplateForm.setFieldsValue({
+        name: tpl.name,
+        appType: tpl.appType,
+        jobType: tpl.jobType || 'normal',
+        icon: tpl.icon,
+        category: tpl.category || 'general',
+        description: tpl.description,
+        partition: tpl.partition,
+        nodes: tpl.nodes,
+        cpus: tpl.cpus,
+        gpus: tpl.gpus || 0,
+        memory: Math.floor(tpl.memory / 1024),
+        time: Math.floor(tpl.time / 60),
+        moduleLoad: tpl.moduleLoad,
+        executable: tpl.executable,
+        inputFile: tpl.inputFile,
+        containerImage: tpl.containerImage,
+        showInQuick: tpl.showInQuick || false
+      })
+      setEditTemplateOpen(true)
+    }
+  }, [editTemplateForm])
+  
+  // 保存模板编辑
+  const handleSaveTemplate = async (values: any) => {
+    if (!currentTemplate) return
+    
+    try {
+      await axios.put(`/app-templates/${currentTemplate.id}`, {
+        ...values,
+        memory: values.memory * 1024, // 转换为MB
+        time: values.time * 60, // 转换为分钟
+        owner: user?.username
+      })
+      Message.success('模板更新成功')
+      setEditTemplateOpen(false)
+      editTemplateForm.resetFields()
+      setCurrentTemplate(null)
+      loadTemplates()
+    } catch (e: any) {
+      Message.error(e.response?.data?.error || '更新模板失败')
+    }
+  }
+  
+  // 删除模板
+  const handleDeleteTemplate = useCallback(async (tpl: Template) => {
+    modal.confirm({
+      title: '删除模板',
+      content: `确定要删除模板"${tpl.name}"吗？此操作不可恢复。`,
+      okText: '确定删除',
+      okButtonProps: { danger: true },
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          await axios.delete(`/app-templates/${tpl.id}`)
+          Message.success('模板已删除')
+          loadTemplates()
+        } catch (e: any) {
+          Message.error(e.response?.data?.error || '删除模板失败')
+        }
+      }
+    })
+  }, [modal, loadTemplates])
   const applyTemplate = useCallback((tpl: Template) => {
+    // 构建脚本内容
+    let scriptContent = '#!/bin/bash\n'
+    scriptContent += `#SBATCH -J ${tpl.name}\n`
+    scriptContent += `#SBATCH -p ${tpl.partition || 'compute'}\n`
+    scriptContent += `#SBATCH -N ${tpl.nodes || 1}\n`
+    scriptContent += `#SBATCH -c ${tpl.cpus}\n`
+    if (tpl.memory > 0) {
+      scriptContent += `#SBATCH --mem=${tpl.memory}M\n`
+    }
+    if (tpl.time > 0) {
+      const hours = Math.floor(tpl.time / 60)
+      const mins = tpl.time % 60
+      scriptContent += `#SBATCH -t ${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}:00\n`
+    }
+    if (tpl.gpus && tpl.gpus > 0) {
+      scriptContent += `#SBATCH --gres=gpu:${tpl.gpus}\n`
+    }
+    scriptContent += '\n'
+    
+    // 添加模块加载
+    if (tpl.moduleLoad) {
+      scriptContent += `module load ${tpl.moduleLoad}\n\n`
+    }
+    
+    // 添加执行命令
+    if (tpl.executable) {
+      if (tpl.inputFile) {
+        scriptContent += `srun ${tpl.executable} ${tpl.inputFile}\n`
+      } else {
+        scriptContent += `srun ${tpl.executable}\n`
+      }
+    } else {
+      scriptContent += 'srun ./my-program\n'
+    }
+    
+    const memoryGB = Math.floor(tpl.memory / 1024) || 0
+    const timeHours = Math.floor(tpl.time / 60) || 0
+    
     submitForm.setFieldsValue({
       name: tpl.name,
-      partition: 'compute',
-      nodes: 1,
+      partition: tpl.partition || 'compute',
+      nodes: tpl.nodes || 1,
       cpus: tpl.cpus,
-      memory: tpl.memory,
-      time: '01:00:00'
+      memory: memoryGB,
+      time_hours: timeHours,
+      gpus: tpl.gpus || 0,
+      qos: '',
+      workdir: '',
+      script: scriptContent
     })
+    
+    // 更新资源统计
+    setCurrentResources({
+      nodes: tpl.nodes || 1,
+      cpus: tpl.cpus,
+      gpus: tpl.gpus || 0,
+      memory: memoryGB
+    })
+    
     setSubmitTab('manual')
   }, [submitForm])
   
@@ -928,7 +1120,7 @@ export default function JobManagement() {
                           <div style={{ fontSize: '0.95rem', lineHeight: 1 }}>{tpl.icon}</div>
                           <div style={{ fontSize: '0.73rem', fontWeight: 600, lineHeight: 1.2 }}>{tpl.name}</div>
                           <div style={{ fontSize: '0.67rem', color: '#8c8c8c' }}>
-                            {tpl.cpus}核 · {tpl.memory}
+                            {tpl.cpus}核 · {Math.floor(tpl.memory / 1024)}GB
                           </div>
                         </div>
                       ))}
@@ -972,82 +1164,120 @@ export default function JobManagement() {
                     layout="vertical"
                     onFinish={handleSubmit}
                   >
-                    <Form.Item
-                      label="作业名称"
-                      name="name"
-                      rules={[{ required: true, message: '请输入作业名称' }]}
-                    >
-                      <Input placeholder="例如：数据处理任务" />
-                    </Form.Item>
-                    
-                    <Form.Item
-                      label="分区"
-                      name="partition"
-                      rules={[{ required: true, message: '请选择分区' }]}
-                    >
-                      <Select placeholder="选择计算分区">
-                        {partitions.map(p => (
-                          <Select.Option key={p} value={p}>{p}</Select.Option>
-                        ))}
-                      </Select>
-                    </Form.Item>
+                    <Row gutter={16}>
+                      <Col span={12}>
+                        <Form.Item
+                          label="作业名称"
+                          name="name"
+                          rules={[{ required: true, message: '请输入作业名称' }]}
+                        >
+                          <Input placeholder="my_job" />
+                        </Form.Item>
+                      </Col>
+                      <Col span={12}>
+                        <Form.Item
+                          label="队列/分区"
+                          name="partition"
+                          rules={[{ required: true, message: '请选择分区' }]}
+                        >
+                          <Select placeholder="选择计算分区">
+                            {partitions.map(p => (
+                              <Select.Option key={p} value={p}>{p}</Select.Option>
+                            ))}
+                          </Select>
+                        </Form.Item>
+                      </Col>
+                    </Row>
                     
                     <Row gutter={16}>
-                      <Col span={8}>
+                      <Col span={12}>
                         <Form.Item
                           label="节点数"
                           name="nodes"
                           rules={[{ required: true, message: '请输入节点数' }]}
+                          initialValue={1}
                         >
-                          <Input type="number" min={1} suffix="个" />
+                          <Input type="number" min={1} placeholder="1" />
                         </Form.Item>
                       </Col>
-                      <Col span={8}>
+                      <Col span={12}>
                         <Form.Item
-                          label="CPU核数"
+                          label="CPU 核心数"
                           name="cpus"
                           rules={[{ required: true, message: '请输入CPU核数' }]}
+                          initialValue={8}
                         >
-                          <Input type="number" min={1} suffix="核" />
+                          <Input type="number" min={1} placeholder="8" />
                         </Form.Item>
                       </Col>
-                      <Col span={8}>
+                    </Row>
+                    
+                    <Row gutter={16}>
+                      <Col span={12}>
                         <Form.Item
-                          label="内存"
+                          label="内存 (GB)"
                           name="memory"
-                          rules={[{ required: true, message: '请输入内存' }]}
+                          initialValue={0}
                         >
-                          <Input placeholder="8GB" />
+                          <Input type="number" min={0} placeholder="0" />
+                        </Form.Item>
+                      </Col>
+                      <Col span={12}>
+                        <Form.Item
+                          label="时间 (小时)"
+                          name="time_hours"
+                          initialValue={0}
+                        >
+                          <Input type="number" min={0} placeholder="0" />
+                        </Form.Item>
+                      </Col>
+                    </Row>
+                    
+                    <Row gutter={16}>
+                      <Col span={12}>
+                        <Form.Item
+                          label="GPU 卡数"
+                          name="gpus"
+                          initialValue={0}
+                        >
+                          <Input type="number" min={0} placeholder="0" />
+                        </Form.Item>
+                      </Col>
+                      <Col span={12}>
+                        <Form.Item
+                          label="QOS（服务质量）"
+                          name="qos"
+                        >
+                          <Input placeholder="默认" />
                         </Form.Item>
                       </Col>
                     </Row>
                     
                     <Form.Item
-                      label="时间限制"
-                      name="time"
-                      rules={[{ required: true, message: '请输入时间限制' }]}
+                      label="工作目录"
+                      name="workdir"
                     >
-                      <Input placeholder="格式：HH:MM:SS，例如：04:00:00" />
+                      <Input placeholder="/home/username/jobs" />
                     </Form.Item>
                     
                     <Form.Item
-                      label="作业脚本"
+                      label="脚本内容"
                       name="script"
                       rules={[{ required: true, message: '请输入作业脚本' }]}
                     >
                       <TextArea
                         rows={12}
-                        placeholder="#!/bin/bash&#10;#SBATCH --job-name=my-job&#10;#SBATCH --output=output.log&#10;&#10;srun ./my-program"
-                        style={{ fontFamily: 'monospace', fontSize: 12 }}
+                        placeholder="#!/bin/bash&#10;#SBATCH -J my_job&#10;#SBATCH -p compute&#10;#SBATCH -N 1&#10;#SBATCH -c 4&#10;#SBATCH --mem=8G&#10;#SBATCH -t 01:00:00&#10;&#10;srun ./my-program"
+                        style={{ fontFamily: 'monospace', fontSize: 13 }}
                       />
                     </Form.Item>
                     
                     <Form.Item>
                       <Space>
-                        <Button type="primary" htmlType="submit">
+                        <Button type="primary" htmlType="submit" size="large">
                           提交作业
                         </Button>
-                        <Button onClick={() => submitForm.resetFields()}>
+                        <Button onClick={() => submitForm.resetFields()} size="large">
                           重置
                         </Button>
                       </Space>
@@ -1375,12 +1605,14 @@ export default function JobManagement() {
                         </Button>
                         <Button
                           size="small"
+                          onClick={() => handleViewTemplate(tpl)}
                           style={{ fontSize: 11, height: 24 }}
                         >
                           📄 查看
                         </Button>
                         <Button
                           size="small"
+                          onClick={() => handleEditTemplate(tpl)}
                           style={{ fontSize: 11, height: 24 }}
                         >
                           ✏️ 编辑
@@ -1651,6 +1883,382 @@ echo "Job finished: $(date)"`}
               }}>
                 取消
               </Button>
+            </Space>
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* 查看模板弹窗 */}
+      <Modal
+        title={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 20 }}>{currentTemplate?.icon}</span>
+            <span>{currentTemplate?.name}</span>
+          </div>
+        }
+        open={viewTemplateOpen}
+        onCancel={() => {
+          setViewTemplateOpen(false)
+          setCurrentTemplate(null)
+        }}
+        width={700}
+        footer={
+          <Space>
+            <Button onClick={() => {
+              setViewTemplateOpen(false)
+              setCurrentTemplate(null)
+            }}>
+              关闭
+            </Button>
+            {currentTemplate && (admin || currentTemplate.owner === user?.username) && (
+              <>
+                <Button 
+                  type="primary"
+                  onClick={() => {
+                    setViewTemplateOpen(false)
+                    handleEditTemplate(currentTemplate)
+                  }}
+                >
+                  编辑模板
+                </Button>
+                <Button 
+                  danger
+                  onClick={() => {
+                    setViewTemplateOpen(false)
+                    handleDeleteTemplate(currentTemplate)
+                  }}
+                >
+                  删除模板
+                </Button>
+              </>
+            )}
+          </Space>
+        }
+      >
+        {currentTemplate && (
+          <div style={{ padding: '8px 0' }}>
+            <Row gutter={[16, 16]}>
+              <Col span={24}>
+                <div style={{ marginBottom: 12, padding: 12, background: '#f5f5f5', borderRadius: 6 }}>
+                  <div style={{ fontSize: 13, color: '#666', marginBottom: 4 }}>
+                    {currentTemplate.description || '暂无描述'}
+                  </div>
+                  <Space size="small" wrap style={{ marginTop: 8 }}>
+                    <Tag color="blue">{currentTemplate.jobType === 'container' ? '🐳 容器作业' : '⚙️ 普通作业'}</Tag>
+                    <Tag>{currentTemplate.category || '通用'}</Tag>
+                    {currentTemplate.isPublic && <Tag color="green">🌐 公共</Tag>}
+                    {currentTemplate.showInQuick && <Tag color="orange">⭐ 快速模板</Tag>}
+                  </Space>
+                </div>
+              </Col>
+              
+              <Col span={12}>
+                <div style={{ marginBottom: 8 }}>
+                  <strong style={{ color: '#64748b', fontSize: 12 }}>应用类型:</strong>
+                  <div style={{ marginTop: 4 }}>{currentTemplate.appType || '-'}</div>
+                </div>
+              </Col>
+              
+              <Col span={12}>
+                <div style={{ marginBottom: 8 }}>
+                  <strong style={{ color: '#64748b', fontSize: 12 }}>所有者:</strong>
+                  <div style={{ marginTop: 4 }}>{currentTemplate.owner || '-'}</div>
+                </div>
+              </Col>
+              
+              <Col span={24}>
+                <div style={{ 
+                  padding: 12, 
+                  background: '#f9fafb', 
+                  borderRadius: 6,
+                  border: '1px solid #e5e7eb'
+                }}>
+                  <div style={{ 
+                    fontSize: 11, 
+                    fontWeight: 600, 
+                    color: '#6b7280', 
+                    marginBottom: 8,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em'
+                  }}>
+                    资源配置
+                  </div>
+                  <Row gutter={[12, 12]}>
+                    <Col span={6}>
+                      <div style={{ fontSize: 11, color: '#9ca3af' }}>分区</div>
+                      <div style={{ fontSize: 14, fontWeight: 600 }}>{currentTemplate.partition || 'compute'}</div>
+                    </Col>
+                    <Col span={6}>
+                      <div style={{ fontSize: 11, color: '#9ca3af' }}>节点数</div>
+                      <div style={{ fontSize: 14, fontWeight: 600 }}>{currentTemplate.nodes || 1} 个</div>
+                    </Col>
+                    <Col span={6}>
+                      <div style={{ fontSize: 11, color: '#9ca3af' }}>CPU核数</div>
+                      <div style={{ fontSize: 14, fontWeight: 600 }}>{currentTemplate.cpus || 0} 核</div>
+                    </Col>
+                    <Col span={6}>
+                      <div style={{ fontSize: 11, color: '#9ca3af' }}>GPU卡数</div>
+                      <div style={{ fontSize: 14, fontWeight: 600 }}>{currentTemplate.gpus || 0} 卡</div>
+                    </Col>
+                    <Col span={12}>
+                      <div style={{ fontSize: 11, color: '#9ca3af' }}>内存</div>
+                      <div style={{ fontSize: 14, fontWeight: 600 }}>
+                        {Math.floor(currentTemplate.memory / 1024)} GB
+                      </div>
+                    </Col>
+                    <Col span={12}>
+                      <div style={{ fontSize: 11, color: '#9ca3af' }}>时间限制</div>
+                      <div style={{ fontSize: 14, fontWeight: 600 }}>
+                        {Math.floor(currentTemplate.time / 60)} 小时
+                      </div>
+                    </Col>
+                  </Row>
+                </div>
+              </Col>
+              
+              {currentTemplate.jobType === 'container' ? (
+                <Col span={24}>
+                  <div style={{ marginBottom: 8 }}>
+                    <strong style={{ color: '#64748b', fontSize: 12 }}>容器镜像:</strong>
+                    <div style={{ 
+                      marginTop: 4, 
+                      padding: 8, 
+                      background: '#f9fafb', 
+                      borderRadius: 4,
+                      fontFamily: 'monospace',
+                      fontSize: 12,
+                      wordBreak: 'break-all'
+                    }}>
+                      {currentTemplate.containerImage || '-'}
+                    </div>
+                  </div>
+                </Col>
+              ) : (
+                <>
+                  {currentTemplate.moduleLoad && (
+                    <Col span={24}>
+                      <div style={{ marginBottom: 8 }}>
+                        <strong style={{ color: '#64748b', fontSize: 12 }}>模块加载:</strong>
+                        <div style={{ 
+                          marginTop: 4, 
+                          padding: 8, 
+                          background: '#f9fafb', 
+                          borderRadius: 4,
+                          fontFamily: 'monospace',
+                          fontSize: 12
+                        }}>
+                          {currentTemplate.moduleLoad}
+                        </div>
+                      </div>
+                    </Col>
+                  )}
+                  
+                  {currentTemplate.executable && (
+                    <Col span={24}>
+                      <div style={{ marginBottom: 8 }}>
+                        <strong style={{ color: '#64748b', fontSize: 12 }}>执行命令:</strong>
+                        <div style={{ 
+                          marginTop: 4, 
+                          padding: 8, 
+                          background: '#f9fafb', 
+                          borderRadius: 4,
+                          fontFamily: 'monospace',
+                          fontSize: 12
+                        }}>
+                          {currentTemplate.executable}
+                        </div>
+                      </div>
+                    </Col>
+                  )}
+                  
+                  {currentTemplate.inputFile && (
+                    <Col span={24}>
+                      <div style={{ marginBottom: 8 }}>
+                        <strong style={{ color: '#64748b', fontSize: 12 }}>输入文件:</strong>
+                        <div style={{ 
+                          marginTop: 4, 
+                          padding: 8, 
+                          background: '#f9fafb', 
+                          borderRadius: 4,
+                          fontFamily: 'monospace',
+                          fontSize: 12
+                        }}>
+                          {currentTemplate.inputFile}
+                        </div>
+                      </div>
+                    </Col>
+                  )}
+                </>
+              )}
+            </Row>
+          </div>
+        )}
+      </Modal>
+
+      {/* 编辑模板弹窗 */}
+      <Modal
+        title="✏️ 编辑模板"
+        open={editTemplateOpen}
+        onCancel={() => {
+          setEditTemplateOpen(false)
+          setCurrentTemplate(null)
+          editTemplateForm.resetFields()
+        }}
+        width={700}
+        footer={null}
+      >
+        <Form
+          form={editTemplateForm}
+          layout="vertical"
+          onFinish={handleSaveTemplate}
+        >
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item
+                label="模板名称"
+                name="name"
+                rules={[{ required: true, message: '请输入模板名称' }]}
+              >
+                <Input placeholder="例：My LAMMPS 模板" />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item
+                label="应用类型"
+                name="appType"
+                rules={[{ required: true, message: '请输入应用类型' }]}
+              >
+                <Input placeholder="例：LAMMPS" />
+              </Form.Item>
+            </Col>
+          </Row>
+          
+          <Row gutter={16}>
+            <Col span={8}>
+              <Form.Item label="作业类型" name="jobType">
+                <Select>
+                  <Select.Option value="normal">⚙️ 普通作业</Select.Option>
+                  <Select.Option value="container">🐳 容器作业</Select.Option>
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item label="图标（emoji）" name="icon">
+                <Input placeholder="🔬" maxLength={4} />
+              </Form.Item>
+            </Col>
+            <Col span={8}>
+              <Form.Item label="分类" name="category">
+                <Select>
+                  <Select.Option value="cfd">CFD</Select.Option>
+                  <Select.Option value="chemistry">化学</Select.Option>
+                  <Select.Option value="md">分子动力学</Select.Option>
+                  <Select.Option value="ai">AI 训练</Select.Option>
+                  <Select.Option value="ai-inference">AI 推理</Select.Option>
+                  <Select.Option value="general">通用</Select.Option>
+                </Select>
+              </Form.Item>
+            </Col>
+          </Row>
+          
+          <Form.Item label="描述" name="description">
+            <Input placeholder="简短描述此模板用途" />
+          </Form.Item>
+          
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item label="分区" name="partition">
+                <Select>
+                  {partitions.map(p => (
+                    <Select.Option key={p} value={p}>{p}</Select.Option>
+                  ))}
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item label="节点数" name="nodes">
+                <Input type="number" min={1} />
+              </Form.Item>
+            </Col>
+          </Row>
+          
+          <Row gutter={16}>
+            <Col span={6}>
+              <Form.Item label="CPU 核心数" name="cpus">
+                <Input type="number" min={1} />
+              </Form.Item>
+            </Col>
+            <Col span={6}>
+              <Form.Item label="内存 (GB)" name="memory">
+                <Input type="number" min={1} />
+              </Form.Item>
+            </Col>
+            <Col span={6}>
+              <Form.Item label="GPU 卡数" name="gpus">
+                <Input type="number" min={0} />
+              </Form.Item>
+            </Col>
+            <Col span={6}>
+              <Form.Item label="时间 (小时)" name="time">
+                <Input type="number" min={1} />
+              </Form.Item>
+            </Col>
+          </Row>
+          
+          <Form.Item
+            noStyle
+            shouldUpdate={(prevValues, currentValues) => prevValues.jobType !== currentValues.jobType}
+          >
+            {({ getFieldValue }) =>
+              getFieldValue('jobType') === 'container' ? (
+                <Form.Item label="容器镜像" name="containerImage">
+                  <Input placeholder="harbor.example.com/library/pytorch:latest" />
+                </Form.Item>
+              ) : (
+                <>
+                  <Form.Item label="模块加载" name="moduleLoad">
+                    <Input placeholder="例：gcc/9.3.0 openmpi/4.0.3" />
+                  </Form.Item>
+                  
+                  <Form.Item label="执行命令" name="executable">
+                    <Input placeholder="例：./my-program 或 python script.py" />
+                  </Form.Item>
+                  
+                  <Form.Item label="输入文件" name="inputFile">
+                    <Input placeholder="例：input.dat" />
+                  </Form.Item>
+                </>
+              )
+            }
+          </Form.Item>
+          
+          <Form.Item name="showInQuick" valuePropName="checked">
+            <Checkbox>显示在快速模板栏</Checkbox>
+          </Form.Item>
+          
+          <Form.Item>
+            <Space>
+              <Button type="primary" htmlType="submit">
+                💾 保存
+              </Button>
+              <Button onClick={() => {
+                setEditTemplateOpen(false)
+                setCurrentTemplate(null)
+                editTemplateForm.resetFields()
+              }}>
+                取消
+              </Button>
+              {currentTemplate && (admin || currentTemplate.owner === user?.username) && (
+                <Button 
+                  danger
+                  onClick={() => {
+                    setEditTemplateOpen(false)
+                    handleDeleteTemplate(currentTemplate)
+                  }}
+                >
+                  删除模板
+                </Button>
+              )}
             </Space>
           </Form.Item>
         </Form>

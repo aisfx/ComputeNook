@@ -679,18 +679,40 @@ func GetPartitions(c *gin.Context) {
 		return
 	}
 
-	// 转换为前端格式
+	// 转换为前端格式，包含更多详细信息
 	partitionList := make([]map[string]interface{}, 0, len(partitions))
 	for _, partition := range partitions {
+		// 处理时间限制
+		var maxTime interface{} = "infinite"
+		if partition.Maximums.Time.Set && !partition.Maximums.Time.Infinite {
+			maxTime = partition.Maximums.Time.Number / 60 // 转换为分钟
+		}
+		
+		var defaultTime interface{} = nil
+		if partition.Defaults.Time.Set && !partition.Defaults.Time.Infinite {
+			defaultTime = partition.Defaults.Time.Number / 60 // 转换为分钟
+		}
+		
+		// 处理节点限制
+		var maxNodes interface{} = "infinite"
+		if partition.Maximums.Nodes.Set && !partition.Maximums.Nodes.Infinite {
+			maxNodes = partition.Maximums.Nodes.Number
+		}
+		
 		partitionInfo := map[string]interface{}{
-			"name":  partition.GetPartitionName(),
-			"state": partition.GetPartitionState(),
-			"nodes": partition.GetNodesConfigured(),
+			"name":          partition.GetPartitionName(),
+			"state":         partition.GetPartitionState(),
+			"nodes":         partition.GetNodesConfigured(),
+			"node_count":    partition.Nodes.Total,
+			"max_time":      maxTime,
+			"default_time":  defaultTime,
+			"max_nodes":     maxNodes,
+			"min_nodes":     partition.Minimums.Nodes,
 		}
 		partitionList = append(partitionList, partitionInfo)
 	}
 
-	logger.Info("Retrieved %d partitions", len(partitionList))
+	logger.Info("Retrieved %d partitions for user %s", len(partitionList), username)
 	c.JSON(http.StatusOK, gin.H{"data": partitionList})
 }
 

@@ -2,6 +2,96 @@
 
 ## [Unreleased]
 
+### Added
+- **作业模板查看和编辑功能**（2026-07-03 00:52）
+  - 实现作业模板库的"查看"和"编辑"按钮功能
+  - 添加查看模板弹窗：显示完整模板信息（资源配置、容器镜像、模块加载等）
+  - 添加编辑模板弹窗：支持修改模板所有字段
+  - 查看模板时可直接跳转到编辑或删除
+  - 编辑模板时支持切换作业类型（普通/容器）
+  - 编辑时内存和时间自动转换为用户友好单位（GB和小时）
+  - 保存时自动转换回后端格式（MB和分钟）
+  - 只有管理员或模板所有者可以编辑/删除模板
+  - 修改文件：`frontend/src/pages/user/jobs/index.tsx`
+
+- **用户仪表盘Tab视图切换功能**（2026-07-03 00:05）
+  - 将"正在运行的作业"和"节点状态"合并为统一的"资源视图"卡片
+  - 添加Tab切换按钮：作业 | 分区 | 节点
+  - Tab按钮样式类似按钮组，带计数标签
+  - 作业Tab显示运行中的作业列表，支持查看历史记录
+  - 节点Tab显示节点状态表格，点击行可查看详情
+  - 分区Tab预留接口（开发中）
+  - 修改文件：`frontend/src/pages/user/dashboard/index.tsx`
+
+- **分区视图功能实现**（2026-07-03 00:25）
+  - 实现用户仪表盘分区Tab的完整功能
+  - 显示分区列表表格：名称（带状态指示灯）、状态标签、时间限制、节点数量、节点列表、最大/最小节点数
+  - 后端API增强：返回更多分区详细信息（max_time, default_time, max_nodes, min_nodes, node_count）
+  - 时间限制智能显示：转换为小时/分钟格式，infinite显示为"无限制"标签
+  - 节点限制智能显示：数字或"无限制"标签
+  - 修改文件：
+    - `backend/handlers/job.go` - 增强GetPartitions返回信息
+    - `frontend/src/pages/user/dashboard/index.tsx` - 实现分区视图
+
+### Changed
+- **用户仪表盘卡片布局优化为左右布局**（2026-07-03 00:38）
+  - 将作业统计、账户配额、机时信息、存储配额四个卡片由上下布局改为左右布局
+  - 左侧显示主要指标（大数字/百分比/图标），右侧显示详细信息列表
+  - 统一使用 `bodyStyle={{ height: 140 }}` 固定卡片内容区高度，确保四个卡片高度完全一致
+  - 四个卡片平均分配宽度：每个占6列（共24列），充分利用横向空间
+  - 机时信息字体缩小：主要文字从13px改为12px，大数字从48px改为42px，间距从8px改为6px
+  - 内容区使用 `height: 100%` 和 `display: flex` 垂直居中对齐
+  - 修改文件：`frontend/src/pages/user/dashboard/index.tsx`
+
+- **作业提交表单布局优化**（2026-07-03 00:42）
+  - 调整表单布局为左右对齐，更符合原版样式
+  - 作业名称和队列/分区放在同一行（各占50%宽度）
+  - 节点数和CPU核心数放在同一行
+  - 内存和时间放在同一行
+  - GPU卡数和QOS放在同一行
+  - 工作目录单独一行
+  - 优化字段标签和占位符文本
+  - 添加默认值：节点数=1, CPU=8, 内存/时间/GPU=0
+  - 脚本示例更新为SBATCH短参数格式（-J, -p, -N, -c等）
+  - 修改文件：`frontend/src/pages/user/jobs/index.tsx`
+
+### Fixed
+- **用户仪表盘前端无限刷新问题**（2026-07-02 23:00）
+  - 修复 `frontend/src/pages/user/dashboard/index.tsx` 中 useEffect 依赖导致的无限重渲染
+  - 将 `useEffect([loadData])` 改为 `useEffect([])` 避免循环调用
+  
+- **用户仪表盘 API 404 错误**（2026-07-02 23:10）
+  - 后端 `backend/main.go` 添加 `/api/dashboard` 路由，映射到 `GetUserDashboard` 处理函数
+  - 后端 `backend/main.go` 添加 `/api/monitoring/nodes` 路由，映射到 `GetDashboardNodes` 处理函数
+  - 在 `backend/handlers/dashboard.go` 中实现 `GetUserDashboard` 和 `GetDashboardNodes` 函数
+  
+- **机时信息和存储配额无法显示**（2026-07-02 23:20）
+  - 添加 `/api/usage/my-resources` 路由获取用户资源和QoS信息
+  - 添加 `/api/usage/billing-summary` 路由获取机时汇总信息
+  - 修复 `GetMyBillingInfo` 返回字段：`total_recharged` 改为 `total_quota`
+  - 添加 `/api/quota` 兼容路由，修改返回格式匹配前端期望的字段
+  - 前端优化：无配额时也显示已用机时；存储配额未配置时显示友好提示
+  
+- **账户配额卡片显示异常**（2026-07-02 23:30）
+  - 优化显示逻辑：有限制显示百分比，无限制有作业显示核数，无限制无作业显示友好提示
+  - 优化布局：减小内边距(20→12px)、主数字字体(48→42px)、说明文字(13→12px)
+  - 减小间距：Space size small→4px，指示点8→6px
+  - 添加分隔线区分底部QoS信息，确保所有内容在320px高度内完整显示
+  
+- **节点状态改用表格显示**（2026-07-02 23:40）
+  - 将节点卡片布局改为表格布局
+  - 表格列：节点名称(带状态指示灯)、状态标签、CPU总数/已用/使用率、内存总量/已用/使用率、作业数
+  - 点击表格行打开详情弹窗查看完整节点信息
+  - 使用进度条可视化CPU和内存使用率
+  
+- **节点内存显示NaN问题**（2026-07-02 23:50）
+  - 修复前后端字段名不一致导致的显示异常
+  - 后端返回：`memory_total_mb`, `memory_allocated_mb`, `cpu_total`, `cpu_allocated`, `running_jobs`
+  - 更新前端 `NodeInfo` 接口定义，修改表格列和详情弹窗的字段引用
+  - 内存正常显示为 GB/TB 格式
+
+## [Unreleased]
+
 ### Security
 - 收紧监控 API 权限边界，`/api/monitoring/*` 默认需要管理员权限；PromQL 代理增加 5 秒超时、查询长度限制、`query_range` 最大 24 小时时间窗和最小 15 秒 step 限制。
 - Redis GET 缓存 key 增加用户身份与管理员状态隔离，避免相同 URL 的用户级数据在开启缓存后串读。

@@ -65,6 +65,17 @@ interface NodeInfo {
   running_jobs: number
 }
 
+interface PartitionInfo {
+  name: string
+  state: string
+  nodes: string
+  node_count: number
+  max_time: number | string  // 可能是数字(分钟)或"infinite"
+  default_time: number | null
+  max_nodes: number | string  // 可能是数字或"infinite"
+  min_nodes: number
+}
+
 interface AccountQuota {
   account: string
   partition: string
@@ -141,6 +152,7 @@ export default function UserDashboard() {
   })
   const [runningJobs, setRunningJobs] = useState<RunningJob[]>([])
   const [nodes, setNodes] = useState<NodeInfo[]>([])
+  const [partitions, setPartitions] = useState<PartitionInfo[]>([])
   
   // 配额信息
   const [accountQuotas, setAccountQuotas] = useState<AccountQuota[]>([])
@@ -178,6 +190,9 @@ export default function UserDashboard() {
   
   // 作业详情
   const [selectedJob, setSelectedJob] = useState<any>(null)
+  
+  // Tab视图切换（作业 | 分区 | 节点）
+  const [activeViewTab, setActiveViewTab] = useState<'jobs' | 'partitions' | 'nodes'>('jobs')
   
   // 加载仪表盘统计
   const loadDashboard = useCallback(async () => {
@@ -234,6 +249,16 @@ export default function UserDashboard() {
       setNodes(res.data.data || [])
     } catch (e) {
       console.error('加载节点失败:', e)
+    }
+  }, [])
+  
+  // 加载分区信息
+  const loadPartitions = useCallback(async () => {
+    try {
+      const res = await axios.get('/jobs/partitions/list')
+      setPartitions(res.data.data || [])
+    } catch (e) {
+      console.error('加载分区失败:', e)
     }
   }, [])
   
@@ -360,11 +385,12 @@ export default function UserDashboard() {
       loadDashboard(),
       loadJobStats(),
       loadNodes(),
+      loadPartitions(),
       loadAccountQuotas(),
       loadMachineTime(),
       loadStorageQuota()
     ])
-  }, [loadDashboard, loadJobStats, loadNodes, loadAccountQuotas, loadMachineTime, loadStorageQuota])
+  }, [loadDashboard, loadJobStats, loadNodes, loadPartitions, loadAccountQuotas, loadMachineTime, loadStorageQuota])
   
   useEffect(() => {
     refreshAll()
@@ -722,7 +748,7 @@ export default function UserDashboard() {
         </Col>
       </Row>
 
-      {/* 四个图表卡片 */}
+      {/* 四个图表卡片 - 改为左右布局，统一高度，平均分配宽度 */}
       <Row gutter={16}>
         {/* 作业统计 */}
         <Col span={6}>
@@ -739,57 +765,61 @@ export default function UserDashboard() {
                 历史记录 →
               </Button>
             }
-            style={{ height: 320 }}
+            bodyStyle={{ height: 140 }}
           >
-            <div style={{ textAlign: 'center', paddingTop: 20 }}>
-              <div style={{ fontSize: 48, fontWeight: 700, color: '#1f2937', marginBottom: 8 }}>
-                {jobStatsTotal}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 24, height: '100%' }}>
+              {/* 左侧：大数字 */}
+              <div style={{ flex: '0 0 auto', textAlign: 'center' }}>
+                <div style={{ fontSize: 48, fontWeight: 700, color: '#1f2937', lineHeight: 1 }}>
+                  {jobStatsTotal}
+                </div>
+                <div style={{ fontSize: 12, color: '#9ca3af', marginTop: 4 }}>总作业</div>
               </div>
-              <div style={{ fontSize: 13, color: '#9ca3af', marginBottom: 24 }}>总作业</div>
               
-              <Space direction="vertical" style={{ width: '100%' }} size="small">
+              {/* 右侧：状态列表 */}
+              <Space direction="vertical" style={{ flex: 1 }} size={6}>
                 <div
                   style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
                   onClick={() => openJobList('RUNNING')}
                 >
-                  <Space>
+                  <Space size={6}>
                     <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#3b82f6' }} />
                     <span style={{ fontSize: 13 }}>运行中</span>
                   </Space>
-                  <span style={{ fontSize: 15, fontWeight: 600, color: '#3b82f6' }}>{jobStats.running}</span>
+                  <span style={{ fontSize: 16, fontWeight: 600, color: '#3b82f6' }}>{jobStats.running}</span>
                 </div>
                 
                 <div
                   style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
                   onClick={() => openJobList('PENDING')}
                 >
-                  <Space>
+                  <Space size={6}>
                     <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#f59e0b' }} />
                     <span style={{ fontSize: 13 }}>等待中</span>
                   </Space>
-                  <span style={{ fontSize: 15, fontWeight: 600, color: '#f59e0b' }}>{jobStats.pending}</span>
+                  <span style={{ fontSize: 16, fontWeight: 600, color: '#f59e0b' }}>{jobStats.pending}</span>
                 </div>
                 
                 <div
                   style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
                   onClick={() => openJobList('COMPLETED')}
                 >
-                  <Space>
+                  <Space size={6}>
                     <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#10b981' }} />
                     <span style={{ fontSize: 13 }}>已完成</span>
                   </Space>
-                  <span style={{ fontSize: 15, fontWeight: 600, color: '#10b981' }}>{jobStats.completed}</span>
+                  <span style={{ fontSize: 16, fontWeight: 600, color: '#10b981' }}>{jobStats.completed}</span>
                 </div>
                 
                 <div
                   style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
                   onClick={() => openJobList('FAILED')}
                 >
-                  <Space>
+                  <Space size={6}>
                     <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444' }} />
                     <span style={{ fontSize: 13 }}>失败</span>
                   </Space>
-                  <span style={{ fontSize: 15, fontWeight: 600, color: '#ef4444' }}>{jobStats.failed}</span>
+                  <span style={{ fontSize: 16, fontWeight: 600, color: '#ef4444' }}>{jobStats.failed}</span>
                 </div>
               </Space>
             </div>
@@ -820,57 +850,56 @@ export default function UserDashboard() {
                 </Select>
               )
             }
-            style={{ height: 320 }}
+            bodyStyle={{ height: 140 }}
           >
             {accountQuotas.length > 0 ? (
-              <div style={{ textAlign: 'center', paddingTop: 12 }}>
-                {currentAccountQuota.max_cpus > 0 ? (
-                  // 有 CPU 限制：显示百分比
-                  <>
-                    <div style={{ fontSize: 42, fontWeight: 700, marginBottom: 6 }}>
-                      <span style={{ color: currentAccountQuota.cpu_pct > 90 ? '#ef4444' : currentAccountQuota.cpu_pct > 70 ? '#f59e0b' : '#667eea' }}>
-                        {currentAccountQuota.cpu_pct}
-                      </span>
-                      <span style={{ fontSize: 20, color: '#9ca3af' }}>%</span>
-                    </div>
-                    <div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 4 }}>CPU 使用率</div>
-                    <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 16 }}>
-                      {currentAccountQuota.used_cpus} / {currentAccountQuota.max_cpus} 核
-                    </div>
-                  </>
-                ) : currentAccountQuota.used_cpus > 0 ? (
-                  // 无限制但有使用：显示当前使用数
-                  <>
-                    <div style={{ fontSize: 42, fontWeight: 700, marginBottom: 6, color: '#667eea' }}>
-                      {currentAccountQuota.used_cpus}
-                    </div>
-                    <div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 4 }}>当前使用 CPU</div>
-                    <div style={{ fontSize: 11, color: '#f59e0b', marginBottom: 16 }}>
-                      ⚠️ 无配额限制
-                    </div>
-                  </>
-                ) : (
-                  // 无限制且无使用：显示空闲状态
-                  <>
-                    <div style={{ fontSize: 40, marginBottom: 12 }}>🎯</div>
-                    <div style={{ fontSize: 13, color: '#9ca3af', marginBottom: 4 }}>
-                      当前无运行作业
-                    </div>
-                    <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 16 }}>
-                      CPU 配额: 无限制
-                    </div>
-                  </>
-                )}
-                <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 12 }}>{currentAccountQuota.account}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 20, height: '100%' }}>
+                {/* 左侧：百分比或数字 */}
+                <div style={{ flex: '0 0 auto', textAlign: 'center', minWidth: 100 }}>
+                  {currentAccountQuota.max_cpus > 0 ? (
+                    <>
+                      <div style={{ fontSize: 48, fontWeight: 700, lineHeight: 1 }}>
+                        <span style={{ color: currentAccountQuota.cpu_pct > 90 ? '#ef4444' : currentAccountQuota.cpu_pct > 70 ? '#f59e0b' : '#667eea' }}>
+                          {currentAccountQuota.cpu_pct}
+                        </span>
+                        <span style={{ fontSize: 20, color: '#9ca3af' }}>%</span>
+                      </div>
+                      <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>
+                        {currentAccountQuota.used_cpus}/{currentAccountQuota.max_cpus} 核
+                      </div>
+                    </>
+                  ) : currentAccountQuota.used_cpus > 0 ? (
+                    <>
+                      <div style={{ fontSize: 48, fontWeight: 700, color: '#667eea', lineHeight: 1 }}>
+                        {currentAccountQuota.used_cpus}
+                      </div>
+                      <div style={{ fontSize: 11, color: '#f59e0b', marginTop: 4 }}>
+                        ⚠️ 无限制
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div style={{ fontSize: 36 }}>🎯</div>
+                      <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>
+                        无作业
+                      </div>
+                    </>
+                  )}
+                </div>
                 
-                <Space direction="vertical" style={{ width: '100%' }} size={4}>
+                {/* 右侧：详细信息 */}
+                <Space direction="vertical" style={{ flex: 1 }} size={6}>
+                  <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 4 }}>
+                    账户: {currentAccountQuota.account}
+                  </div>
+                  
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <Space size={4}>
                       <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#667eea' }} />
-                      <span style={{ fontSize: 12 }}>CPU 限额</span>
+                      <span style={{ fontSize: 12 }}>CPU限额</span>
                     </Space>
                     <span style={{ fontSize: 12 }}>
-                      {currentAccountQuota.max_cpus > 0 ? `${currentAccountQuota.max_cpus} 核` : '无限制'}
+                      {currentAccountQuota.max_cpus > 0 ? `${currentAccountQuota.max_cpus}核` : '无限制'}
                     </span>
                   </div>
                   
@@ -880,7 +909,7 @@ export default function UserDashboard() {
                       <span style={{ fontSize: 12 }}>节点限额</span>
                     </Space>
                     <span style={{ fontSize: 12 }}>
-                      {currentAccountQuota.max_nodes > 0 ? `${currentAccountQuota.max_nodes} 个` : '无限制'}
+                      {currentAccountQuota.max_nodes > 0 ? `${currentAccountQuota.max_nodes}个` : '无限制'}
                     </span>
                   </div>
                   
@@ -894,13 +923,15 @@ export default function UserDashboard() {
                     </span>
                   </div>
                   
-                  <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 6, paddingTop: 6, borderTop: '1px solid #f3f4f6' }}>
+                  <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 4, paddingTop: 4, borderTop: '1px solid #f3f4f6' }}>
                     分区: {currentAccountQuota.partition || '全部'} · QoS: {currentAccountQuota.qos || '-'}
                   </div>
                 </Space>
               </div>
             ) : (
-              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无账户配额" />
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无账户配额" />
+              </div>
             )}
           </Card>
         </Col>
@@ -922,10 +953,10 @@ export default function UserDashboard() {
                 </Button>
               )
             }
-            style={{ height: 320 }}
+            bodyStyle={{ height: 140 }}
           >
             {machineTimeList.length > 1 && (
-              <div style={{ marginBottom: 12, display: 'flex', gap: 4 }}>
+              <div style={{ marginBottom: 8, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                 {machineTimeList.map((item, idx) => (
                   <Button
                     key={idx}
@@ -939,67 +970,80 @@ export default function UserDashboard() {
               </div>
             )}
             
-            {currentMachineTime.has_limit ? (
-              <div style={{ textAlign: 'center', paddingTop: 20 }}>
-                <div style={{ fontSize: 48, fontWeight: 700, marginBottom: 8 }}>
-                  <span style={{ color: currentMachineTime.usage_rate > 90 ? '#ef4444' : currentMachineTime.usage_rate > 70 ? '#f59e0b' : '#667eea' }}>
-                    {currentMachineTime.usage_rate < 0.01 && currentMachineTime.usage_rate > 0 ? '<0.01' : currentMachineTime.usage_rate}
-                  </span>
-                  <span style={{ fontSize: 24, color: '#9ca3af' }}>%</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 20, height: machineTimeList.length > 1 ? 'calc(100% - 40px)' : '100%' }}>
+              {currentMachineTime.has_limit ? (
+                <>
+                  {/* 左侧：百分比 */}
+                  <div style={{ flex: '0 0 auto', textAlign: 'center', minWidth: 100 }}>
+                    <div style={{ fontSize: 42, fontWeight: 700, lineHeight: 1 }}>
+                      <span style={{ color: currentMachineTime.usage_rate > 90 ? '#ef4444' : currentMachineTime.usage_rate > 70 ? '#f59e0b' : '#667eea' }}>
+                        {currentMachineTime.usage_rate < 0.01 && currentMachineTime.usage_rate > 0 ? '<0.01' : currentMachineTime.usage_rate}
+                      </span>
+                      <span style={{ fontSize: 20, color: '#9ca3af' }}>%</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>使用率</div>
+                  </div>
+                  
+                  {/* 右侧：详细信息 */}
+                  <Space direction="vertical" style={{ flex: 1 }} size={6}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Space size={6}>
+                        <div style={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: '50%',
+                          background: currentMachineTime.usage_rate > 90 ? '#ef4444' : currentMachineTime.usage_rate > 70 ? '#f59e0b' : '#667eea'
+                        }} />
+                        <span style={{ fontSize: 12 }}>已用</span>
+                      </Space>
+                      <span style={{ fontSize: 12 }}>{currentMachineTime.used.toFixed(1)} 小时</span>
+                    </div>
+                    
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Space size={6}>
+                        <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#10b981' }} />
+                        <span style={{ fontSize: 12 }}>剩余</span>
+                      </Space>
+                      <span style={{ fontSize: 12 }}>{currentMachineTime.remaining.toFixed(1)} 小时</span>
+                    </div>
+                    
+                    <div style={{ fontSize: 10, color: '#9ca3af', paddingTop: 4, borderTop: '1px solid #f3f4f6' }}>
+                      总配额: {currentMachineTime.total_quota.toLocaleString()} 小时
+                    </div>
+                  </Space>
+                </>
+              ) : currentMachineTime.has_usage ? (
+                <>
+                  {/* 左侧：已用小时数 */}
+                  <div style={{ flex: '0 0 auto', textAlign: 'center', minWidth: 100 }}>
+                    <div style={{ fontSize: 42, fontWeight: 700, color: '#667eea', lineHeight: 1 }}>
+                      {currentMachineTime.used.toFixed(1)}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>已用小时</div>
+                  </div>
+                  
+                  {/* 右侧：提示信息 */}
+                  <Space direction="vertical" style={{ flex: 1 }} size={6}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Space size={6}>
+                        <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#667eea' }} />
+                        <span style={{ fontSize: 12 }}>QoS</span>
+                      </Space>
+                      <span style={{ fontSize: 12 }}>{currentMachineTime.qos_name}</span>
+                    </div>
+                    
+                    <div style={{ fontSize: 11, color: '#f59e0b', textAlign: 'center', marginTop: 6 }}>
+                      ⚠️ 未设置配额限制
+                    </div>
+                  </Space>
+                </>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                  <div style={{ fontSize: 36, marginBottom: 8 }}>⏰</div>
+                  <div style={{ fontSize: 13, color: '#9ca3af' }}>暂无机时使用记录</div>
                 </div>
-                <div style={{ fontSize: 13, color: '#9ca3af', marginBottom: 24 }}>使用率</div>
-                
-                <Space direction="vertical" style={{ width: '100%' }} size="small">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Space>
-                      <div style={{
-                        width: 8,
-                        height: 8,
-                        borderRadius: '50%',
-                        background: currentMachineTime.usage_rate > 90 ? '#ef4444' : currentMachineTime.usage_rate > 70 ? '#f59e0b' : '#667eea'
-                      }} />
-                      <span style={{ fontSize: 13 }}>已用</span>
-                    </Space>
-                    <span style={{ fontSize: 13 }}>{currentMachineTime.used.toFixed(1)} 小时</span>
-                  </div>
-                  
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Space>
-                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#10b981' }} />
-                      <span style={{ fontSize: 13 }}>剩余</span>
-                    </Space>
-                    <span style={{ fontSize: 13 }}>{currentMachineTime.remaining.toFixed(1)} 小时</span>
-                  </div>
-                  
-                  <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 8 }}>
-                    总配额: {currentMachineTime.total_quota.toLocaleString()} 小时
-                  </div>
-                </Space>
-              </div>
-            ) : currentMachineTime.has_usage ? (
-              <div style={{ textAlign: 'center', paddingTop: 20 }}>
-                <div style={{ fontSize: 48, fontWeight: 700, marginBottom: 8, color: '#667eea' }}>
-                  {currentMachineTime.used.toFixed(1)}
-                </div>
-                <div style={{ fontSize: 13, color: '#9ca3af', marginBottom: 24 }}>已使用 (小时)</div>
-                
-                <Space direction="vertical" style={{ width: '100%' }} size="small">
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Space>
-                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#667eea' }} />
-                      <span style={{ fontSize: 13 }}>QoS</span>
-                    </Space>
-                    <span style={{ fontSize: 13 }}>{currentMachineTime.qos_name}</span>
-                  </div>
-                  
-                  <div style={{ fontSize: 11, color: '#f59e0b', marginTop: 8, textAlign: 'center' }}>
-                    ⚠️ 未设置配额限制
-                  </div>
-                </Space>
-              </div>
-            ) : (
-              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无机时配额" />
-            )}
+              )}
+            </div>
           </Card>
         </Col>
         
@@ -1013,21 +1057,25 @@ export default function UserDashboard() {
                 存储配额
               </Space>
             }
-            style={{ height: 320 }}
+            bodyStyle={{ height: 140 }}
           >
             {storageQuota.has_data ? (
-              <div style={{ textAlign: 'center', paddingTop: 20 }}>
-                <div style={{ fontSize: 48, fontWeight: 700, color: '#1f2937', marginBottom: 8 }}>
-                  <span style={{ color: storageQuota.capacity.percentage > 90 ? '#ef4444' : storageQuota.capacity.percentage > 80 ? '#f59e0b' : '#667eea' }}>
-                    {storageQuota.capacity.percentage}
-                  </span>
-                  <span style={{ fontSize: 24, color: '#9ca3af' }}>%</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 20, height: '100%' }}>
+                {/* 左侧：百分比 */}
+                <div style={{ flex: '0 0 auto', textAlign: 'center', minWidth: 100 }}>
+                  <div style={{ fontSize: 48, fontWeight: 700, lineHeight: 1 }}>
+                    <span style={{ color: storageQuota.capacity.percentage > 90 ? '#ef4444' : storageQuota.capacity.percentage > 80 ? '#f59e0b' : '#667eea' }}>
+                      {storageQuota.capacity.percentage}
+                    </span>
+                    <span style={{ fontSize: 24, color: '#9ca3af' }}>%</span>
+                  </div>
+                  <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 4 }}>已使用</div>
                 </div>
-                <div style={{ fontSize: 13, color: '#9ca3af', marginBottom: 24 }}>已使用</div>
                 
-                <Space direction="vertical" style={{ width: '100%' }} size="small">
+                {/* 右侧：详细信息 */}
+                <Space direction="vertical" style={{ flex: 1 }} size={8}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Space>
+                    <Space size={6}>
                       <div style={{
                         width: 8,
                         height: 8,
@@ -1040,25 +1088,25 @@ export default function UserDashboard() {
                   </div>
                   
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Space>
+                    <Space size={6}>
                       <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#e5e7eb' }} />
                       <span style={{ fontSize: 13 }}>总量</span>
                     </Space>
                     <span style={{ fontSize: 13 }}>{storageQuota.capacity.total}</span>
                   </div>
                   
-                  <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 8 }}>
+                  <div style={{ fontSize: 11, color: '#9ca3af', paddingTop: 6, borderTop: '1px solid #f3f4f6' }}>
                     {storageQuota.files.no_limit
-                      ? `文件数: ${storageQuota.files.used.toLocaleString()} (未设置配额)`
+                      ? `文件数: ${storageQuota.files.used.toLocaleString()} (未设限)`
                       : `文件数: ${storageQuota.files.used.toLocaleString()} / ${storageQuota.files.total.toLocaleString()} (${storageQuota.files.percentage}%)`
                     }
                   </div>
                 </Space>
               </div>
             ) : storageQuota.not_configured ? (
-              <div style={{ textAlign: 'center', paddingTop: 40 }}>
-                <div style={{ fontSize: 48, marginBottom: 16 }}>📦</div>
-                <div style={{ fontSize: 14, color: '#9ca3af', marginBottom: 8 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                <div style={{ fontSize: 36, marginBottom: 8 }}>📦</div>
+                <div style={{ fontSize: 13, color: '#9ca3af', marginBottom: 4 }}>
                   存储配额系统未配置
                 </div>
                 <div style={{ fontSize: 11, color: '#d1d5db' }}>
@@ -1066,221 +1114,386 @@ export default function UserDashboard() {
                 </div>
               </div>
             ) : (
-              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无存储配额" />
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无存储配额" />
+              </div>
             )}
           </Card>
         </Col>
       </Row>
       
-      {/* 正在运行的作业 */}
+      {/* 作业/分区/节点 Tab视图 */}
       <Card
         title={
-          <Space>
-            <PlayCircleOutlined />
-            正在运行的作业
-            <Tag color="blue">{runningJobs.length} 个运行中</Tag>
+          <Space size="large">
+            <Space style={{ fontSize: 16, fontWeight: 600 }}>
+              <CloudServerOutlined />
+              资源视图
+            </Space>
+            <Space size={0} style={{ 
+              border: '1px solid #d9d9d9', 
+              borderRadius: 4,
+              overflow: 'hidden'
+            }}>
+              <Button
+                type={activeViewTab === 'jobs' ? 'primary' : 'text'}
+                size="small"
+                onClick={() => setActiveViewTab('jobs')}
+                style={{ 
+                  borderRadius: 0,
+                  border: 'none'
+                }}
+              >
+                作业 {runningJobs.length > 0 && (
+                  <Tag 
+                    color={activeViewTab === 'jobs' ? 'blue' : 'default'} 
+                    style={{ marginLeft: 4, fontSize: 11 }}
+                  >
+                    {runningJobs.length}
+                  </Tag>
+                )}
+              </Button>
+              <div style={{ width: 1, height: 20, background: '#d9d9d9' }} />
+              <Button
+                type={activeViewTab === 'partitions' ? 'primary' : 'text'}
+                size="small"
+                onClick={() => setActiveViewTab('partitions')}
+                style={{ 
+                  borderRadius: 0,
+                  border: 'none'
+                }}
+              >
+                分区
+              </Button>
+              <div style={{ width: 1, height: 20, background: '#d9d9d9' }} />
+              <Button
+                type={activeViewTab === 'nodes' ? 'primary' : 'text'}
+                size="small"
+                onClick={() => setActiveViewTab('nodes')}
+                style={{ 
+                  borderRadius: 0,
+                  border: 'none'
+                }}
+              >
+                节点 {nodes.length > 0 && (
+                  <Tag 
+                    color={activeViewTab === 'nodes' ? 'green' : 'default'} 
+                    style={{ marginLeft: 4, fontSize: 11 }}
+                  >
+                    {nodes.length}
+                  </Tag>
+                )}
+              </Button>
+            </Space>
           </Space>
         }
         extra={
-          <Button
-            type="link"
-            size="small"
-            icon={<ReloadOutlined />}
-            onClick={loadJobStats}
-          >
-            刷新
-          </Button>
+          <Space>
+            {activeViewTab === 'jobs' && (
+              <Button type="link" size="small" onClick={() => setJobHistoryOpen(true)}>
+                历史记录 →
+              </Button>
+            )}
+            <Button
+              type="link"
+              size="small"
+              icon={<ReloadOutlined />}
+              onClick={
+                activeViewTab === 'jobs' ? loadJobStats : 
+                activeViewTab === 'partitions' ? loadPartitions : 
+                loadNodes
+              }
+            >
+              刷新
+            </Button>
+          </Space>
         }
       >
-        {runningJobs.length === 0 ? (
-          <Empty description="暂无运行中的作业" />
-        ) : (
-          <Table
-            columns={runningJobColumns}
-            dataSource={runningJobs}
-            rowKey="job_id"
-            pagination={false}
-            size="small"
-          />
+        {/* 作业视图 */}
+        {activeViewTab === 'jobs' && (
+          runningJobs.length === 0 ? (
+            <Empty description="暂无运行中的作业" />
+          ) : (
+            <Table
+              columns={runningJobColumns}
+              dataSource={runningJobs}
+              rowKey="job_id"
+              pagination={false}
+              size="small"
+            />
+          )
         )}
-      </Card>
-      
-      {/* 节点状态 */}
-      <Card
-        title={
-          <Space>
-            <CloudServerOutlined />
-            节点
-            <Tag>{nodes.length} 个节点</Tag>
-          </Space>
-        }
-        extra={
-          <Button
-            type="link"
-            size="small"
-            icon={<ReloadOutlined />}
-            onClick={loadNodes}
-          >
-            刷新
-          </Button>
-        }
-      >
-        {nodes.length === 0 ? (
-          <Empty description="暂无节点数据" />
-        ) : (
-          <Table
-            columns={[
-              {
-                title: '节点名称',
-                dataIndex: 'name',
-                key: 'name',
-                width: 200,
-                render: (name: string, record: NodeInfo) => {
-                  const stateColors: Record<string, string> = {
-                    idle: '#10b981',
-                    allocated: '#3b82f6',
-                    mixed: '#f59e0b',
-                    down: '#ef4444',
-                    drain: '#94a3b8'
+        
+        {/* 分区视图 */}
+        {activeViewTab === 'partitions' && (
+          partitions.length === 0 ? (
+            <Empty description="暂无分区数据" />
+          ) : (
+            <Table
+              columns={[
+                {
+                  title: '分区名称',
+                  dataIndex: 'name',
+                  key: 'name',
+                  width: 150,
+                  render: (name: string, record: PartitionInfo) => {
+                    const stateColors: Record<string, string> = {
+                      up: '#10b981',
+                      down: '#ef4444',
+                      drain: '#f59e0b',
+                      inactive: '#94a3b8'
+                    }
+                    return (
+                      <Space>
+                        <div style={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: '50%',
+                          background: stateColors[record.state.toLowerCase()] || '#10b981'
+                        }} />
+                        <span style={{ fontWeight: 500 }}>{name}</span>
+                      </Space>
+                    )
                   }
-                  return (
-                    <Space>
-                      <div style={{
-                        width: 8,
-                        height: 8,
-                        borderRadius: '50%',
-                        background: stateColors[record.state.toLowerCase()] || '#94a3b8'
-                      }} />
-                      <span style={{ fontWeight: 500 }}>{name}</span>
-                    </Space>
-                  )
-                }
-              },
-              {
-                title: '状态',
-                dataIndex: 'state',
-                key: 'state',
-                width: 100,
-                render: (state: string) => {
-                  const stateColorMap: Record<string, string> = {
-                    idle: 'success',
-                    allocated: 'processing',
-                    mixed: 'warning',
-                    down: 'error',
-                    drain: 'default'
+                },
+                {
+                  title: '状态',
+                  dataIndex: 'state',
+                  key: 'state',
+                  width: 100,
+                  render: (state: string) => {
+                    const stateColorMap: Record<string, string> = {
+                      up: 'success',
+                      down: 'error',
+                      drain: 'warning',
+                      inactive: 'default'
+                    }
+                    return (
+                      <Tag color={stateColorMap[state.toLowerCase()] || 'success'}>
+                        {state.toUpperCase()}
+                      </Tag>
+                    )
                   }
-                  return (
-                    <Tag color={stateColorMap[state.toLowerCase()] || 'default'}>
-                      {state.toUpperCase()}
-                    </Tag>
+                },
+                {
+                  title: '时间限制',
+                  dataIndex: 'max_time',
+                  key: 'max_time',
+                  width: 150,
+                  render: (time: number | string) => {
+                    if (time === 'infinite') {
+                      return <Tag color="blue">无限制</Tag>
+                    }
+                    const hours = Math.floor(Number(time) / 60)
+                    const mins = Number(time) % 60
+                    return `${hours}小时${mins > 0 ? mins + '分' : ''}`
+                  }
+                },
+                {
+                  title: '节点数量',
+                  dataIndex: 'node_count',
+                  key: 'node_count',
+                  width: 100,
+                  align: 'center' as const,
+                  render: (count: number) => <span style={{ fontWeight: 500 }}>{count}</span>
+                },
+                {
+                  title: '节点列表',
+                  dataIndex: 'nodes',
+                  key: 'nodes',
+                  ellipsis: true,
+                  render: (nodes: string) => (
+                    <span style={{ fontSize: 12, color: '#64748b' }}>{nodes || '-'}</span>
                   )
+                },
+                {
+                  title: '最大节点数',
+                  dataIndex: 'max_nodes',
+                  key: 'max_nodes',
+                  width: 120,
+                  align: 'center' as const,
+                  render: (maxNodes: number | string) => {
+                    if (maxNodes === 'infinite') {
+                      return <Tag color="blue">无限制</Tag>
+                    }
+                    return maxNodes
+                  }
+                },
+                {
+                  title: '最小节点数',
+                  dataIndex: 'min_nodes',
+                  key: 'min_nodes',
+                  width: 120,
+                  align: 'center' as const,
                 }
-              },
-              {
-                title: 'CPU 总数',
-                dataIndex: 'cpu_total',
-                key: 'cpu_total',
-                width: 100,
-                align: 'center' as const,
-                render: (cpus: number) => <span style={{ fontWeight: 500 }}>{cpus}</span>
-              },
-              {
-                title: 'CPU 已用',
-                dataIndex: 'cpu_allocated',
-                key: 'cpu_allocated',
-                width: 100,
-                align: 'center' as const,
-                render: (allocated: number, record: NodeInfo) => {
-                  const usage = record.cpu_usage_percent
-                  return (
-                    <span style={{ 
-                      fontWeight: 500,
-                      color: usage > 80 ? '#ef4444' : usage > 50 ? '#f59e0b' : '#10b981'
-                    }}>
-                      {allocated}
+              ]}
+              dataSource={partitions}
+              rowKey="name"
+              pagination={false}
+              size="small"
+            />
+          )
+        )}
+        
+        {/* 节点视图 */}
+        {activeViewTab === 'nodes' && (
+          nodes.length === 0 ? (
+            <Empty description="暂无节点数据" />
+          ) : (
+            <Table
+              columns={[
+                {
+                  title: '节点名称',
+                  dataIndex: 'name',
+                  key: 'name',
+                  width: 200,
+                  render: (name: string, record: NodeInfo) => {
+                    const stateColors: Record<string, string> = {
+                      idle: '#10b981',
+                      allocated: '#3b82f6',
+                      mixed: '#f59e0b',
+                      down: '#ef4444',
+                      drain: '#94a3b8'
+                    }
+                    return (
+                      <Space>
+                        <div style={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: '50%',
+                          background: stateColors[record.state.toLowerCase()] || '#94a3b8'
+                        }} />
+                        <span style={{ fontWeight: 500 }}>{name}</span>
+                      </Space>
+                    )
+                  }
+                },
+                {
+                  title: '状态',
+                  dataIndex: 'state',
+                  key: 'state',
+                  width: 100,
+                  render: (state: string) => {
+                    const stateColorMap: Record<string, string> = {
+                      idle: 'success',
+                      allocated: 'processing',
+                      mixed: 'warning',
+                      down: 'error',
+                      drain: 'default'
+                    }
+                    return (
+                      <Tag color={stateColorMap[state.toLowerCase()] || 'default'}>
+                        {state.toUpperCase()}
+                      </Tag>
+                    )
+                  }
+                },
+                {
+                  title: 'CPU 总数',
+                  dataIndex: 'cpu_total',
+                  key: 'cpu_total',
+                  width: 100,
+                  align: 'center' as const,
+                  render: (cpus: number) => <span style={{ fontWeight: 500 }}>{cpus}</span>
+                },
+                {
+                  title: 'CPU 已用',
+                  dataIndex: 'cpu_allocated',
+                  key: 'cpu_allocated',
+                  width: 100,
+                  align: 'center' as const,
+                  render: (allocated: number, record: NodeInfo) => {
+                    const usage = record.cpu_usage_percent
+                    return (
+                      <span style={{ 
+                        fontWeight: 500,
+                        color: usage > 80 ? '#ef4444' : usage > 50 ? '#f59e0b' : '#10b981'
+                      }}>
+                        {allocated}
+                      </span>
+                    )
+                  }
+                },
+                {
+                  title: 'CPU 使用率',
+                  key: 'cpu_usage',
+                  width: 150,
+                  render: (_, record: NodeInfo) => {
+                    const usage = Math.round(record.cpu_usage_percent)
+                    return (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Progress 
+                          percent={usage} 
+                          size="small" 
+                          strokeColor={usage > 80 ? '#ef4444' : usage > 50 ? '#f59e0b' : '#3b82f6'}
+                          style={{ flex: 1, margin: 0 }}
+                        />
+                        <span style={{ fontSize: 12, minWidth: 35 }}>{usage}%</span>
+                      </div>
+                    )
+                  }
+                },
+                {
+                  title: '内存总量',
+                  dataIndex: 'memory_total_mb',
+                  key: 'memory_total_mb',
+                  width: 120,
+                  align: 'center' as const,
+                  render: (mem: number) => `${(mem / 1024).toFixed(1)} GB`
+                },
+                {
+                  title: '内存已用',
+                  dataIndex: 'memory_allocated_mb',
+                  key: 'memory_allocated_mb',
+                  width: 120,
+                  align: 'center' as const,
+                  render: (mem: number) => `${(mem / 1024).toFixed(1)} GB`
+                },
+                {
+                  title: '内存使用率',
+                  key: 'mem_usage',
+                  width: 150,
+                  render: (_, record: NodeInfo) => {
+                    const usage = Math.round(record.memory_usage_percent)
+                    return (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Progress 
+                          percent={usage} 
+                          size="small" 
+                          strokeColor={usage > 80 ? '#ef4444' : usage > 50 ? '#f59e0b' : '#10b981'}
+                          style={{ flex: 1, margin: 0 }}
+                        />
+                        <span style={{ fontSize: 12, minWidth: 35 }}>{usage}%</span>
+                      </div>
+                    )
+                  }
+                },
+                {
+                  title: '作业数',
+                  dataIndex: 'running_jobs',
+                  key: 'running_jobs',
+                  width: 80,
+                  align: 'center' as const,
+                  render: (jobs: number) => (
+                    <span style={{ fontWeight: 500, color: jobs > 0 ? '#3b82f6' : '#9ca3af' }}>
+                      {jobs}
                     </span>
                   )
                 }
-              },
-              {
-                title: 'CPU 使用率',
-                key: 'cpu_usage',
-                width: 150,
-                render: (_, record: NodeInfo) => {
-                  const usage = Math.round(record.cpu_usage_percent)
-                  return (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <Progress 
-                        percent={usage} 
-                        size="small" 
-                        strokeColor={usage > 80 ? '#ef4444' : usage > 50 ? '#f59e0b' : '#3b82f6'}
-                        style={{ flex: 1, margin: 0 }}
-                      />
-                      <span style={{ fontSize: 12, minWidth: 35 }}>{usage}%</span>
-                    </div>
-                  )
-                }
-              },
-              {
-                title: '内存总量',
-                dataIndex: 'memory_total_mb',
-                key: 'memory_total_mb',
-                width: 120,
-                align: 'center' as const,
-                render: (mem: number) => `${(mem / 1024).toFixed(1)} GB`
-              },
-              {
-                title: '内存已用',
-                dataIndex: 'memory_allocated_mb',
-                key: 'memory_allocated_mb',
-                width: 120,
-                align: 'center' as const,
-                render: (mem: number) => `${(mem / 1024).toFixed(1)} GB`
-              },
-              {
-                title: '内存使用率',
-                key: 'mem_usage',
-                width: 150,
-                render: (_, record: NodeInfo) => {
-                  const usage = Math.round(record.memory_usage_percent)
-                  return (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <Progress 
-                        percent={usage} 
-                        size="small" 
-                        strokeColor={usage > 80 ? '#ef4444' : usage > 50 ? '#f59e0b' : '#10b981'}
-                        style={{ flex: 1, margin: 0 }}
-                      />
-                      <span style={{ fontSize: 12, minWidth: 35 }}>{usage}%</span>
-                    </div>
-                  )
-                }
-              },
-              {
-                title: '作业数',
-                dataIndex: 'running_jobs',
-                key: 'running_jobs',
-                width: 80,
-                align: 'center' as const,
-                render: (jobs: number) => (
-                  <span style={{ fontWeight: 500, color: jobs > 0 ? '#3b82f6' : '#9ca3af' }}>
-                    {jobs}
-                  </span>
-                )
-              }
-            ]}
-            dataSource={nodes}
-            rowKey="name"
-            pagination={false}
-            size="small"
-            onRow={(record) => ({
-              onClick: () => {
-                setSelectedNode(record)
-                setNodeDetailOpen(true)
-              },
-              style: { cursor: 'pointer' }
-            })}
-          />
+              ]}
+              dataSource={nodes}
+              rowKey="name"
+              pagination={false}
+              size="small"
+              onRow={(record) => ({
+                onClick: () => {
+                  setSelectedNode(record)
+                  setNodeDetailOpen(true)
+                },
+                style: { cursor: 'pointer' }
+              })}
+            />
+          )
         )}
       </Card>
       
