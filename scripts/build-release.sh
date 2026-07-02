@@ -425,9 +425,18 @@ echo "准备打包文件..."
 cp -r "${RELEASE_DIR}"/* "${TEMP_DIR}/computenook/" 2>/dev/null || true
 rm -rf "${TEMP_DIR}/computenook/temp_pack"
 
-# 创建压缩包
+# 创建压缩包（排除 macOS 元数据）
 cd "${TEMP_DIR}"
-tar -czf "${ARCHIVE_PATH}" computenook/
+if [[ "$(uname -s)" == "Darwin" ]]; then
+    # macOS: 使用 COPYFILE_DISABLE 环境变量禁用扩展属性
+    # 先尝试 --no-xattrs 参数，如果不支持则使用基础命令
+    COPYFILE_DISABLE=1 tar --no-mac-metadata --no-xattrs -czf "${ARCHIVE_PATH}" computenook/ 2>/dev/null || \
+    COPYFILE_DISABLE=1 tar --no-xattrs -czf "${ARCHIVE_PATH}" computenook/ 2>/dev/null || \
+    COPYFILE_DISABLE=1 tar -czf "${ARCHIVE_PATH}" computenook/
+else
+    # Linux: 直接打包
+    tar -czf "${ARCHIVE_PATH}" computenook/
+fi
 
 # 清理临时目录
 cd "${ROOT_DIR}"
