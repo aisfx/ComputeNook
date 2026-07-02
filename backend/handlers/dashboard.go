@@ -320,3 +320,62 @@ func parseNodeList(nodeStr string) []string {
 	
 	return nodes
 }
+
+// UserDashboardData 用户仪表盘数据（兼容旧前端格式）
+type UserDashboardData struct {
+	Nodes       int     `json:"nodes"`
+	NodesOnline int     `json:"nodes_online"`
+	CPUCores    int     `json:"cpu_cores"`
+	CPUUsage    int     `json:"cpu_usage"`
+	Memory      int64   `json:"memory"`         // MB
+	MemoryFree  int64   `json:"memory_free"`    // MB
+	GPUCards    int     `json:"gpu_cards"`
+	GPUInUse    int     `json:"gpu_in_use"`
+}
+
+// GetUserDashboard 获取用户仪表盘数据（兼容旧前端）
+// GET /api/dashboard
+func GetUserDashboard(c *gin.Context) {
+	// 获取当前用户信息
+	username, exists := c.Get("username")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未授权"})
+		return
+	}
+	
+	// 创建 Slurm 客户端
+	client, err := GetSlurmClientForUser(username.(string))
+	if err != nil {
+		logger.Error("Failed to create Slurm client: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to connect to Slurm"})
+		return
+	}
+	
+	// 获取集群统计信息
+	clusterStats, err := client.GetClusterStatistics()
+	if err != nil {
+		logger.Error("Failed to get cluster statistics: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get cluster statistics: " + err.Error()})
+		return
+	}
+	
+	// 转换为前端期望的格式
+	data := UserDashboardData{
+		Nodes:       clusterStats.TotalNodes,
+		NodesOnline: clusterStats.OnlineNodes,
+		CPUCores:    clusterStats.TotalCPUs,
+		CPUUsage:    clusterStats.AllocatedCPUs,
+		Memory:      clusterStats.TotalMemoryMB,
+		MemoryFree:  clusterStats.FreeMemoryMB,
+		GPUCards:    clusterStats.TotalGPUs,
+		GPUInUse:    clusterStats.AllocatedGPUs,
+	}
+	
+	logger.Info("User dashboard data for %s: nodes=%d/%d, cpus=%d/%d, memory=%dMB/%dMB, gpus=%d/%d",
+		username, data.NodesOnline, data.Nodes,
+		data.CPUUsage, data.CPUCores,
+		data.Memory-data.MemoryFree, data.Memory,
+		data.GPUInUse, data.GPUCards)
+	
+	c.JSON(http.StatusOK, gin.H{"data": data})
+}

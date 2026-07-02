@@ -422,6 +422,9 @@ func main() {
 			dashboard.GET("/stats", cache.CacheMiddleware(cache.PrefixDashboard+"stats:", 30*time.Second), handlers.GetDashboardStats)
 			dashboard.GET("/nodes", cache.CacheMiddleware(cache.PrefixDashboard+"nodes:", 30*time.Second), handlers.GetDashboardNodes)
 		}
+		
+		// 用户 Dashboard API（兼容性路由）
+		auth.GET("/dashboard", cache.CacheMiddleware(cache.PrefixDashboard+"user:", 30*time.Second), handlers.GetUserDashboard)
 
 		// 用户自定义看板配置（跨设备同步）
 		auth.GET("/user/dashboards", handlers.GetUserDashboards)
@@ -429,23 +432,30 @@ func main() {
 
 		// 监控 API
 		monitoring := auth.Group("/monitoring")
-		monitoring.Use(middleware.AdminMiddleware())
 		{
-			monitoring.GET("/metrics", cache.CacheMiddleware(cache.PrefixMonitoring+"metrics:", 15*time.Second), handlers.GetNodeMetrics)
-			monitoring.GET("/overview", cache.CacheMiddleware(cache.PrefixMonitoring+"overview:", 15*time.Second), handlers.GetMonitoringOverview)
-			monitoring.GET("/node-metrics", cache.CacheMiddleware(cache.PrefixMonitoring+"node-metrics:", 15*time.Second), handlers.GetNodeExporterMetrics)
-			monitoring.GET("/local-metrics", cache.CacheMiddleware(cache.PrefixMonitoring+"local-metrics:", 15*time.Second), handlers.GetLocalMetrics)
-			monitoring.GET("/mgmt-services", cache.CacheMiddleware(cache.PrefixMonitoring+"mgmt-services:", 15*time.Second), handlers.GetMgmtServices)
-			monitoring.GET("/rack", handlers.GetRackLayout)
-			monitoring.POST("/rack", middleware.AdminMiddleware(), handlers.CreateRack)
-			monitoring.PUT("/rack/:id", middleware.AdminMiddleware(), handlers.UpdateRack)
-			monitoring.DELETE("/rack/:id", middleware.AdminMiddleware(), handlers.DeleteRack)
-			monitoring.POST("/rack/auto", middleware.AdminMiddleware(), handlers.AutoGenerateRacks)
-			monitoring.GET("/prom-alerts", cache.CacheMiddleware(cache.PrefixMonitoring+"prom-alerts:", 15*time.Second), handlers.GetPromAlerts)
-			monitoring.GET("/prom-targets", cache.CacheMiddleware(cache.PrefixMonitoring+"prom-targets:", 30*time.Second), handlers.GetPromTargets)
-			monitoring.GET("/prom-rules", cache.CacheMiddleware(cache.PrefixMonitoring+"prom-rules:", 60*time.Second), handlers.GetPromRules)
-			monitoring.GET("/promql", handlers.PromQueryInstant)
-			monitoring.GET("/promql/range", handlers.PromQueryRange)
+			// 普通用户也可以查看节点信息
+			monitoring.GET("/nodes", cache.CacheMiddleware(cache.PrefixMonitoring+"nodes:", 30*time.Second), handlers.GetDashboardNodes)
+		}
+		
+		// 管理员监控功能
+		monitoringAdmin := auth.Group("/monitoring")
+		monitoringAdmin.Use(middleware.AdminMiddleware())
+		{
+			monitoringAdmin.GET("/metrics", cache.CacheMiddleware(cache.PrefixMonitoring+"metrics:", 15*time.Second), handlers.GetNodeMetrics)
+			monitoringAdmin.GET("/overview", cache.CacheMiddleware(cache.PrefixMonitoring+"overview:", 15*time.Second), handlers.GetMonitoringOverview)
+			monitoringAdmin.GET("/node-metrics", cache.CacheMiddleware(cache.PrefixMonitoring+"node-metrics:", 15*time.Second), handlers.GetNodeExporterMetrics)
+			monitoringAdmin.GET("/local-metrics", cache.CacheMiddleware(cache.PrefixMonitoring+"local-metrics:", 15*time.Second), handlers.GetLocalMetrics)
+			monitoringAdmin.GET("/mgmt-services", cache.CacheMiddleware(cache.PrefixMonitoring+"mgmt-services:", 15*time.Second), handlers.GetMgmtServices)
+			monitoringAdmin.GET("/rack", handlers.GetRackLayout)
+			monitoringAdmin.POST("/rack", handlers.CreateRack)
+			monitoringAdmin.PUT("/rack/:id", handlers.UpdateRack)
+			monitoringAdmin.DELETE("/rack/:id", handlers.DeleteRack)
+			monitoringAdmin.POST("/rack/auto", handlers.AutoGenerateRacks)
+			monitoringAdmin.GET("/prom-alerts", cache.CacheMiddleware(cache.PrefixMonitoring+"prom-alerts:", 15*time.Second), handlers.GetPromAlerts)
+			monitoringAdmin.GET("/prom-targets", cache.CacheMiddleware(cache.PrefixMonitoring+"prom-targets:", 30*time.Second), handlers.GetPromTargets)
+			monitoringAdmin.GET("/prom-rules", cache.CacheMiddleware(cache.PrefixMonitoring+"prom-rules:", 60*time.Second), handlers.GetPromRules)
+			monitoringAdmin.GET("/promql", handlers.PromQueryInstant)
+			monitoringAdmin.GET("/promql/range", handlers.PromQueryRange)
 		}
 
 		// 缓存监控API（管理员）
