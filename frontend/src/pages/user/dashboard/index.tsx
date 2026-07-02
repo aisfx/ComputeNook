@@ -823,78 +823,78 @@ export default function UserDashboard() {
             style={{ height: 320 }}
           >
             {accountQuotas.length > 0 ? (
-              <div style={{ textAlign: 'center', paddingTop: 20 }}>
+              <div style={{ textAlign: 'center', paddingTop: 12 }}>
                 {currentAccountQuota.max_cpus > 0 ? (
                   // 有 CPU 限制：显示百分比
                   <>
-                    <div style={{ fontSize: 48, fontWeight: 700, marginBottom: 8 }}>
+                    <div style={{ fontSize: 42, fontWeight: 700, marginBottom: 6 }}>
                       <span style={{ color: currentAccountQuota.cpu_pct > 90 ? '#ef4444' : currentAccountQuota.cpu_pct > 70 ? '#f59e0b' : '#667eea' }}>
                         {currentAccountQuota.cpu_pct}
                       </span>
-                      <span style={{ fontSize: 24, color: '#9ca3af' }}>%</span>
+                      <span style={{ fontSize: 20, color: '#9ca3af' }}>%</span>
                     </div>
-                    <div style={{ fontSize: 13, color: '#9ca3af', marginBottom: 8 }}>CPU 使用率</div>
-                    <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 24 }}>
+                    <div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 4 }}>CPU 使用率</div>
+                    <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 16 }}>
                       {currentAccountQuota.used_cpus} / {currentAccountQuota.max_cpus} 核
                     </div>
                   </>
                 ) : currentAccountQuota.used_cpus > 0 ? (
                   // 无限制但有使用：显示当前使用数
                   <>
-                    <div style={{ fontSize: 48, fontWeight: 700, marginBottom: 8, color: '#667eea' }}>
+                    <div style={{ fontSize: 42, fontWeight: 700, marginBottom: 6, color: '#667eea' }}>
                       {currentAccountQuota.used_cpus}
                     </div>
-                    <div style={{ fontSize: 13, color: '#9ca3af', marginBottom: 8 }}>当前使用 CPU</div>
-                    <div style={{ fontSize: 11, color: '#f59e0b', marginBottom: 24 }}>
+                    <div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 4 }}>当前使用 CPU</div>
+                    <div style={{ fontSize: 11, color: '#f59e0b', marginBottom: 16 }}>
                       ⚠️ 无配额限制
                     </div>
                   </>
                 ) : (
                   // 无限制且无使用：显示空闲状态
                   <>
-                    <div style={{ fontSize: 48, marginBottom: 16 }}>🎯</div>
-                    <div style={{ fontSize: 14, color: '#9ca3af', marginBottom: 8 }}>
+                    <div style={{ fontSize: 40, marginBottom: 12 }}>🎯</div>
+                    <div style={{ fontSize: 13, color: '#9ca3af', marginBottom: 4 }}>
                       当前无运行作业
                     </div>
-                    <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 24 }}>
+                    <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 16 }}>
                       CPU 配额: 无限制
                     </div>
                   </>
                 )}
-                <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 16 }}>{currentAccountQuota.account}</div>
+                <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 12 }}>{currentAccountQuota.account}</div>
                 
-                <Space direction="vertical" style={{ width: '100%' }} size="small">
+                <Space direction="vertical" style={{ width: '100%' }} size={4}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Space>
-                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#667eea' }} />
-                      <span style={{ fontSize: 13 }}>CPU 限额</span>
+                    <Space size={4}>
+                      <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#667eea' }} />
+                      <span style={{ fontSize: 12 }}>CPU 限额</span>
                     </Space>
-                    <span style={{ fontSize: 13 }}>
+                    <span style={{ fontSize: 12 }}>
                       {currentAccountQuota.max_cpus > 0 ? `${currentAccountQuota.max_cpus} 核` : '无限制'}
                     </span>
                   </div>
                   
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Space>
-                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#10b981' }} />
-                      <span style={{ fontSize: 13 }}>节点限额</span>
+                    <Space size={4}>
+                      <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981' }} />
+                      <span style={{ fontSize: 12 }}>节点限额</span>
                     </Space>
-                    <span style={{ fontSize: 13 }}>
+                    <span style={{ fontSize: 12 }}>
                       {currentAccountQuota.max_nodes > 0 ? `${currentAccountQuota.max_nodes} 个` : '无限制'}
                     </span>
                   </div>
                   
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Space>
-                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#f59e0b' }} />
-                      <span style={{ fontSize: 13 }}>作业上限</span>
+                    <Space size={4}>
+                      <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#f59e0b' }} />
+                      <span style={{ fontSize: 12 }}>作业上限</span>
                     </Space>
-                    <span style={{ fontSize: 13 }}>
+                    <span style={{ fontSize: 12 }}>
                       {currentAccountQuota.max_jobs > 0 ? currentAccountQuota.max_jobs : '无限制'}
                     </span>
                   </div>
                   
-                  <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 8 }}>
+                  <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 6, paddingTop: 6, borderTop: '1px solid #f3f4f6' }}>
                     分区: {currentAccountQuota.partition || '全部'} · QoS: {currentAccountQuota.qos || '-'}
                   </div>
                 </Space>
