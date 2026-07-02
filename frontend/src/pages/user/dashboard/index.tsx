@@ -78,10 +78,12 @@ interface MachineTime {
   remaining: number
   usage_rate: number
   has_limit: boolean
+  has_usage?: boolean  // 新增：是否有使用记录
 }
 
 interface StorageQuota {
   has_data: boolean
+  not_configured?: boolean  // 新增：标记配额系统未配置
   capacity: {
     used: string
     total: string
@@ -294,7 +296,8 @@ export default function UserDashboard() {
         usage_rate: item.total_quota > 0
           ? parseFloat(((item.used_hours / item.total_quota) * 100).toFixed(2))
           : 0,
-        has_limit: (item.total_quota || 0) > 0
+        has_limit: (item.total_quota || 0) > 0,
+        has_usage: (item.used_hours || 0) > 0  // 新增：标记是否有使用记录
       }))
       
       setMachineTimeList(timeList)
@@ -327,6 +330,14 @@ export default function UserDashboard() {
               : 0,
             no_limit: !data.files_limit || data.files_limit === 0
           }
+        })
+      } else {
+        // 配额系统未配置，设置标记
+        setStorageQuota({
+          has_data: false,
+          not_configured: true,
+          capacity: { used: '0 KB', total: '0 KB', percentage: 0 },
+          files: { used: 0, total: 0, percentage: 0, no_limit: true }
         })
       }
     } catch (e) {
@@ -926,6 +937,27 @@ export default function UserDashboard() {
                   </div>
                 </Space>
               </div>
+            ) : currentMachineTime.has_usage ? (
+              <div style={{ textAlign: 'center', paddingTop: 20 }}>
+                <div style={{ fontSize: 48, fontWeight: 700, marginBottom: 8, color: '#667eea' }}>
+                  {currentMachineTime.used.toFixed(1)}
+                </div>
+                <div style={{ fontSize: 13, color: '#9ca3af', marginBottom: 24 }}>已使用 (小时)</div>
+                
+                <Space direction="vertical" style={{ width: '100%' }} size="small">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Space>
+                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#667eea' }} />
+                      <span style={{ fontSize: 13 }}>QoS</span>
+                    </Space>
+                    <span style={{ fontSize: 13 }}>{currentMachineTime.qos_name}</span>
+                  </div>
+                  
+                  <div style={{ fontSize: 11, color: '#f59e0b', marginTop: 8, textAlign: 'center' }}>
+                    ⚠️ 未设置配额限制
+                  </div>
+                </Space>
+              </div>
             ) : (
               <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无机时配额" />
             )}
@@ -983,6 +1015,16 @@ export default function UserDashboard() {
                     }
                   </div>
                 </Space>
+              </div>
+            ) : storageQuota.not_configured ? (
+              <div style={{ textAlign: 'center', paddingTop: 40 }}>
+                <div style={{ fontSize: 48, marginBottom: 16 }}>📦</div>
+                <div style={{ fontSize: 14, color: '#9ca3af', marginBottom: 8 }}>
+                  存储配额系统未配置
+                </div>
+                <div style={{ fontSize: 11, color: '#d1d5db' }}>
+                  请联系管理员配置配额系统
+                </div>
               </div>
             ) : (
               <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无存储配额" />
