@@ -820,6 +820,7 @@ export default function UserDashboard() {
             {accountQuotas.length > 0 ? (
               <div style={{ textAlign: 'center', paddingTop: 20 }}>
                 {currentAccountQuota.max_cpus > 0 ? (
+                  // 有 CPU 限制：显示百分比
                   <>
                     <div style={{ fontSize: 48, fontWeight: 700, marginBottom: 8 }}>
                       <span style={{ color: currentAccountQuota.cpu_pct > 90 ? '#ef4444' : currentAccountQuota.cpu_pct > 70 ? '#f59e0b' : '#667eea' }}>
@@ -828,16 +829,34 @@ export default function UserDashboard() {
                       <span style={{ fontSize: 24, color: '#9ca3af' }}>%</span>
                     </div>
                     <div style={{ fontSize: 13, color: '#9ca3af', marginBottom: 8 }}>CPU 使用率</div>
+                    <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 24 }}>
+                      {currentAccountQuota.used_cpus} / {currentAccountQuota.max_cpus} 核
+                    </div>
                   </>
-                ) : (
+                ) : currentAccountQuota.used_cpus > 0 ? (
+                  // 无限制但有使用：显示当前使用数
                   <>
                     <div style={{ fontSize: 48, fontWeight: 700, marginBottom: 8, color: '#667eea' }}>
                       {currentAccountQuota.used_cpus}
                     </div>
                     <div style={{ fontSize: 13, color: '#9ca3af', marginBottom: 8 }}>当前使用 CPU</div>
+                    <div style={{ fontSize: 11, color: '#f59e0b', marginBottom: 24 }}>
+                      ⚠️ 无配额限制
+                    </div>
+                  </>
+                ) : (
+                  // 无限制且无使用：显示空闲状态
+                  <>
+                    <div style={{ fontSize: 48, marginBottom: 16 }}>🎯</div>
+                    <div style={{ fontSize: 14, color: '#9ca3af', marginBottom: 8 }}>
+                      当前无运行作业
+                    </div>
+                    <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 24 }}>
+                      CPU 配额: 无限制
+                    </div>
                   </>
                 )}
-                <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 24 }}>{currentAccountQuota.account}</div>
+                <div style={{ fontSize: 11, color: '#9ca3af', marginBottom: 16 }}>{currentAccountQuota.account}</div>
                 
                 <Space direction="vertical" style={{ width: '100%' }} size="small">
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
