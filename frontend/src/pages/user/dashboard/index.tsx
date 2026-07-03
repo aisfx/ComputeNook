@@ -154,6 +154,10 @@ export default function UserDashboard() {
   const [nodes, setNodes] = useState<NodeInfo[]>([])
   const [partitions, setPartitions] = useState<PartitionInfo[]>([])
   
+  // 分区详情
+  const [selectedPartition, setSelectedPartition] = useState<PartitionInfo | null>(null)
+  const [partitionDetailOpen, setPartitionDetailOpen] = useState(false)
+  
   // 配额信息
   const [accountQuotas, setAccountQuotas] = useState<AccountQuota[]>([])
   const [selectedAccountIdx, setSelectedAccountIdx] = useState(0)
@@ -1325,6 +1329,25 @@ export default function UserDashboard() {
                   key: 'min_nodes',
                   width: 120,
                   align: 'center' as const,
+                },
+                {
+                  title: '操作',
+                  key: 'action',
+                  width: 100,
+                  align: 'center' as const,
+                  render: (_: any, record: PartitionInfo) => (
+                    <Button
+                      type="link"
+                      size="small"
+                      icon={<EyeOutlined />}
+                      onClick={() => {
+                        setSelectedPartition(record)
+                        setPartitionDetailOpen(true)
+                      }}
+                    >
+                      详情
+                    </Button>
+                  )
                 }
               ]}
               dataSource={partitions}
@@ -1786,6 +1809,167 @@ export default function UserDashboard() {
               )}
               <Col span={12}>
                 <div><strong>运行时长:</strong> {formatElapsed(selectedJob.run_time)}</div>
+              </Col>
+            </Row>
+          </div>
+        )}
+      </Modal>
+
+      {/* 分区详情弹窗 */}
+      <Modal
+        title={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <CloudServerOutlined style={{ color: '#3b82f6' }} />
+            <span>分区详情 - {selectedPartition?.name}</span>
+          </div>
+        }
+        open={partitionDetailOpen}
+        onCancel={() => {
+          setPartitionDetailOpen(false)
+          setSelectedPartition(null)
+        }}
+        width={700}
+        footer={
+          <Button onClick={() => {
+            setPartitionDetailOpen(false)
+            setSelectedPartition(null)
+          }}>
+            关闭
+          </Button>
+        }
+      >
+        {selectedPartition && (
+          <div style={{ padding: '8px 0' }}>
+            <Row gutter={[16, 16]}>
+              {/* 状态信息 */}
+              <Col span={24}>
+                <div style={{ 
+                  padding: 12, 
+                  background: '#f5f5f5', 
+                  borderRadius: 6,
+                  marginBottom: 16
+                }}>
+                  <Space size="large">
+                    <div>
+                      <div style={{ fontSize: 11, color: '#666', marginBottom: 4 }}>状态</div>
+                      <Tag color={selectedPartition.state.toLowerCase() === 'up' ? 'success' : 'error'} style={{ fontSize: 13 }}>
+                        {selectedPartition.state.toUpperCase()}
+                      </Tag>
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 11, color: '#666', marginBottom: 4 }}>节点数量</div>
+                      <div style={{ fontSize: 16, fontWeight: 600 }}>{selectedPartition.node_count} 个</div>
+                    </div>
+                  </Space>
+                </div>
+              </Col>
+              
+              {/* 时间限制 */}
+              <Col span={24}>
+                <div style={{ 
+                  padding: 12, 
+                  background: '#f9fafb', 
+                  borderRadius: 6,
+                  border: '1px solid #e5e7eb'
+                }}>
+                  <div style={{ 
+                    fontSize: 11, 
+                    fontWeight: 600, 
+                    color: '#6b7280', 
+                    marginBottom: 8,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em'
+                  }}>
+                    时间限制
+                  </div>
+                  <Row gutter={16}>
+                    <Col span={12}>
+                      <div style={{ fontSize: 11, color: '#9ca3af' }}>最大时间</div>
+                      <div style={{ fontSize: 14, fontWeight: 600, marginTop: 4 }}>
+                        {selectedPartition.max_time === 'infinite' ? (
+                          <Tag color="blue">无限制</Tag>
+                        ) : (
+                          `${Math.floor(Number(selectedPartition.max_time) / 60)} 小时 ${Number(selectedPartition.max_time) % 60} 分`
+                        )}
+                      </div>
+                    </Col>
+                    <Col span={12}>
+                      <div style={{ fontSize: 11, color: '#9ca3af' }}>默认时间</div>
+                      <div style={{ fontSize: 14, fontWeight: 600, marginTop: 4 }}>
+                        {selectedPartition.default_time ? (
+                          `${Math.floor(Number(selectedPartition.default_time) / 60)} 小时 ${Number(selectedPartition.default_time) % 60} 分`
+                        ) : (
+                          <span style={{ color: '#9ca3af' }}>未设置</span>
+                        )}
+                      </div>
+                    </Col>
+                  </Row>
+                </div>
+              </Col>
+              
+              {/* 节点限制 */}
+              <Col span={24}>
+                <div style={{ 
+                  padding: 12, 
+                  background: '#f9fafb', 
+                  borderRadius: 6,
+                  border: '1px solid #e5e7eb'
+                }}>
+                  <div style={{ 
+                    fontSize: 11, 
+                    fontWeight: 600, 
+                    color: '#6b7280', 
+                    marginBottom: 8,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em'
+                  }}>
+                    节点限制
+                  </div>
+                  <Row gutter={16}>
+                    <Col span={8}>
+                      <div style={{ fontSize: 11, color: '#9ca3af' }}>最大节点数</div>
+                      <div style={{ fontSize: 14, fontWeight: 600, marginTop: 4 }}>
+                        {selectedPartition.max_nodes === 'infinite' ? (
+                          <Tag color="blue">无限制</Tag>
+                        ) : (
+                          selectedPartition.max_nodes
+                        )}
+                      </div>
+                    </Col>
+                    <Col span={8}>
+                      <div style={{ fontSize: 11, color: '#9ca3af' }}>最小节点数</div>
+                      <div style={{ fontSize: 14, fontWeight: 600, marginTop: 4 }}>
+                        {selectedPartition.min_nodes || 1}
+                      </div>
+                    </Col>
+                    <Col span={8}>
+                      <div style={{ fontSize: 11, color: '#9ca3af' }}>当前节点数</div>
+                      <div style={{ fontSize: 14, fontWeight: 600, marginTop: 4 }}>
+                        {selectedPartition.node_count}
+                      </div>
+                    </Col>
+                  </Row>
+                </div>
+              </Col>
+              
+              {/* 节点列表 */}
+              <Col span={24}>
+                <div style={{ marginBottom: 8 }}>
+                  <strong style={{ color: '#64748b', fontSize: 12 }}>节点列表:</strong>
+                  <div style={{ 
+                    marginTop: 8, 
+                    padding: 12, 
+                    background: '#f9fafb', 
+                    borderRadius: 4,
+                    fontFamily: 'monospace',
+                    fontSize: 12,
+                    wordBreak: 'break-all',
+                    maxHeight: 150,
+                    overflowY: 'auto'
+                  }}>
+                    {selectedPartition.nodes || '暂无节点信息'}
+                  </div>
+                </div>
               </Col>
             </Row>
           </div>

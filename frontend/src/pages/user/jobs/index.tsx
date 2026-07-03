@@ -339,11 +339,73 @@ export default function JobManagement() {
     }
   }, [])
   
+  // 根据表单参数自动生成/更新脚本内容
+  const updateScriptFromForm = useCallback(() => {
+    const values = submitForm.getFieldsValue()
+    const name = values.name || 'my_job'
+    const partition = values.partition || 'compute'
+    const nodes = values.nodes || 1
+    const cpus = values.cpus || 8
+    const memory = values.memory || 0
+    const timeHours = values.time_hours || 0
+    const gpus = values.gpus || 0
+    const qos = values.qos || ''
+    
+    let script = '#!/bin/bash\n'
+    script += `#SBATCH -J ${name}\n`
+    script += `#SBATCH -p ${partition}\n`
+    script += `#SBATCH -N ${nodes}\n`
+    script += `#SBATCH -c ${cpus}\n`
+    
+    if (memory > 0) {
+      script += `#SBATCH --mem=${memory}G\n`
+    }
+    
+    if (timeHours > 0) {
+      const hours = Math.floor(timeHours)
+      const mins = Math.round((timeHours - hours) * 60)
+      script += `#SBATCH -t ${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}:00\n`
+    }
+    
+    if (gpus > 0) {
+      script += `#SBATCH --gres=gpu:${gpus}\n`
+    }
+    
+    if (qos) {
+      script += `#SBATCH --qos=${qos}\n`
+    }
+    
+    script += '\n'
+    script += 'echo "Job started: $(date)"\n'
+    script += 'echo "Running on node: $(hostname)"\n'
+    script += '\n'
+    script += '# 在此处添加你的命令\n'
+    script += 'srun ./my-program\n'
+    script += '\n'
+    script += 'echo "Job finished: $(date)"\n'
+    
+    submitForm.setFieldsValue({ script })
+  }, [submitForm])
+  
   useEffect(() => {
     loadPartitions()
     loadTemplates()
     loadHarborProjects()
   }, [loadPartitions, loadTemplates, loadHarborProjects])
+  
+  // 初始化作业提交表单的脚本内容
+  useEffect(() => {
+    if (submitOpen && jobMode === 'normal') {
+      // 延迟执行，确保表单已初始化
+      setTimeout(() => {
+        const currentScript = submitForm.getFieldValue('script')
+        // 只在脚本为空时初始化
+        if (!currentScript) {
+          updateScriptFromForm()
+        }
+      }, 100)
+    }
+  }, [submitOpen, jobMode, submitForm, updateScriptFromForm])
   
   // 继续下一部分...
 
@@ -1236,6 +1298,10 @@ export default function JobManagement() {
                     form={submitForm}
                     layout="vertical"
                     onFinish={handleSubmit}
+                    onValuesChange={() => {
+                      // 延迟执行，确保表单值已更新
+                      setTimeout(() => updateScriptFromForm(), 0)
+                    }}
                   >
                     <Row gutter={16}>
                       <Col span={12}>
@@ -1244,7 +1310,7 @@ export default function JobManagement() {
                           name="name"
                           rules={[{ required: true, message: '请输入作业名称' }]}
                         >
-                          <Input placeholder="my_job" />
+                          <Input placeholder="my_job" onChange={updateScriptFromForm} />
                         </Form.Item>
                       </Col>
                       <Col span={12}>
@@ -1253,7 +1319,7 @@ export default function JobManagement() {
                           name="partition"
                           rules={[{ required: true, message: '请选择分区' }]}
                         >
-                          <Select placeholder="选择计算分区">
+                          <Select placeholder="选择计算分区" onChange={updateScriptFromForm}>
                             {partitions.map(p => (
                               <Select.Option key={p} value={p}>{p}</Select.Option>
                             ))}
@@ -1270,7 +1336,7 @@ export default function JobManagement() {
                           rules={[{ required: true, message: '请输入节点数' }]}
                           initialValue={1}
                         >
-                          <Input type="number" min={1} placeholder="1" />
+                          <Input type="number" min={1} placeholder="1" onChange={updateScriptFromForm} />
                         </Form.Item>
                       </Col>
                       <Col span={12}>
@@ -1280,7 +1346,7 @@ export default function JobManagement() {
                           rules={[{ required: true, message: '请输入CPU核数' }]}
                           initialValue={8}
                         >
-                          <Input type="number" min={1} placeholder="8" />
+                          <Input type="number" min={1} placeholder="8" onChange={updateScriptFromForm} />
                         </Form.Item>
                       </Col>
                     </Row>
@@ -1292,7 +1358,7 @@ export default function JobManagement() {
                           name="memory"
                           initialValue={0}
                         >
-                          <Input type="number" min={0} placeholder="0" />
+                          <Input type="number" min={0} placeholder="0" onChange={updateScriptFromForm} />
                         </Form.Item>
                       </Col>
                       <Col span={12}>
@@ -1301,7 +1367,7 @@ export default function JobManagement() {
                           name="time_hours"
                           initialValue={0}
                         >
-                          <Input type="number" min={0} placeholder="0" />
+                          <Input type="number" min={0} placeholder="0" step={0.5} onChange={updateScriptFromForm} />
                         </Form.Item>
                       </Col>
                     </Row>
@@ -1313,7 +1379,7 @@ export default function JobManagement() {
                           name="gpus"
                           initialValue={0}
                         >
-                          <Input type="number" min={0} placeholder="0" />
+                          <Input type="number" min={0} placeholder="0" onChange={updateScriptFromForm} />
                         </Form.Item>
                       </Col>
                       <Col span={12}>
@@ -1321,7 +1387,7 @@ export default function JobManagement() {
                           label="QOS（服务质量）"
                           name="qos"
                         >
-                          <Input placeholder="默认" />
+                          <Input placeholder="默认" onChange={updateScriptFromForm} />
                         </Form.Item>
                       </Col>
                     </Row>
