@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Card, Table, Button, Space, Input, Select, Tag, Modal, Form, Row, Col,
-  Statistic, Checkbox, message as Message, App, Empty
+  Statistic, Checkbox, message as Message, App, Empty, Typography
 } from 'antd'
 import type { TableColumnsType } from 'antd'
 import {
@@ -16,6 +16,7 @@ import { getUser, isAdmin } from '@/utils/auth'
 import { useNavigate, useLocation } from 'react-router-dom'
 
 const { TextArea } = Input
+const { Text } = Typography
 
 interface Job {
   id: string | number
@@ -1566,39 +1567,53 @@ export default function JobManagement() {
                         </Form.Item>
                         
                         <Form.Item 
-                          label="工作目录" 
-                          name="workdir"
-                          tooltip="作业执行的工作目录，可以手动输入或选择"
+                          label="挂载目录" 
+                          name="mountDir"
+                          tooltip="逗号分隔，格式：宿主机路径:容器内路径"
                         >
                           <Input 
-                            placeholder={`/home/${getUser()?.username || 'username'}/jobs`}
-                            addonAfter={
-                              <Button 
-                                type="link" 
-                                size="small" 
-                                icon={<FolderOutlined />}
-                                onClick={() => {
-                                  Message.info('请直接输入目录路径，或在文件管理器中查看可用目录')
-                                }}
-                                style={{ padding: 0 }}
-                              >
-                                选择
-                              </Button>
-                            }
+                            placeholder={`/fs/home/${getUser()?.username || 'username'}:/fs/home/${getUser()?.username || 'username'}`}
+                            style={{ fontFamily: 'monospace', fontSize: 13 }}
+                          />
+                        </Form.Item>
+                        
+                        <Form.Item 
+                          label="工作目录" 
+                          name="workdir"
+                          tooltip="容器内的工作目录"
+                        >
+                          <Input 
+                            placeholder={`/fs/home/${getUser()?.username || 'username'}`}
+                            style={{ fontFamily: 'monospace', fontSize: 13 }}
                           />
                         </Form.Item>
                         
                         <Form.Item
-                          label="启动命令"
+                          label="运行命令（可选）"
                           name="command"
-                          rules={[{ required: true, message: '请输入启动命令' }]}
+                          tooltip="留空 = 交互模式（sleep infinity），可通过【进入容器】连接"
                         >
                           <TextArea
                             rows={6}
-                            placeholder="python train.py --epochs 100"
+                            placeholder="python /workspace/train.py"
                             style={{ fontFamily: 'monospace', fontSize: 12 }}
                           />
                         </Form.Item>
+                        
+                        <div style={{ 
+                          padding: '8px 12px', 
+                          background: '#fffbe6', 
+                          border: '1px solid #ffe58f',
+                          borderRadius: 4,
+                          marginBottom: 16
+                        }}>
+                          <Space>
+                            <span style={{ fontSize: 16 }}>💡</span>
+                            <Text type="secondary" style={{ fontSize: 12 }}>
+                              留空 = 交互模式（sleep infinity），可通过【进入容器】连接
+                            </Text>
+                          </Space>
+                        </div>
                         
                         <Form.Item>
                           <Space>
