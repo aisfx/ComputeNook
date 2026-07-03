@@ -407,7 +407,12 @@ export default function RegistryManagement() {
               style={{ marginTop: 80 }}
             />
           ) : (
-            <Space direction="vertical" size={20} style={{ width: '100%' }}>
+            <div style={{ 
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))',
+              gap: '20px',
+              alignItems: 'start'
+            }}>
               {filteredRepos.map((repo) => {
                 const cleanName = repo.name.replace(`${selectedProject?.name}/`, '')
                 const imagePath = harborUrl 
@@ -420,111 +425,95 @@ export default function RegistryManagement() {
                     style={{ 
                       borderRadius: 12,
                       border: '1px solid #e8e8e8',
-                      boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+                      height: 'fit-content'
                     }}
-                    bodyStyle={{ padding: 24 }}
+                    bodyStyle={{ padding: 20 }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 20 }}>
-                      {/* Docker鲸鱼图标 */}
-                      <div style={{
-                        width: 64,
-                        height: 64,
-                        background: 'linear-gradient(135deg, #0db7ed 0%, #0a8ec7 100%)',
-                        borderRadius: 12,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        flexShrink: 0,
-                        fontSize: 32
-                      }}>
-                        🐳
+                    <Space direction="vertical" size={14} style={{ width: '100%' }}>
+                      {/* 仓库名称和图标 */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <div style={{
+                          width: 48,
+                          height: 48,
+                          background: 'linear-gradient(135deg, #0db7ed 0%, #0a8ec7 100%)',
+                          borderRadius: 10,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
+                          fontSize: 24
+                        }}>
+                          🐳
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <Text strong style={{ fontSize: 16, display: 'block' }}>
+                            {cleanName}
+                          </Text>
+                          <Text type="secondary" style={{ fontSize: 12 }}>
+                            {repo.tags?.length || 0} 个版本 · 更新于 {formatTime(repo.update_time)}
+                          </Text>
+                        </div>
                       </div>
 
-                      {/* 仓库信息 */}
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <Space direction="vertical" size={16} style={{ width: '100%' }}>
-                          {/* 仓库名称和统计 */}
-                          <div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-                              <Text strong style={{ fontSize: 20 }}>
-                                {cleanName}
-                              </Text>
-                            </div>
-                            <Text type="secondary" style={{ fontSize: 13 }}>
-                              {repo.tags?.length || 0} 个版本 · 更新于 {formatTime(repo.update_time)}
-                            </Text>
-                          </div>
-
-                          {/* Tag列表 */}
-                          {repo.tags && repo.tags.length > 0 && (
-                            <div style={{
-                              padding: '16px',
-                              background: '#fafafa',
-                              borderRadius: 8,
-                              border: '1px solid #e8e8e8'
-                            }}>
-                              <Space size={[8, 12]} wrap>
-                                {repo.tags.map((tag, index) => (
-                                  <Tag 
-                                    key={index}
-                                    style={{
-                                      margin: 0,
-                                      padding: '6px 12px',
-                                      fontSize: 13,
-                                      fontFamily: 'monospace',
-                                      background: '#fff',
-                                      border: '1px solid #d9d9d9',
-                                      borderRadius: 6,
-                                      color: '#555'
-                                    }}
-                                  >
-                                    {tag.name}
-                                  </Tag>
-                                ))}
-                              </Space>
-                            </div>
-                          )}
-
-                          {/* 镜像地址 */}
-                          <div style={{
-                            padding: '12px 16px',
-                            background: '#f5f5f5',
-                            borderRadius: 6,
-                            fontFamily: 'monospace',
-                            fontSize: 13,
-                            color: '#666',
-                            border: '1px solid #e0e0e0',
-                            wordBreak: 'break-all'
-                          }}>
-                            {imagePath}
-                          </div>
-
-                          {/* 操作按钮 */}
-                          <Space size={12}>
-                            <Button
-                              icon={<CopyOutlined />}
-                              onClick={() => copyImagePath(repo.name)}
-                              style={{ borderRadius: 6 }}
-                            >
-                              复制地址
-                            </Button>
-                            <Button
-                              danger
-                              icon={<DeleteOutlined />}
-                              disabled
-                              title="需要管理员权限"
-                              style={{ borderRadius: 6 }}
-                            >
-                              删除
-                            </Button>
+                      {/* Tag列表 */}
+                      {repo.tags && repo.tags.length > 0 && (
+                        <div style={{
+                          padding: '10px',
+                          background: '#fafafa',
+                          borderRadius: 6,
+                          border: '1px solid #e8e8e8',
+                          maxHeight: '120px',
+                          overflowY: 'auto'
+                        }}>
+                          <Space size={[6, 8]} wrap>
+                            {repo.tags.map((tag, index) => (
+                              <Tag 
+                                key={index}
+                                style={{
+                                  margin: 0,
+                                  padding: '4px 10px',
+                                  fontSize: 12,
+                                  fontFamily: 'monospace',
+                                  background: '#fff',
+                                  border: '1px solid #d9d9d9',
+                                  borderRadius: 4,
+                                  color: '#555'
+                                }}
+                              >
+                                {tag.name}
+                              </Tag>
+                            ))}
                           </Space>
-                        </Space>
-                      </div>
-                    </div>
+                        </div>
+                      )}
+
+                      {/* 操作按钮 */}
+                      <Space size={8} style={{ width: '100%' }}>
+                        <Button
+                          size="small"
+                          icon={<CopyOutlined />}
+                          onClick={() => copyImagePath(repo.name)}
+                          style={{ flex: 1, borderRadius: 6 }}
+                        >
+                          复制地址
+                        </Button>
+                        <Button
+                          size="small"
+                          danger
+                          icon={<DeleteOutlined />}
+                          disabled
+                          title="需要管理员权限"
+                          style={{ borderRadius: 6 }}
+                        >
+                          删除
+                        </Button>
+                      </Space>
+                    </Space>
                   </Card>
                 )
               })}
-            </Space>
+            </div>
           )}
         </div>
       </div>
