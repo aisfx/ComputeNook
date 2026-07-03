@@ -388,7 +388,8 @@ export default function JobManagement() {
             // 获取该仓库的标签
             try {
               console.log(`   4. 加载仓库 [${cleanRepoName}] 的标签...`)
-              const tagsRes = await axios.get(`/registry/projects/${project.name}/repositories/${encodeURIComponent(repo.name)}/tags`)
+              // 重要：使用cleanRepoName而不是repo.name，因为API路径已经包含了项目名
+              const tagsRes = await axios.get(`/registry/projects/${project.name}/repositories/${encodeURIComponent(cleanRepoName)}/tags`)
               const tags = tagsRes.data.data || []
               console.log(`      → ${tags.length} 个标签`)
               
@@ -413,7 +414,7 @@ export default function JobManagement() {
                 console.log(`      ✓ 添加镜像: ${imageInfo.displayName}`)
               }
             } catch (e: any) {
-              console.error(`      ❌ 加载仓库 [${repo.name}] 的标签失败:`, e.response?.data || e.message)
+              console.error(`      ❌ 加载仓库 [${cleanRepoName}] 的标签失败:`, e.response?.data || e.message)
             }
           }
         } catch (e: any) {
