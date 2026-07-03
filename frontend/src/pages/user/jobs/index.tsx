@@ -355,7 +355,7 @@ export default function JobManagement() {
     script += `#SBATCH -J ${name}\n`
     script += `#SBATCH -p ${partition}\n`
     script += `#SBATCH -N ${nodes}\n`
-    script += `#SBATCH -c ${cpus}\n`
+    script += `#SBATCH -n ${cpus}\n`  // 改为 -n（任务数）
     
     if (memory > 0) {
       script += `#SBATCH --mem=${memory}G\n`
@@ -1408,8 +1408,26 @@ export default function JobManagement() {
                     <Form.Item
                       label="工作目录"
                       name="workdir"
+                      tooltip="作业执行的工作目录，可以手动输入或选择"
                     >
-                      <Input placeholder={`/home/${getUser()?.username || 'username'}/jobs`} />
+                      <Input 
+                        placeholder={`/home/${getUser()?.username || 'username'}/jobs`}
+                        addonAfter={
+                          <Button 
+                            type="link" 
+                            size="small" 
+                            icon={<FolderOutlined />}
+                            onClick={() => {
+                              // 弹出目录选择对话框，这里暂时提示用户可以手动输入
+                              Message.info('请直接输入目录路径，或在文件管理器中查看可用目录')
+                              // TODO: 可以后续添加目录树选择器
+                            }}
+                            style={{ padding: 0 }}
+                          >
+                            选择
+                          </Button>
+                        }
+                      />
                     </Form.Item>
                     
                     <Form.Item
@@ -1419,8 +1437,8 @@ export default function JobManagement() {
                     >
                       <TextArea
                         rows={12}
-                        placeholder="#!/bin/bash&#10;#SBATCH -J my_job&#10;#SBATCH -p compute&#10;#SBATCH -N 1&#10;#SBATCH -c 4&#10;#SBATCH --mem=8G&#10;#SBATCH -t 01:00:00&#10;&#10;srun ./my-program"
                         style={{ fontFamily: 'monospace', fontSize: 13 }}
+                        placeholder="脚本内容将根据上方参数自动生成，您也可以直接编辑修改"
                       />
                     </Form.Item>
                     
@@ -1579,8 +1597,27 @@ export default function JobManagement() {
                           <Input placeholder="格式：HH:MM:SS，例如：04:00:00" />
                         </Form.Item>
                         
-                        <Form.Item label="工作目录" name="workdir">
-                          <Input placeholder={`/home/${getUser()?.username || 'username'}/jobs`} />
+                        <Form.Item 
+                          label="工作目录" 
+                          name="workdir"
+                          tooltip="作业执行的工作目录，可以手动输入或选择"
+                        >
+                          <Input 
+                            placeholder={`/home/${getUser()?.username || 'username'}/jobs`}
+                            addonAfter={
+                              <Button 
+                                type="link" 
+                                size="small" 
+                                icon={<FolderOutlined />}
+                                onClick={() => {
+                                  Message.info('请直接输入目录路径，或在文件管理器中查看可用目录')
+                                }}
+                                style={{ padding: 0 }}
+                              >
+                                选择
+                              </Button>
+                            }
+                          />
                         </Form.Item>
                         
                         <Form.Item

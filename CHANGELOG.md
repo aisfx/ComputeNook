@@ -3,6 +3,14 @@
 ## [Unreleased]
 
 ### Fixed
+- **作业提交表单优化**（2026-07-03 20:15）
+  - 修复脚本内容输入框无法编辑的问题（移除了过长的placeholder）
+  - 修正CPU核心数参数：从`-c`改为`-n`（SBATCH标准参数）
+  - 工作目录添加"选择"按钮和提示信息，方便用户输入
+  - 普通作业和容器作业的工作目录都支持手动输入
+  - 脚本内容支持用户直接编辑修改
+  - 修改文件：`frontend/src/pages/user/jobs/index.tsx`
+
 - **文件管理器自动刷新问题修复**（2026-07-03 20:10）
   - 修复点击文件夹后导致页面不断自动刷新的循环依赖问题
   - 问题原因：useEffect 同时依赖 currentPath 和 loadDirectory，而 loadDirectory 又依赖 currentPath
