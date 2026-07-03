@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+### Added
+- **WebShell Mac快捷键支持优化**（2026-07-03 20:00）
+  - Mac 系统使用 Cmd 键，其他系统使用 Ctrl 键
+  - 自动检测平台并显示正确的快捷键符号（Mac: ⌘，其他: Ctrl）
+  - 新增快捷键：
+    - Cmd/Ctrl + 1~9：切换到指定Tab
+    - Cmd/Ctrl + T：新建终端
+    - Cmd/Ctrl + W：关闭当前Tab
+    - Cmd/Ctrl + K：清屏（Mac风格）
+    - Cmd/Ctrl + F：切换全屏
+    - Cmd/Ctrl + ,：打开终端设置
+    - Cmd/Ctrl + Shift + K：打开密钥管理
+    - Cmd/Ctrl + [/]：切换前后Tab（Mac风格）
+    - Cmd/Ctrl + ←/→：切换前后Tab（通用风格）
+  - 快捷键提示条实时显示当前平台的修饰键
+  - 所有按钮 title 提示也动态显示正确的快捷键
+  - 修改文件：`frontend/src/pages/user/webshell/index.tsx`
+
 ### Fixed
 - **WebShell密码认证问题修复**（2026-07-03 19:50）
   - 修复第二次打开新窗口时密码认证失败的问题

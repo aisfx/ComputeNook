@@ -226,8 +226,14 @@ export default function WebShell() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!e.altKey) return
-      // Alt+1~9  切换 Tab
+      // 检测平台：Mac 用 Cmd，其他用 Ctrl
+      const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0
+      const modifier = isMac ? e.metaKey : e.ctrlKey
+      
+      // 主修饰键未按下则返回（Mac: Cmd，其他: Ctrl）
+      if (!modifier) return
+      
+      // Cmd/Ctrl + 1~9  切换 Tab
       if (e.key >= '1' && e.key <= '9') {
         e.preventDefault()
         const idx = parseInt(e.key) - 1
@@ -235,25 +241,64 @@ export default function WebShell() {
         if (t) setActiveTabId(t.id)
         return
       }
-      // Alt+T  新建 Tab（打开认证弹窗）
+      
+      // Cmd/Ctrl + T  新建 Tab（打开认证弹窗）
       if (e.key === 't' || e.key === 'T') {
         e.preventDefault()
         setAuthOpen(true)
         return
       }
-      // Alt+W  关闭当前 Tab
+      
+      // Cmd/Ctrl + W  关闭当前 Tab
       if (e.key === 'w' || e.key === 'W') {
         e.preventDefault()
         if (activeTabIdRef.current) closeTab(activeTabIdRef.current)
         return
       }
-      // Alt+F  切换全屏
+      
+      // Cmd/Ctrl + F  切换全屏
       if (e.key === 'f' || e.key === 'F') {
         e.preventDefault()
         toggleFullscreen()
         return
       }
-      // Alt+←/→  切换相邻 Tab
+      
+      // Cmd/Ctrl + K  清屏（Mac 风格）
+      if (e.key === 'k' || e.key === 'K') {
+        e.preventDefault()
+        tabs.find(t => t.id === activeTabIdRef.current)?.terminal?.clear()
+        return
+      }
+      
+      // Cmd/Ctrl + ,  打开终端设置
+      if (e.key === ',') {
+        e.preventDefault()
+        setSettingsOpen(true)
+        return
+      }
+      
+      // Cmd/Ctrl + Shift + K  打开密钥管理
+      if (e.shiftKey && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault()
+        setKeyOpen(true)
+        return
+      }
+      
+      // Cmd/Ctrl + [/]  切换相邻 Tab（Mac 风格）
+      if (e.key === '[') {
+        e.preventDefault()
+        const cur = tabsRef.current.findIndex(t => t.id === activeTabIdRef.current)
+        if (cur > 0) setActiveTabId(tabsRef.current[cur - 1].id)
+        return
+      }
+      if (e.key === ']') {
+        e.preventDefault()
+        const cur = tabsRef.current.findIndex(t => t.id === activeTabIdRef.current)
+        if (cur < tabsRef.current.length - 1) setActiveTabId(tabsRef.current[cur + 1].id)
+        return
+      }
+      
+      // Cmd/Ctrl + ←/→  也支持箭头切换
       if (e.key === 'ArrowLeft') {
         e.preventDefault()
         const cur = tabsRef.current.findIndex(t => t.id === activeTabIdRef.current)
@@ -274,6 +319,10 @@ export default function WebShell() {
 
   // Modal 全屏时需要挂载到容器内
   const modalProps = { getContainer: () => containerRef.current || document.body }
+
+  // 检测平台，显示对应的修饰键符号
+  const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0
+  const modKey = isMac ? '⌘' : 'Ctrl'
 
   // ── render ─────────────────────────────────────────────────
   return (
@@ -300,11 +349,13 @@ export default function WebShell() {
       {/* 快捷键提示条 */}
       {tabs.length > 0 && (
         <div style={{ padding: '3px 20px', background: '#f0f0f0', borderBottom: '1px solid #e8e8e8', fontSize: 11, color: '#999', display: 'flex', gap: 16, flexShrink: 0 }}>
-          <span>Alt+1~9 切换Tab</span>
-          <span>Alt+←/→ 前后Tab</span>
-          <span>Alt+T 新建</span>
-          <span>Alt+W 关闭</span>
-          <span>Alt+F 全屏</span>
+          <span>{modKey}+1~9 切换Tab</span>
+          <span>{modKey}+[/] 前后Tab</span>
+          <span>{modKey}+T 新建</span>
+          <span>{modKey}+W 关闭</span>
+          <span>{modKey}+K 清屏</span>
+          <span>{modKey}+F 全屏</span>
+          <span>{modKey}+, 设置</span>
         </div>
       )}
 
@@ -381,7 +432,7 @@ export default function WebShell() {
                     <CloseOutlined onClick={e => { e.stopPropagation(); closeTab(tab.id) }} style={{ fontSize: 10, color: '#666' }} />
                   </div>
                 ))}
-                <Button type="text" size="small" icon={<PlusOutlined />} onClick={() => setAuthOpen(true)} style={{ color: '#666', marginLeft: 4 }} title="新建终端 (Alt+T)" />
+                <Button type="text" size="small" icon={<PlusOutlined />} onClick={() => setAuthOpen(true)} style={{ color: '#666', marginLeft: 4 }} title={`新建终端 (${modKey}+T)`} />
               </div>
 
               {/* 工具栏 */}
@@ -391,9 +442,9 @@ export default function WebShell() {
                   {activeTab?.status === 'connected' ? '  ● 已连接' : activeTab?.status === 'connecting' ? '  ⏳ 连接中' : '  ○ 已断开'}
                 </span>
                 <Space size={2}>
-                  <Button type="text" size="small" icon={<ClearOutlined />} onClick={() => tabs.find(t => t.id === activeTabId)?.terminal?.clear()} title="清屏" style={{ color: '#888' }} />
-                  <Button type="text" size="small" icon={isFullscreen ? <FullscreenExitOutlined /> : <FullscreenOutlined />} onClick={toggleFullscreen} title={`${isFullscreen ? '退出全屏' : '全屏'} (Alt+F)`} style={{ color: '#888' }} />
-                  <Button type="text" size="small" icon={<DisconnectOutlined />} onClick={() => tabs.find(t => t.id === activeTabId)?.websocket?.close()} title="断开 (Alt+W)" style={{ color: '#ff6b6b' }} />
+                  <Button type="text" size="small" icon={<ClearOutlined />} onClick={() => tabs.find(t => t.id === activeTabId)?.terminal?.clear()} title={`清屏 (${modKey}+K)`} style={{ color: '#888' }} />
+                  <Button type="text" size="small" icon={isFullscreen ? <FullscreenExitOutlined /> : <FullscreenOutlined />} onClick={toggleFullscreen} title={`${isFullscreen ? '退出全屏' : '全屏'} (${modKey}+F)`} style={{ color: '#888' }} />
+                  <Button type="text" size="small" icon={<DisconnectOutlined />} onClick={() => tabs.find(t => t.id === activeTabId)?.websocket?.close()} title={`断开 (${modKey}+W)`} style={{ color: '#ff6b6b' }} />
                 </Space>
               </div>
 
