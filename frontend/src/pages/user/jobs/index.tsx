@@ -187,7 +187,6 @@ export default function JobManagement() {
   const [jobLogLoading, setJobLogLoading] = useState(false)
   const [jobLogContent, setJobLogContent] = useState<{stdout: string, stderr: string}>({stdout: '', stderr: ''})
   const [logType, setLogType] = useState<'stdout' | 'stderr'>('stdout')
-  const [aiAnalyzing, setAiAnalyzing] = useState(false)
   
   // 从URL参数获取初始状态筛选
   useEffect(() => {
@@ -699,51 +698,6 @@ export default function JobManagement() {
       setJobLogLoading(false)
     }
   }, [])
-  
-  // AI分析作业日志
-  const analyzeJobLog = useCallback(async () => {
-    if (!selectedJob) return
-    
-    setAiAnalyzing(true)
-    try {
-      const logContent = logType === 'stdout' ? jobLogContent.stdout : jobLogContent.stderr
-      
-      const res = await axios.post('/ai/analyze-job-log', {
-        job_id: selectedJob.id,
-        job_name: selectedJob.name,
-        job_status: selectedJob.status,
-        log_type: logType,
-        log_content: logContent
-      })
-      
-      // 显示AI分析结果
-      modal.info({
-        title: '🤖 AI 日志分析结果',
-        width: 700,
-        content: (
-          <div style={{ 
-            maxHeight: 500, 
-            overflowY: 'auto',
-            padding: '12px 0'
-          }}>
-            <div style={{ 
-              whiteSpace: 'pre-wrap', 
-              fontFamily: 'system-ui',
-              lineHeight: 1.6,
-              fontSize: 14
-            }}>
-              {res.data.data?.analysis || '分析结果为空'}
-            </div>
-          </div>
-        ),
-        okText: '关闭'
-      })
-    } catch (e: any) {
-      Message.error(e.response?.data?.error || 'AI分析失败')
-    } finally {
-      setAiAnalyzing(false)
-    }
-  }, [selectedJob, logType, jobLogContent, modal])
   
   // 打开目录
   const openDirectory = useCallback((job: Job) => {
@@ -2670,15 +2624,6 @@ echo "Job finished: $(date)"`}
               setLogType('stdout')
             }}>
               关闭
-            </Button>
-            <Button
-              type="primary"
-              icon={<span style={{ marginRight: 4 }}>🤖</span>}
-              loading={aiAnalyzing}
-              onClick={analyzeJobLog}
-              disabled={!jobLogContent.stdout && !jobLogContent.stderr}
-            >
-              AI 分析问题
             </Button>
             <Button
               onClick={() => {
