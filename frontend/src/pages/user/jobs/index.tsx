@@ -393,17 +393,30 @@ export default function JobManagement() {
     loadHarborProjects()
   }, [loadPartitions, loadTemplates, loadHarborProjects])
   
-  // 初始化作业提交表单的脚本内容
+  // 初始化作业提交表单的脚本内容和工作目录
   useEffect(() => {
-    if (submitOpen && jobMode === 'normal') {
-      // 延迟执行，确保表单已初始化
-      setTimeout(() => {
-        const currentScript = submitForm.getFieldValue('script')
-        // 只在脚本为空时初始化
-        if (!currentScript) {
-          updateScriptFromForm()
-        }
-      }, 100)
+    if (submitOpen) {
+      const user = getUser()
+      
+      // 设置默认工作目录（普通作业和容器作业都需要）
+      const currentWorkdir = submitForm.getFieldValue('workdir')
+      if (!currentWorkdir && user?.username) {
+        submitForm.setFieldsValue({ 
+          workdir: `/home/${user.username}/jobs`
+        })
+      }
+      
+      // 只有普通作业需要初始化脚本
+      if (jobMode === 'normal') {
+        // 延迟执行，确保表单已初始化
+        setTimeout(() => {
+          const currentScript = submitForm.getFieldValue('script')
+          // 只在脚本为空时初始化
+          if (!currentScript) {
+            updateScriptFromForm()
+          }
+        }, 100)
+      }
     }
   }, [submitOpen, jobMode, submitForm, updateScriptFromForm])
   
@@ -1396,7 +1409,7 @@ export default function JobManagement() {
                       label="工作目录"
                       name="workdir"
                     >
-                      <Input placeholder="/home/username/jobs" />
+                      <Input placeholder={`/home/${getUser()?.username || 'username'}/jobs`} />
                     </Form.Item>
                     
                     <Form.Item
@@ -1567,7 +1580,7 @@ export default function JobManagement() {
                         </Form.Item>
                         
                         <Form.Item label="工作目录" name="workdir">
-                          <Input placeholder="/home/username/jobs" />
+                          <Input placeholder={`/home/${getUser()?.username || 'username'}/jobs`} />
                         </Form.Item>
                         
                         <Form.Item
