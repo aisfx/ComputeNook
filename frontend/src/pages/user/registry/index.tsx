@@ -128,11 +128,43 @@ export default function RegistryManagement() {
       ? `${harborUrl.replace(/^https?:\/\//, '')}/${selectedProject?.name}/${cleanName}`
       : `harbor.example.com/${selectedProject?.name}/${cleanName}`
     
-    navigator.clipboard.writeText(imagePath).then(() => {
-      Message.success('镜像地址已复制')
-    }).catch(() => {
-      Message.error('复制失败')
-    })
+    // 优先使用 Clipboard API，降级到 document.execCommand
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(imagePath).then(() => {
+        Message.success('镜像地址已复制')
+      }).catch(() => {
+        // Clipboard API失败，尝试降级方案
+        fallbackCopyTextToClipboard(imagePath)
+      })
+    } else {
+      // 浏览器不支持 Clipboard API，使用降级方案
+      fallbackCopyTextToClipboard(imagePath)
+    }
+  }
+
+  // 降级复制方案（兼容HTTP环境）
+  const fallbackCopyTextToClipboard = (text: string) => {
+    const textArea = document.createElement('textarea')
+    textArea.value = text
+    textArea.style.position = 'fixed'
+    textArea.style.top = '-9999px'
+    textArea.style.left = '-9999px'
+    document.body.appendChild(textArea)
+    textArea.focus()
+    textArea.select()
+    
+    try {
+      const successful = document.execCommand('copy')
+      if (successful) {
+        Message.success('镜像地址已复制')
+      } else {
+        Message.error('复制失败，请手动复制')
+      }
+    } catch (err) {
+      Message.error('复制失败，请手动复制')
+    }
+    
+    document.body.removeChild(textArea)
   }
 
   // 显示使用说明
