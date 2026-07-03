@@ -616,7 +616,7 @@ export default function JobManagement() {
     scriptContent += `#SBATCH -J ${tpl.name}\n`
     scriptContent += `#SBATCH -p ${tpl.partition || 'compute'}\n`
     scriptContent += `#SBATCH -N ${tpl.nodes || 1}\n`
-    scriptContent += `#SBATCH -c ${tpl.cpus}\n`
+    scriptContent += `#SBATCH -n ${tpl.cpus}\n`
     if (tpl.memory > 0) {
       scriptContent += `#SBATCH --mem=${tpl.memory}M\n`
     }
@@ -2033,7 +2033,7 @@ export default function JobManagement() {
 #SBATCH -J my_job
 #SBATCH -p compute
 #SBATCH -N 1
-#SBATCH -c 4
+#SBATCH -n 4
 #SBATCH --mem=8G
 #SBATCH -t 01:00:00
 #SBATCH -o output_%j.log

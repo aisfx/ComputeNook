@@ -3,6 +3,16 @@
 ## [Unreleased]
 
 ### Fixed
+- **作业提交脚本CPU参数修正**（2026-07-03 20:35）
+  - 修正作业脚本中的CPU核心数参数：从`-c`改为`-n`
+  - `-c`是cpus-per-task，`-n`是tasks（总任务数/核心数），符合SBATCH标准用法
+  - 修改位置：
+    - 模板应用函数（applyTemplate）
+    - 模板创建表单的初始脚本示例
+    - 自动生成脚本函数（updateScriptFromForm）已是正确的`-n`
+  - 脚本内容TextArea已支持用户自由编辑
+  - 修改文件：`frontend/src/pages/user/jobs/index.tsx`
+
 - **文件管理器路径权限检查问题修复**（2026-07-03 20:28）
   - 修复文件管理器一直显示"读取目录失败"的问题
   - 问题原因：`isPathAllowed`函数使用`filepath.EvalSymlinks`，当home目录是符号链接或路径不存在时会失败
