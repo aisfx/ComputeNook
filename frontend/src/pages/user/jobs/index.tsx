@@ -1311,10 +1311,6 @@ export default function JobManagement() {
                     form={submitForm}
                     layout="vertical"
                     onFinish={handleSubmit}
-                    onValuesChange={() => {
-                      // 延迟执行，确保表单值已更新
-                      setTimeout(() => updateScriptFromForm(), 0)
-                    }}
                   >
                     <Row gutter={16}>
                       <Col span={12}>
@@ -1323,7 +1319,7 @@ export default function JobManagement() {
                           name="name"
                           rules={[{ required: true, message: '请输入作业名称' }]}
                         >
-                          <Input placeholder="my_job" onChange={updateScriptFromForm} />
+                          <Input placeholder="my_job" />
                         </Form.Item>
                       </Col>
                       <Col span={12}>
@@ -1332,7 +1328,7 @@ export default function JobManagement() {
                           name="partition"
                           rules={[{ required: true, message: '请选择分区' }]}
                         >
-                          <Select placeholder="选择计算分区" onChange={updateScriptFromForm}>
+                          <Select placeholder="选择计算分区">
                             {partitions.map(p => (
                               <Select.Option key={p} value={p}>{p}</Select.Option>
                             ))}
@@ -1349,7 +1345,7 @@ export default function JobManagement() {
                           rules={[{ required: true, message: '请输入节点数' }]}
                           initialValue={1}
                         >
-                          <Input type="number" min={1} placeholder="1" onChange={updateScriptFromForm} />
+                          <Input type="number" min={1} placeholder="1" />
                         </Form.Item>
                       </Col>
                       <Col span={12}>
@@ -1359,7 +1355,7 @@ export default function JobManagement() {
                           rules={[{ required: true, message: '请输入CPU核数' }]}
                           initialValue={8}
                         >
-                          <Input type="number" min={1} placeholder="8" onChange={updateScriptFromForm} />
+                          <Input type="number" min={1} placeholder="8" />
                         </Form.Item>
                       </Col>
                     </Row>
@@ -1371,7 +1367,7 @@ export default function JobManagement() {
                           name="memory"
                           initialValue={0}
                         >
-                          <Input type="number" min={0} placeholder="0" onChange={updateScriptFromForm} />
+                          <Input type="number" min={0} placeholder="0" />
                         </Form.Item>
                       </Col>
                       <Col span={12}>
@@ -1380,7 +1376,7 @@ export default function JobManagement() {
                           name="time_hours"
                           initialValue={0}
                         >
-                          <Input type="number" min={0} placeholder="0" step={0.5} onChange={updateScriptFromForm} />
+                          <Input type="number" min={0} placeholder="0" step={0.5} />
                         </Form.Item>
                       </Col>
                     </Row>
@@ -1392,7 +1388,7 @@ export default function JobManagement() {
                           name="gpus"
                           initialValue={0}
                         >
-                          <Input type="number" min={0} placeholder="0" onChange={updateScriptFromForm} />
+                          <Input type="number" min={0} placeholder="0" />
                         </Form.Item>
                       </Col>
                       <Col span={12}>
@@ -1400,7 +1396,7 @@ export default function JobManagement() {
                           label="QOS（服务质量）"
                           name="qos"
                         >
-                          <Input placeholder="默认" onChange={updateScriptFromForm} />
+                          <Input placeholder="默认" />
                         </Form.Item>
                       </Col>
                     </Row>
@@ -1408,23 +1404,22 @@ export default function JobManagement() {
                     <Form.Item
                       label="工作目录"
                       name="workdir"
-                      tooltip="作业执行的工作目录，可以手动输入或选择"
+                      tooltip="作业执行的工作目录，可以手动输入路径"
                     >
                       <Input 
-                        placeholder={`/home/${getUser()?.username || 'username'}/jobs`}
+                        placeholder={`例如：/home/${getUser()?.username || 'username'}/jobs`}
+                        style={{ backgroundColor: '#fff' }}
                         addonAfter={
                           <Button 
                             type="link" 
                             size="small" 
                             icon={<FolderOutlined />}
                             onClick={() => {
-                              // 弹出目录选择对话框，这里暂时提示用户可以手动输入
-                              Message.info('请直接输入目录路径，或在文件管理器中查看可用目录')
-                              // TODO: 可以后续添加目录树选择器
+                              Message.info('请直接在输入框中输入或修改目录路径')
                             }}
                             style={{ padding: 0 }}
                           >
-                            选择
+                            提示
                           </Button>
                         }
                       />
@@ -1434,12 +1429,31 @@ export default function JobManagement() {
                       label="脚本内容"
                       name="script"
                       rules={[{ required: true, message: '请输入作业脚本' }]}
+                      tooltip="可以点击下方按钮根据参数生成模板，也可以直接编辑修改"
                     >
                       <TextArea
                         rows={12}
-                        style={{ fontFamily: 'monospace', fontSize: 13 }}
-                        placeholder="脚本内容将根据上方参数自动生成，您也可以直接编辑修改"
+                        style={{ 
+                          fontFamily: 'monospace', 
+                          fontSize: 13,
+                          backgroundColor: '#fff'
+                        }}
+                        placeholder="点击下方【生成脚本模板】按钮，或直接在此输入脚本内容"
                       />
+                    </Form.Item>
+                    
+                    <Form.Item>
+                      <Space>
+                        <Button 
+                          onClick={() => updateScriptFromForm()}
+                          icon={<SyncOutlined />}
+                        >
+                          生成脚本模板
+                        </Button>
+                        <span style={{ color: '#999', fontSize: 12 }}>
+                          根据上方参数生成SBATCH脚本模板
+                        </span>
+                      </Space>
                     </Form.Item>
                     
                     <Form.Item>
