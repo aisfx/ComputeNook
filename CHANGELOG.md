@@ -3,6 +3,16 @@
 ## [Unreleased]
 
 ### Fixed
+- **修复镜像标签显示undefined问题**（2026-07-03 22:11）
+  - Harbor V2 API返回的数据结构是artifacts数组
+  - 每个artifact包含一个tags数组
+  - 之前直接使用data作为tags数组，导致tag.name为undefined
+  - 修复：遍历artifacts，提取每个artifact中的tags
+  - 数据结构示例：`[{tags: [{name: "v1.0"}]}]`
+  - 正确显示镜像标签，如：`jupyter/base-notebook:x86_64-python-3.11.6`
+  - 修改文件：`frontend/src/pages/user/jobs/index.tsx`
+  - 提交哈希：`df2281a7`
+
 - **修复容器镜像加载404错误**（2026-07-03 22:04）
   - 修复仓库标签API路径错误
   - 问题：使用了`repo.name`（包含项目前缀）导致URL重复编码
