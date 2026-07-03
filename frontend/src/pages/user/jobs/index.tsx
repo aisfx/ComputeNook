@@ -604,7 +604,17 @@ export default function JobManagement() {
   // 提交作业
   const handleSubmit = useCallback(async (values: any) => {
     try {
-      await axios.post('/jobs', values)
+      // 转换数字字段为整数类型
+      const submitData = {
+        ...values,
+        nodes: values.nodes ? parseInt(String(values.nodes)) : 1,
+        cpus: values.cpus ? parseInt(String(values.cpus)) : 1,
+        gpus: values.gpus ? parseInt(String(values.gpus)) : 0,
+        memory: values.memory ? parseInt(String(values.memory)) : 0,
+        time_hours: values.time_hours ? parseFloat(String(values.time_hours)) : 0
+      }
+      
+      await axios.post('/jobs', submitData)
       Message.success('作业提交成功')
       setSubmitOpen(false)
       submitForm.resetFields()
