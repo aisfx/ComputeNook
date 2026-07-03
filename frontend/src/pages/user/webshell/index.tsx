@@ -116,7 +116,18 @@ export default function WebShell() {
     if (!inst) { Message.error('创建终端失败'); return }
     const { terminal, fitAddon } = inst
 
-    const params = new URLSearchParams({ node: node.name, token: getToken() || '', ...(authType === 'password' && pwd ? { password: pwd } : {}) })
+    // 根据当前的认证类型决定传递哪些参数
+    const params = new URLSearchParams({ 
+      node: node.name, 
+      token: getToken() || ''
+    })
+    
+    // 密码认证：传递密码
+    if (pwd) {
+      params.append('password', pwd)
+    }
+    // 如果既没有密码也没有私钥，这里先尝试连接，后端会返回auth_required
+    
     const ws = new WebSocket(`${getWsBase()}/api/webshell/connect?${params}`)
 
     ws.onopen = () => {
@@ -128,14 +139,41 @@ export default function WebShell() {
       terminal.onResize(({ cols, rows }: { cols: number; rows: number }) => ws.readyState === WebSocket.OPEN && ws.send(JSON.stringify({ type: 'resize', cols, rows })))
     }
     ws.onmessage = e => {
-      try { const m = JSON.parse(e.data); if (m.type === 'output') terminal.write(m.data) }
+      try { 
+        const m = JSON.parse(e.data)
+        if (m.type === 'output') {
+          terminal.write(m.data)
+        } else if (m.type === 'auth_required') {
+          // 需要重新认证
+          terminal.writeln('\r\n\x1b[33m⚠ 需要密码认证\x1b[0m')
+          terminal.writeln('\x1b[90m提示：请关闭此窗口并使用密码重新连接\x1b[0m\r\n')
+          ws.close()
+          // 更新Tab状态为需要认证
+          setTabs(prev => prev.map(t => t.id === tabId ? { ...t, connected: false, status: 'auth_required' } : t))
+          // 不要自动关闭Tab，让用户看到提示信息
+          // 弹出密码认证窗口，预设当前节点
+          setTimeout(() => {
+            setPendingNode(node)
+            setAuthType('password') // 强制使用密码认证
+            setPassword('') // 清空之前的密码
+            setAuthOpen(true)
+          }, 100)
+        } else if (m.type === 'connected') {
+          terminal.writeln(`\x1b[90m认证方式: ${m.data?.auth_method === 'private_key' ? '私钥' : '密码'}\x1b[0m\r\n`)
+        }
+      }
       catch { terminal.write(e.data) }
     }
     ws.onerror = () => { terminal.writeln('\r\n\x1b[31m✗ Connection error\x1b[0m'); setTabs(prev => prev.map(t => t.id === tabId ? { ...t, connected: false, status: 'error' } : t)) }
     ws.onclose = () => { terminal.writeln('\r\n\x1b[33m─── Connection closed ───\x1b[0m'); setTabs(prev => prev.map(t => t.id === tabId ? { ...t, connected: false, status: 'disconnected' } : t)) }
-  }, [authType, createTerm])
+  }, [createTerm])
 
-  const handleNodeClick = (node: Node) => { setPendingNode(node); setAuthOpen(true) }
+  const handleNodeClick = (node: Node) => { 
+    setPendingNode(node)
+    // 根据是否有密钥自动选择认证方式
+    setAuthType(hasKey ? 'key' : 'password')
+    setAuthOpen(true) 
+  }
 
   const handleConnect = () => {
     if (!pendingNode) return

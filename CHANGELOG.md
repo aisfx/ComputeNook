@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Fixed
+- **WebShell密码认证问题修复**（2026-07-03 19:50）
+  - 修复第二次打开新窗口时密码认证失败的问题
+  - 前端改进：密码参数始终在提供时传递，不依赖authType状态
+  - 前端改进：收到auth_required时不立即关闭Tab，而是显示提示信息让用户手动处理
+  - 前端改进：弹出密码认证窗口时预设当前节点和密码认证方式
+  - 后端改进：明确区分hasPrivateKey和hasPassword的认证检查逻辑
+  - 后端改进：当既没有私钥又没有密码时发送auth_required消息
+  - 后端改进：添加认证方法的日志输出便于调试
+  - 修改文件：
+    - `backend/handlers/webshell.go`
+    - `frontend/src/pages/user/webshell/index.tsx`
+
 ### Added
 - **作业提交表单自动获取工作目录**（2026-07-03 19:40）
   - 打开作业提交面板时自动填充用户家目录作为默认工作目录

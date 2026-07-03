@@ -164,16 +164,26 @@ func ConnectWebShell(c *gin.Context) {
 	// 尝试获取用户私钥（可选）
 	privateKey, keyErr := getUserPrivateKey(userID)
 	
-	// 如果没有私钥且没有密码，返回错误
-	if keyErr != nil && password == "" {
-		// 会话还未创建，直接写入（此时没有并发问题）
+	// 检查认证方式
+	hasPrivateKey := keyErr == nil && privateKey != ""
+	hasPassword := password != ""
+	
+	// 如果既没有私钥又没有密码，要求密码认证
+	if !hasPrivateKey && !hasPassword {
+		log.Printf("ConnectWebShell: No authentication method provided for user %s", username)
+		// 发送需要认证的消息
 		conn.WriteJSON(map[string]interface{}{
 			"type": "auth_required",
-			"data": "No private key found. Please provide password or upload private key.",
+			"data": map[string]interface{}{
+				"message": "需要密码认证",
+				"reason":  "no_private_key",
+			},
 		})
 		conn.Close()
 		return
 	}
+	
+	log.Printf("ConnectWebShell: Authentication method - hasPrivateKey: %v, hasPassword: %v", hasPrivateKey, hasPassword)
 	
 	// 创建SSH配置（用户名固定为当前登录用户）
 	sshConfig := webshell.SSHConfig{
