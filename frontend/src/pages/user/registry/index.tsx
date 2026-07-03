@@ -409,8 +409,8 @@ export default function RegistryManagement() {
           ) : (
             <div style={{ 
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))',
-              gap: '20px',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+              gap: '16px',
               alignItems: 'start'
             }}>
               {filteredRepos.map((repo) => {
@@ -423,35 +423,35 @@ export default function RegistryManagement() {
                   <Card
                     key={repo.id}
                     style={{ 
-                      borderRadius: 12,
+                      borderRadius: 8,
                       border: '1px solid #e8e8e8',
-                      boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+                      boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
                       height: 'fit-content'
                     }}
-                    bodyStyle={{ padding: 20 }}
+                    bodyStyle={{ padding: 16 }}
                   >
-                    <Space direction="vertical" size={14} style={{ width: '100%' }}>
+                    <Space direction="vertical" size={10} style={{ width: '100%' }}>
                       {/* 仓库名称和图标 */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                         <div style={{
-                          width: 48,
-                          height: 48,
+                          width: 40,
+                          height: 40,
                           background: 'linear-gradient(135deg, #0db7ed 0%, #0a8ec7 100%)',
-                          borderRadius: 10,
+                          borderRadius: 8,
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
                           flexShrink: 0,
-                          fontSize: 24
+                          fontSize: 20
                         }}>
                           🐳
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <Text strong style={{ fontSize: 16, display: 'block' }}>
+                          <Text strong style={{ fontSize: 14, display: 'block', lineHeight: '1.3' }}>
                             {cleanName}
                           </Text>
-                          <Text type="secondary" style={{ fontSize: 12 }}>
-                            {repo.tags?.length || 0} 个版本 · 更新于 {formatTime(repo.update_time)}
+                          <Text type="secondary" style={{ fontSize: 11 }}>
+                            {repo.tags?.length || 0} 个版本 · {formatTime(repo.update_time)}
                           </Text>
                         </div>
                       </div>
@@ -459,26 +459,27 @@ export default function RegistryManagement() {
                       {/* Tag列表 */}
                       {repo.tags && repo.tags.length > 0 && (
                         <div style={{
-                          padding: '10px',
+                          padding: '8px',
                           background: '#fafafa',
-                          borderRadius: 6,
+                          borderRadius: 4,
                           border: '1px solid #e8e8e8',
-                          maxHeight: '120px',
+                          maxHeight: '80px',
                           overflowY: 'auto'
                         }}>
-                          <Space size={[6, 8]} wrap>
+                          <Space size={[4, 6]} wrap>
                             {repo.tags.map((tag, index) => (
                               <Tag 
                                 key={index}
                                 style={{
                                   margin: 0,
-                                  padding: '4px 10px',
-                                  fontSize: 12,
+                                  padding: '2px 8px',
+                                  fontSize: 11,
                                   fontFamily: 'monospace',
                                   background: '#fff',
                                   border: '1px solid #d9d9d9',
-                                  borderRadius: 4,
-                                  color: '#555'
+                                  borderRadius: 3,
+                                  color: '#555',
+                                  lineHeight: '1.4'
                                 }}
                               >
                                 {tag.name}
@@ -489,12 +490,12 @@ export default function RegistryManagement() {
                       )}
 
                       {/* 操作按钮 */}
-                      <Space size={8} style={{ width: '100%' }}>
+                      <Space size={6} style={{ width: '100%' }}>
                         <Button
                           size="small"
                           icon={<CopyOutlined />}
                           onClick={() => copyImagePath(repo.name)}
-                          style={{ flex: 1, borderRadius: 6 }}
+                          style={{ flex: 1, fontSize: 12, height: 28, borderRadius: 4 }}
                         >
                           复制地址
                         </Button>
@@ -504,7 +505,7 @@ export default function RegistryManagement() {
                           icon={<DeleteOutlined />}
                           disabled
                           title="需要管理员权限"
-                          style={{ borderRadius: 6 }}
+                          style={{ fontSize: 12, height: 28, borderRadius: 4 }}
                         >
                           删除
                         </Button>
