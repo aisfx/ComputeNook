@@ -390,16 +390,26 @@ export default function JobManagement() {
               console.log(`   4. 加载仓库 [${cleanRepoName}] 的标签...`)
               // 重要：使用cleanRepoName而不是repo.name，因为API路径已经包含了项目名
               const tagsRes = await axios.get(`/registry/projects/${project.name}/repositories/${encodeURIComponent(cleanRepoName)}/tags`)
-              const tags = tagsRes.data.data || []
-              console.log(`      → ${tags.length} 个标签`)
+              const artifacts = tagsRes.data.data || []
+              console.log(`      → 返回 ${artifacts.length} 个artifact`)
               
-              if (tags.length === 0) {
+              // Harbor V2 API返回的是artifacts数组，每个artifact包含tags数组
+              let allTags: any[] = []
+              for (const artifact of artifacts) {
+                if (artifact.tags && Array.isArray(artifact.tags)) {
+                  allTags = allTags.concat(artifact.tags)
+                }
+              }
+              
+              console.log(`      → 共有 ${allTags.length} 个标签`)
+              
+              if (allTags.length === 0) {
                 console.log(`      ⚠️ 仓库 [${cleanRepoName}] 没有标签`)
                 continue
               }
               
               // 为每个标签创建一个镜像条目
-              for (const tag of tags) {
+              for (const tag of allTags) {
                 const imageInfo = {
                   projectName: project.name,
                   repoName: cleanRepoName,
