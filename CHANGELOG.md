@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+### Fixed
+- **修复容器镜像加载404错误**（2026-07-03 22:04）
+  - 修复仓库标签API路径错误
+  - 问题：使用了`repo.name`（包含项目前缀）导致URL重复编码
+  - 修复：使用`cleanRepoName`（移除项目前缀后的仓库名）
+  - 错误路径：`/projects/jupyter/repositories/jupyter%2Fbase-notebook/tags`
+  - 正确路径：`/projects/jupyter/repositories/base-notebook/tags`
+  - 修改文件：`frontend/src/pages/user/jobs/index.tsx`
+  
+- **修复镜像仓库复制功能报错**（2026-07-03 22:04）
+  - 添加`navigator.clipboard` API可用性检查
+  - 提供`document.execCommand`降级方案
+  - 兼容HTTP环境（Clipboard API需要HTTPS）
+  - 兼容不支持Clipboard API的旧浏览器
+  - 添加`fallbackCopyTextToClipboard`降级函数
+  - 修改文件：`frontend/src/pages/user/registry/index.tsx`
+  - 提交哈希：`6d7541da`
+
 ### Changed
 - **改为单个下拉框显示所有镜像**（2026-07-03 21:51）
   - 移除三个级联下拉框和Modal弹框方式
