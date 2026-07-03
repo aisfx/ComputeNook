@@ -354,25 +354,31 @@ export default function JobManagement() {
       const configRes = await axios.get('/registry/config')
       const harborUrl = configRes.data.harbor_url || 'harbor.example.com'
       const harborHost = harborUrl.replace(/^https?:\/\//, '')
+      console.log('Harbor URL:', harborHost)
       
       // 获取所有项目
       const projectsRes = await axios.get('/registry/projects')
       const projects = projectsRes.data.data || []
+      console.log('加载到项目数量:', projects.length, projects)
       
       // 获取所有项目的镜像（包括公共项目和个人项目）
       const allImages: any[] = []
       for (const project of projects) {
         try {
+          console.log(`开始加载项目 ${project.name} 的仓库...`)
           const reposRes = await axios.get(`/registry/projects/${project.name}/repositories`)
           const repos = reposRes.data.data || []
+          console.log(`项目 ${project.name} 有 ${repos.length} 个仓库`, repos)
           
           for (const repo of repos) {
             const cleanRepoName = repo.name.replace(`${project.name}/`, '')
             
             // 获取该仓库的标签
             try {
+              console.log(`开始加载仓库 ${repo.name} 的标签...`)
               const tagsRes = await axios.get(`/registry/projects/${project.name}/repositories/${encodeURIComponent(repo.name)}/tags`)
               const tags = tagsRes.data.data || []
+              console.log(`仓库 ${repo.name} 有 ${tags.length} 个标签`, tags)
               
               // 为每个标签创建一个镜像条目
               for (const tag of tags) {
@@ -396,6 +402,8 @@ export default function JobManagement() {
         }
       }
       
+      console.log('最终加载到的镜像数量:', allImages.length, allImages)
+      
       // 按更新时间倒序排列
       allImages.sort((a, b) => {
         const timeA = a.updateTime ? new Date(a.updateTime).getTime() : 0
@@ -406,7 +414,7 @@ export default function JobManagement() {
       setAvailableImages(allImages)
     } catch (e: any) {
       console.error('加载镜像列表失败:', e)
-      Message.error('加载镜像列表失败')
+      Message.error('加载镜像列表失败: ' + (e.response?.data?.error || e.message))
     } finally {
       setLoadingAvailableImages(false)
     }
@@ -2771,7 +2779,7 @@ echo "Job finished: $(date)"`}
               justifyContent: 'space-between',
               alignItems: 'center'
             }}>
-              <span>公共镜像</span>
+              <span>可用镜像</span>
               <span>共 {availableImages.filter(img => {
                 if (!imageSearchText.trim()) return true
                 return img.displayName.toLowerCase().includes(imageSearchText.toLowerCase())
