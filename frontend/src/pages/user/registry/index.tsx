@@ -1,17 +1,17 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
-  Card, Table, Button, Space, Input, Tag, Modal, Form, message as Message,
-  Tabs, Empty, Spin, Tooltip
+  Card, Button, Space, Input, Tag, Modal, message as Message,
+  Empty, Spin, List, Badge, Tooltip, Typography
 } from 'antd'
-import type { TableColumnsType } from 'antd'
 import {
   ReloadOutlined, SearchOutlined, DatabaseOutlined, LockOutlined,
-  UnlockOutlined, EyeOutlined, FolderOutlined
+  UnlockOutlined, UserOutlined, GlobalOutlined, CopyOutlined,
+  DeleteOutlined, QuestionCircleOutlined
 } from '@ant-design/icons'
 import axios from 'axios'
 import { getUser } from '@/utils/auth'
 
-const { TabPane } = Tabs
+const { Text } = Typography
 
 interface Project {
   project_id: number
@@ -45,374 +45,366 @@ export default function RegistryManagement() {
   const user = getUser()
   const [loading, setLoading] = useState(false)
   const [projects, setProjects] = useState<Project[]>([])
-  const [searchText, setSearchText] = useState('')
-  const [activeTab, setActiveTab] = useState('project')
-  
-  // 仓库相关
   const [selectedProject, setSelectedProject] = useState<Project | null>(null)
   const [repositories, setRepositories] = useState<Repository[]>([])
   const [loadingRepos, setLoadingRepos] = useState(false)
-  
-  // 镜像标签相关
-  const [selectedRepo, setSelectedRepo] = useState<Repository | null>(null)
-  const [imageTags, setImageTags] = useState<ImageTag[]>([])
-  const [loadingTags, setLoadingTags] = useState(false)
-  const [tagsModalOpen, setTagsModalOpen] = useState(false)
+  const [searchText, setSearchText] = useState('')
+  const [harborUrl, setHarborUrl] = useState('')
 
   // 加载项目列表
   const loadProjects = useCallback(async () => {
     setLoading(true)
     try {
       const res = await axios.get('/registry/projects')
-      setProjects(res.data.data || [])
+      const projectList = res.data.data || []
+      setProjects(projectList)
+      
+      // 默认选中第一个项目
+      if (projectList.length > 0 && !selectedProject) {
+        setSelectedProject(projectList[0])
+      }
     } catch (e: any) {
       Message.error(e.response?.data?.error || '加载项目列表失败')
     } finally {
       setLoading(false)
     }
+  }, [selectedProject])
+
+  // 加载配置信息（获取Harbor URL）
+  const loadHarborConfig = useCallback(async () => {
+    try {
+      const res = await axios.get('/registry/config')
+      setHarborUrl(res.data.harbor_url || '')
+    } catch (e: any) {
+      console.error('加载Harbor配置失败:', e)
+    }
   }, [])
 
   // 加载仓库列表
   const loadRepositories = useCallback(async (project: Project) => {
+    if (!project) return
+    
     setLoadingRepos(true)
     try {
       const res = await axios.get(`/registry/projects/${project.name}/repositories`)
       setRepositories(res.data.data || [])
-      setSelectedProject(project)
-      setActiveTab('repository')
     } catch (e: any) {
       Message.error(e.response?.data?.error || '加载仓库列表失败')
+      setRepositories([])
     } finally {
       setLoadingRepos(false)
     }
   }, [])
 
-  // 加载镜像标签
-  const loadImageTags = useCallback(async (repo: Repository) => {
-    setLoadingTags(true)
-    setSelectedRepo(repo)
-    setTagsModalOpen(true)
-    try {
-      const res = await axios.get(
-        `/registry/projects/${selectedProject?.name}/repositories/${encodeURIComponent(repo.name)}/tags`
-      )
-      setImageTags(res.data.data || [])
-    } catch (e: any) {
-      Message.error(e.response?.data?.error || '加载标签列表失败')
-    } finally {
-      setLoadingTags(false)
-    }
-  }, [selectedProject])
-
+  // 初始化
   useEffect(() => {
     loadProjects()
-  }, [loadProjects])
+    loadHarborConfig()
+  }, [loadProjects, loadHarborConfig])
 
-  // 格式化文件大小
-  const formatSize = (bytes?: number) => {
-    if (!bytes) return '-'
-    if (bytes < 1024) return bytes + ' B'
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + ' KB'
-    if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(2) + ' MB'
-    return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB'
-  }
+  // 当选中项目变化时，加载仓库列表
+  useEffect(() => {
+    if (selectedProject) {
+      loadRepositories(selectedProject)
+    }
+  }, [selectedProject, loadRepositories])
 
   // 格式化时间
   const formatTime = (timeStr?: string) => {
     if (!timeStr) return '-'
-    return new Date(timeStr).toLocaleString('zh-CN')
+    const date = new Date(timeStr)
+    return date.toLocaleDateString('zh-CN', { 
+      year: 'numeric', 
+      month: '2-digit', 
+      day: '2-digit' 
+    })
   }
 
-  // 过滤项目
-  const filteredProjects = projects.filter(p => {
+  // 复制镜像地址
+  const copyImagePath = (repoName: string) => {
+    // 移除项目前缀
+    const cleanName = repoName.replace(`${selectedProject?.name}/`, '')
+    const imagePath = harborUrl 
+      ? `${harborUrl.replace(/^https?:\/\//, '')}/${selectedProject?.name}/${cleanName}`
+      : `harbor.example.com/${selectedProject?.name}/${cleanName}`
+    
+    navigator.clipboard.writeText(imagePath).then(() => {
+      Message.success('镜像地址已复制')
+    }).catch(() => {
+      Message.error('复制失败')
+    })
+  }
+
+  // 显示使用说明
+  const showUsageGuide = () => {
+    Modal.info({
+      title: '📖 使用说明',
+      width: 600,
+      content: (
+        <div style={{ lineHeight: 1.8 }}>
+          <h4>如何使用容器镜像：</h4>
+          <ol>
+            <li>点击仓库列表中的"📋 复制地址"按钮复制镜像地址</li>
+            <li>在作业提交页面选择"容器作业"</li>
+            <li>粘贴镜像地址到容器镜像输入框</li>
+            <li>配置资源参数并提交作业</li>
+          </ol>
+          <h4>项目说明：</h4>
+          <ul>
+            <li><strong>library</strong>: 公共基础镜像库</li>
+            <li><strong>用户名</strong>: 个人私有项目</li>
+            <li><strong>其他</strong>: 团队共享项目</li>
+          </ul>
+        </div>
+      ),
+    })
+  }
+
+  // 过滤仓库
+  const filteredRepos = repositories.filter(r => {
     if (!searchText.trim()) return true
-    return p.name.toLowerCase().includes(searchText.toLowerCase())
+    return r.name.toLowerCase().includes(searchText.toLowerCase())
   })
 
-  // 项目表格列定义
-  const projectColumns: TableColumnsType<Project> = [
-    {
-      title: '项目名称',
-      dataIndex: 'name',
-      key: 'name',
-      render: (name: string, record: Project) => (
-        <Space>
-          <FolderOutlined style={{ fontSize: 18, color: '#1890ff' }} />
-          <span style={{ fontWeight: 500 }}>{name}</span>
-        </Space>
-      ),
-    },
-    {
-      title: '可见性',
-      dataIndex: 'public',
-      key: 'public',
-      width: 100,
-      render: (isPublic: boolean) => (
-        <Tag icon={isPublic ? <UnlockOutlined /> : <LockOutlined />} color={isPublic ? 'green' : 'default'}>
-          {isPublic ? '公开' : '私有'}
-        </Tag>
-      ),
-    },
-    {
-      title: '仓库数',
-      dataIndex: 'repo_count',
-      key: 'repo_count',
-      width: 100,
-      align: 'center',
-    },
-    {
-      title: '创建时间',
-      dataIndex: 'creation_time',
-      key: 'creation_time',
-      width: 180,
-      render: formatTime,
-    },
-    {
-      title: '操作',
-      key: 'actions',
-      width: 120,
-      render: (_: any, record: Project) => (
-        <Space>
-          <Button
-            type="link"
-            size="small"
-            icon={<EyeOutlined />}
-            onClick={() => loadRepositories(record)}
-          >
-            查看仓库
-          </Button>
-        </Space>
-      ),
-    },
-  ]
-
-  // 仓库表格列定义
-  const repoColumns: TableColumnsType<Repository> = [
-    {
-      title: '仓库名称',
-      dataIndex: 'name',
-      key: 'name',
-      render: (name: string) => (
-        <Space>
-          <DatabaseOutlined style={{ fontSize: 16, color: '#52c41a' }} />
-          <span>{name.replace(`${selectedProject?.name}/`, '')}</span>
-        </Space>
-      ),
-    },
-    {
-      title: '镜像数',
-      dataIndex: 'artifact_count',
-      key: 'artifact_count',
-      width: 100,
-      align: 'center',
-    },
-    {
-      title: '拉取次数',
-      dataIndex: 'pull_count',
-      key: 'pull_count',
-      width: 100,
-      align: 'center',
-    },
-    {
-      title: '最后更新',
-      dataIndex: 'update_time',
-      key: 'update_time',
-      width: 180,
-      render: formatTime,
-    },
-    {
-      title: '操作',
-      key: 'actions',
-      width: 120,
-      render: (_: any, record: Repository) => (
-        <Space>
-          <Button
-            type="link"
-            size="small"
-            icon={<EyeOutlined />}
-            onClick={() => loadImageTags(record)}
-          >
-            查看标签
-          </Button>
-        </Space>
-      ),
-    },
-  ]
-
-  // 标签表格列定义
-  const tagColumns: TableColumnsType<ImageTag> = [
-    {
-      title: '标签名称',
-      dataIndex: 'name',
-      key: 'name',
-      render: (name: string) => <code style={{ fontSize: 12 }}>{name}</code>,
-    },
-    {
-      title: '大小',
-      dataIndex: 'size',
-      key: 'size',
-      width: 120,
-      render: formatSize,
-    },
-    {
-      title: '推送时间',
-      dataIndex: 'push_time',
-      key: 'push_time',
-      width: 180,
-      render: formatTime,
-    },
-  ]
-
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* 页面标题栏 */}
-      <Card
-        size="small"
-        style={{ marginBottom: 16 }}
-        bodyStyle={{ padding: '12px 16px' }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <div style={{ 
+      display: 'flex', 
+      height: '100%', 
+      gap: 0,
+      overflow: 'hidden'
+    }}>
+      {/* 左侧项目列表 */}
+      <div style={{ 
+        width: 240, 
+        borderRight: '1px solid #f0f0f0',
+        display: 'flex',
+        flexDirection: 'column',
+        background: '#fafafa'
+      }}>
+        {/* 项目列表标题 */}
+        <div style={{ 
+          padding: '16px',
+          borderBottom: '1px solid #f0f0f0',
+          background: '#fff',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
           <Space>
-            <DatabaseOutlined style={{ fontSize: 20, color: '#1890ff' }} />
-            <span style={{ fontSize: 16, fontWeight: 600 }}>
-              {activeTab === 'project' ? '镜像仓库' : `${selectedProject?.name} / 仓库列表`}
-            </span>
+            <DatabaseOutlined style={{ fontSize: 16 }} />
+            <span style={{ fontWeight: 600 }}>项目</span>
           </Space>
+          <Button
+            type="text"
+            size="small"
+            icon={<ReloadOutlined />}
+            onClick={loadProjects}
+            loading={loading}
+          />
+        </div>
+
+        {/* 项目列表 */}
+        <div style={{ flex: 1, overflow: 'auto', padding: '8px' }}>
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: 40 }}>
+              <Spin size="small" />
+            </div>
+          ) : (
+            <List
+              dataSource={projects}
+              renderItem={(project) => (
+                <List.Item
+                  key={project.project_id}
+                  onClick={() => setSelectedProject(project)}
+                  style={{
+                    cursor: 'pointer',
+                    padding: '12px',
+                    marginBottom: 4,
+                    borderRadius: 6,
+                    background: selectedProject?.project_id === project.project_id ? '#e6f7ff' : '#fff',
+                    border: selectedProject?.project_id === project.project_id ? '1px solid #1890ff' : '1px solid #f0f0f0',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  <List.Item.Meta
+                    avatar={
+                      project.public ? 
+                        <GlobalOutlined style={{ fontSize: 18, color: '#52c41a' }} /> : 
+                        <UserOutlined style={{ fontSize: 18, color: '#1890ff' }} />
+                    }
+                    title={
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontWeight: 500 }}>{project.name}</span>
+                      </div>
+                    }
+                    description={
+                      <Space size={4}>
+                        <Tag 
+                          icon={project.public ? <UnlockOutlined /> : <LockOutlined />}
+                          color={project.public ? 'success' : 'default'}
+                          style={{ fontSize: 11 }}
+                        >
+                          {project.public ? '公开' : '私有'}
+                        </Tag>
+                        <Badge 
+                          count={project.repo_count} 
+                          showZero
+                          style={{ backgroundColor: '#1890ff' }}
+                        />
+                      </Space>
+                    }
+                  />
+                </List.Item>
+              )}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* 右侧仓库列表 */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#fff' }}>
+        {/* 顶部工具栏 */}
+        <div style={{ 
+          padding: '16px 24px',
+          borderBottom: '1px solid #f0f0f0',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
           <Space>
-            {activeTab === 'repository' && (
-              <Button
-                onClick={() => {
-                  setActiveTab('project')
-                  setSelectedProject(null)
-                  setRepositories([])
-                }}
-              >
-                返回项目列表
-              </Button>
+            <DatabaseOutlined style={{ fontSize: 18, color: '#1890ff' }} />
+            <span style={{ fontSize: 16, fontWeight: 600 }}>
+              {selectedProject?.name || '请选择项目'}
+            </span>
+            {selectedProject && (
+              <Tag color={selectedProject.public ? 'success' : 'default'}>
+                {selectedProject.public ? '公开' : '私有'}
+              </Tag>
             )}
+          </Space>
+
+          <Space>
             <Input
-              placeholder={activeTab === 'project' ? '搜索项目...' : '搜索仓库...'}
+              placeholder="搜索镜像..."
               prefix={<SearchOutlined />}
               value={searchText}
               onChange={(e) => setSearchText(e.target.value)}
-              style={{ width: 250 }}
+              style={{ width: 220 }}
               allowClear
             />
             <Button
-              type="primary"
               icon={<ReloadOutlined />}
-              onClick={activeTab === 'project' ? loadProjects : () => selectedProject && loadRepositories(selectedProject)}
-              loading={loading || loadingRepos}
+              onClick={() => selectedProject && loadRepositories(selectedProject)}
+              loading={loadingRepos}
             >
               刷新
             </Button>
+            <Button
+              icon={<QuestionCircleOutlined />}
+              onClick={showUsageGuide}
+            >
+              使用说明
+            </Button>
           </Space>
         </div>
-      </Card>
 
-      {/* 主内容区 */}
-      <Card
-        style={{ flex: 1 }}
-        bodyStyle={{ padding: 0, height: '100%' }}
-      >
-        {activeTab === 'project' ? (
-          <Table
-            columns={projectColumns}
-            dataSource={filteredProjects}
-            rowKey="project_id"
-            loading={loading}
-            pagination={{
-              total: filteredProjects.length,
-              pageSize: 15,
-              showTotal: (total) => `共 ${total} 个项目`,
-              showSizeChanger: false,
-            }}
-            locale={{
-              emptyText: (
-                <Empty
-                  description="暂无项目"
-                  image={Empty.PRESENTED_IMAGE_SIMPLE}
-                />
-              ),
-            }}
-          />
-        ) : (
-          <Table
-            columns={repoColumns}
-            dataSource={repositories.filter(r => {
-              if (!searchText.trim()) return true
-              return r.name.toLowerCase().includes(searchText.toLowerCase())
-            })}
-            rowKey="id"
-            loading={loadingRepos}
-            pagination={{
-              total: repositories.length,
-              pageSize: 15,
-              showTotal: (total) => `共 ${total} 个仓库`,
-              showSizeChanger: false,
-            }}
-            locale={{
-              emptyText: (
-                <Empty
-                  description="暂无仓库"
-                  image={Empty.PRESENTED_IMAGE_SIMPLE}
-                />
-              ),
-            }}
-          />
-        )}
-      </Card>
+        {/* 仓库列表 */}
+        <div style={{ flex: 1, overflow: 'auto', padding: '16px 24px' }}>
+          {!selectedProject ? (
+            <Empty
+              description="请从左侧选择一个项目"
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+              style={{ marginTop: 80 }}
+            />
+          ) : loadingRepos ? (
+            <div style={{ textAlign: 'center', padding: 80 }}>
+              <Spin tip="加载仓库列表中..." />
+            </div>
+          ) : filteredRepos.length === 0 ? (
+            <Empty
+              description={searchText ? '没有找到匹配的仓库' : '该项目下暂无仓库'}
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+              style={{ marginTop: 80 }}
+            />
+          ) : (
+            <List
+              dataSource={filteredRepos}
+              renderItem={(repo) => {
+                const cleanName = repo.name.replace(`${selectedProject?.name}/`, '')
+                const imagePath = harborUrl 
+                  ? `${harborUrl.replace(/^https?:\/\//, '')}/${selectedProject?.name}/${cleanName}`
+                  : `${selectedProject?.name}/${cleanName}`
 
-      {/* 镜像标签弹窗 */}
-      <Modal
-        title={
-          <Space>
-            <DatabaseOutlined />
-            <span>{selectedRepo?.name} - 标签列表</span>
-          </Space>
-        }
-        open={tagsModalOpen}
-        onCancel={() => {
-          setTagsModalOpen(false)
-          setSelectedRepo(null)
-          setImageTags([])
-        }}
-        width={800}
-        footer={
-          <Button onClick={() => {
-            setTagsModalOpen(false)
-            setSelectedRepo(null)
-            setImageTags([])
-          }}>
-            关闭
-          </Button>
-        }
-      >
-        {loadingTags ? (
-          <div style={{ textAlign: 'center', padding: 40 }}>
-            <Spin tip="加载标签列表中..." />
-          </div>
-        ) : (
-          <Table
-            columns={tagColumns}
-            dataSource={imageTags}
-            rowKey="name"
-            pagination={{
-              pageSize: 10,
-              showTotal: (total) => `共 ${total} 个标签`,
-            }}
-            size="small"
-            locale={{
-              emptyText: (
-                <Empty
-                  description="暂无标签"
-                  image={Empty.PRESENTED_IMAGE_SIMPLE}
-                />
-              ),
-            }}
-          />
-        )}
-      </Modal>
+                return (
+                  <Card
+                    size="small"
+                    key={repo.id}
+                    style={{ marginBottom: 16 }}
+                    bodyStyle={{ padding: 16 }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div style={{ flex: 1 }}>
+                        <Space direction="vertical" size={8} style={{ width: '100%' }}>
+                          {/* 仓库名称 */}
+                          <Space>
+                            <DatabaseOutlined style={{ fontSize: 18, color: '#52c41a' }} />
+                            <Text strong style={{ fontSize: 15 }}>
+                              {cleanName}
+                            </Text>
+                          </Space>
+
+                          {/* 统计信息 */}
+                          <Space size={16} style={{ fontSize: 12, color: '#666' }}>
+                            <span>
+                              <Text type="secondary">镜像数: </Text>
+                              <Text strong>{repo.artifact_count}</Text>
+                            </span>
+                            <span>
+                              <Text type="secondary">更新于: </Text>
+                              <Text>{formatTime(repo.update_time)}</Text>
+                            </span>
+                          </Space>
+
+                          {/* 镜像地址 */}
+                          <div style={{
+                            background: '#f5f5f5',
+                            padding: '8px 12px',
+                            borderRadius: 4,
+                            fontFamily: 'monospace',
+                            fontSize: 12,
+                            color: '#1890ff'
+                          }}>
+                            {imagePath}
+                          </div>
+                        </Space>
+                      </div>
+
+                      {/* 操作按钮 */}
+                      <Space direction="vertical" size={8} style={{ marginLeft: 16 }}>
+                        <Button
+                          size="small"
+                          icon={<CopyOutlined />}
+                          onClick={() => copyImagePath(repo.name)}
+                        >
+                          复制地址
+                        </Button>
+                        {/* 删除按钮暂时隐藏，需要管理员权限 */}
+                        {/* <Button
+                          size="small"
+                          danger
+                          icon={<DeleteOutlined />}
+                        >
+                          删除
+                        </Button> */}
+                      </Space>
+                    </div>
+                  </Card>
+                )
+              }}
+            />
+          )}
+        </div>
+      </div>
     </div>
   )
 }
