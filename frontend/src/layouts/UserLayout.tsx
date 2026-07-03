@@ -15,6 +15,7 @@ import {
   MenuUnfoldOutlined,
   LogoutOutlined,
   SettingOutlined,
+  DatabaseOutlined,
 } from '@ant-design/icons'
 import { logout, getUser, isAdmin } from '@/utils/auth'
 import { useTheme } from '@/hooks/useTheme'
@@ -25,6 +26,7 @@ import ReportsPage from '@/pages/user/reports'
 import WebShell from '@/pages/user/webshell'
 import RemoteDesktop from '@/pages/user/desktop'
 import FileManager from '@/pages/user/files'
+import RegistryManagement from '@/pages/user/registry'
 import AIAssistant from '@/components/AIAssistant'
 import Profile from '@/pages/user/profile'
 import DownloadPage from '@/pages/user/download'
@@ -49,6 +51,7 @@ const buildMenuItems = (admin: boolean): MenuItem[] => [
   { key: '/dashboard/webshell', icon: <CodeOutlined />, label: 'Web Shell' },
   { key: '/dashboard/desktop', icon: <DesktopOutlined />, label: '远程桌面' },
   { key: '/dashboard/files', icon: <FolderOutlined />, label: '文件管理' },
+  { key: '/dashboard/registry', icon: <DatabaseOutlined />, label: '镜像仓库' },
   { key: '/dashboard/reports', icon: <LineChartOutlined />, label: '报表中心' },
 ]
 
@@ -211,6 +214,7 @@ export default function UserLayout() {
             <Route path="webshell" element={<WebShell />} />
             <Route path="desktop" element={<RemoteDesktop />} />
             <Route path="files" element={<FileManager />} />
+            <Route path="registry" element={<RegistryManagement />} />
             <Route path="profile" element={<Profile />} />
             <Route path="download" element={<DownloadPage />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
