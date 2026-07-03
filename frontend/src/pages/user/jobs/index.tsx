@@ -466,7 +466,7 @@ export default function JobManagement() {
     const nodes = values.nodes || 1
     const cpus = values.cpus || 8
     const memory = values.memory || 0
-    const timeHours = values.time_hours || 0
+    const timeHours = values.time_hours // 不设默认值，允许为空
     const gpus = values.gpus || 0
     const qos = values.qos || ''
     
@@ -480,7 +480,8 @@ export default function JobManagement() {
       script += `#SBATCH --mem=${memory}G\n`
     }
     
-    if (timeHours > 0) {
+    // 只有填写了时间限制才添加 -t 参数
+    if (timeHours && timeHours > 0) {
       const hours = Math.floor(timeHours)
       const mins = Math.round((timeHours - hours) * 60)
       script += `#SBATCH -t ${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}:00\n`
@@ -1458,11 +1459,17 @@ export default function JobManagement() {
                       </Col>
                       <Col span={12}>
                         <Form.Item
-                          label="时间 (小时)"
+                          label="时间限制 (小时)"
                           name="time_hours"
-                          initialValue={0}
+                          tooltip="不填写表示不限制时间"
                         >
-                          <Input type="number" min={0} placeholder="0" step={0.5} />
+                          <Input 
+                            type="number" 
+                            min={0} 
+                            step={0.1} 
+                            placeholder="不填写则不限制" 
+                            style={{ width: '100%' }}
+                          />
                         </Form.Item>
                       </Col>
                     </Row>
@@ -1644,11 +1651,17 @@ export default function JobManagement() {
                         </Row>
                         
                         <Form.Item
-                          label="时间限制"
-                          name="time"
-                          rules={[{ required: true, message: '请输入时间限制' }]}
+                          label="时间限制 (小时)"
+                          name="time_hours"
+                          tooltip="不填写表示不限制时间"
                         >
-                          <Input placeholder="格式：HH:MM:SS，例如：04:00:00" />
+                          <Input 
+                            type="number" 
+                            min={0} 
+                            step={0.1} 
+                            placeholder="不填写则不限制，例如：0.1, 1, 2.5" 
+                            style={{ width: '100%' }}
+                          />
                         </Form.Item>
                         
                         <Form.Item 
