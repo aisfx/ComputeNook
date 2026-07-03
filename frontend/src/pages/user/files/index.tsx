@@ -94,15 +94,9 @@ export default function FileManager() {
   const [isEditing, setIsEditing] = useState(false)
   const [saving, setSaving] = useState(false)
   
-  // 初始化
-  useEffect(() => {
-    const homePath = (user as any)?.homeDir || `/home/${user?.username || ''}`
-    setCurrentPath(homePath)
-  }, [user])
-  
   // 加载目录
   const loadDirectory = useCallback(async (path?: string) => {
-    const targetPath = path ?? currentPath
+    const targetPath = path || currentPath
     if (!targetPath) return
     
     setLoading(true)
@@ -110,7 +104,6 @@ export default function FileManager() {
     try {
       const res = await axios.get('/filemanager/list', { params: { path: targetPath } })
       setFiles(res.data.files || [])
-      setCurrentPath(res.data.path || targetPath)
     } catch (e: any) {
       message.error(e.response?.data?.error || '读取目录失败')
       setFiles([])
@@ -119,9 +112,14 @@ export default function FileManager() {
     }
   }, [currentPath])
   
+  // 初始化：设置并加载主目录
   useEffect(() => {
-    if (currentPath) loadDirectory()
-  }, [currentPath, loadDirectory])
+    const homePath = (user as any)?.homeDir || `/home/${user?.username || ''}`
+    if (homePath) {
+      setCurrentPath(homePath)
+      loadDirectory(homePath)
+    }
+  }, [user, loadDirectory])
   
   // 面包屑导航
   const homePath = (user as any)?.homeDir || `/home/${user?.username || ''}`
@@ -130,13 +128,17 @@ export default function FileManager() {
   const breadcrumbItems = [
     {
       title: <HomeOutlined />,
-      onClick: () => setCurrentPath(homePath),
+      onClick: () => {
+        setCurrentPath(homePath)
+        loadDirectory(homePath)
+      },
     },
     ...pathParts.map((part, index) => ({
       title: part,
       onClick: () => {
         const newPath = '/' + pathParts.slice(0, index + 1).join('/')
         setCurrentPath(newPath)
+        loadDirectory(newPath)
       },
     })),
   ]
@@ -145,7 +147,9 @@ export default function FileManager() {
   const goBack = () => {
     const parts = currentPath.split('/').filter(Boolean)
     parts.pop()
-    setCurrentPath('/' + parts.join('/') || '/')
+    const newPath = '/' + parts.join('/') || '/'
+    setCurrentPath(newPath)
+    loadDirectory(newPath)
   }
   
   const canGoBack = currentPath !== homePath && currentPath !== '/'
@@ -164,6 +168,7 @@ export default function FileManager() {
   const openDirectory = (file: FileItem) => {
     if (file.is_dir) {
       setCurrentPath(file.path)
+      loadDirectory(file.path)
     }
   }
   

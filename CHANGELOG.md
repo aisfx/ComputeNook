@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Fixed
+- **文件管理器自动刷新问题修复**（2026-07-03 20:10）
+  - 修复点击文件夹后导致页面不断自动刷新的循环依赖问题
+  - 问题原因：useEffect 同时依赖 currentPath 和 loadDirectory，而 loadDirectory 又依赖 currentPath
+  - 解决方案：
+    - 将 loadDirectory 的 path 参数改为可选
+    - 初始化时只在组件挂载时执行一次
+    - 切换目录时显式传递新路径
+    - 刷新当前目录时不传参数，使用当前 currentPath
+  - 修改文件：`frontend/src/pages/user/files/index.tsx`
+
 ### Added
 - **WebShell Mac快捷键支持优化**（2026-07-03 20:00）
   - Mac 系统使用 Cmd 键，其他系统使用 Ctrl 键
