@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+### Fixed
+- **容器作业自动填充挂载目录和工作目录**（2026-07-03 21:20）
+  - 容器作业打开提交表单时自动填充挂载目录
+    - 默认值：`/fs/home/username:/fs/home/username`
+    - 格式：宿主机路径:容器内路径（适配Enroot）
+  - 工作目录统一为 `/fs/home/username`
+    - 普通作业和容器作业使用相同的默认工作目录
+    - 之前的 `/home/username/jobs` 路径已更正
+  - 用户仍可手动修改这些字段
+  - 修改文件：`frontend/src/pages/user/jobs/index.tsx`
+  - 提交哈希：`725edbb2`
+
 ### Changed
 - **容器镜像选择UI重构**（2026-07-03 21:16）
   - 移除三个下拉框（项目/仓库/标签）的复杂选择方式
