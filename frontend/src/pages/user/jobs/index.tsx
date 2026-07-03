@@ -179,9 +179,7 @@ export default function JobManagement() {
   const [imageTags, setImageTags] = useState<string[]>([])
   const [loadingImages, setLoadingImages] = useState(false)
   
-  // 镜像选择Modal
-  const [imageSelectModalOpen, setImageSelectModalOpen] = useState(false)
-  const [imageSearchText, setImageSearchText] = useState('')
+  // 所有可用镜像列表
   const [availableImages, setAvailableImages] = useState<any[]>([])
   const [loadingAvailableImages, setLoadingAvailableImages] = useState(false)
   
@@ -345,8 +343,7 @@ export default function JobManagement() {
     }
   }, [])
   
-  
-  // 加载所有可用镜像（用于镜像选择Modal）
+  // 加载所有可用镜像（用于下拉框）
   const loadAvailableImages = useCallback(async () => {
     setLoadingAvailableImages(true)
     try {
@@ -354,31 +351,25 @@ export default function JobManagement() {
       const configRes = await axios.get('/registry/config')
       const harborUrl = configRes.data.harbor_url || 'harbor.example.com'
       const harborHost = harborUrl.replace(/^https?:\/\//, '')
-      console.log('Harbor URL:', harborHost)
       
       // 获取所有项目
       const projectsRes = await axios.get('/registry/projects')
       const projects = projectsRes.data.data || []
-      console.log('加载到项目数量:', projects.length, projects)
       
-      // 获取所有项目的镜像（包括公共项目和个人项目）
+      // 获取所有项目的镜像
       const allImages: any[] = []
       for (const project of projects) {
         try {
-          console.log(`开始加载项目 ${project.name} 的仓库...`)
           const reposRes = await axios.get(`/registry/projects/${project.name}/repositories`)
           const repos = reposRes.data.data || []
-          console.log(`项目 ${project.name} 有 ${repos.length} 个仓库`, repos)
           
           for (const repo of repos) {
             const cleanRepoName = repo.name.replace(`${project.name}/`, '')
             
             // 获取该仓库的标签
             try {
-              console.log(`开始加载仓库 ${repo.name} 的标签...`)
               const tagsRes = await axios.get(`/registry/projects/${project.name}/repositories/${encodeURIComponent(repo.name)}/tags`)
               const tags = tagsRes.data.data || []
-              console.log(`仓库 ${repo.name} 有 ${tags.length} 个标签`, tags)
               
               // 为每个标签创建一个镜像条目
               for (const tag of tags) {
@@ -401,8 +392,6 @@ export default function JobManagement() {
           console.error(`加载项目${project.name}的仓库失败:`, e)
         }
       }
-      
-      console.log('最终加载到的镜像数量:', allImages.length, allImages)
       
       // 按更新时间倒序排列
       allImages.sort((a, b) => {
@@ -1539,23 +1528,23 @@ export default function JobManagement() {
                           name="containerImage"
                           rules={[{ required: true, message: '请选择容器镜像' }]}
                         >
-                          <Input
-                            placeholder="点击右侧按钮选择镜像"
-                            readOnly
-                            suffix={
-                              <Button
-                                type="primary"
-                                size="small"
-                                icon={<DatabaseOutlined />}
-                                onClick={() => {
-                                  setImageSelectModalOpen(true)
-                                  loadAvailableImages()
-                                }}
-                              >
-                                选择
-                              </Button>
+                          <Select
+                            placeholder="选择容器镜像"
+                            showSearch
+                            loading={loadingAvailableImages}
+                            onDropdownVisibleChange={(open) => {
+                              if (open && availableImages.length === 0) {
+                                loadAvailableImages()
+                              }
+                            }}
+                            filterOption={(input, option) =>
+                              (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
                             }
-                            style={{ backgroundColor: 'white' }}
+                            options={availableImages.map(img => ({
+                              label: img.displayName,
+                              value: img.imagePath
+                            }))}
+                            style={{ width: '100%' }}
                           />
                         </Form.Item>
                         
@@ -2731,113 +2720,6 @@ echo "Job finished: $(date)"`}
             wordBreak: 'break-word'
           }}>
             {logType === 'stdout' ? jobLogContent.stdout : jobLogContent.stderr}
-          </div>
-        )}
-      </Modal>
-
-      {/* 镜像选择Modal */}
-      <Modal
-        title="选择容器镜像"
-        open={imageSelectModalOpen}
-        onCancel={() => {
-          setImageSelectModalOpen(false)
-          setImageSearchText('')
-        }}
-        width={1000}
-        footer={null}
-        style={{ top: 20 }}
-      >
-        <div style={{ marginBottom: 16 }}>
-          <Input
-            placeholder="搜索镜像..."
-            prefix={<SearchOutlined />}
-            value={imageSearchText}
-            onChange={(e) => setImageSearchText(e.target.value)}
-            allowClear
-            size="large"
-          />
-        </div>
-
-        {loadingAvailableImages ? (
-          <div style={{ textAlign: 'center', padding: 80 }}>
-            <Spin size="large" tip="加载镜像列表中..." />
-          </div>
-        ) : availableImages.length === 0 ? (
-          <Empty
-            description="暂无可用镜像"
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
-            style={{ padding: 60 }}
-          />
-        ) : (
-          <div>
-            <div style={{ 
-              marginBottom: 12, 
-              fontSize: 13, 
-              color: '#666',
-              fontWeight: 500,
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center'
-            }}>
-              <span>可用镜像</span>
-              <span>共 {availableImages.filter(img => {
-                if (!imageSearchText.trim()) return true
-                return img.displayName.toLowerCase().includes(imageSearchText.toLowerCase())
-              }).length} 个镜像</span>
-            </div>
-            
-            <div style={{ maxHeight: 500, overflowY: 'auto' }}>
-              {availableImages
-                .filter(img => {
-                  if (!imageSearchText.trim()) return true
-                  return img.displayName.toLowerCase().includes(imageSearchText.toLowerCase())
-                })
-                .map((img, index) => (
-                  <Card
-                    key={index}
-                    size="small"
-                    hoverable
-                    onClick={() => {
-                      submitForm.setFieldsValue({ containerImage: img.imagePath })
-                      setImageSelectModalOpen(false)
-                      setImageSearchText('')
-                      Message.success('已选择镜像：' + img.displayName)
-                    }}
-                    style={{ 
-                      marginBottom: 8, 
-                      cursor: 'pointer',
-                      transition: 'all 0.3s'
-                    }}
-                    bodyStyle={{ padding: 16 }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ 
-                          fontWeight: 600, 
-                          marginBottom: 8,
-                          fontSize: 14,
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 8
-                        }}>
-                          <span>{img.displayName}</span>
-                          <Tag color={img.isPublic ? 'success' : 'default'} style={{ margin: 0 }}>
-                            {img.isPublic ? '公开' : '私有'}
-                          </Tag>
-                        </div>
-                        <div style={{ 
-                          fontSize: 12, 
-                          color: '#999',
-                          fontFamily: 'monospace',
-                          wordBreak: 'break-all'
-                        }}>
-                          {img.imagePath}
-                        </div>
-                      </div>
-                    </div>
-                  </Card>
-                ))}
-            </div>
           </div>
         )}
       </Modal>
