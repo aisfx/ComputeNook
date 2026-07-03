@@ -203,3 +203,116 @@ func doAIChat(c *gin.Context, apiURL, apiKey, model, systemPrompt string, userMe
 
 	c.JSON(http.StatusOK, gin.H{"content": answer})
 }
+
+// AnalyzeJobLog AI分析作业日志
+func AnalyzeJobLog(c *gin.Context) {
+	apiURL := os.Getenv("AI_API_URL")
+	apiKey := os.Getenv("AI_API_KEY")
+	model := os.Getenv("AI_MODEL")
+
+	if apiURL == "" || apiKey == "" {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "AI 服务未配置，请联系管理员"})
+		return
+	}
+	if model == "" {
+		model = "gpt-3.5-turbo"
+	}
+
+	var req struct {
+		JobID      interface{} `json:"job_id"`
+		JobName    string      `json:"job_name"`
+		JobStatus  string      `json:"job_status"`
+		LogType    string      `json:"log_type"`
+		LogContent string      `json:"log_content"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请求格式错误"})
+		return
+	}
+
+	// 限制日志长度，避免token过多
+	logContent := req.LogContent
+	if len(logContent) > 8000 {
+		logContent = logContent[len(logContent)-8000:]
+		logContent = "... (日志太长，已截取最后8000字符) ...\n\n" + logContent
+	}
+
+	// 构建分析提示
+	systemPrompt := `你是一个专业的HPC作业日志分析专家。你的任务是分析用户提供的作业日志，识别问题、错误原因，并提供解决方案。
+
+分析时请关注：
+1. 错误信息和警告
+2. 资源限制（内存、时间、CPU等）
+3. 依赖项和环境问题
+4. 代码逻辑错误
+5. 配置问题
+
+请用中文回答，分析要点要明确，解决方案要具体可行。`
+
+
+	userPrompt := fmt.Sprintf("请分析以下作业的日志：\n\n"+
+		"**作业信息：**\n"+
+		"- 作业ID: %v\n"+
+		"- 作业名称: %s\n"+
+		"- 作业状态: %s\n"+
+		"- 日志类型: %s\n\n"+
+		"**日志内容：**\n"+
+		"```\n%s\n```\n\n"+
+		"请分析日志中的问题，并提供解决建议。", 
+		req.JobID, req.JobName, req.JobStatus, req.LogType, logContent)
+
+	messages := []AIMessage{
+		{Role: "system", Content: systemPrompt},
+		{Role: "user", Content: userPrompt},
+	}
+
+	apiReq := AIAPIRequest{
+		Model:    model,
+		Messages: messages,
+		Stream:   false,
+	}
+
+	body, _ := json.Marshal(apiReq)
+	httpReq, err := http.NewRequest("POST", apiURL, bytes.NewBuffer(body))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "创建请求失败"})
+		return
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+apiKey)
+
+	client := &http.Client{}
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "AI 服务请求失败: " + err.Error()})
+		return
+	}
+	defer resp.Body.Close()
+
+	respBody, _ := io.ReadAll(resp.Body)
+
+	var apiResp AIAPIResponse
+	if err := json.Unmarshal(respBody, &apiResp); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "解析响应失败"})
+		return
+	}
+
+	if apiResp.Error != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": apiResp.Error.Message})
+		return
+	}
+
+	if len(apiResp.Choices) == 0 {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "AI 返回空响应"})
+		return
+	}
+
+	analysis := apiResp.Choices[0].Message.Content
+
+	c.JSON(http.StatusOK, gin.H{
+		"data": gin.H{
+			"analysis": analysis,
+		},
+	})
+}

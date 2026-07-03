@@ -3,6 +3,24 @@
 ## [Unreleased]
 
 ### Added
+- **作业日志查看和AI分析功能**（2026-07-03 01:10）
+  - 作业详情弹窗增加"查看日志"按钮
+  - 新增作业日志查看弹窗，支持标准输出/错误输出切换
+  - 日志内容以终端样式显示（深色背景，等宽字体）
+  - 支持下载日志文件到本地
+  - 集成AI分析功能：点击"AI分析问题"自动诊断日志中的错误和问题
+  - AI会识别资源限制、依赖问题、代码错误等，并提供解决建议
+  - 后端新增API：
+    - `GET /jobs/:id/logs` - 获取作业日志（stdout/stderr）
+    - `POST /ai/analyze-job-log` - AI分析作业日志
+  - 日志文件自动截取（超过100KB只显示最后100KB）
+  - 支持权限控制：普通用户只能查看自己的作业日志
+  - 修改文件：
+    - `frontend/src/pages/user/jobs/index.tsx`
+    - `backend/handlers/job.go` (新增GetJobLogs)
+    - `backend/handlers/ai.go` (新增AnalyzeJobLog)
+    - `backend/main.go` (注册新路由)
+
 - **作业模板查看和编辑功能**（2026-07-03 00:52）
   - 实现作业模板库的"查看"和"编辑"按钮功能
   - 添加查看模板弹窗：显示完整模板信息（资源配置、容器镜像、模块加载等）

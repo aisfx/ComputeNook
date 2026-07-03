@@ -756,3 +756,133 @@ chmod 600 "$CRED_FILE"
 	// 没有 shebang，直接前置
 	return credSnippet + script
 }
+
+// GetJobLogs 获取作业日志
+func GetJobLogs(c *gin.Context) {
+	jobIDStr := c.Param("id")
+	jobID, err := strconv.ParseInt(jobIDStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无效的作业ID"})
+		return
+	}
+
+	// 获取当前用户信息
+	username, exists := c.Get("username")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "未授权"})
+		return
+	}
+
+	// 安全地获取管理员状态
+	isAdminVal, _ := c.Get("isAdmin")
+	isAdmin := false
+	if isAdminVal != nil {
+		isAdmin, _ = isAdminVal.(bool)
+	}
+
+	logger.Info("GetJobLogs: user=%s, isAdmin=%v, jobID=%d", username, isAdmin, jobID)
+
+	// 开发模式：返回模拟日志
+	if os.Getenv("DEV_MODE") == "true" {
+		mockStdout := fmt.Sprintf(`Job %d started at %s
+Running on node: localhost
+CPU count: 4
+Memory: 8GB
+
+=== Job Execution ===
+Processing data...
+Task 1 completed
+Task 2 completed
+Task 3 completed
+
+=== Job Completed ===
+Job finished successfully at %s
+Total runtime: 1h 23m 45s`, jobID, time.Now().Add(-2*time.Hour).Format("2006-01-02 15:04:05"), time.Now().Format("2006-01-02 15:04:05"))
+
+		mockStderr := `Warning: Using deprecated API
+Note: Output redirected to /tmp/output.log`
+
+		c.JSON(http.StatusOK, gin.H{
+			"data": gin.H{
+				"stdout": mockStdout,
+				"stderr": mockStderr,
+			},
+		})
+		return
+	}
+
+	client, err := GetSlurmClientForUser(username.(string))
+	if err != nil {
+		logger.Error("Failed to create Slurm client: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "无法连接到 Slurm API: " + err.Error()})
+		return
+	}
+
+	// 先获取作业信息，检查权限和获取工作目录
+	job, err := client.GetJob(jobID)
+	if err != nil {
+		logger.Error("Failed to get job: %v", err)
+		c.JSON(http.StatusNotFound, gin.H{"error": "作业不存在: " + err.Error()})
+		return
+	}
+
+	// 权限检查：非管理员只能查看自己的作业日志
+	if !isAdmin && job.GetUser() != username.(string) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "无权查看此作业日志"})
+		return
+	}
+
+	// 获取作业的工作目录和日志文件路径
+	workDir := job.GetWorkingDirectory()
+	
+	// 日志文件通常命名为 slurm-<jobid>.out 和 slurm-<jobid>.err
+	// 也可能是用户自定义的输出文件
+	stdoutFile := fmt.Sprintf("%s/slurm-%d.out", workDir, jobID)
+	stderrFile := fmt.Sprintf("%s/slurm-%d.err", workDir, jobID)
+
+	// 读取标准输出日志
+	var stdoutContent string
+	stdoutData, err := os.ReadFile(stdoutFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			stdoutContent = fmt.Sprintf("日志文件不存在: %s\n提示：作业可能尚未开始运行，或日志文件路径不是默认位置。", stdoutFile)
+		} else {
+			stdoutContent = fmt.Sprintf("读取日志文件失败: %v", err)
+		}
+		logger.Warn("Failed to read stdout file %s: %v", stdoutFile, err)
+	} else {
+		stdoutContent = string(stdoutData)
+		// 如果日志太大，只返回最后100KB
+		if len(stdoutContent) > 100*1024 {
+			stdoutContent = "... (前面的日志已省略) ...\n\n" + stdoutContent[len(stdoutContent)-100*1024:]
+		}
+	}
+
+	// 读取错误输出日志
+	var stderrContent string
+	stderrData, err := os.ReadFile(stderrFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			stderrContent = fmt.Sprintf("错误日志文件不存在: %s\n提示：如果作业正常运行，这个文件可能为空或不存在。", stderrFile)
+		} else {
+			stderrContent = fmt.Sprintf("读取错误日志文件失败: %v", err)
+		}
+		logger.Warn("Failed to read stderr file %s: %v", stderrFile, err)
+	} else {
+		stderrContent = string(stderrData)
+		// 如果日志太大，只返回最后100KB
+		if len(stderrContent) > 100*1024 {
+			stderrContent = "... (前面的日志已省略) ...\n\n" + stderrContent[len(stderrContent)-100*1024:]
+		}
+	}
+
+	logger.Info("Successfully retrieved logs for job %d", jobID)
+	c.JSON(http.StatusOK, gin.H{
+		"data": gin.H{
+			"stdout": stdoutContent,
+			"stderr": stderrContent,
+			"stdout_file": stdoutFile,
+			"stderr_file": stderrFile,
+		},
+	})
+}

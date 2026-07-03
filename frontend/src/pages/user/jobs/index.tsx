@@ -182,6 +182,13 @@ export default function JobManagement() {
   const [detailOpen, setDetailOpen] = useState(false)
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
   
+  // 作业日志
+  const [jobLogOpen, setJobLogOpen] = useState(false)
+  const [jobLogLoading, setJobLogLoading] = useState(false)
+  const [jobLogContent, setJobLogContent] = useState<{stdout: string, stderr: string}>({stdout: '', stderr: ''})
+  const [logType, setLogType] = useState<'stdout' | 'stderr'>('stdout')
+  const [aiAnalyzing, setAiAnalyzing] = useState(false)
+  
   // 从URL参数获取初始状态筛选
   useEffect(() => {
     const params = new URLSearchParams(location.search)
@@ -596,6 +603,72 @@ export default function JobManagement() {
     setSelectedJob(job)
     setDetailOpen(true)
   }, [])
+  
+  // 获取作业日志
+  const fetchJobLog = useCallback(async (job: Job) => {
+    setJobLogLoading(true)
+    setJobLogOpen(true)
+    try {
+      const res = await axios.get(`/jobs/${job.id}/logs`)
+      setJobLogContent({
+        stdout: res.data.data?.stdout || '暂无标准输出日志',
+        stderr: res.data.data?.stderr || '暂无错误日志'
+      })
+    } catch (e: any) {
+      Message.error(e.response?.data?.error || '获取作业日志失败')
+      setJobLogContent({
+        stdout: '获取日志失败',
+        stderr: '获取日志失败'
+      })
+    } finally {
+      setJobLogLoading(false)
+    }
+  }, [])
+  
+  // AI分析作业日志
+  const analyzeJobLog = useCallback(async () => {
+    if (!selectedJob) return
+    
+    setAiAnalyzing(true)
+    try {
+      const logContent = logType === 'stdout' ? jobLogContent.stdout : jobLogContent.stderr
+      
+      const res = await axios.post('/ai/analyze-job-log', {
+        job_id: selectedJob.id,
+        job_name: selectedJob.name,
+        job_status: selectedJob.status,
+        log_type: logType,
+        log_content: logContent
+      })
+      
+      // 显示AI分析结果
+      modal.info({
+        title: '🤖 AI 日志分析结果',
+        width: 700,
+        content: (
+          <div style={{ 
+            maxHeight: 500, 
+            overflowY: 'auto',
+            padding: '12px 0'
+          }}>
+            <div style={{ 
+              whiteSpace: 'pre-wrap', 
+              fontFamily: 'system-ui',
+              lineHeight: 1.6,
+              fontSize: 14
+            }}>
+              {res.data.data?.analysis || '分析结果为空'}
+            </div>
+          </div>
+        ),
+        okText: '关闭'
+      })
+    } catch (e: any) {
+      Message.error(e.response?.data?.error || 'AI分析失败')
+    } finally {
+      setAiAnalyzing(false)
+    }
+  }, [selectedJob, logType, jobLogContent, modal])
   
   // 打开目录
   const openDirectory = useCallback((job: Job) => {
@@ -2274,33 +2347,43 @@ echo "Job finished: $(date)"`}
         }}
         width={800}
         footer={
-          selectedJob && (selectedJob.status === 'RUNNING' || selectedJob.status === 'PENDING') &&
-          (admin || selectedJob.user === user?.username) ? (
-            <Space>
-              <Button onClick={() => {
-                setDetailOpen(false)
-                setSelectedJob(null)
-              }}>
-                关闭
-              </Button>
-              <Button danger onClick={() => {
-                if (selectedJob) {
-                  cancelJob(selectedJob)
-                  setDetailOpen(false)
-                  setSelectedJob(null)
-                }
-              }}>
-                取消作业
-              </Button>
-            </Space>
-          ) : (
+          <Space>
             <Button onClick={() => {
               setDetailOpen(false)
               setSelectedJob(null)
             }}>
               关闭
             </Button>
-          )
+            {selectedJob && (
+              <Button 
+                type="primary"
+                icon={<EyeOutlined />}
+                onClick={() => {
+                  if (selectedJob) {
+                    fetchJobLog(selectedJob)
+                  }
+                }}
+              >
+                查看日志
+              </Button>
+            )}
+            {selectedJob && (selectedJob.status === 'RUNNING' || selectedJob.status === 'PENDING') &&
+              (admin || selectedJob.user === user?.username) && (
+              <Button 
+                danger 
+                icon={<StopOutlined />}
+                onClick={() => {
+                  if (selectedJob) {
+                    cancelJob(selectedJob)
+                    setDetailOpen(false)
+                    setSelectedJob(null)
+                  }
+                }}
+              >
+                取消作业
+              </Button>
+            )}
+          </Space>
         }
       >
         {selectedJob && (
@@ -2403,6 +2486,114 @@ echo "Job finished: $(date)"`}
                 </Col>
               )}
             </Row>
+          </div>
+        )}
+      </Modal>
+
+      {/* 作业日志查看弹窗 */}
+      <Modal
+        title={
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span>📋 作业日志 - {selectedJob?.id}</span>
+            <Space size={4} style={{
+              background: '#f5f5f5',
+              borderRadius: 6,
+              padding: 2
+            }}>
+              <Button
+                type={logType === 'stdout' ? 'primary' : 'text'}
+                size="small"
+                onClick={() => setLogType('stdout')}
+                style={{
+                  fontSize: '0.8rem',
+                  height: 28
+                }}
+              >
+                标准输出
+              </Button>
+              <Button
+                type={logType === 'stderr' ? 'primary' : 'text'}
+                size="small"
+                onClick={() => setLogType('stderr')}
+                style={{
+                  fontSize: '0.8rem',
+                  height: 28
+                }}
+              >
+                错误输出
+              </Button>
+            </Space>
+          </div>
+        }
+        open={jobLogOpen}
+        onCancel={() => {
+          setJobLogOpen(false)
+          setJobLogContent({stdout: '', stderr: ''})
+          setLogType('stdout')
+        }}
+        width={900}
+        footer={
+          <Space>
+            <Button onClick={() => {
+              setJobLogOpen(false)
+              setJobLogContent({stdout: '', stderr: ''})
+              setLogType('stdout')
+            }}>
+              关闭
+            </Button>
+            <Button
+              type="primary"
+              icon={<span style={{ marginRight: 4 }}>🤖</span>}
+              loading={aiAnalyzing}
+              onClick={analyzeJobLog}
+              disabled={!jobLogContent.stdout && !jobLogContent.stderr}
+            >
+              AI 分析问题
+            </Button>
+            <Button
+              onClick={() => {
+                const content = logType === 'stdout' ? jobLogContent.stdout : jobLogContent.stderr
+                const blob = new Blob([content], { type: 'text/plain' })
+                const url = URL.createObjectURL(blob)
+                const a = document.createElement('a')
+                a.href = url
+                a.download = `job-${selectedJob?.id}-${logType}.log`
+                a.click()
+                URL.revokeObjectURL(url)
+              }}
+            >
+              下载日志
+            </Button>
+          </Space>
+        }
+      >
+        {jobLogLoading ? (
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'center', 
+            alignItems: 'center',
+            minHeight: 400 
+          }}>
+            <Space direction="vertical" align="center">
+              <SyncOutlined spin style={{ fontSize: 32, color: '#1890ff' }} />
+              <div>加载日志中...</div>
+            </Space>
+          </div>
+        ) : (
+          <div style={{
+            background: '#1e1e1e',
+            borderRadius: 6,
+            padding: 16,
+            maxHeight: 500,
+            overflowY: 'auto',
+            fontFamily: 'Monaco, Menlo, "Courier New", monospace',
+            fontSize: 12,
+            lineHeight: 1.6,
+            color: '#d4d4d4',
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word'
+          }}>
+            {logType === 'stdout' ? jobLogContent.stdout : jobLogContent.stderr}
           </div>
         )}
       </Modal>

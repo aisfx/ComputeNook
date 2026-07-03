@@ -132,6 +132,7 @@ func main() {
 		auth.POST("/logout", handlers.Logout)
 		auth.POST("/ai/chat", handlers.AIChat)
 		auth.POST("/ai/admin/chat", middleware.AdminMiddleware(), handlers.AIAdminChat)
+		auth.POST("/ai/analyze-job-log", handlers.AnalyzeJobLog)
 
 		// MFA 管理（登录用户自助）
 		auth.GET("/mfa/status", handlers.GetMFAStatus)
@@ -304,6 +305,7 @@ func main() {
 		{
 			jobs.GET("", handlers.GetJobs)
 			jobs.GET("/:id", handlers.GetJob)
+			jobs.GET("/:id/logs", handlers.GetJobLogs)
 			jobs.POST("", handlers.SubmitJob)
 			jobs.DELETE("/:id", handlers.CancelJob)
 			jobs.POST("/:id/suspend", handlers.SuspendJob)
