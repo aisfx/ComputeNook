@@ -1,14 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Card, Table, Button, Space, Input, Select, Tag, Modal, Form, Row, Col,
-  Statistic, Checkbox, message as Message, App, Empty, Typography
+  Statistic, Checkbox, message as Message, App, Empty, Typography, List, Spin
 } from 'antd'
 import type { TableColumnsType } from 'antd'
 import {
   PlusOutlined, ReloadOutlined, SearchOutlined, PlayCircleOutlined,
   PauseCircleOutlined, StopOutlined, FolderOutlined, EyeOutlined,
   ExportOutlined, SettingOutlined, CheckCircleOutlined, CloseCircleOutlined,
-  HourglassOutlined, SyncOutlined
+  HourglassOutlined, SyncOutlined, DatabaseOutlined
 } from '@ant-design/icons'
 import axios from 'axios'
 import dayjs from 'dayjs'
@@ -179,6 +179,12 @@ export default function JobManagement() {
   const [imageTags, setImageTags] = useState<string[]>([])
   const [loadingImages, setLoadingImages] = useState(false)
   
+  // 镜像选择Modal
+  const [imageSelectModalOpen, setImageSelectModalOpen] = useState(false)
+  const [imageSearchText, setImageSearchText] = useState('')
+  const [availableImages, setAvailableImages] = useState<any[]>([])
+  const [loadingAvailableImages, setLoadingAvailableImages] = useState(false)
+  
   // 作业详情
   const [detailOpen, setDetailOpen] = useState(false)
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
@@ -338,6 +344,53 @@ export default function JobManagement() {
       setLoadingImages(false)
     }
   }, [])
+  
+  // 加载所有可用镜像（用于镜像选择Modal）
+  const loadAvailableImages = useCallback(async () => {
+    setLoadingAvailableImages(true)
+    try {
+      // 获取所有项目
+      const projectsRes = await axios.get('/registry/projects')
+      const projects = projectsRes.data.data || []
+      
+      // 获取所有公共项目的镜像
+      const allImages: any[] = []
+      for (const project of projects) {
+        if (project.public || project.name === user?.username) {
+          try {
+            const reposRes = await axios.get(`/registry/projects/${project.name}/repositories`)
+            const repos = reposRes.data.data || []
+            
+            for (const repo of repos) {
+              const cleanRepoName = repo.name.replace(`${project.name}/`, '')
+              // 获取Harbor URL
+              const configRes = await axios.get('/registry/config')
+              const harborUrl = configRes.data.harbor_url || 'harbor.example.com'
+              const harborHost = harborUrl.replace(/^https?:\/\//, '')
+              
+              allImages.push({
+                projectName: project.name,
+                repoName: cleanRepoName,
+                fullName: `${project.name}/${cleanRepoName}`,
+                displayName: `${project.name}/${cleanRepoName}`,
+                imagePath: `${harborHost}/${project.name}/${cleanRepoName}`,
+                artifactCount: repo.artifact_count,
+                isPublic: project.public
+              })
+            }
+          } catch (e) {
+            console.error(`加载项目${project.name}的仓库失败:`, e)
+          }
+        }
+      }
+      
+      setAvailableImages(allImages)
+    } catch (e: any) {
+      Message.error('加载镜像列表失败')
+    } finally {
+      setLoadingAvailableImages(false)
+    }
+  }, [user])
   
   // 根据表单参数自动生成/更新脚本内容
   const updateScriptFromForm = useCallback(() => {
@@ -1446,70 +1499,24 @@ export default function JobManagement() {
                           name="containerImage"
                           rules={[{ required: true, message: '请选择容器镜像' }]}
                         >
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                            <Select
-                              placeholder="1. 选择项目"
-                              value={selectedProject}
-                              onChange={(value) => {
-                                setSelectedProject(value)
-                                setSelectedRepo('')
-                                setImageTags([])
-                                loadRepositories(value)
-                              }}
-                              showSearch
-                              loading={loadingImages}
-                            >
-                              {harborProjects.map((p: any) => (
-                                <Select.Option key={p.name} value={p.name}>
-                                  {p.name}
-                                </Select.Option>
-                              ))}
-                            </Select>
-                            
-                            {selectedProject && (
-                              <Select
-                                placeholder="2. 选择仓库"
-                                value={selectedRepo}
-                                onChange={(value) => {
-                                  setSelectedRepo(value)
-                                  loadImageTags(selectedProject, value)
+                          <Input
+                            placeholder="harbor.example.com/library/pytorch:latest"
+                            addonAfter={
+                              <Button
+                                type="link"
+                                size="small"
+                                icon={<DatabaseOutlined />}
+                                onClick={() => {
+                                  setImageSelectModalOpen(true)
+                                  loadAvailableImages()
                                 }}
-                                showSearch
-                                loading={loadingImages}
-                                disabled={!selectedProject}
+                                style={{ padding: 0 }}
                               >
-                                {harborRepositories.map((r: any) => (
-                                  <Select.Option key={r.name} value={r.name}>
-                                    {r.name.replace(`${selectedProject}/`, '')}
-                                  </Select.Option>
-                                ))}
-                              </Select>
-                            )}
-                            
-                            {selectedRepo && imageTags.length > 0 && (
-                              <Select
-                                placeholder="3. 选择标签"
-                                onChange={(tag) => {
-                                  const fullImage = `${selectedProject}/${selectedRepo.replace(`${selectedProject}/`, '')}:${tag}`
-                                  submitForm.setFieldsValue({ containerImage: fullImage })
-                                }}
-                                showSearch
-                                loading={loadingImages}
-                                disabled={!selectedRepo}
-                              >
-                                {imageTags.map((tag: string) => (
-                                  <Select.Option key={tag} value={tag}>
-                                    {tag}
-                                  </Select.Option>
-                                ))}
-                              </Select>
-                            )}
-                            
-                            <Input
-                              placeholder="或直接输入完整镜像地址"
-                              style={{ marginTop: 4 }}
-                            />
-                          </div>
+                                选择
+                              </Button>
+                            }
+                            style={{ fontFamily: 'monospace', fontSize: 13 }}
+                          />
                         </Form.Item>
                         
                         <Form.Item
@@ -2684,6 +2691,91 @@ echo "Job finished: $(date)"`}
             wordBreak: 'break-word'
           }}>
             {logType === 'stdout' ? jobLogContent.stdout : jobLogContent.stderr}
+          </div>
+        )}
+      </Modal>
+
+      {/* 镜像选择Modal */}
+      <Modal
+        title="选择容器镜像"
+        open={imageSelectModalOpen}
+        onCancel={() => {
+          setImageSelectModalOpen(false)
+          setImageSearchText('')
+        }}
+        width={900}
+        footer={null}
+      >
+        <div style={{ marginBottom: 16 }}>
+          <Input
+            placeholder="搜索镜像..."
+            prefix={<SearchOutlined />}
+            value={imageSearchText}
+            onChange={(e) => setImageSearchText(e.target.value)}
+            allowClear
+          />
+        </div>
+
+        {loadingAvailableImages ? (
+          <div style={{ textAlign: 'center', padding: 60 }}>
+            <Spin tip="加载镜像列表中..." />
+          </div>
+        ) : (
+          <div>
+            <div style={{ 
+              marginBottom: 12, 
+              fontSize: 13, 
+              color: '#666',
+              fontWeight: 500 
+            }}>
+              公共镜像
+            </div>
+            <List
+              dataSource={availableImages.filter(img => {
+                if (!imageSearchText.trim()) return true
+                return img.displayName.toLowerCase().includes(imageSearchText.toLowerCase())
+              })}
+              renderItem={(img) => (
+                <Card
+                  size="small"
+                  hoverable
+                  onClick={() => {
+                    submitForm.setFieldsValue({ containerImage: img.imagePath })
+                    setImageSelectModalOpen(false)
+                    setImageSearchText('')
+                    Message.success('已选择镜像：' + img.displayName)
+                  }}
+                  style={{ marginBottom: 8, cursor: 'pointer' }}
+                  bodyStyle={{ padding: 12 }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 600, marginBottom: 4 }}>
+                        {img.displayName}
+                      </div>
+                      <div style={{ 
+                        fontSize: 12, 
+                        color: '#999',
+                        fontFamily: 'monospace'
+                      }}>
+                        {img.imagePath}
+                      </div>
+                    </div>
+                    <Tag color={img.isPublic ? 'success' : 'default'}>
+                      {img.isPublic ? '公开' : '私有'}
+                    </Tag>
+                  </div>
+                </Card>
+              )}
+              locale={{
+                emptyText: (
+                  <Empty
+                    description={imageSearchText ? '没有找到匹配的镜像' : '暂无可用镜像'}
+                    image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  />
+                )
+              }}
+            />
           </div>
         )}
       </Modal>
