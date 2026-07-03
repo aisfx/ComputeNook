@@ -614,6 +614,73 @@ export default function JobManagement() {
         time_hours: values.time_hours ? parseFloat(String(values.time_hours)) : 0
       }
       
+      // 如果是容器作业且没有script，自动生成
+      if (jobMode === 'container' && !submitData.script) {
+        const name = submitData.name || 'container-job'
+        const partition = submitData.partition || 'compute'
+        const nodes = submitData.nodes || 1
+        const cpus = submitData.cpus || 1
+        const memory = submitData.memory || 0
+        const timeHours = submitData.time_hours || 0
+        const gpus = submitData.gpus || 0
+        const containerImage = submitData.containerImage || ''
+        const mountDir = submitData.mountDir || ''
+        const workdir = submitData.workdir || ''
+        const command = submitData.command || ''
+        
+        let script = '#!/bin/bash\n'
+        script += `#SBATCH -J ${name}\n`
+        script += `#SBATCH -p ${partition}\n`
+        script += `#SBATCH -N ${nodes}\n`
+        script += `#SBATCH -c ${cpus}\n`
+        
+        if (memory > 0) {
+          script += `#SBATCH --mem=${memory}G\n`
+        }
+        
+        if (timeHours > 0) {
+          const hours = Math.floor(timeHours)
+          const mins = Math.round((timeHours - hours) * 60)
+          script += `#SBATCH -t ${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}:00\n`
+        }
+        
+        if (gpus > 0) {
+          script += `#SBATCH --gres=gpu:${gpus}\n`
+        }
+        
+        script += '\n'
+        script += 'echo "Container job started: $(date)"\n'
+        script += `echo "Image: ${containerImage}"\n`
+        script += '\n'
+        
+        if (command) {
+          script += '# 交互模式 - 通过 Web Shell 连接到此作业节点\n'
+          script += `srun --container-image=${containerImage}`
+          if (mountDir) {
+            script += ` --container-mounts=${mountDir}`
+          }
+          if (workdir) {
+            script += ` --container-workdir=${workdir}`
+          }
+          script += ` bash -c "${command}"\n`
+        } else {
+          script += '# 交互模式 - 通过 Web Shell 连接到此作业节点\n'
+          script += `srun --container-image=${containerImage}`
+          if (mountDir) {
+            script += ` --container-mounts=${mountDir}`
+          }
+          if (workdir) {
+            script += ` --container-workdir=${workdir}`
+          }
+          script += ' sleep infinity\n'
+        }
+        
+        script += '\n'
+        script += 'echo "Container job finished: $(date)"\n'
+        
+        submitData.script = script
+      }
+      
       await axios.post('/jobs', submitData)
       Message.success('作业提交成功')
       setSubmitOpen(false)
@@ -622,7 +689,7 @@ export default function JobManagement() {
     } catch (e: any) {
       Message.error(e.response?.data?.error || '作业提交失败')
     }
-  }, [submitForm, loadJobs])
+  }, [submitForm, loadJobs, jobMode])
   
   // 创建模板
   const handleCreateTemplate = async (values: any) => {
