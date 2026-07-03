@@ -347,33 +347,59 @@ export default function JobManagement() {
   const loadAvailableImages = useCallback(async () => {
     setLoadingAvailableImages(true)
     try {
+      console.log('=== 开始加载镜像列表 ===')
+      
       // 获取Harbor配置
       const configRes = await axios.get('/registry/config')
       const harborUrl = configRes.data.harbor_url || 'harbor.example.com'
       const harborHost = harborUrl.replace(/^https?:\/\//, '')
+      console.log('1. Harbor URL:', harborUrl, '→', harborHost)
       
       // 获取所有项目
       const projectsRes = await axios.get('/registry/projects')
       const projects = projectsRes.data.data || []
+      console.log('2. 获取到项目列表:', projects.length, '个项目')
+      console.log('   项目详情:', projects.map((p: any) => ({ name: p.name, public: p.public })))
+      
+      if (projects.length === 0) {
+        console.error('❌ 项目列表为空！')
+        Message.warning('未找到可访问的镜像项目')
+        setAvailableImages([])
+        return
+      }
       
       // 获取所有项目的镜像
       const allImages: any[] = []
       for (const project of projects) {
         try {
+          console.log(`3. 加载项目 [${project.name}] 的仓库...`)
           const reposRes = await axios.get(`/registry/projects/${project.name}/repositories`)
           const repos = reposRes.data.data || []
+          console.log(`   → ${repos.length} 个仓库`)
+          
+          if (repos.length === 0) {
+            console.log(`   ⚠️ 项目 [${project.name}] 没有仓库`)
+            continue
+          }
           
           for (const repo of repos) {
             const cleanRepoName = repo.name.replace(`${project.name}/`, '')
             
             // 获取该仓库的标签
             try {
+              console.log(`   4. 加载仓库 [${cleanRepoName}] 的标签...`)
               const tagsRes = await axios.get(`/registry/projects/${project.name}/repositories/${encodeURIComponent(repo.name)}/tags`)
               const tags = tagsRes.data.data || []
+              console.log(`      → ${tags.length} 个标签`)
+              
+              if (tags.length === 0) {
+                console.log(`      ⚠️ 仓库 [${cleanRepoName}] 没有标签`)
+                continue
+              }
               
               // 为每个标签创建一个镜像条目
               for (const tag of tags) {
-                allImages.push({
+                const imageInfo = {
                   projectName: project.name,
                   repoName: cleanRepoName,
                   tag: tag.name,
@@ -382,15 +408,24 @@ export default function JobManagement() {
                   imagePath: `${harborHost}/${project.name}/${cleanRepoName}:${tag.name}`,
                   isPublic: project.public,
                   updateTime: tag.push_time
-                })
+                }
+                allImages.push(imageInfo)
+                console.log(`      ✓ 添加镜像: ${imageInfo.displayName}`)
               }
-            } catch (e) {
-              console.error(`加载仓库${repo.name}的标签失败:`, e)
+            } catch (e: any) {
+              console.error(`      ❌ 加载仓库 [${repo.name}] 的标签失败:`, e.response?.data || e.message)
             }
           }
-        } catch (e) {
-          console.error(`加载项目${project.name}的仓库失败:`, e)
+        } catch (e: any) {
+          console.error(`   ❌ 加载项目 [${project.name}] 的仓库失败:`, e.response?.data || e.message)
         }
+      }
+      
+      console.log('5. 最终获取到的镜像数量:', allImages.length)
+      
+      if (allImages.length === 0) {
+        console.error('❌ 没有找到任何可用镜像！')
+        Message.warning('未找到可用的容器镜像，请检查镜像仓库')
       }
       
       // 按更新时间倒序排列
@@ -401,8 +436,11 @@ export default function JobManagement() {
       })
       
       setAvailableImages(allImages)
+      console.log('=== 镜像列表加载完成 ===')
+      
     } catch (e: any) {
-      console.error('加载镜像列表失败:', e)
+      console.error('❌ 加载镜像列表失败:', e)
+      console.error('   错误详情:', e.response?.data || e.message)
       Message.error('加载镜像列表失败: ' + (e.response?.data?.error || e.message))
     } finally {
       setLoadingAvailableImages(false)
