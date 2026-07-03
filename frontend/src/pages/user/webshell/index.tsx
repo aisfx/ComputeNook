@@ -46,6 +46,10 @@ export default function WebShell() {
   const [keyTab, setKeyTab]               = useState<'generate' | 'upload'>('generate')
   const [generatingKey, setGeneratingKey] = useState(false)
   const [generatedPubKey, setGeneratedPubKey] = useState('')
+  const [deployKeyOpen, setDeployKeyOpen] = useState(false)
+  const [deployPassword, setDeployPassword] = useState('')
+  const [deploying, setDeploying] = useState(false)
+  const [deployedNodes, setDeployedNodes] = useState<string[]>([])
   const [fontSize, setFontSize]           = useState(14)
   const [theme, setTheme]                 = useState('dark')
   const [cursorBlink, setCursorBlink]     = useState(true)
@@ -209,10 +213,54 @@ export default function WebShell() {
     try {
       const res = await axios.post('/webshell/generate-key')
       setGeneratedPubKey(res.data.public_key || '')
-      Message.success('密钥生成成功')
+      Message.success('密钥生成成功！请部署到登录节点')
       checkPrivateKey()
+      // 自动打开部署对话框
+      setDeployKeyOpen(true)
     } catch (e: any) { Message.error(e.response?.data?.error || '生成失败') }
     finally { setGeneratingKey(false) }
+  }
+
+  // 部署公钥到节点
+  const deployPublicKey = async () => {
+    if (!deployPassword) {
+      Message.error('请输入SSH密码')
+      return
+    }
+    
+    setDeploying(true)
+    const deployed: string[] = []
+    const failed: string[] = []
+    
+    try {
+      // 部署到所有节点
+      for (const node of nodes) {
+        try {
+          await axios.post('/webshell/keys/deploy', {
+            node_name: node.name,
+            password: deployPassword
+          })
+          deployed.push(node.name)
+        } catch (e: any) {
+          console.error(`部署到${node.name}失败:`, e)
+          failed.push(node.name)
+        }
+      }
+      
+      setDeployedNodes(deployed)
+      
+      if (failed.length === 0) {
+        Message.success(`成功部署到 ${deployed.length} 个节点`)
+        setDeployKeyOpen(false)
+        setDeployPassword('')
+      } else {
+        Message.warning(`成功: ${deployed.length}, 失败: ${failed.length}`)
+      }
+    } catch (e: any) {
+      Message.error(e.response?.data?.error || '部署失败')
+    } finally {
+      setDeploying(false)
+    }
   }
 
   const activeTab = tabs.find(t => t.id === activeTabId)
@@ -574,13 +622,24 @@ export default function WebShell() {
         </div>
         {keyTab === 'generate' ? (
           <div>
-            <p style={{ fontSize: 13, color: '#555', marginBottom: 12 }}>平台自动生成 ED25519 密钥对，私钥保存在服务端，公钥自动部署到计算节点。</p>
-            <Button type="primary" loading={generatingKey} onClick={generateKey} block>🔐 一键生成密钥对</Button>
+            <p style={{ fontSize: 13, color: '#555', marginBottom: 12 }}>
+              平台自动生成 RSA 4096 密钥对，私钥保存在服务端，需要手动部署公钥到登录节点。
+            </p>
+            <Button type="primary" loading={generatingKey} onClick={generateKey} block>
+              🔐 生成密钥对
+            </Button>
             {generatedPubKey && (
               <div style={{ marginTop: 12 }}>
-                <div style={{ fontSize: 12, color: '#555', marginBottom: 4 }}>公钥（已自动部署）</div>
+                <div style={{ fontSize: 12, color: '#555', marginBottom: 4 }}>公钥内容：</div>
                 <pre style={{ background: '#f5f5f5', padding: 10, borderRadius: 6, fontSize: 11, overflowX: 'auto', wordBreak: 'break-all', whiteSpace: 'pre-wrap' }}>{generatedPubKey}</pre>
-                <Button size="small" onClick={() => { navigator.clipboard.writeText(generatedPubKey); Message.success('已复制') }}>📋 复制</Button>
+                <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
+                  <Button size="small" onClick={() => { navigator.clipboard.writeText(generatedPubKey); Message.success('已复制') }}>
+                    📋 复制公钥
+                  </Button>
+                  <Button type="primary" size="small" onClick={() => setDeployKeyOpen(true)}>
+                    🚀 部署到节点
+                  </Button>
+                </div>
               </div>
             )}
           </div>
@@ -606,6 +665,78 @@ export default function WebShell() {
               }}
             />
             <div style={{ marginTop: 10, fontSize: 11, color: '#999' }}>💡 私钥将加密保存在服务器，仅用于 SSH 认证</div>
+          </div>
+        )}
+      </Modal>
+
+      {/* 部署公钥弹窗 */}
+      <Modal
+        title="🚀 部署公钥到登录节点"
+        open={deployKeyOpen}
+        onCancel={() => {
+          setDeployKeyOpen(false)
+          setDeployPassword('')
+        }}
+        {...modalProps}
+        footer={[
+          <Button key="cancel" onClick={() => {
+            setDeployKeyOpen(false)
+            setDeployPassword('')
+          }}>
+            取消
+          </Button>,
+          <Button key="deploy" type="primary" loading={deploying} onClick={deployPublicKey}>
+            部署到所有节点
+          </Button>
+        ]}
+      >
+        <div style={{ marginBottom: 16 }}>
+          <p style={{ fontSize: 13, color: '#555', lineHeight: 1.6 }}>
+            需要使用您的SSH密码登录到各个节点，将公钥部署到 <code>~/.ssh/authorized_keys</code>
+          </p>
+        </div>
+        
+        <div style={{ marginBottom: 16, padding: 12, background: '#f5f5f5', borderRadius: 6 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8 }}>将部署到以下节点：</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {nodes.map(node => (
+              <div 
+                key={node.name}
+                style={{
+                  padding: '4px 8px',
+                  background: deployedNodes.includes(node.name) ? '#52c41a' : '#fff',
+                  color: deployedNodes.includes(node.name) ? '#fff' : '#000',
+                  border: '1px solid #d9d9d9',
+                  borderRadius: 4,
+                  fontSize: 12
+                }}
+              >
+                {deployedNodes.includes(node.name) && '✓ '}
+                {node.name}
+              </div>
+            ))}
+          </div>
+        </div>
+        
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 8 }}>SSH 登录密码</div>
+          <Input.Password
+            value={deployPassword}
+            onChange={(e) => setDeployPassword(e.target.value)}
+            placeholder="输入您的SSH密码"
+            onPressEnter={deployPublicKey}
+            autoFocus
+          />
+          <div style={{ fontSize: 11, color: '#999', marginTop: 6 }}>
+            💡 密码仅用于一次性部署公钥，不会被保存
+          </div>
+        </div>
+        
+        {deployedNodes.length > 0 && (
+          <div style={{ marginTop: 12, padding: 10, background: '#f6ffed', border: '1px solid #b7eb8f', borderRadius: 6 }}>
+            <div style={{ fontSize: 12, color: '#52c41a' }}>
+              ✓ 已成功部署到 {deployedNodes.length} 个节点
+            </div>
           </div>
         )}
       </Modal>

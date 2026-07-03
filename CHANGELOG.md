@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Added
+- **WebShell 公钥部署功能**（2026-07-03 20:25）
+  - 生成密钥后增加手动部署步骤，需要输入SSH密码
+  - 新增部署公钥弹窗，支持一键部署到所有节点
+  - 显示部署进度和状态（成功/失败节点）
+  - 密码仅用于一次性部署，不会被保存
+  - 修复了之前"已自动部署"的误导性提示
+  - 修改文件：`frontend/src/pages/user/webshell/index.tsx`
+  - 后端API：`POST /api/webshell/keys/deploy`
+
 ### Fixed
 - **作业提交表单优化**（2026-07-03 20:15）
   - 修复脚本内容输入框无法编辑的问题（移除了过长的placeholder）
