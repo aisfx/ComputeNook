@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Fixed
+- **文件管理器路径权限检查问题修复**（2026-07-03 20:28）
+  - 修复文件管理器一直显示"读取目录失败"的问题
+  - 问题原因：`isPathAllowed`函数使用`filepath.EvalSymlinks`，当home目录是符号链接或路径不存在时会失败
+  - 解决方案：
+    - 简化`isPathAllowed`函数，移除`EvalSymlinks`调用
+    - 使用`filepath.Abs`和`filepath.Rel`进行路径检查
+    - 删除不再使用的`resolvePathThroughExistingParent`辅助函数
+  - 修改文件：`backend/handlers/filemanager.go`
+
 ### Added
 - **WebShell 公钥部署功能**（2026-07-03 20:25）
   - 生成密钥后增加手动部署步骤，需要输入SSH密码

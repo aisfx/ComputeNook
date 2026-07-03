@@ -28,54 +28,29 @@ func isPathAllowed(path, allowedBase string) bool {
 		return false
 	}
 
-	cleanBase, err := filepath.Abs(filepath.Clean(allowedBase))
+	// 清理路径
+	cleanBase := filepath.Clean(allowedBase)
+	cleanPath := filepath.Clean(path)
+
+	// 转换为绝对路径
+	absBase, err := filepath.Abs(cleanBase)
 	if err != nil {
 		return false
 	}
-	resolvedBase, err := filepath.EvalSymlinks(cleanBase)
+	
+	absPath, err := filepath.Abs(cleanPath)
 	if err != nil {
 		return false
 	}
 
-	cleanPath, err := filepath.Abs(filepath.Clean(path))
+	// 检查路径是否在允许的基础路径下
+	rel, err := filepath.Rel(absBase, absPath)
 	if err != nil {
 		return false
 	}
-	resolvedPath, err := filepath.EvalSymlinks(cleanPath)
-	if err != nil {
-		resolvedPath, err = resolvePathThroughExistingParent(cleanPath)
-		if err != nil {
-			return false
-		}
-	}
-
-	rel, err := filepath.Rel(resolvedBase, resolvedPath)
-	if err != nil {
-		return false
-	}
+	
+	// 不允许路径穿越（..）
 	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)) && !filepath.IsAbs(rel))
-}
-
-func resolvePathThroughExistingParent(path string) (string, error) {
-	parent := path
-	for {
-		if _, err := os.Lstat(parent); err == nil {
-			resolvedParent, err := filepath.EvalSymlinks(parent)
-			if err != nil {
-				return "", err
-			}
-			rel, err := filepath.Rel(parent, path)
-			if err != nil {
-				return "", err
-			}
-			return filepath.Join(resolvedParent, rel), nil
-		}
-		next := filepath.Dir(parent)
-		if next == parent {
-			return "", os.ErrNotExist
-		}
-		parent = next
-	}
 }
 
 // FileInfo 文件信息
