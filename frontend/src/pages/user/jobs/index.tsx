@@ -451,12 +451,24 @@ export default function JobManagement() {
     if (submitOpen) {
       const user = getUser()
       
-      // 设置默认工作目录（普通作业和容器作业都需要）
-      const currentWorkdir = submitForm.getFieldValue('workdir')
-      if (!currentWorkdir && user?.username) {
-        submitForm.setFieldsValue({ 
-          workdir: `/home/${user.username}/jobs`
-        })
+      if (user?.username) {
+        // 设置默认工作目录
+        const currentWorkdir = submitForm.getFieldValue('workdir')
+        if (!currentWorkdir) {
+          submitForm.setFieldsValue({ 
+            workdir: `/fs/home/${user.username}`
+          })
+        }
+        
+        // 容器作业需要初始化挂载目录
+        if (jobMode === 'container') {
+          const currentMountDir = submitForm.getFieldValue('mountDir')
+          if (!currentMountDir) {
+            submitForm.setFieldsValue({
+              mountDir: `/fs/home/${user.username}:/fs/home/${user.username}`
+            })
+          }
+        }
       }
       
       // 只有普通作业需要初始化脚本
