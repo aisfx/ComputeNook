@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
   Card, Button, Space, Input, Tag, Modal, message as Message,
-  Empty, Spin, List, Badge, Tooltip, Typography
+  Empty, Spin, List, Tooltip, Typography
 } from 'antd'
 import {
   ReloadOutlined, SearchOutlined, DatabaseOutlined, LockOutlined,
@@ -32,6 +32,7 @@ interface Repository {
   artifact_count: number
   creation_time?: string
   update_time?: string
+  tags?: ImageTag[] // 添加tags字段
 }
 
 interface ImageTag {
@@ -80,15 +81,63 @@ export default function RegistryManagement() {
     }
   }, [])
 
-  // 加载仓库列表
+  // 加载仓库列表（包含tags）
   const loadRepositories = useCallback(async (project: Project) => {
     if (!project) return
     
     setLoadingRepos(true)
     try {
+      console.log(`=== 加载项目 [${project.name}] 的仓库和标签 ===`)
+      
+      // 1. 获取仓库列表
       const res = await axios.get(`/registry/projects/${project.name}/repositories`)
-      setRepositories(res.data.data || [])
+      const repos = res.data.data || []
+      console.log(`  → 找到 ${repos.length} 个仓库`)
+      
+      // 2. 为每个仓库加载tags
+      const reposWithTags = await Promise.all(
+        repos.map(async (repo: Repository) => {
+          const cleanRepoName = repo.name.replace(`${project.name}/`, '')
+          
+          try {
+            console.log(`  → 加载仓库 [${cleanRepoName}] 的标签...`)
+            
+            // 使用cleanRepoName而不是repo.name，因为API路径已经包含了项目名
+            const tagsRes = await axios.get(
+              `/registry/projects/${project.name}/repositories/${encodeURIComponent(cleanRepoName)}/tags`
+            )
+            
+            const artifacts = tagsRes.data.data || []
+            console.log(`    → 返回 ${artifacts.length} 个artifact`)
+            
+            // Harbor V2 API返回的是artifacts数组，每个artifact包含tags数组
+            let allTags: ImageTag[] = []
+            for (const artifact of artifacts) {
+              if (artifact.tags && Array.isArray(artifact.tags)) {
+                allTags = allTags.concat(artifact.tags)
+              }
+            }
+            
+            console.log(`    ✓ 找到 ${allTags.length} 个标签`)
+            
+            return {
+              ...repo,
+              tags: allTags
+            }
+          } catch (e: any) {
+            console.error(`    ❌ 加载仓库 [${cleanRepoName}] 的标签失败:`, e.response?.data || e.message)
+            return {
+              ...repo,
+              tags: []
+            }
+          }
+        })
+      )
+      
+      console.log('=== 仓库和标签加载完成 ===')
+      setRepositories(reposWithTags)
     } catch (e: any) {
+      console.error('❌ 加载仓库列表失败:', e)
       Message.error(e.response?.data?.error || '加载仓库列表失败')
       setRepositories([])
     } finally {
@@ -245,48 +294,47 @@ export default function RegistryManagement() {
             <List
               dataSource={projects}
               renderItem={(project) => (
-                <List.Item
+                <Card
                   key={project.project_id}
                   onClick={() => setSelectedProject(project)}
+                  size="small"
                   style={{
                     cursor: 'pointer',
-                    padding: '12px',
-                    marginBottom: 4,
-                    borderRadius: 6,
+                    marginBottom: 8,
                     background: selectedProject?.project_id === project.project_id ? '#e6f7ff' : '#fff',
-                    border: selectedProject?.project_id === project.project_id ? '1px solid #1890ff' : '1px solid #f0f0f0',
+                    borderColor: selectedProject?.project_id === project.project_id ? '#1890ff' : '#f0f0f0',
                     transition: 'all 0.2s'
                   }}
+                  bodyStyle={{ padding: 12 }}
+                  hoverable
                 >
-                  <List.Item.Meta
-                    avatar={
-                      project.public ? 
-                        <GlobalOutlined style={{ fontSize: 18, color: '#52c41a' }} /> : 
-                        <UserOutlined style={{ fontSize: 18, color: '#1890ff' }} />
-                    }
-                    title={
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontWeight: 500 }}>{project.name}</span>
-                      </div>
-                    }
-                    description={
-                      <Space size={4}>
-                        <Tag 
-                          icon={project.public ? <UnlockOutlined /> : <LockOutlined />}
-                          color={project.public ? 'success' : 'default'}
-                          style={{ fontSize: 11 }}
-                        >
-                          {project.public ? '公开' : '私有'}
-                        </Tag>
-                        <Badge 
-                          count={project.repo_count} 
-                          showZero
-                          style={{ backgroundColor: '#1890ff' }}
-                        />
-                      </Space>
-                    }
-                  />
-                </List.Item>
+                  <Space direction="vertical" size={8} style={{ width: '100%' }}>
+                    {/* 项目名称 */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {project.public ? 
+                        <GlobalOutlined style={{ fontSize: 16, color: '#52c41a' }} /> : 
+                        <UserOutlined style={{ fontSize: 16, color: '#1890ff' }} />
+                      }
+                      <Text strong style={{ fontSize: 13, flex: 1 }}>
+                        {project.name}
+                      </Text>
+                    </div>
+                    
+                    {/* 标签和统计 */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Tag 
+                        icon={project.public ? <UnlockOutlined /> : <LockOutlined />}
+                        color={project.public ? 'success' : 'default'}
+                        style={{ fontSize: 11, margin: 0 }}
+                      >
+                        {project.public ? '公开' : '私有'}
+                      </Tag>
+                      <Text type="secondary" style={{ fontSize: 11 }}>
+                        {project.repo_count} 仓库
+                      </Text>
+                    </div>
+                  </Space>
+                </Card>
               )}
             />
           )}
@@ -369,42 +417,83 @@ export default function RegistryManagement() {
 
                 return (
                   <Card
-                    size="small"
                     key={repo.id}
                     style={{ marginBottom: 16 }}
-                    bodyStyle={{ padding: 16 }}
+                    bodyStyle={{ padding: 20 }}
                   >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                      <div style={{ flex: 1 }}>
-                        <Space direction="vertical" size={8} style={{ width: '100%' }}>
-                          {/* 仓库名称 */}
-                          <Space>
-                            <DatabaseOutlined style={{ fontSize: 18, color: '#52c41a' }} />
-                            <Text strong style={{ fontSize: 15 }}>
-                              {cleanName}
-                            </Text>
-                          </Space>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
+                      {/* Docker图标 */}
+                      <div style={{
+                        width: 48,
+                        height: 48,
+                        background: 'linear-gradient(135deg, #0db7ed 0%, #0a8ec7 100%)',
+                        borderRadius: 8,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0
+                      }}>
+                        <DatabaseOutlined style={{ fontSize: 24, color: '#fff' }} />
+                      </div>
 
-                          {/* 统计信息 */}
-                          <Space size={16} style={{ fontSize: 12, color: '#666' }}>
-                            <span>
-                              <Text type="secondary">镜像数: </Text>
-                              <Text strong>{repo.artifact_count}</Text>
-                            </span>
-                            <span>
-                              <Text type="secondary">更新于: </Text>
-                              <Text>{formatTime(repo.update_time)}</Text>
-                            </span>
-                          </Space>
+                      {/* 仓库信息 */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                          {/* 仓库名称和统计 */}
+                          <div>
+                            <Space align="center" style={{ marginBottom: 4 }}>
+                              <Text strong style={{ fontSize: 16 }}>
+                                {cleanName}
+                              </Text>
+                              <Tag color="blue">
+                                {repo.tags?.length || 0} 版本
+                              </Tag>
+                            </Space>
+                            <Text type="secondary" style={{ fontSize: 12 }}>
+                              更新于 {formatTime(repo.update_time)}
+                            </Text>
+                          </div>
+
+                          {/* Tag列表 */}
+                          {repo.tags && repo.tags.length > 0 && (
+                            <div style={{
+                              padding: '12px',
+                              background: '#f5f5f5',
+                              borderRadius: 6,
+                              border: '1px solid #e8e8e8'
+                            }}>
+                              <Space size={[4, 8]} wrap>
+                                {repo.tags.map((tag, index) => (
+                                  <Tag 
+                                    key={index}
+                                    color="default"
+                                    style={{
+                                      margin: 0,
+                                      padding: '2px 8px',
+                                      fontSize: 12,
+                                      fontFamily: 'monospace',
+                                      background: '#fff',
+                                      border: '1px solid #d9d9d9',
+                                      borderRadius: 4
+                                    }}
+                                  >
+                                    {tag.name}
+                                  </Tag>
+                                ))}
+                              </Space>
+                            </div>
+                          )}
 
                           {/* 镜像地址 */}
                           <div style={{
-                            background: '#f5f5f5',
+                            background: '#fafafa',
                             padding: '8px 12px',
                             borderRadius: 4,
                             fontFamily: 'monospace',
                             fontSize: 12,
-                            color: '#1890ff'
+                            color: '#666',
+                            border: '1px solid #e8e8e8',
+                            wordBreak: 'break-all'
                           }}>
                             {imagePath}
                           </div>
@@ -412,22 +501,24 @@ export default function RegistryManagement() {
                       </div>
 
                       {/* 操作按钮 */}
-                      <Space direction="vertical" size={8} style={{ marginLeft: 16 }}>
+                      <Space direction="vertical" size={8}>
                         <Button
+                          type="primary"
                           size="small"
                           icon={<CopyOutlined />}
                           onClick={() => copyImagePath(repo.name)}
                         >
                           复制地址
                         </Button>
-                        {/* 删除按钮暂时隐藏，需要管理员权限 */}
-                        {/* <Button
+                        <Button
                           size="small"
                           danger
                           icon={<DeleteOutlined />}
+                          disabled
+                          title="需要管理员权限"
                         >
                           删除
-                        </Button> */}
+                        </Button>
                       </Space>
                     </div>
                   </Card>
