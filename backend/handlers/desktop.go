@@ -777,6 +777,15 @@ func buildDesktopScript(session *DesktopSession) string {
 		if useAutoResize {
 			resizeFlag = "yes"
 		}
+
+		// 对 XFCE 桌面：禁用 polkit agent 避免启动时弹出错误弹窗
+		// 原理：覆盖 autostart 配置，让 xfce4-polkit 不被启动
+		if desktopEnv == "xfce4" || startCmd == "startxfce4" {
+			b.WriteString("# 禁用 xfce4-polkit agent，避免非交互环境下报错\n")
+			b.WriteString("mkdir -p \"$HOME/.config/autostart\"\n")
+			b.WriteString("printf '[Desktop Entry]\\nHidden=true\\n' > \"$HOME/.config/autostart/xfce4-polkit.desktop\"\n\n")
+		}
+
 		b.WriteString(fmt.Sprintf(
 			"xpra start-desktop :${DISPLAY_NUM} \\\n"+
 				"  --bind-ws=0.0.0.0:${WS_PORT} \\\n"+
