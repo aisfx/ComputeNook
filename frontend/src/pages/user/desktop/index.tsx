@@ -110,7 +110,20 @@ export default function RemoteDesktop() {
     setLoading(true)
     try {
       const res = await axios.get('/desktop/sessions')
-      setSessions(res.data.data || [])
+      const data: Session[] = res.data.data || []
+      setSessions(data)
+
+      // 切换页面后自动恢复：如果有 running 会话且当前没有活跃弹窗，自动设为可连接状态
+      const running = data.find(s => s.status === 'running')
+      if (running) {
+        setSelectedSession(prev => {
+          // 如果当前没有选中的会话，自动选中第一个运行中的
+          if (!prev || prev.status !== 'running') return running
+          // 如果当前选中的会话仍在运行，更新其信息
+          if (prev.id === running.id) return running
+          return prev
+        })
+      }
     } catch { /* ignore */ }
     finally { setLoading(false) }
   }, [])
@@ -173,6 +186,9 @@ export default function RemoteDesktop() {
       clearInterval(launchRef.current)
     }
   }, [loadSessions])
+
+  // 有 running 会话时，页面底部显示快速连接提示
+  const hasRunning = sessions.some(s => s.status === 'running')
 
   // ── 创建 ──────────────────────────────────────────────────
   const handleCreate = async () => {
@@ -246,22 +262,23 @@ export default function RemoteDesktop() {
       setLaunchProgress(Math.min(90, (elapsed / 120) * 90))
       try {
         const res = await axios.get(`/desktop/sessions/${sessionId}/status`)
-        const status = res.data.status
-        const logs: string[] = res.data.logs || []
-        setLaunchLogs(logs)
+        // 后端返回 {data: session}，需要从 data 中取 status
+        const session = res.data.data
+        const status = session?.status
+        setLaunchLogs([])
 
         if (status === 'running') {
           setLaunchProgress(100)
           setLaunchStatus('ready')
           clearInterval(launchRef.current)
-          setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, ...res.data.session } : s))
-          setSelectedSession(res.data.session)
+          setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, ...session } : s))
+          setSelectedSession(session)
           setLaunchFloatVisible(false)
           setReadyOpen(true)
           loadSessions()
         } else if (status === 'failed') {
           setLaunchStatus('failed')
-          setLaunchError(res.data.error || '启动失败')
+          setLaunchError('启动失败，请查看日志')
           clearInterval(launchRef.current)
           setLaunchFloatVisible(false)
           setReadyOpen(true)
@@ -481,6 +498,35 @@ export default function RemoteDesktop() {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* ── 已运行会话快速连接提示条 ── */}
+      {hasRunning && !readyOpen && !launchFloatVisible && (
+        <div style={{
+          position: 'fixed', bottom: 24, right: 24, zIndex: 999,
+          background: '#fff', border: '1px solid #52c41a', borderRadius: 12,
+          boxShadow: '0 4px 24px rgba(0,0,0,0.12)',
+          overflow: 'hidden', minWidth: 280
+        }}>
+          <div style={{ background: '#52c41a', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#fff' }} />
+            <span style={{ color: '#fff', fontSize: 13, fontWeight: 500 }}>会话运行中</span>
+          </div>
+          <div style={{ padding: '12px 16px' }}>
+            {sessions.filter(s => s.status === 'running').map(s => (
+              <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <span style={{ fontSize: 13 }}>{s.name}</span>
+                <Button
+                  type="primary"
+                  size="small"
+                  onClick={() => { setSelectedSession(s); setReadyOpen(true); setLaunchStatus('ready') }}
+                >
+                  连接
+                </Button>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
