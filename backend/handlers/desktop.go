@@ -558,8 +558,9 @@ func buildDesktopScript(session *DesktopSession) string {
 	statusFile := fmt.Sprintf("%s/%d.status", statusDir, session.ID)
 
 	resolution := session.Resolution
-	if resolution == "" || resolution == "auto" {
-		resolution = "1920x1080"
+	useAutoResize := resolution == "" || resolution == "auto"
+	if useAutoResize {
+		resolution = "1920x1080" // 初始分辨率，之后由客户端动态调整
 	}
 	mode := session.Mode
 	if mode == "" {
@@ -687,6 +688,10 @@ func buildDesktopScript(session *DesktopSession) string {
 	b.WriteString("echo \"[DEBUG] Display: :${DISPLAY_NUM}, WS Port: ${WS_PORT}, TCP Port: ${TCP_PORT}\"\n")
 
 	if mode == "app" {
+		resizeFlag := resolution
+		if useAutoResize {
+			resizeFlag = "yes"
+		}
 		b.WriteString(fmt.Sprintf(
 			"xpra start :${DISPLAY_NUM} \\\n"+
 				"  --bind-ws=0.0.0.0:${WS_PORT} \\\n"+
@@ -697,8 +702,9 @@ func buildDesktopScript(session *DesktopSession) string {
 				"  --start-child=\"%s\" \\\n"+
 				"  --exit-with-children=no \\\n"+
 				"  --daemon=no \\\n"+
+				"  --dpi=96 \\\n"+
 				"  --resize-display=%s &\n\n",
-			socketDir, logFile, appCmd, resolution,
+			socketDir, logFile, appCmd, resizeFlag,
 		))
 	} else {
 		var startCmd string
@@ -710,6 +716,10 @@ func buildDesktopScript(session *DesktopSession) string {
 		default:
 			startCmd = "startxfce4"
 		}
+		resizeFlag := resolution
+		if useAutoResize {
+			resizeFlag = "yes"
+		}
 		b.WriteString(fmt.Sprintf(
 			"xpra start-desktop :${DISPLAY_NUM} \\\n"+
 				"  --bind-ws=0.0.0.0:${WS_PORT} \\\n"+
@@ -720,8 +730,9 @@ func buildDesktopScript(session *DesktopSession) string {
 				"  --start-child=%s \\\n"+
 				"  --exit-with-children=no \\\n"+
 				"  --daemon=no \\\n"+
+				"  --dpi=96 \\\n"+
 				"  --resize-display=%s &\n\n",
-			socketDir, logFile, startCmd, resolution,
+			socketDir, logFile, startCmd, resizeFlag,
 		))
 	}
 
