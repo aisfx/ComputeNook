@@ -139,23 +139,49 @@ func (j *Job) GetWorkingDirectory() string {
 
 // IsContainerJob 判断是否为容器作业
 func (j *Job) IsContainerJob() bool {
-	// 检查环境变量中是否包含 SLURM_CONTAINER_IMAGE
+	// 方法1: 检查环境变量中是否包含 SLURM_CONTAINER_IMAGE
 	for _, env := range j.Environment {
 		if strings.HasPrefix(env, "SLURM_CONTAINER_IMAGE=") {
 			return true
 		}
 	}
+	
+	// 方法2: 检查 Container 字段是否不为空
+	if len(j.Container) > 0 && string(j.Container) != "null" && string(j.Container) != "{}" {
+		return true
+	}
+	
+	// 方法3: 检查作业脚本内容是否包含容器相关参数
+	// 检查 stdout 路径或作业名称是否暗示这是容器作业
+	scriptContent := j.StandardOutput + j.StandardError
+	if strings.Contains(scriptContent, "--container-image") || 
+	   strings.Contains(scriptContent, "Container job started") {
+		return true
+	}
+	
 	return false
 }
 
 // GetContainerImage 获取容器镜像
 func (j *Job) GetContainerImage() string {
-	// 从环境变量中提取
+	// 方法1: 从环境变量中提取
 	for _, env := range j.Environment {
 		if strings.HasPrefix(env, "SLURM_CONTAINER_IMAGE=") {
 			return strings.TrimPrefix(env, "SLURM_CONTAINER_IMAGE=")
 		}
 	}
+	
+	// 方法2: 从 Container 字段中提取（如果可用）
+	if len(j.Container) > 0 && string(j.Container) != "null" {
+		// 尝试解析 Container JSON
+		var containerData map[string]interface{}
+		if err := json.Unmarshal(j.Container, &containerData); err == nil {
+			if image, ok := containerData["image"].(string); ok && image != "" {
+				return image
+			}
+		}
+	}
+	
 	return ""
 }
 

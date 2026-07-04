@@ -34,6 +34,8 @@ interface Job {
   account: string
   timeLimit: number
   nodeNames: string[]
+  isContainer?: boolean  // 是否是容器作业
+  containerImage?: string  // 容器镜像
 }
 
 interface JobStats {
@@ -136,6 +138,7 @@ export default function JobManagement() {
   const [statusFilter, setStatusFilter] = useState('')
   const [partitionFilter, setPartitionFilter] = useState('')
   const [userFilter, setUserFilter] = useState('')
+  const [containerFilter, setContainerFilter] = useState<'all' | 'container' | 'normal'>('all') // 容器作业过滤
   const [partitions, setPartitions] = useState<string[]>([])
   
   // 分页
@@ -188,7 +191,6 @@ export default function JobManagement() {
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
   
   // 作业日志
-  const [jobLogOpen, setJobLogOpen] = useState(false)
   const [jobLogLoading, setJobLogLoading] = useState(false)
   const [jobLogContent, setJobLogContent] = useState<{stdout: string, stderr: string}>({stdout: '', stderr: ''})
   const [logType, setLogType] = useState<'stdout' | 'stderr'>('stdout')
@@ -242,7 +244,9 @@ export default function JobManagement() {
           runTime: formatDuration(runTime),
           directory: job.work_dir || job.directory || '-',
           account: job.account || '-',
-          timeLimit: job.time_limit || 0
+          timeLimit: job.time_limit || 0,
+          isContainer: job.is_container || false,
+          containerImage: job.container_image || ''
         }
       })
       
@@ -262,6 +266,8 @@ export default function JobManagement() {
         ? jobList.filter((j: Job) => j.user === user?.username)
         : jobList
       
+      const containerJobsCount = currentJobs.filter((j: Job) => j.isContainer).length
+      
       setStats({
         running: currentJobs.filter((j: Job) => j.status === 'RUNNING').length,
         pending: currentJobs.filter((j: Job) => j.status === 'PENDING').length,
@@ -271,6 +277,11 @@ export default function JobManagement() {
         userHeld: currentJobs.filter((j: Job) => j.status === 'SUSPENDED').length,
         sysHeld: 0
       })
+      
+      // 如果有容器作业，在控制台输出统计
+      if (containerJobsCount > 0) {
+        console.log(`🐳 容器作业: ${containerJobsCount} / ${currentJobs.length}`)
+      }
     } catch (e: any) {
       Message.error(e.response?.data?.error || '加载作业列表失败')
     } finally {
@@ -628,6 +639,13 @@ export default function JobManagement() {
         const workdir = submitData.workdir || ''
         const command = submitData.command || ''
         
+        // 构建挂载列表，确保 /etc/slurm 总是被挂载
+        let mountPaths = '/etc/slurm:/etc/slurm'
+        if (mountDir) {
+          // 如果用户提供了额外的挂载，追加到默认挂载后面
+          mountPaths += ',' + mountDir
+        }
+        
         let script = '#!/bin/bash\n'
         script += `#SBATCH -J ${name}\n`
         script += `#SBATCH -p ${partition}\n`
@@ -648,31 +666,24 @@ export default function JobManagement() {
           script += `#SBATCH --gres=gpu:${gpus}\n`
         }
         
+        // 添加容器镜像到 SBATCH 参数中，这样 Slurm 会设置 SLURM_CONTAINER_IMAGE 环境变量
+        script += `#SBATCH --container-image=${containerImage}\n`
+        script += `#SBATCH --container-mounts=${mountPaths}\n`
+        if (workdir) {
+          script += `#SBATCH --container-workdir=${workdir}\n`
+        }
+        
         script += '\n'
         script += 'echo "Container job started: $(date)"\n'
         script += `echo "Image: ${containerImage}"\n`
         script += '\n'
         
         if (command) {
-          script += '# 交互模式 - 通过 Web Shell 连接到此作业节点\n'
-          script += `srun --container-image=${containerImage}`
-          if (mountDir) {
-            script += ` --container-mounts=${mountDir}`
-          }
-          if (workdir) {
-            script += ` --container-workdir=${workdir}`
-          }
-          script += ` bash -c "${command}"\n`
+          script += '# 执行用户命令\n'
+          script += `srun bash -c "${command}"\n`
         } else {
           script += '# 交互模式 - 通过 Web Shell 连接到此作业节点\n'
-          script += `srun --container-image=${containerImage}`
-          if (mountDir) {
-            script += ` --container-mounts=${mountDir}`
-          }
-          if (workdir) {
-            script += ` --container-workdir=${workdir}`
-          }
-          script += ' sleep infinity\n'
+          script += 'srun sleep infinity\n'
         }
         
         script += '\n'
@@ -682,7 +693,24 @@ export default function JobManagement() {
       }
       
       await axios.post('/jobs', submitData)
-      Message.success('作业提交成功')
+      
+      // 根据作业类型显示不同的成功提示
+      if (jobMode === 'container') {
+        Message.success({
+          content: (
+            <div>
+              <div style={{ fontWeight: 600, marginBottom: 4 }}>🐳 容器作业提交成功！</div>
+              <div style={{ fontSize: 12 }}>
+                作业运行后，可在作业列表中点击【🐳 进入容器】按钮进行交互操作
+              </div>
+            </div>
+          ),
+          duration: 5
+        })
+      } else {
+        Message.success('作业提交成功')
+      }
+      
       setSubmitOpen(false)
       submitForm.resetFields()
       loadJobs()
@@ -694,12 +722,37 @@ export default function JobManagement() {
   // 创建模板
   const handleCreateTemplate = async (values: any) => {
     try {
-      await axios.post('/app-templates', {
+      const templateData: any = {
         ...values,
-        jobType: templateJobType,
+        jobType: values.jobType || 'normal',
         owner: user?.username,
-        isPublic: false
-      })
+        isPublic: false,
+        memory: values.memory * 1024, // 转换为MB
+        time: values.time * 60, // 转换为分钟
+      }
+      
+      // 如果是容器作业，保存容器相关参数到 appParams
+      if (values.jobType === 'container') {
+        templateData.appParams = {
+          command: values.command || '',
+          mountDir: values.mountDir || '',
+          workdir: values.workdir || ''
+        }
+        // 容器作业不需要 moduleLoad, executable, inputFile
+        delete templateData.moduleLoad
+        delete templateData.executable
+        delete templateData.inputFile
+        delete templateData.scriptContent
+      } else {
+        // 普通作业保存脚本内容到 appParams
+        templateData.appParams = {
+          scriptContent: values.scriptContent || ''
+        }
+        // 普通作业不需要 containerImage
+        delete templateData.containerImage
+      }
+      
+      await axios.post('/app-templates', templateData)
       Message.success('模板创建成功')
       setCreateTemplateOpen(false)
       createTemplateForm.resetFields()
@@ -732,7 +785,7 @@ export default function JobManagement() {
       setCurrentTemplate(templateData)
       
       // 填充编辑表单
-      editTemplateForm.setFieldsValue({
+      const formValues: any = {
         name: templateData.name,
         appType: templateData.appType,
         jobType: templateData.jobType || 'normal',
@@ -745,18 +798,33 @@ export default function JobManagement() {
         gpus: templateData.gpus || 0,
         memory: Math.floor(templateData.memory / 1024), // 转换为GB
         time: Math.floor(templateData.time / 60), // 转换为小时
-        moduleLoad: templateData.moduleLoad,
-        executable: templateData.executable,
-        inputFile: templateData.inputFile,
-        containerImage: templateData.containerImage,
         showInQuick: templateData.showInQuick || false
-      })
+      }
       
+      // 根据作业类型填充不同的字段
+      if (templateData.jobType === 'container') {
+        // 容器作业
+        formValues.containerImage = templateData.containerImage
+        // 从 appParams 中恢复容器相关参数
+        if (templateData.appParams) {
+          formValues.command = templateData.appParams.command || ''
+          formValues.mountDir = templateData.appParams.mountDir || ''
+          formValues.workdir = templateData.appParams.workdir || ''
+        }
+      } else {
+        // 普通作业
+        formValues.moduleLoad = templateData.moduleLoad
+        formValues.executable = templateData.executable
+        formValues.inputFile = templateData.inputFile
+      }
+      
+      editTemplateForm.setFieldsValue(formValues)
       setEditTemplateOpen(true)
     } catch (e: any) {
       // 如果API失败，直接使用现有数据
       setCurrentTemplate(tpl)
-      editTemplateForm.setFieldsValue({
+      
+      const formValues: any = {
         name: tpl.name,
         appType: tpl.appType,
         jobType: tpl.jobType || 'normal',
@@ -769,12 +837,23 @@ export default function JobManagement() {
         gpus: tpl.gpus || 0,
         memory: Math.floor(tpl.memory / 1024),
         time: Math.floor(tpl.time / 60),
-        moduleLoad: tpl.moduleLoad,
-        executable: tpl.executable,
-        inputFile: tpl.inputFile,
-        containerImage: tpl.containerImage,
         showInQuick: tpl.showInQuick || false
-      })
+      }
+      
+      if (tpl.jobType === 'container') {
+        formValues.containerImage = tpl.containerImage
+        if (tpl.appParams) {
+          formValues.command = tpl.appParams.command || ''
+          formValues.mountDir = tpl.appParams.mountDir || ''
+          formValues.workdir = tpl.appParams.workdir || ''
+        }
+      } else {
+        formValues.moduleLoad = tpl.moduleLoad
+        formValues.executable = tpl.executable
+        formValues.inputFile = tpl.inputFile
+      }
+      
+      editTemplateForm.setFieldsValue(formValues)
       setEditTemplateOpen(true)
     }
   }, [editTemplateForm])
@@ -784,12 +863,30 @@ export default function JobManagement() {
     if (!currentTemplate) return
     
     try {
-      await axios.put(`/app-templates/${currentTemplate.id}`, {
+      const templateData: any = {
         ...values,
         memory: values.memory * 1024, // 转换为MB
         time: values.time * 60, // 转换为分钟
         owner: user?.username
-      })
+      }
+      
+      // 如果是容器作业，保存容器相关参数到 appParams
+      if (values.jobType === 'container') {
+        templateData.appParams = {
+          command: values.command || '',
+          mountDir: values.mountDir || '',
+          workdir: values.workdir || ''
+        }
+        // 容器作业不需要 moduleLoad, executable, inputFile
+        delete templateData.moduleLoad
+        delete templateData.executable
+        delete templateData.inputFile
+      } else {
+        // 普通作业不需要容器相关字段
+        delete templateData.containerImage
+      }
+      
+      await axios.put(`/app-templates/${currentTemplate.id}`, templateData)
       Message.success('模板更新成功')
       setEditTemplateOpen(false)
       editTemplateForm.resetFields()
@@ -820,64 +917,104 @@ export default function JobManagement() {
     })
   }, [modal, loadTemplates])
   const applyTemplate = useCallback((tpl: Template) => {
-    // 构建脚本内容
-    let scriptContent = '#!/bin/bash\n'
-    scriptContent += `#SBATCH -J ${tpl.name}\n`
-    scriptContent += `#SBATCH -p ${tpl.partition || 'compute'}\n`
-    scriptContent += `#SBATCH -N ${tpl.nodes || 1}\n`
-    scriptContent += `#SBATCH -n ${tpl.cpus}\n`
-    if (tpl.memory > 0) {
-      scriptContent += `#SBATCH --mem=${tpl.memory}M\n`
-    }
-    if (tpl.time > 0) {
-      const hours = Math.floor(tpl.time / 60)
-      const mins = tpl.time % 60
-      scriptContent += `#SBATCH -t ${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}:00\n`
-    }
-    if (tpl.gpus && tpl.gpus > 0) {
-      scriptContent += `#SBATCH --gres=gpu:${tpl.gpus}\n`
-    }
-    scriptContent += '\n'
-    
-    // 添加模块加载
-    if (tpl.moduleLoad) {
-      scriptContent += `module load ${tpl.moduleLoad}\n\n`
-    }
-    
-    // 添加执行命令
-    if (tpl.executable) {
-      if (tpl.inputFile) {
-        scriptContent += `srun ${tpl.executable} ${tpl.inputFile}\n`
-      } else {
-        scriptContent += `srun ${tpl.executable}\n`
-      }
+    // 检查是否是容器作业模板
+    if (tpl.jobType === 'container') {
+      // 容器作业模板
+      setJobMode('container')
+      
+      const memoryGB = Math.floor(tpl.memory / 1024) || 0
+      const timeHours = Math.floor(tpl.time / 60) || 0
+      const user = getUser()
+      
+      // 从 appParams 中获取容器相关参数
+      const mountDir = tpl.appParams?.mountDir || `/fs/home/${user?.username || 'username'}:/fs/home/${user?.username || 'username'}`
+      const workdir = tpl.appParams?.workdir || `/fs/home/${user?.username || 'username'}`
+      const command = tpl.appParams?.command || tpl.executable || ''
+      
+      submitForm.setFieldsValue({
+        name: tpl.name,
+        partition: tpl.partition || 'compute',
+        nodes: tpl.nodes || 1,
+        cpus: tpl.cpus,
+        memory: memoryGB,
+        time_hours: timeHours,
+        gpus: tpl.gpus || 0,
+        containerImage: tpl.containerImage || '',
+        mountDir: mountDir,
+        workdir: workdir,
+        command: command
+      })
+      
+      // 更新资源统计
+      setCurrentResources({
+        nodes: tpl.nodes || 1,
+        cpus: tpl.cpus,
+        gpus: tpl.gpus || 0,
+        memory: memoryGB
+      })
     } else {
-      scriptContent += 'srun ./my-program\n'
+      // 普通作业模板
+      setJobMode('normal')
+      
+      // 构建脚本内容
+      let scriptContent = '#!/bin/bash\n'
+      scriptContent += `#SBATCH -J ${tpl.name}\n`
+      scriptContent += `#SBATCH -p ${tpl.partition || 'compute'}\n`
+      scriptContent += `#SBATCH -N ${tpl.nodes || 1}\n`
+      scriptContent += `#SBATCH -n ${tpl.cpus}\n`
+      if (tpl.memory > 0) {
+        scriptContent += `#SBATCH --mem=${tpl.memory}M\n`
+      }
+      if (tpl.time > 0) {
+        const hours = Math.floor(tpl.time / 60)
+        const mins = tpl.time % 60
+        scriptContent += `#SBATCH -t ${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}:00\n`
+      }
+      if (tpl.gpus && tpl.gpus > 0) {
+        scriptContent += `#SBATCH --gres=gpu:${tpl.gpus}\n`
+      }
+      scriptContent += '\n'
+      
+      // 添加模块加载
+      if (tpl.moduleLoad) {
+        scriptContent += `module load ${tpl.moduleLoad}\n\n`
+      }
+      
+      // 添加执行命令
+      if (tpl.executable) {
+        if (tpl.inputFile) {
+          scriptContent += `srun ${tpl.executable} ${tpl.inputFile}\n`
+        } else {
+          scriptContent += `srun ${tpl.executable}\n`
+        }
+      } else {
+        scriptContent += 'srun ./my-program\n'
+      }
+      
+      const memoryGB = Math.floor(tpl.memory / 1024) || 0
+      const timeHours = Math.floor(tpl.time / 60) || 0
+      
+      submitForm.setFieldsValue({
+        name: tpl.name,
+        partition: tpl.partition || 'compute',
+        nodes: tpl.nodes || 1,
+        cpus: tpl.cpus,
+        memory: memoryGB,
+        time_hours: timeHours,
+        gpus: tpl.gpus || 0,
+        qos: '',
+        workdir: '',
+        script: scriptContent
+      })
+      
+      // 更新资源统计
+      setCurrentResources({
+        nodes: tpl.nodes || 1,
+        cpus: tpl.cpus,
+        gpus: tpl.gpus || 0,
+        memory: memoryGB
+      })
     }
-    
-    const memoryGB = Math.floor(tpl.memory / 1024) || 0
-    const timeHours = Math.floor(tpl.time / 60) || 0
-    
-    submitForm.setFieldsValue({
-      name: tpl.name,
-      partition: tpl.partition || 'compute',
-      nodes: tpl.nodes || 1,
-      cpus: tpl.cpus,
-      memory: memoryGB,
-      time_hours: timeHours,
-      gpus: tpl.gpus || 0,
-      qos: '',
-      workdir: '',
-      script: scriptContent
-    })
-    
-    // 更新资源统计
-    setCurrentResources({
-      nodes: tpl.nodes || 1,
-      cpus: tpl.cpus,
-      gpus: tpl.gpus || 0,
-      memory: memoryGB
-    })
     
     setSubmitTab('manual')
   }, [submitForm])
@@ -891,7 +1028,6 @@ export default function JobManagement() {
   // 获取作业日志
   const fetchJobLog = useCallback(async (job: Job) => {
     setJobLogLoading(true)
-    setJobLogOpen(true)
     try {
       const res = await axios.get(`/jobs/${job.id}/logs`)
       setJobLogContent({
@@ -909,6 +1045,13 @@ export default function JobManagement() {
     }
   }, [])
   
+  // 在打开详情后加载日志
+  useEffect(() => {
+    if (detailOpen && selectedJob) {
+      fetchJobLog(selectedJob)
+    }
+  }, [detailOpen, selectedJob, fetchJobLog])
+  
   // 打开目录
   const openDirectory = useCallback((job: Job) => {
     if (!job.directory || job.directory === '-') {
@@ -918,10 +1061,33 @@ export default function JobManagement() {
     navigate('/dashboard/files?path=' + encodeURIComponent(job.directory))
   }, [navigate])
   
+  // 进入容器 WebShell
+  const enterContainer = useCallback((job: Job) => {
+    if (!job.isContainer) {
+      Message.error('该作业不是容器作业')
+      return
+    }
+    if (job.status !== 'RUNNING') {
+      Message.error('只能连接正在运行的容器作业')
+      return
+    }
+    if (!job.nodeNames || job.nodeNames.length === 0) {
+      Message.error('无法获取作业节点信息')
+      return
+    }
+    
+    // 跳转到 WebShell 页面，并传递作业信息
+    const nodeParam = encodeURIComponent(job.nodeNames[0])
+    const jobIdParam = encodeURIComponent(String(job.id))
+    navigate(`/dashboard/webshell?node=${nodeParam}&jobId=${jobIdParam}&container=true`)
+  }, [navigate])
+  
   // 过滤作业
   const filteredJobs = jobs.filter(job => {
     if (statusFilter && job.status !== statusFilter) return false
     if (partitionFilter && job.partition !== partitionFilter) return false
+    if (containerFilter === 'container' && !job.isContainer) return false
+    if (containerFilter === 'normal' && job.isContainer) return false
     if (searchText.trim()) {
       const q = searchText.trim().toLowerCase()
       if (!job.name?.toLowerCase().includes(q) && !String(job.id).includes(q)) return false
@@ -976,7 +1142,17 @@ export default function JobManagement() {
     {
       title: '作业名称',
       dataIndex: 'name',
-      ellipsis: true
+      ellipsis: true,
+      render: (name, record) => (
+        <Space size="small">
+          {record.isContainer && (
+            <Tag color="cyan" icon={<DatabaseOutlined />} style={{ margin: 0, fontSize: 11, fontWeight: 600 }}>
+              🐳 容器
+            </Tag>
+          )}
+          <span>{name}</span>
+        </Space>
+      )
     },
     {
       title: '状态',
@@ -991,7 +1167,15 @@ export default function JobManagement() {
     {
       title: '作业类型',
       dataIndex: 'jobType',
-      width: 100
+      width: 120,
+      render: (jobType, record) => (
+        <Space size="small">
+          <span>{jobType}</span>
+          {record.isContainer && (
+            <span style={{ fontSize: 16 }}>🐳</span>
+          )}
+        </Space>
+      )
     },
     {
       title: '分区',
@@ -1020,10 +1204,10 @@ export default function JobManagement() {
     },
     {
       title: '操作',
-      width: 180,
+      width: 280,
       fixed: 'right',
       render: (_, record) => (
-        <Space size="small">
+        <Space size="small" wrap>
           <Button
             type="link"
             size="small"
@@ -1032,6 +1216,20 @@ export default function JobManagement() {
           >
             详情
           </Button>
+          {record.isContainer && record.status === 'RUNNING' && (
+            <Button
+              type="primary"
+              size="small"
+              icon={<DatabaseOutlined />}
+              onClick={() => enterContainer(record)}
+              style={{ 
+                background: '#13c2c2',
+                borderColor: '#13c2c2'
+              }}
+            >
+              🐳 进入容器
+            </Button>
+          )}
           {(record.status === 'RUNNING' || record.status === 'PENDING') &&
             (admin || record.user === user?.username) && (
             <Button
@@ -1077,7 +1275,12 @@ export default function JobManagement() {
       {/* 统计卡片 */}
       <Row gutter={16}>
         <Col span={4}>
-          <Card size="small" style={{ height: 120 }}>
+          <Card 
+            size="small" 
+            style={{ height: 120, cursor: 'pointer' }}
+            hoverable
+            onClick={() => setContainerFilter('all')}
+          >
             <Statistic
               title="作业总数"
               value={jobs.length}
@@ -1086,7 +1289,15 @@ export default function JobManagement() {
           </Card>
         </Col>
         <Col span={4}>
-          <Card size="small" style={{ height: 120 }}>
+          <Card 
+            size="small" 
+            style={{ height: 120, cursor: 'pointer' }}
+            hoverable
+            onClick={() => {
+              setStatusFilter('PENDING')
+              setPagination(prev => ({ ...prev, current: 1 }))
+            }}
+          >
             <Statistic
               title="等待资源"
               value={stats.pending}
@@ -1094,6 +1305,31 @@ export default function JobManagement() {
               valueStyle={{ fontSize: 28, fontWeight: 700, color: '#f59e0b' }}
             />
             <Tag color="warning" style={{ marginTop: 8 }}>等待</Tag>
+          </Card>
+        </Col>
+        <Col span={4}>
+          <Card 
+            size="small" 
+            style={{ height: 120, cursor: 'pointer' }}
+            hoverable
+            onClick={() => {
+              setContainerFilter('container')
+              setPagination(prev => ({ ...prev, current: 1 }))
+            }}
+          >
+            <Statistic
+              title="容器作业"
+              value={jobs.filter(j => j.isContainer).length}
+              prefix={<DatabaseOutlined />}
+              valueStyle={{ fontSize: 28, fontWeight: 700, color: '#13c2c2' }}
+            />
+            <Tag 
+              color="cyan" 
+              style={{ marginTop: 8 }}
+              icon={<DatabaseOutlined />}
+            >
+              🐳 容器
+            </Tag>
           </Card>
         </Col>
         <Col span={4}>
@@ -1279,6 +1515,20 @@ export default function JobManagement() {
             {partitions.map(p => (
               <Select.Option key={p} value={p}>{p}</Select.Option>
             ))}
+          </Select>
+          
+          <Select
+            placeholder="全部作业类型"
+            value={containerFilter}
+            onChange={(v) => {
+              setContainerFilter(v)
+              setPagination(prev => ({ ...prev, current: 1 }))
+            }}
+            style={{ width: 140 }}
+          >
+            <Select.Option value="all">全部作业</Select.Option>
+            <Select.Option value="container">🐳 容器作业</Select.Option>
+            <Select.Option value="normal">⚙️ 普通作业</Select.Option>
           </Select>
         </Space>
       </Card>
@@ -1640,8 +1890,25 @@ export default function JobManagement() {
                   ) : (
                     // 容器作业表单
                     <div style={{ padding: '16px', background: '#f5f5f5', borderRadius: 8 }}>
-                      <div style={{ marginBottom: 12, fontSize: 13, color: '#666', lineHeight: 1.6 }}>
-                        容器作业支持使用Docker/Singularity镜像运行作业。
+                      <div style={{ 
+                        marginBottom: 16, 
+                        padding: 12,
+                        background: 'linear-gradient(135deg, #e6fffb 0%, #b5f5ec 100%)',
+                        border: '1px solid #87e8de',
+                        borderRadius: 8,
+                        display: 'flex',
+                        alignItems: 'start',
+                        gap: 10
+                      }}>
+                        <DatabaseOutlined style={{ fontSize: 20, color: '#13c2c2', marginTop: 2 }} />
+                        <div>
+                          <div style={{ fontSize: 14, color: '#006d75', fontWeight: 600, marginBottom: 4 }}>
+                            🐳 容器作业说明
+                          </div>
+                          <div style={{ fontSize: 12, color: '#08979c', lineHeight: 1.6 }}>
+                            容器作业支持使用 Docker/Singularity 镜像运行。提交后可通过"进入容器"按钮连接到运行中的容器进行交互操作。
+                          </div>
+                        </div>
                       </div>
                       <Form
                         form={submitForm}
@@ -1776,26 +2043,42 @@ export default function JobManagement() {
                         </Form.Item>
                         
                         <div style={{ 
-                          padding: '8px 12px', 
-                          background: '#fffbe6', 
-                          border: '1px solid #ffe58f',
-                          borderRadius: 4,
+                          padding: '10px 14px', 
+                          background: '#fff7e6', 
+                          border: '1px solid #ffd591',
+                          borderRadius: 6,
                           marginBottom: 16
                         }}>
-                          <Space>
-                            <span style={{ fontSize: 16 }}>💡</span>
-                            <Text type="secondary" style={{ fontSize: 12 }}>
-                              留空 = 交互模式（sleep infinity），可通过【进入容器】连接
-                            </Text>
+                          <Space align="start">
+                            <span style={{ fontSize: 18 }}>💡</span>
+                            <div>
+                              <div style={{ fontSize: 12, fontWeight: 600, color: '#ad6800', marginBottom: 4 }}>
+                                提示
+                              </div>
+                              <Text type="secondary" style={{ fontSize: 12, lineHeight: 1.5 }}>
+                                • 留空命令 = 交互模式（sleep infinity），可通过【🐳 进入容器】按钮连接<br/>
+                                • 填写命令 = 批处理模式，运行指定命令后自动退出
+                              </Text>
+                            </div>
                           </Space>
                         </div>
                         
                         <Form.Item>
                           <Space>
-                            <Button type="primary" htmlType="submit">
-                              提交容器作业
+                            <Button 
+                              type="primary" 
+                              htmlType="submit"
+                              icon={<DatabaseOutlined />}
+                              size="large"
+                              style={{
+                                background: '#13c2c2',
+                                borderColor: '#13c2c2',
+                                fontWeight: 600
+                              }}
+                            >
+                              🐳 提交容器作业
                             </Button>
-                            <Button onClick={() => submitForm.resetFields()}>
+                            <Button onClick={() => submitForm.resetFields()} size="large">
                               重置
                             </Button>
                           </Space>
@@ -2054,68 +2337,24 @@ export default function JobManagement() {
             {({ getFieldValue }) =>
               getFieldValue('jobType') === 'container' ? (
                 <Form.Item label="容器镜像" name="containerImage" rules={[{ required: true, message: '请选择容器镜像' }]}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <Select
-                      placeholder="1. 选择项目"
-                      onChange={(value) => {
-                        setSelectedProject(value)
-                        setSelectedRepo('')
-                        setImageTags([])
-                        loadRepositories(value)
-                      }}
-                      showSearch
-                      loading={loadingImages}
-                    >
-                      {harborProjects.map((p: any) => (
-                        <Select.Option key={p.name} value={p.name}>
-                          {p.name}
-                        </Select.Option>
-                      ))}
-                    </Select>
-                    
-                    {selectedProject && (
-                      <Select
-                        placeholder="2. 选择仓库"
-                        onChange={(value) => {
-                          setSelectedRepo(value)
-                          loadImageTags(selectedProject, value)
-                        }}
-                        showSearch
-                        loading={loadingImages}
-                        disabled={!selectedProject}
-                      >
-                        {harborRepositories.map((r: any) => (
-                          <Select.Option key={r.name} value={r.name}>
-                            {r.name.replace(`${selectedProject}/`, '')}
-                          </Select.Option>
-                        ))}
-                      </Select>
-                    )}
-                    
-                    {selectedRepo && imageTags.length > 0 && (
-                      <Select
-                        placeholder="3. 选择标签"
-                        onChange={(tag) => {
-                          const fullImage = `${selectedProject}/${selectedRepo.replace(`${selectedProject}/`, '')}:${tag}`
-                          createTemplateForm.setFieldsValue({ containerImage: fullImage })
-                        }}
-                        showSearch
-                        loading={loadingImages}
-                        disabled={!selectedRepo}
-                      >
-                        {imageTags.map((tag: string) => (
-                          <Select.Option key={tag} value={tag}>
-                            {tag}
-                          </Select.Option>
-                        ))}
-                      </Select>
-                    )}
-                    
-                    <Input
-                      placeholder="或直接输入完整镜像地址: harbor.example.com/library/pytorch:latest"
-                      style={{ marginTop: 4 }}
-                    />
-                  </div>
+                  <Select
+                    placeholder="选择容器镜像"
+                    showSearch
+                    loading={loadingAvailableImages}
+                    onDropdownVisibleChange={(open) => {
+                      if (open && availableImages.length === 0) {
+                        loadAvailableImages()
+                      }
+                    }}
+                    filterOption={(input, option) =>
+                      (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                    }
+                    options={availableImages.map(img => ({
+                      label: img.displayName,
+                      value: img.imagePath
+                    }))}
+                    style={{ width: '100%' }}
+                  />
                 </Form.Item>
               ) : null
             }
@@ -2171,17 +2410,41 @@ export default function JobManagement() {
           >
             {({ getFieldValue }) =>
               getFieldValue('jobType') === 'container' ? (
-                <Form.Item
-                  label="启动命令"
-                  name="command"
-                  rules={[{ required: true, message: '请输入启动命令' }]}
-                >
-                  <TextArea
-                    rows={6}
-                    placeholder="python train.py --epochs 100"
-                    style={{ fontFamily: 'monospace', fontSize: 12 }}
-                  />
-                </Form.Item>
+                <>
+                  <Form.Item 
+                    label="挂载目录" 
+                    name="mountDir"
+                    tooltip="格式：宿主机路径:容器内路径，多个用逗号分隔"
+                  >
+                    <Input 
+                      placeholder={`/fs/home/${getUser()?.username || 'username'}:/fs/home/${getUser()?.username || 'username'}`}
+                      style={{ fontFamily: 'monospace', fontSize: 12 }}
+                    />
+                  </Form.Item>
+                  
+                  <Form.Item 
+                    label="工作目录" 
+                    name="workdir"
+                    tooltip="容器内的工作目录"
+                  >
+                    <Input 
+                      placeholder={`/fs/home/${getUser()?.username || 'username'}`}
+                      style={{ fontFamily: 'monospace', fontSize: 12 }}
+                    />
+                  </Form.Item>
+                  
+                  <Form.Item
+                    label="启动命令"
+                    name="command"
+                    tooltip="留空表示交互模式"
+                  >
+                    <TextArea
+                      rows={6}
+                      placeholder="python train.py --epochs 100&#10;&#10;留空 = 交互模式（可通过【进入容器】连接）"
+                      style={{ fontFamily: 'monospace', fontSize: 12 }}
+                    />
+                  </Form.Item>
+                </>
               ) : (
                 <Form.Item
                   label="脚本内容"
@@ -2558,9 +2821,62 @@ echo "Job finished: $(date)"`}
           >
             {({ getFieldValue }) =>
               getFieldValue('jobType') === 'container' ? (
-                <Form.Item label="容器镜像" name="containerImage">
-                  <Input placeholder="harbor.example.com/library/pytorch:latest" />
-                </Form.Item>
+                <>
+                  <Form.Item label="容器镜像" name="containerImage" rules={[{ required: true, message: '请选择容器镜像' }]}>
+                    <Select
+                      placeholder="选择容器镜像"
+                      showSearch
+                      loading={loadingAvailableImages}
+                      onDropdownVisibleChange={(open) => {
+                        if (open && availableImages.length === 0) {
+                          loadAvailableImages()
+                        }
+                      }}
+                      filterOption={(input, option) =>
+                        (option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+                      }
+                      options={availableImages.map(img => ({
+                        label: img.displayName,
+                        value: img.imagePath
+                      }))}
+                      style={{ width: '100%' }}
+                    />
+                  </Form.Item>
+                  
+                  <Form.Item 
+                    label="挂载目录" 
+                    name="mountDir"
+                    tooltip="格式：宿主机路径:容器内路径，多个用逗号分隔"
+                  >
+                    <Input 
+                      placeholder={`/fs/home/${getUser()?.username || 'username'}:/fs/home/${getUser()?.username || 'username'}`}
+                      style={{ fontFamily: 'monospace', fontSize: 12 }}
+                    />
+                  </Form.Item>
+                  
+                  <Form.Item 
+                    label="工作目录" 
+                    name="workdir"
+                    tooltip="容器内的工作目录"
+                  >
+                    <Input 
+                      placeholder={`/fs/home/${getUser()?.username || 'username'}`}
+                      style={{ fontFamily: 'monospace', fontSize: 12 }}
+                    />
+                  </Form.Item>
+                  
+                  <Form.Item
+                    label="启动命令"
+                    name="command"
+                    tooltip="留空表示交互模式"
+                  >
+                    <TextArea
+                      rows={6}
+                      placeholder="python train.py --epochs 100&#10;&#10;留空 = 交互模式（可通过【进入容器】连接）"
+                      style={{ fontFamily: 'monospace', fontSize: 12 }}
+                    />
+                  </Form.Item>
+                </>
               ) : (
                 <>
                   <Form.Item label="模块加载" name="moduleLoad">
@@ -2618,27 +2934,37 @@ echo "Job finished: $(date)"`}
         onCancel={() => {
           setDetailOpen(false)
           setSelectedJob(null)
+          setJobLogContent({stdout: '', stderr: ''})
+          setLogType('stdout')
         }}
-        width={800}
+        width={900}
         footer={
           <Space>
             <Button onClick={() => {
               setDetailOpen(false)
               setSelectedJob(null)
+              setJobLogContent({stdout: '', stderr: ''})
+              setLogType('stdout')
             }}>
               关闭
             </Button>
-            {selectedJob && (
+            {selectedJob?.isContainer && selectedJob.status === 'RUNNING' && (
               <Button 
                 type="primary"
-                icon={<EyeOutlined />}
+                icon={<DatabaseOutlined />}
                 onClick={() => {
                   if (selectedJob) {
-                    fetchJobLog(selectedJob)
+                    enterContainer(selectedJob)
                   }
                 }}
+                style={{
+                  background: '#13c2c2',
+                  borderColor: '#13c2c2',
+                  fontWeight: 600
+                }}
+                size="large"
               >
-                查看日志
+                🐳 进入容器
               </Button>
             )}
             {selectedJob && (selectedJob.status === 'RUNNING' || selectedJob.status === 'PENDING') &&
@@ -2662,11 +2988,53 @@ echo "Job finished: $(date)"`}
       >
         {selectedJob && (
           <div>
+            {/* 容器作业运行提示 */}
+            {selectedJob.isContainer && selectedJob.status === 'RUNNING' && (
+              <div style={{
+                marginBottom: 16,
+                padding: 14,
+                background: 'linear-gradient(135deg, #e6fffb 0%, #b5f5ec 100%)',
+                border: '2px solid #13c2c2',
+                borderRadius: 10,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12
+              }}>
+                <DatabaseOutlined style={{ fontSize: 28, color: '#13c2c2' }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: '#006d75', marginBottom: 4 }}>
+                    🐳 容器作业正在运行
+                  </div>
+                  <div style={{ fontSize: 12, color: '#08979c' }}>
+                    点击右下角的"🐳 进入容器"按钮可以连接到运行中的容器进行交互操作
+                  </div>
+                </div>
+              </div>
+            )}
+            
             <Row gutter={[16, 16]}>
               <Col span={12}>
                 <div style={{ marginBottom: 8 }}>
                   <strong style={{ color: '#64748b' }}>作业名:</strong>
-                  <div style={{ marginTop: 4 }}>{selectedJob.name}</div>
+                  <div style={{ marginTop: 4 }}>
+                    <Space size="small">
+                      {selectedJob.name}
+                      {selectedJob.isContainer && (
+                        <Tag 
+                          color="cyan" 
+                          icon={<DatabaseOutlined />} 
+                          style={{ 
+                            margin: 0,
+                            fontSize: 12,
+                            fontWeight: 600,
+                            padding: '4px 8px'
+                          }}
+                        >
+                          🐳 容器作业
+                        </Tag>
+                      )}
+                    </Space>
+                  </div>
                 </div>
               </Col>
               <Col span={12}>
@@ -2703,6 +3071,35 @@ echo "Job finished: $(date)"`}
                   <div style={{ marginTop: 4 }}>{selectedJob.jobType}</div>
                 </div>
               </Col>
+              {selectedJob.isContainer && selectedJob.containerImage && (
+                <Col span={24}>
+                  <div style={{ 
+                    marginBottom: 8,
+                    padding: 12,
+                    background: 'linear-gradient(135deg, #e6fffb 0%, #b5f5ec 100%)',
+                    border: '1px solid #87e8de',
+                    borderRadius: 8
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                      <DatabaseOutlined style={{ fontSize: 16, color: '#13c2c2' }} />
+                      <strong style={{ color: '#006d75', fontSize: 13 }}>容器镜像:</strong>
+                    </div>
+                    <div style={{ marginTop: 4 }}>
+                      <code style={{ 
+                        fontSize: 12, 
+                        background: '#fff', 
+                        padding: '6px 10px', 
+                        borderRadius: 4,
+                        border: '1px solid #b5f5ec',
+                        display: 'inline-block',
+                        wordBreak: 'break-all'
+                      }}>
+                        {selectedJob.containerImage}
+                      </code>
+                    </div>
+                  </div>
+                </Col>
+              )}
               <Col span={12}>
                 <div style={{ marginBottom: 8 }}>
                   <strong style={{ color: '#64748b' }}>节点数:</strong>
@@ -2760,105 +3157,73 @@ echo "Job finished: $(date)"`}
                 </Col>
               )}
             </Row>
-          </div>
-        )}
-      </Modal>
-
-      {/* 作业日志查看弹窗 */}
-      <Modal
-        title={
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span>📋 作业日志 - {selectedJob?.id}</span>
-            <Space size={4} style={{
-              background: '#f5f5f5',
-              borderRadius: 6,
-              padding: 2
-            }}>
-              <Button
-                type={logType === 'stdout' ? 'primary' : 'text'}
-                size="small"
-                onClick={() => setLogType('stdout')}
-                style={{
-                  fontSize: '0.8rem',
-                  height: 28
-                }}
-              >
-                标准输出
-              </Button>
-              <Button
-                type={logType === 'stderr' ? 'primary' : 'text'}
-                size="small"
-                onClick={() => setLogType('stderr')}
-                style={{
-                  fontSize: '0.8rem',
-                  height: 28
-                }}
-              >
-                错误输出
-              </Button>
-            </Space>
-          </div>
-        }
-        open={jobLogOpen}
-        onCancel={() => {
-          setJobLogOpen(false)
-          setJobLogContent({stdout: '', stderr: ''})
-          setLogType('stdout')
-        }}
-        width={900}
-        footer={
-          <Space>
-            <Button onClick={() => {
-              setJobLogOpen(false)
-              setJobLogContent({stdout: '', stderr: ''})
-              setLogType('stdout')
-            }}>
-              关闭
-            </Button>
-            <Button
-              onClick={() => {
-                const content = logType === 'stdout' ? jobLogContent.stdout : jobLogContent.stderr
-                const blob = new Blob([content], { type: 'text/plain' })
-                const url = URL.createObjectURL(blob)
-                const a = document.createElement('a')
-                a.href = url
-                a.download = `job-${selectedJob?.id}-${logType}.log`
-                a.click()
-                URL.revokeObjectURL(url)
-              }}
-            >
-              下载日志
-            </Button>
-          </Space>
-        }
-      >
-        {jobLogLoading ? (
-          <div style={{ 
-            display: 'flex', 
-            justifyContent: 'center', 
-            alignItems: 'center',
-            minHeight: 400 
-          }}>
-            <Space direction="vertical" align="center">
-              <SyncOutlined spin style={{ fontSize: 32, color: '#1890ff' }} />
-              <div>加载日志中...</div>
-            </Space>
-          </div>
-        ) : (
-          <div style={{
-            background: '#1e1e1e',
-            borderRadius: 6,
-            padding: 16,
-            maxHeight: 500,
-            overflowY: 'auto',
-            fontFamily: 'Monaco, Menlo, "Courier New", monospace',
-            fontSize: 12,
-            lineHeight: 1.6,
-            color: '#d4d4d4',
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'break-word'
-          }}>
-            {logType === 'stdout' ? jobLogContent.stdout : jobLogContent.stderr}
+            
+            {/* 日志区域 */}
+            <div style={{ marginTop: 24, borderTop: '1px solid #e8e8e8', paddingTop: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                <strong style={{ color: '#64748b' }}>📋 作业日志</strong>
+                <Space size={4}>
+                  <Button
+                    type={logType === 'stdout' ? 'primary' : 'default'}
+                    size="small"
+                    onClick={() => {
+                      setLogType('stdout')
+                      if (selectedJob && !jobLogContent.stdout) {
+                        fetchJobLog(selectedJob)
+                      }
+                    }}
+                  >
+                    标准输出
+                  </Button>
+                  <Button
+                    type={logType === 'stderr' ? 'primary' : 'default'}
+                    size="small"
+                    onClick={() => {
+                      setLogType('stderr')
+                      if (selectedJob && !jobLogContent.stderr) {
+                        fetchJobLog(selectedJob)
+                      }
+                    }}
+                  >
+                    错误输出
+                  </Button>
+                  <Button
+                    size="small"
+                    icon={<ReloadOutlined />}
+                    onClick={() => selectedJob && fetchJobLog(selectedJob)}
+                    loading={jobLogLoading}
+                  >
+                    刷新
+                  </Button>
+                </Space>
+              </div>
+              {jobLogLoading ? (
+                <div style={{ textAlign: 'center', padding: '40px 0', background: '#fafafa', borderRadius: 6 }}>
+                  <Spin />
+                  <div style={{ marginTop: 8, color: '#888' }}>加载日志中...</div>
+                </div>
+              ) : (
+                <pre
+                  style={{
+                    background: '#1e1e1e',
+                    color: '#e8e8e8',
+                    padding: 16,
+                    borderRadius: 6,
+                    maxHeight: 400,
+                    overflowY: 'auto',
+                    fontSize: 12,
+                    lineHeight: 1.6,
+                    margin: 0,
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                  }}
+                >
+                  {logType === 'stdout' 
+                    ? (jobLogContent.stdout || '（暂无标准输出日志）') 
+                    : (jobLogContent.stderr || '（暂无错误日志）')}
+                </pre>
+              )}
+            </div>
           </div>
         )}
       </Modal>

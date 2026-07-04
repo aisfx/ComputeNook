@@ -94,6 +94,7 @@ func GetJobs(c *gin.Context) {
 				"partition":   "normal",
 				"job_state":   "RUNNING",
 				"nodes":       "node01",
+				"node_names":  []string{"node01"},
 				"cpus":        4,
 				"submit_time": now - 3600,
 				"start_time":  now - 3000,
@@ -109,6 +110,7 @@ func GetJobs(c *gin.Context) {
 				"partition":   "normal",
 				"job_state":   "COMPLETED",
 				"nodes":       "node02",
+				"node_names":  []string{"node02"},
 				"cpus":        8,
 				"submit_time": now - 7200,
 				"start_time":  now - 6000,
@@ -124,6 +126,7 @@ func GetJobs(c *gin.Context) {
 				"partition":   "gpu",
 				"job_state":   "PENDING",
 				"nodes":       "",
+				"node_names":  []string{},
 				"cpus":        16,
 				"submit_time": now - 600,
 				"start_time":  0,
@@ -143,6 +146,7 @@ func GetJobs(c *gin.Context) {
 				"partition":   "compute",
 				"job_state":   "RUNNING",
 				"nodes":       "node03,node04",
+				"node_names":  []string{"node03", "node04"},
 				"cpus":        32,
 				"submit_time": now - 5400,
 				"start_time":  now - 4800,
@@ -206,8 +210,12 @@ func GetJobs(c *gin.Context) {
 		}
 		// 计算节点数：nodes 字段是逗号分隔的节点名列表
 		numNodes := 0
+		var nodeNames []string
 		if job.Nodes != "" {
-			numNodes = len(strings.Split(job.Nodes, ","))
+			nodeNames = strings.Split(job.Nodes, ",")
+			numNodes = len(nodeNames)
+		} else {
+			nodeNames = []string{}
 		}
 		allJobs = append(allJobs, map[string]interface{}{
 			"job_id":          job.JobID,
@@ -217,6 +225,7 @@ func GetJobs(c *gin.Context) {
 			"partition":       job.Partition,
 			"job_state":       job.GetJobState(),
 			"nodes":           job.Nodes,
+			"node_names":      nodeNames,
 			"num_nodes":       numNodes,
 			"cpus":            job.GetCPUs(),
 			"submit_time":     job.GetSubmitTime(),
@@ -615,10 +624,11 @@ func SubmitJob(c *gin.Context) {
 	logger.Info("Job submission request: name=%s, partition=%s, workdir=%s, script_length=%d",
 		req.Name, req.Partition, workDir, len(req.Script))
 
-	// 如果脚本中包含 --container-image，自动注入 enroot Harbor 认证凭证
+	// 如果脚本中包含 --container-image，自动注入 enroot Harbor 认证凭证和容器挂载
 	script := req.Script
 	if strings.Contains(script, "--container-image") {
 		script = injectEnrootCredentials(script)
+		script = injectContainerMounts(script)
 	}
 
 	// 构建作业提交参数
@@ -755,6 +765,61 @@ chmod 600 "$CRED_FILE"
 	}
 	// 没有 shebang，直接前置
 	return credSnippet + script
+}
+
+// injectContainerMounts 在容器作业脚本中自动添加 --container-mounts 参数
+// 确保 /etc/slurm:/etc/slurm 总是被挂载到容器内，使容器可以访问 Slurm 配置
+func injectContainerMounts(script string) string {
+	// 在 #SBATCH --container-image 行后添加或合并 --container-mounts
+	lines := strings.Split(script, "\n")
+	var result []string
+	var foundContainerMounts bool
+	
+	for i, line := range lines {
+		// 检查是否已有 --container-mounts 且包含 /etc/slurm
+		if strings.Contains(line, "#SBATCH") && strings.Contains(line, "--container-mounts") {
+			if strings.Contains(line, "/etc/slurm:/etc/slurm") {
+				// 已经包含 /etc/slurm，保持原样
+				logger.Info("injectContainerMounts: --container-mounts already contains /etc/slurm, keeping as is")
+				result = append(result, line)
+				foundContainerMounts = true
+			} else {
+				// 已有 --container-mounts 但不包含 /etc/slurm，追加到现有挂载
+				mountsLine := strings.TrimSpace(line)
+				if strings.HasSuffix(mountsLine, ",") {
+					mountsLine += "/etc/slurm:/etc/slurm"
+				} else {
+					mountsLine += ",/etc/slurm:/etc/slurm"
+				}
+				result = append(result, mountsLine)
+				foundContainerMounts = true
+				logger.Info("injectContainerMounts: appended /etc/slurm to existing --container-mounts")
+			}
+			continue
+		}
+		
+		result = append(result, line)
+		
+		// 如果是 --container-image 行且后面没有 --container-mounts，则添加
+		if !foundContainerMounts && strings.Contains(line, "#SBATCH") && strings.Contains(line, "--container-image") {
+			// 检查下一行是否是 --container-mounts
+			hasNextMounts := false
+			if i+1 < len(lines) {
+				nextLine := strings.TrimSpace(lines[i+1])
+				if strings.Contains(nextLine, "#SBATCH") && strings.Contains(nextLine, "--container-mounts") {
+					hasNextMounts = true
+				}
+			}
+			
+			if !hasNextMounts {
+				result = append(result, "#SBATCH --container-mounts=/etc/slurm:/etc/slurm")
+				foundContainerMounts = true
+				logger.Info("injectContainerMounts: added --container-mounts=/etc/slurm:/etc/slurm")
+			}
+		}
+	}
+	
+	return strings.Join(result, "\n")
 }
 
 // GetJobLogs 获取作业日志
