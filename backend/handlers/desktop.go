@@ -207,11 +207,68 @@ func RecoverDesktopSessions() {
 	if err != nil {
 		return
 	}
-	for _, s := range sessions {
-		if (s.Status == "running" || s.Status == "pending") && s.SlurmJobID > 0 {
-			go pollDesktopJob(s.ID, s.SlurmJobID, s.Username)
-		}
+
+	homeBase := os.Getenv("HOME_BASE_PATH")
+	if homeBase == "" {
+		homeBase = "/home"
 	}
+
+	for i, s := range sessions {
+		if s.SlurmJobID <= 0 {
+			continue
+		}
+		if s.Status != "running" && s.Status != "pending" {
+			continue
+		}
+
+		// 先检查状态文件，如果已有 status=running 则直接更新 session
+		statusFile := fmt.Sprintf("%s/%s/.desktop/%d.status", homeBase, s.Username, s.ID)
+		if data, err := os.ReadFile(statusFile); err == nil {
+			content := string(data)
+			if strings.Contains(content, "status=running") && s.Status != "running" {
+				// 解析端口和节点
+				wsPort, tcpPort := 0, 0
+				node := ""
+				for _, line := range strings.Split(content, "\n") {
+					parts := strings.SplitN(line, "=", 2)
+					if len(parts) != 2 {
+						continue
+					}
+					switch strings.TrimSpace(parts[0]) {
+					case "ws_port":
+						if p, e := strconv.Atoi(strings.TrimSpace(parts[1])); e == nil {
+							wsPort = p
+						}
+					case "tcp_port":
+						if p, e := strconv.Atoi(strings.TrimSpace(parts[1])); e == nil {
+							tcpPort = p
+						}
+					case "node":
+						if v := strings.TrimSpace(parts[1]); v != "" {
+							node = v
+						}
+					}
+				}
+				sessions[i].Status = "running"
+				if node != "" {
+					sessions[i].Address = node
+				}
+				if wsPort > 0 {
+					sessions[i].VNCPort = wsPort
+				}
+				if tcpPort > 0 {
+					sessions[i].XpraPort = tcpPort
+				} else if wsPort > 0 {
+					sessions[i].XpraPort = wsPort
+				}
+				logger.Info("RecoverDesktopSessions: restored session %d to running state from status file", s.ID)
+			}
+		}
+
+		go pollDesktopJob(sessions[i].ID, s.SlurmJobID, s.Username)
+	}
+
+	_ = saveDesktopSessions(sessions)
 }
 
 // GET /api/desktop/sessions
@@ -421,8 +478,8 @@ func StartDesktopSession(c *gin.Context) {
 		GPUs:      session.GPUs,
 		TimeLimit: timeLimit,
 		WorkDir:   fmt.Sprintf("%s/%s", homeBase, username.(string)),
-		Output:    fmt.Sprintf("%s/%s/.desktop/%d.out", homeBase, username.(string), session.ID),
-		Error:     fmt.Sprintf("%s/%s/.desktop/%d.err", homeBase, username.(string), session.ID),
+		Output:    fmt.Sprintf("%s/%s/.desktop/job-%%j.out", homeBase, username.(string)),
+		Error:     fmt.Sprintf("%s/%s/.desktop/job-%%j.err", homeBase, username.(string)),
 		Username:  username.(string),
 	})
 	if err != nil {
@@ -1063,7 +1120,20 @@ func GetDesktopSessionLogs(c *gin.Context) {
 	if homeBase == "" {
 		homeBase = "/home"
 	}
-	logFile := fmt.Sprintf("%s/%s/.desktop/%d.%s", homeBase, session.Username, id, logType)
+
+	// 优先读取按 job ID 命名的日志（新格式：job-{jobID}.out/err）
+	// 如果 session 有 SlurmJobID，用新格式；否则兼容旧格式（session ID）
+	var logFile string
+	if session.SlurmJobID > 0 {
+		logFile = fmt.Sprintf("%s/%s/.desktop/job-%d.%s", homeBase, session.Username, session.SlurmJobID, logType)
+		// 如果新格式文件不存在，回退到旧格式
+		if _, err := os.Stat(logFile); os.IsNotExist(err) {
+			logFile = fmt.Sprintf("%s/%s/.desktop/%d.%s", homeBase, session.Username, id, logType)
+		}
+	} else {
+		logFile = fmt.Sprintf("%s/%s/.desktop/%d.%s", homeBase, session.Username, id, logType)
+	}
+
 	data, err := os.ReadFile(logFile)
 	if err != nil {
 		if os.IsNotExist(err) {
