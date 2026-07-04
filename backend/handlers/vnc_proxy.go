@@ -2,10 +2,12 @@ package handlers
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -459,6 +461,89 @@ func XpraHTTPProxy(c *gin.Context) {
 			c.Header(k, v)
 		}
 	}
+
+	// 对根路径的 HTML 响应注入自适应脚本
+	contentType := resp.Header.Get("Content-Type")
+	isHTML := strings.Contains(contentType, "text/html")
+	isRoot := subPath == "/" || subPath == "/index.html"
+
+	if isHTML && isRoot {
+		// 读取全部响应体
+		bodyBytes, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			c.Status(resp.StatusCode)
+			return
+		}
+		body := string(bodyBytes)
+
+		// 注入脚本：禁用浏览器缩放、强制 canvas 填满视口、修复鼠标坐标
+		injectScript := `<script>
+// ComputeNook: 自适应分辨率和鼠标坐标修复
+(function() {
+  // 禁用页面缩放
+  var meta = document.querySelector('meta[name=viewport]');
+  if (!meta) {
+    meta = document.createElement('meta');
+    meta.name = 'viewport';
+    document.head.appendChild(meta);
+  }
+  meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no';
+
+  function fixCanvas() {
+    var canvas = document.getElementById('canvas') || document.querySelector('canvas');
+    if (!canvas) return;
+
+    // 强制 canvas 填满视口，无滚动条
+    document.body.style.overflow = 'hidden';
+    document.body.style.margin = '0';
+    document.body.style.padding = '0';
+    document.documentElement.style.overflow = 'hidden';
+
+    var w = window.innerWidth;
+    var h = window.innerHeight;
+
+    // 设置 canvas 的 CSS 尺寸铺满
+    canvas.style.position = 'fixed';
+    canvas.style.top = '0';
+    canvas.style.left = '0';
+    canvas.style.width = w + 'px';
+    canvas.style.height = h + 'px';
+    canvas.style.cursor = 'default';
+  }
+
+  // 页面加载后修复
+  window.addEventListener('load', function() {
+    fixCanvas();
+    // 持续监听直到 canvas 出现
+    var tries = 0;
+    var timer = setInterval(function() {
+      fixCanvas();
+      if (++tries > 60) clearInterval(timer);
+    }, 500);
+  });
+
+  // 窗口大小改变时重新修复
+  window.addEventListener('resize', fixCanvas);
+})();
+</script>`
+
+		// 在 </head> 前注入，如果没有 </head> 则在 </body> 前注入
+		if strings.Contains(body, "</head>") {
+			body = strings.Replace(body, "</head>", injectScript+"</head>", 1)
+		} else if strings.Contains(body, "</body>") {
+			body = strings.Replace(body, "</body>", injectScript+"</body>", 1)
+		} else {
+			body = body + injectScript
+		}
+
+		// 移除 Content-Length（因为内容变了）
+		c.Header("Content-Length", "")
+		c.Header("Content-Type", "text/html; charset=utf-8")
+		c.Status(resp.StatusCode)
+		c.Writer.WriteString(body)
+		return
+	}
+
 	c.Status(resp.StatusCode)
 
 	buf := make([]byte, 32*1024)
