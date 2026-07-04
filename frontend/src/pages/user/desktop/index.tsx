@@ -311,7 +311,9 @@ export default function RemoteDesktop() {
 
   const openNoVNC = () => {
     if (!selectedSession) return
-    window.open(`/api/desktop/novnc/${selectedSession.id}`, '_blank')
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token') || ''
+    // 使用后端已注册的 xpra-html 代理路由，内嵌 Xpra HTML5 客户端
+    window.open(`/api/desktop/sessions/${selectedSession.id}/xpra-html/?token=${token}`, '_blank')
   }
 
   const openXpra = () => {

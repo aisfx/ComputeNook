@@ -786,6 +786,9 @@ func pollDesktopJob(sessionID int, jobID int64, username string) {
 		homeBase = "/home"
 	}
 	statusFile := fmt.Sprintf("%s/%s/.desktop/%d.status", homeBase, username, sessionID)
+	
+	logger.Info("pollDesktopJob: Starting poll for session %d, job %d, user %s", sessionID, jobID, username)
+	logger.Info("pollDesktopJob: Status file path: %s", statusFile)
 
 	setStatus := func(status string) {
 		sessions, _ := loadDesktopSessions()
