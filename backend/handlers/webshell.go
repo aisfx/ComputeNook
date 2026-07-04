@@ -168,15 +168,19 @@ func ConnectWebShell(c *gin.Context) {
 	hasPrivateKey := keyErr == nil && privateKey != ""
 	hasPassword := password != ""
 	
+	// 记录详细的认证信息
+	log.Printf("ConnectWebShell: user=%s, userID=%s, keyErr=%v, hasPrivateKey=%v, hasPassword=%v", 
+		username, userID, keyErr, hasPrivateKey, hasPassword)
+	
 	// 如果既没有私钥又没有密码，要求密码认证
 	if !hasPrivateKey && !hasPassword {
-		log.Printf("ConnectWebShell: No authentication method provided for user %s", username)
+		log.Printf("ConnectWebShell: No authentication method provided for user %s (keyErr: %v)", username, keyErr)
 		// 发送需要认证的消息
 		conn.WriteJSON(map[string]interface{}{
 			"type": "auth_required",
 			"data": map[string]interface{}{
 				"message": "需要密码认证",
-				"reason":  "no_private_key",
+				"reason":  fmt.Sprintf("请先上传密钥或提供密码 (keyErr: %v)", keyErr),
 			},
 		})
 		conn.Close()
@@ -464,17 +468,22 @@ func getUserPrivateKey(userID string) (string, error) {
 	// 从用户目录加载私钥
 	keyPath := filepath.Join("keys", userID, "id_rsa")
 	
+	log.Printf("getUserPrivateKey: Looking for key at: %s", keyPath)
+	
 	// 检查文件是否存在
 	if _, err := os.Stat(keyPath); os.IsNotExist(err) {
-		return "", fmt.Errorf("private key not found for user %s", userID)
+		log.Printf("getUserPrivateKey: Private key file not found at %s", keyPath)
+		return "", fmt.Errorf("private key not found for user %s (path: %s)", userID, keyPath)
 	}
 	
 	// 读取私钥文件
 	keyBytes, err := os.ReadFile(keyPath)
 	if err != nil {
+		log.Printf("getUserPrivateKey: Failed to read key file: %v", err)
 		return "", fmt.Errorf("failed to read private key: %w", err)
 	}
 	
+	log.Printf("getUserPrivateKey: Successfully loaded private key for user %s (%d bytes)", userID, len(keyBytes))
 	return string(keyBytes), nil
 }
 
