@@ -19,7 +19,7 @@ export const authAPI = {
     return res.data
   },
   getCaptcha: async () => {
-    const res = await axios.get('/captcha')
+    const res = await axios.get('/captcha/new')
     return res.data
   },
 }

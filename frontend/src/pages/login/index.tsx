@@ -40,7 +40,12 @@ export default function LoginPage() {
   async function loadCaptcha() {
     try {
       const data = await authAPI.getCaptcha()
-      if (data?.captchaId) setCaptcha(data)
+      if (data?.captchaId) {
+        setCaptcha({
+          captchaId: data.captchaId,
+          captchaImage: `/api/captcha/${data.captchaId}`
+        })
+      }
     } catch {
       // 验证码可选，失败不影响登录
     }
