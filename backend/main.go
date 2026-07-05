@@ -350,6 +350,12 @@ func main() {
 
 			// 连接测试
 			webshell.POST("/nodes/:node_name/test", handlers.TestNodeConnection)
+
+			// 文件管理（远程节点SFTP）
+			webshell.POST("/files/list", handlers.WebShellListFiles)
+			webshell.POST("/files/upload", handlers.WebShellUploadFile)
+			webshell.GET("/files/download", handlers.WebShellDownloadFile)
+			webshell.POST("/files/delete", handlers.WebShellDeleteFile)
 		}
 
 		// 远程桌面 API
@@ -430,6 +436,9 @@ func main() {
 		{
 			dashboard.GET("/stats", cache.CacheMiddleware(cache.PrefixDashboard+"stats:", 30*time.Second), handlers.GetDashboardStats)
 			dashboard.GET("/nodes", cache.CacheMiddleware(cache.PrefixDashboard+"nodes:", 30*time.Second), handlers.GetDashboardNodes)
+			// 前端新增接口（返回空数据或从监控接口获取）
+			dashboard.GET("/node-metrics", cache.CacheMiddleware(cache.PrefixDashboard+"node-metrics:", 30*time.Second), handlers.GetDashboardNodeMetrics)
+			dashboard.GET("/alerts", cache.CacheMiddleware(cache.PrefixDashboard+"alerts:", 30*time.Second), handlers.GetDashboardAlerts)
 		}
 		
 		// 用户 Dashboard API（兼容性路由）
@@ -455,6 +464,7 @@ func main() {
 			monitoringAdmin.GET("/node-metrics", cache.CacheMiddleware(cache.PrefixMonitoring+"node-metrics:", 15*time.Second), handlers.GetNodeExporterMetrics)
 			monitoringAdmin.GET("/local-metrics", cache.CacheMiddleware(cache.PrefixMonitoring+"local-metrics:", 15*time.Second), handlers.GetLocalMetrics)
 			monitoringAdmin.GET("/mgmt-services", cache.CacheMiddleware(cache.PrefixMonitoring+"mgmt-services:", 15*time.Second), handlers.GetMgmtServices)
+			monitoringAdmin.GET("/services", cache.CacheMiddleware(cache.PrefixMonitoring+"mgmt-services:", 15*time.Second), handlers.GetMgmtServices) // 别名
 			monitoringAdmin.GET("/rack", handlers.GetRackLayout)
 			monitoringAdmin.POST("/rack", handlers.CreateRack)
 			monitoringAdmin.PUT("/rack/:id", handlers.UpdateRack)
@@ -514,6 +524,7 @@ func main() {
 			registry.DELETE("/projects/:project/repositories/:repo/tags/:tag", handlers.DeleteTag)
 			registry.POST("/images/save", handlers.SaveContainerImage)
 			registry.GET("/images/save/task/:task_id", handlers.GetSaveImageTask)
+			registry.GET("/images/save/tasks", handlers.ListSaveImageTasks)
 		}
 	}
 
