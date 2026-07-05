@@ -174,7 +174,7 @@ func (c *Client) CreateAccount(account *Account) error {
 	associationBody := map[string]interface{}{
 		"association_condition": map[string]interface{}{
 			"accounts": []string{account.Name},
-			"clusters": []string{"cluster"},
+			"clusters": []string{GetDefaultClusterName()},
 		},
 	}
 
