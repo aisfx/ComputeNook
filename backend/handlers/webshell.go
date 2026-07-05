@@ -809,3 +809,370 @@ func generateRSAKeyPair(comment string) (string, string, error) {
 
 	return pubStr, string(privPEMBytes), nil
 }
+
+// ── WebShell 文件管理API（通过SSH/SFTP远程管理）────────────────────────
+
+// WebShellListFilesRequest 列出远程文件请求
+type WebShellListFilesRequest struct {
+	Node string `json:"node"`
+	Path string `json:"path"`
+}
+
+// RemoteFileInfo 远程文件信息
+type RemoteFileInfo struct {
+	Name        string `json:"name"`
+	Path        string `json:"path"`
+	IsDir       bool   `json:"is_dir"`
+	Size        int64  `json:"size"`
+	ModTime     string `json:"mod_time"`
+	Permissions string `json:"permissions"`
+}
+
+// WebShellListFiles 列出远程目录文件
+func WebShellListFiles(c *gin.Context) {
+	// 获取用户信息
+	userInterface, exists := c.Get("user")
+	if !exists {
+		log.Printf("WebShellListFiles: User not authenticated")
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+	user := userInterface.(map[string]interface{})
+	username, _ := user["username"].(string)
+	
+	// 安全地获取 userID，可能是 string 或 float64
+	var userID string
+	switch v := user["uid"].(type) {
+	case string:
+		userID = v
+	case float64:
+		userID = fmt.Sprintf("%.0f", v)
+	case int:
+		userID = fmt.Sprintf("%d", v)
+	default:
+		log.Printf("WebShellListFiles: Invalid uid type: %T", user["uid"])
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid user ID"})
+		return
+	}
+	
+	var req WebShellListFilesRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		log.Printf("WebShellListFiles: Invalid request: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		return
+	}
+
+	log.Printf("WebShellListFiles: user=%s, userID=%s, node=%s, path=%s", username, userID, req.Node, req.Path)
+
+	// 获取节点配置
+	node, err := getNodeByName(req.Node)
+	if err != nil {
+		log.Printf("WebShellListFiles: Node not found: %s, error: %v", req.Node, err)
+		c.JSON(http.StatusNotFound, gin.H{"error": "node not found"})
+		return
+	}
+
+	// 创建SSH连接
+	client, err := createSSHClientForFiles(node, username, userID)
+	if err != nil {
+		log.Printf("WebShellListFiles: SSH connection failed: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "SSH connection failed: " + err.Error()})
+		return
+	}
+	defer client.Close()
+
+	// 创建SFTP客户端
+	sftpClient, err := webshell.NewSFTPClient(client)
+	if err != nil {
+		log.Printf("WebShellListFiles: SFTP init failed: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "SFTP init failed: " + err.Error()})
+		return
+	}
+	defer sftpClient.Close()
+
+	// 列出文件
+	files, err := sftpClient.ReadDir(req.Path)
+	if err != nil {
+		log.Printf("WebShellListFiles: Read dir failed for path %s: %v", req.Path, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "read dir failed: " + err.Error()})
+		return
+	}
+
+	log.Printf("WebShellListFiles: Successfully listed %d files in %s", len(files), req.Path)
+
+	// 转换为响应格式
+	result := make([]RemoteFileInfo, 0, len(files))
+	for _, file := range files {
+		result = append(result, RemoteFileInfo{
+			Name:        file.Name(),
+			Path:        filepath.Join(req.Path, file.Name()),
+			IsDir:       file.IsDir(),
+			Size:        file.Size(),
+			ModTime:     file.ModTime().Format("2006-01-02 15:04:05"),
+			Permissions: file.Mode().String(),
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{"files": result})
+}
+
+// WebShellUploadFile 上传文件到远程节点
+func WebShellUploadFile(c *gin.Context) {
+	// 获取用户信息
+	userInterface, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+	user := userInterface.(map[string]interface{})
+	username, _ := user["username"].(string)
+	
+	// 安全地获取 userID
+	var userID string
+	switch v := user["uid"].(type) {
+	case string:
+		userID = v
+	case float64:
+		userID = fmt.Sprintf("%.0f", v)
+	case int:
+		userID = fmt.Sprintf("%d", v)
+	default:
+		log.Printf("WebShellUploadFile: Invalid uid type: %T", user["uid"])
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid user ID"})
+		return
+	}
+	
+	nodeName := c.PostForm("node")
+	remotePath := c.PostForm("path")
+	
+	file, err := c.FormFile("file")
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "no file uploaded"})
+		return
+	}
+
+	// 获取节点配置
+	node, err := getNodeByName(nodeName)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "node not found"})
+		return
+	}
+
+	// 创建SSH连接
+	client, err := createSSHClientForFiles(node, username, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "SSH connection failed"})
+		return
+	}
+	defer client.Close()
+
+	// 创建SFTP客户端
+	sftpClient, err := webshell.NewSFTPClient(client)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "SFTP init failed"})
+		return
+	}
+	defer sftpClient.Close()
+
+	// 打开上传的文件
+	src, err := file.Open()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "open file failed"})
+		return
+	}
+	defer src.Close()
+
+	// 写入远程文件
+	dstPath := filepath.Join(remotePath, file.Filename)
+	if err := sftpClient.Upload(src, dstPath); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "upload failed: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "upload success", "path": dstPath})
+}
+
+// WebShellDownloadFile 从远程节点下载文件
+func WebShellDownloadFile(c *gin.Context) {
+	// 获取用户信息
+	userInterface, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+	user := userInterface.(map[string]interface{})
+	username, _ := user["username"].(string)
+	
+	// 安全地获取 userID
+	var userID string
+	switch v := user["uid"].(type) {
+	case string:
+		userID = v
+	case float64:
+		userID = fmt.Sprintf("%.0f", v)
+	case int:
+		userID = fmt.Sprintf("%d", v)
+	default:
+		log.Printf("WebShellDownloadFile: Invalid uid type: %T", user["uid"])
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid user ID"})
+		return
+	}
+	
+	nodeName := c.Query("node")
+	remotePath := c.Query("path")
+	
+	// 获取节点配置
+	node, err := getNodeByName(nodeName)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "node not found"})
+		return
+	}
+
+	// 创建SSH连接
+	client, err := createSSHClientForFiles(node, username, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "SSH connection failed"})
+		return
+	}
+	defer client.Close()
+
+	// 创建SFTP客户端
+	sftpClient, err := webshell.NewSFTPClient(client)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "SFTP init failed"})
+		return
+	}
+	defer sftpClient.Close()
+
+	// 读取文件
+	data, err := sftpClient.Download(remotePath)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "download failed: " + err.Error()})
+		return
+	}
+
+	// 设置响应头
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filepath.Base(remotePath)))
+	c.Header("Content-Type", "application/octet-stream")
+	c.Data(http.StatusOK, "application/octet-stream", data)
+}
+
+// WebShellDeleteFile 删除远程文件
+func WebShellDeleteFile(c *gin.Context) {
+	// 获取用户信息
+	userInterface, exists := c.Get("user")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
+		return
+	}
+	user := userInterface.(map[string]interface{})
+	username, _ := user["username"].(string)
+	
+	// 安全地获取 userID
+	var userID string
+	switch v := user["uid"].(type) {
+	case string:
+		userID = v
+	case float64:
+		userID = fmt.Sprintf("%.0f", v)
+	case int:
+		userID = fmt.Sprintf("%d", v)
+	default:
+		log.Printf("WebShellDeleteFile: Invalid uid type: %T", user["uid"])
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid user ID"})
+		return
+	}
+	
+	var req struct {
+		Node string `json:"node"`
+		Path string `json:"path"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
+		return
+	}
+
+	// 获取节点配置
+	node, err := getNodeByName(req.Node)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "node not found"})
+		return
+	}
+
+	// 创建SSH连接
+	client, err := createSSHClientForFiles(node, username, userID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "SSH connection failed"})
+		return
+	}
+	defer client.Close()
+
+	// 创建SFTP客户端
+	sftpClient, err := webshell.NewSFTPClient(client)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "SFTP init failed"})
+		return
+	}
+	defer sftpClient.Close()
+
+	// 删除文件
+	if err := sftpClient.Remove(req.Path); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "delete failed: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "delete success"})
+}
+
+// 辅助函数：根据节点名称获取节点配置
+func getNodeByName(nodeName string) (NodeConfig, error) {
+	nodes, err := loadNodesFromEnv()
+	if err != nil {
+		return NodeConfig{}, err
+	}
+	
+	for _, node := range nodes {
+		if node.Name == nodeName {
+			return node, nil
+		}
+	}
+	
+	return NodeConfig{}, fmt.Errorf("node not found: %s", nodeName)
+}
+
+// 辅助函数：创建SSH客户端（用于文件管理）
+func createSSHClientForFiles(node NodeConfig, username string, userID string) (*gossh.Client, error) {
+	// 尝试从用户的 keys 目录读取私钥（使用 userID）
+	userKeyPath := filepath.Join("keys", userID, "id_rsa")
+	privKeyBytes, err := os.ReadFile(userKeyPath)
+	
+	if err != nil {
+		// 用户私钥不存在，返回友好的错误信息
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("私钥不存在，请先在 WebShell 页面生成或上传 SSH 密钥")
+		}
+		return nil, fmt.Errorf("读取私钥失败: %w", err)
+	}
+
+	signer, err := gossh.ParsePrivateKey(privKeyBytes)
+	if err != nil {
+		return nil, fmt.Errorf("解析私钥失败: %w", err)
+	}
+
+	config := &gossh.ClientConfig{
+		User: username,
+		Auth: []gossh.AuthMethod{
+			gossh.PublicKeys(signer),
+		},
+		HostKeyCallback: gossh.InsecureIgnoreHostKey(),
+		Timeout:         10 * time.Second,
+	}
+
+	addr := fmt.Sprintf("%s:%d", node.Host, node.Port)
+	client, err := gossh.Dial("tcp", addr, config)
+	if err != nil {
+		return nil, fmt.Errorf("SSH 连接失败: %w (请确保已将公钥部署到目标节点)", err)
+	}
+	
+	return client, nil
+}

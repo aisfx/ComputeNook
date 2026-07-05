@@ -1,11 +1,14 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Button, Space, Modal, Input, Radio, message as Message } from 'antd'
+import { Button, Space, Modal, Input, Radio, message as Message, Upload, Table, Breadcrumb, Tooltip, Select, notification } from 'antd'
+import type { UploadProps } from 'antd'
 import {
   PlusOutlined, CloseOutlined, SettingOutlined, KeyOutlined,
   ReloadOutlined, FullscreenOutlined, FullscreenExitOutlined,
   ClearOutlined, DisconnectOutlined, LeftOutlined, RightOutlined,
+  FolderOutlined, FileOutlined, DownloadOutlined, DeleteOutlined,
+  UploadOutlined, HomeOutlined, ArrowLeftOutlined, FileTextOutlined,
 } from '@ant-design/icons'
-import { getWsBase, getToken, getUser } from '@/utils/auth'
+import { getWsBase, getToken, getUser, getApiBase } from '@/utils/auth'
 import axios from 'axios'
 
 interface Node {
@@ -15,6 +18,15 @@ interface Node {
 interface ShellTab {
   id: string; node: Node; terminal: any; fitAddon: any
   websocket: WebSocket | null; connected: boolean; status: string
+}
+
+interface FileItem {
+  name: string
+  path: string
+  is_dir: boolean
+  size: number
+  mod_time: string
+  permissions: string
 }
 
 const THEMES: Record<string, { background: string; foreground: string; cursor: string }> = {
@@ -34,6 +46,30 @@ export default function WebShell() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [tabs, setTabs]                   = useState<ShellTab[]>([])
   const [activeTabId, setActiveTabId]     = useState('')
+  
+  // 文件管理器状态
+  const [filesPanelOpen, setFilesPanelOpen] = useState(false)
+  const [filesPanelWidth, setFilesPanelWidth] = useState(400)
+  const [currentNode, setCurrentNode]     = useState<Node | null>(null)
+  const [currentPath, setCurrentPath]     = useState('')
+  const [files, setFiles]                 = useState<FileItem[]>([])
+  const [filesLoading, setFilesLoading]   = useState(false)
+  const [uploadingFiles, setUploadingFiles] = useState<string[]>([])
+  
+  // 上传进度管理
+  interface UploadTask {
+    id: string
+    fileName: string
+    fileSize: number
+    uploadedSize: number
+    progress: number
+    speed: number
+    status: 'uploading' | 'paused' | 'completed' | 'error'
+    startTime: number
+    error?: string
+  }
+  const [uploadTasks, setUploadTasks] = useState<UploadTask[]>([])
+  const [showUploadPanel, setShowUploadPanel] = useState(false)
 
   const [authOpen, setAuthOpen]           = useState(false)
   const [authType, setAuthType]           = useState<'key' | 'password'>('key')
@@ -65,12 +101,74 @@ export default function WebShell() {
       if (s.theme)    setTheme(s.theme)
       if (s.cursorBlink !== undefined) setCursorBlink(s.cursorBlink)
     } catch { /**/ }
+    
     return () => {
       // eslint-disable-next-line react-hooks/exhaustive-deps
       tabs.forEach(t => { t.websocket?.close(); t.terminal?.dispose() })
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+  
+  // 单独处理容器作业提示，只显示一次
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search)
+    const jobIdParam = urlParams.get('jobId')
+    const isContainer = urlParams.get('container') === 'true'
+    
+    if (jobIdParam && isContainer) {
+      // 显示右下角通知，带关闭按钮
+      const timer = setTimeout(() => {
+        notification.info({
+          message: '🐳 容器连接步骤',
+          description: (
+            <div style={{ fontSize: 13, lineHeight: 1.8 }}>
+              <div>
+                <strong>1.</strong> 选择左侧登录节点<br/>
+                <strong>2.</strong> 进入作业：
+                <code style={{ 
+                  background: '#f0f0f0', 
+                  padding: '2px 6px', 
+                  borderRadius: 3,
+                  color: '#d4380d',
+                  fontSize: 11,
+                  marginLeft: 4
+                }}>
+                  srun --jobid={jobIdParam} --pty --overlap bash
+                </code><br/>
+                <strong>3.</strong> 查看容器：
+                <code style={{ 
+                  background: '#f0f0f0', 
+                  padding: '2px 6px', 
+                  borderRadius: 3,
+                  color: '#d4380d',
+                  fontSize: 11,
+                  marginLeft: 4
+                }}>
+                  enroot list
+                </code><br/>
+                <strong>4.</strong> 进入容器：
+                <code style={{ 
+                  background: '#f0f0f0', 
+                  padding: '2px 6px', 
+                  borderRadius: 3,
+                  color: '#d4380d',
+                  fontSize: 11,
+                  marginLeft: 4
+                }}>
+                  enroot start -w pyxis_{jobIdParam}.0 bash
+                </code>
+              </div>
+            </div>
+          ),
+          duration: 0, // 不自动关闭
+          placement: 'bottomRight',
+          style: { width: 480 }
+        })
+      }, 500)
+      
+      return () => clearTimeout(timer)
+    }
+  }, []) // 空依赖数组，只在组件挂载时执行一次
 
   // fullscreen: watch browser fullscreen change
   useEffect(() => {
@@ -87,6 +185,321 @@ export default function WebShell() {
       setNodes([{ name: 'ln0', host: 'localhost', port: 22, description: '登录节点', enabled: true }])
     }
   }
+
+  // ── 文件管理器功能 ────────────────────────────────────────
+  const loadFiles = useCallback(async (node: Node, path: string) => {
+    setFilesLoading(true)
+    try {
+      const res = await axios.post('/webshell/files/list', {
+        node: node.name,
+        path: path || `/home/${user?.username || ''}`
+      })
+      setFiles(res.data.files || [])
+    } catch (e: any) {
+      const errorMsg = e.response?.data?.error || '加载文件列表失败'
+      
+      // 如果是路径不存在错误，且不是根目录，尝试根目录
+      if (errorMsg.includes('does not exist') && path !== '/') {
+        Message.warning(`目录 ${path} 不存在，切换到根目录`)
+        setCurrentPath('/')
+        loadFiles(node, '/')
+        return
+      }
+      
+      // 如果是私钥相关错误，给出明确提示
+      if (errorMsg.includes('私钥') || errorMsg.includes('private key')) {
+        Message.error({
+          content: (
+            <div>
+              <div>{errorMsg}</div>
+              <div style={{ marginTop: 8, fontSize: 12 }}>
+                提示：请在 WebShell 页面点击"密钥管理"按钮生成或上传 SSH 密钥
+              </div>
+            </div>
+          ),
+          duration: 5000
+        })
+      } else {
+        Message.error(errorMsg)
+      }
+      
+      setFiles([])
+    } finally {
+      setFilesLoading(false)
+    }
+  }, [user])
+
+  const openFilesPanel = async (node: Node) => {
+    console.log('=== 打开文件管理面板 ===')
+    console.log('节点:', node)
+    console.log('当前用户(localStorage):', user)
+    
+    setCurrentNode(node)
+    setFilesPanelOpen(true)
+    
+    // 实时从后端获取用户信息（包含最新的 homeDir）
+    console.log('开始调用 /api/me 获取用户信息...')
+    try {
+      const res = await axios.get('/me')
+      console.log('/api/me 响应:', res.data)
+      const userData = res.data.data
+      console.log('解析的用户数据:', userData)
+      console.log('用户的 homeDir:', userData.homeDir)
+      console.log('用户的 home_dir:', userData.home_dir)
+      
+      const homePath = userData.homeDir || userData.home_dir || `/home/${userData.username || user?.username || ''}`
+      console.log('最终使用的 home 路径:', homePath)
+      
+      setCurrentPath(homePath)
+      loadFiles(node, homePath)
+    } catch (error) {
+      // 如果获取失败，使用本地用户信息
+      console.error('获取用户信息失败，使用本地缓存', error)
+      const homePath = user?.homeDir || `/home/${user?.username || ''}`
+      console.log('降级使用本地 home 路径:', homePath)
+      setCurrentPath(homePath)
+      loadFiles(node, homePath)
+    }
+  }
+
+  const changeDirectory = (path: string) => {
+    if (!currentNode) return
+    setCurrentPath(path)
+    loadFiles(currentNode, path)
+  }
+
+  const goBack = () => {
+    if (!currentPath || currentPath === '/') return
+    const parts = currentPath.split('/').filter(Boolean)
+    parts.pop()
+    const newPath = '/' + parts.join('/')
+    changeDirectory(newPath || '/')
+  }
+
+  const downloadFile = async (file: FileItem) => {
+    if (!currentNode || file.is_dir) return
+    try {
+      const token = getToken() || ''
+      // 下载需要完整 URL，因为不经过 axios 的 baseURL
+      const apiBase = getApiBase()
+      const url = `${apiBase}/api/webshell/files/download?node=${encodeURIComponent(currentNode.name)}&path=${encodeURIComponent(file.path)}&token=${token}`
+      const a = document.createElement('a')
+      a.href = url
+      a.download = file.name
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+    } catch (e: any) {
+      Message.error('下载失败')
+    }
+  }
+
+  const deleteFile = async (file: FileItem) => {
+    if (!currentNode) return
+    Modal.confirm({
+      title: '确认删除',
+      content: `确定要删除 "${file.name}" 吗？`,
+      okText: '删除',
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        try {
+          await axios.post('/webshell/files/delete', {
+            node: currentNode.name,
+            path: file.path
+          })
+          Message.success('删除成功')
+          loadFiles(currentNode, currentPath)
+        } catch (e: any) {
+          Message.error(e.response?.data?.error || '删除失败')
+        }
+      }
+    })
+  }
+
+  const uploadProps: UploadProps = {
+    name: 'file',
+    action: `${getApiBase()}/api/webshell/files/upload`,
+    headers: {
+      Authorization: `Bearer ${getToken()}`,
+    },
+    data: {
+      node: currentNode?.name || '',
+      path: currentPath,
+    },
+    showUploadList: false,
+    customRequest: async (options) => {
+      const { file, onProgress, onSuccess, onError } = options as any
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('node', currentNode?.name || '')
+      formData.append('path', currentPath)
+      
+      const taskId = `upload-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      const task: UploadTask = {
+        id: taskId,
+        fileName: file.name,
+        fileSize: file.size,
+        uploadedSize: 0,
+        progress: 0,
+        speed: 0,
+        status: 'uploading',
+        startTime: Date.now()
+      }
+      
+      setUploadTasks(prev => [...prev, task])
+      setShowUploadPanel(true)
+      
+      try {
+        const xhr = new XMLHttpRequest()
+        
+        // 进度回调
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            const progress = Math.round((e.loaded / e.total) * 100)
+            const elapsed = (Date.now() - task.startTime) / 1000 // 秒
+            const speed = elapsed > 0 ? e.loaded / elapsed : 0 // 字节/秒
+            
+            setUploadTasks(prev => prev.map(t => 
+              t.id === taskId 
+                ? { ...t, uploadedSize: e.loaded, progress, speed }
+                : t
+            ))
+            
+            onProgress?.({ percent: progress })
+          }
+        }
+        
+        // 完成回调
+        xhr.onload = () => {
+          if (xhr.status === 200) {
+            setUploadTasks(prev => prev.map(t => 
+              t.id === taskId 
+                ? { ...t, status: 'completed', progress: 100 }
+                : t
+            ))
+            Message.success(`${file.name} 上传成功`)
+            if (currentNode) loadFiles(currentNode, currentPath)
+            onSuccess?.(xhr.response, xhr)
+            
+            // 3秒后自动移除已完成的任务
+            setTimeout(() => {
+              setUploadTasks(prev => prev.filter(t => t.id !== taskId))
+            }, 3000)
+          } else {
+            throw new Error(xhr.statusText || '上传失败')
+          }
+        }
+        
+        // 错误回调
+        xhr.onerror = () => {
+          const error = '上传失败'
+          setUploadTasks(prev => prev.map(t => 
+            t.id === taskId 
+              ? { ...t, status: 'error', error }
+              : t
+          ))
+          Message.error(`${file.name} ${error}`)
+          onError?.(new Error(error))
+        }
+        
+        // 发送请求
+        xhr.open('POST', `${getApiBase()}/api/webshell/files/upload`)
+        xhr.setRequestHeader('Authorization', `Bearer ${getToken()}`)
+        xhr.send(formData)
+      } catch (err: any) {
+        const error = err.message || '上传失败'
+        setUploadTasks(prev => prev.map(t => 
+          t.id === taskId 
+            ? { ...t, status: 'error', error }
+            : t
+        ))
+        Message.error(`${file.name} ${error}`)
+        onError?.(err)
+      }
+    }
+  }
+
+  const formatFileSize = (bytes: number): string => {
+    if (!bytes || bytes === 0) return '-'
+    const units = ['B', 'KB', 'MB', 'GB', 'TB']
+    const i = Math.floor(Math.log(bytes) / Math.log(1024))
+    return (bytes / Math.pow(1024, i)).toFixed(1) + ' ' + units[i]
+  }
+  
+  const formatSpeed = (bytesPerSecond: number): string => {
+    return formatFileSize(bytesPerSecond) + '/s'
+  }
+  
+  const clearCompletedTasks = () => {
+    setUploadTasks(prev => prev.filter(t => t.status !== 'completed'))
+  }
+  
+  const removeTask = (taskId: string) => {
+    setUploadTasks(prev => prev.filter(t => t.id !== taskId))
+  }
+
+  const fileColumns = [
+    {
+      title: '名称',
+      dataIndex: 'name',
+      key: 'name',
+      render: (name: string, record: FileItem) => (
+        <Space 
+          style={{ cursor: 'pointer' }} 
+          onClick={() => record.is_dir && changeDirectory(record.path)}
+        >
+          {record.is_dir ? (
+            <FolderOutlined style={{ color: '#faad14', fontSize: 16 }} />
+          ) : (
+            <FileTextOutlined style={{ color: '#1890ff', fontSize: 16 }} />
+          )}
+          <span>{name}</span>
+        </Space>
+      ),
+    },
+    {
+      title: '大小',
+      dataIndex: 'size',
+      key: 'size',
+      width: 100,
+      render: (size: number, record: FileItem) => record.is_dir ? '-' : formatFileSize(size),
+    },
+    {
+      title: '权限',
+      dataIndex: 'permissions',
+      key: 'permissions',
+      width: 100,
+      render: (perm: string) => <code style={{ fontSize: 11 }}>{perm}</code>,
+    },
+    {
+      title: '操作',
+      key: 'action',
+      width: 120,
+      render: (_: any, record: FileItem) => (
+        <Space size="small">
+          {!record.is_dir && (
+            <Tooltip title="下载">
+              <Button
+                type="text"
+                size="small"
+                icon={<DownloadOutlined />}
+                onClick={() => downloadFile(record)}
+              />
+            </Tooltip>
+          )}
+          <Tooltip title="删除">
+            <Button
+              type="text"
+              size="small"
+              danger
+              icon={<DeleteOutlined />}
+              onClick={() => deleteFile(record)}
+            />
+          </Tooltip>
+        </Space>
+      ),
+    },
+  ]
 
   const checkPrivateKey = async () => {
     try { setHasKey(!!(await axios.get('/webshell/has-key')).data.has_key) } catch { /**/ }
@@ -170,6 +583,69 @@ export default function WebShell() {
     }
     ws.onerror = () => { terminal.writeln('\r\n\x1b[31m✗ Connection error\x1b[0m'); setTabs(prev => prev.map(t => t.id === tabId ? { ...t, connected: false, status: 'error' } : t)) }
     ws.onclose = () => { terminal.writeln('\r\n\x1b[33m─── Connection closed ───\x1b[0m'); setTabs(prev => prev.map(t => t.id === tabId ? { ...t, connected: false, status: 'disconnected' } : t)) }
+  }, [createTerm])
+
+  // 连接节点并进入容器
+  const connectAndEnterContainer = useCallback(async (node: Node, jobId: string) => {
+    const tabId = `tab-${Date.now()}`
+    setTabs(prev => [...prev, { id: tabId, node, terminal: null, fitAddon: null, websocket: null, connected: false, status: 'connecting' }])
+    setActiveTabId(tabId)
+    await new Promise(r => setTimeout(r, 130))
+
+    const inst = await createTerm(tabId)
+    if (!inst) { Message.error('创建终端失败'); return }
+    const { terminal, fitAddon } = inst
+
+    const params = new URLSearchParams({ 
+      node: node.name, 
+      token: getToken() || ''
+    })
+    
+    const ws = new WebSocket(`${getWsBase()}/api/webshell/connect?${params}`)
+    let containerEntered = false
+
+    ws.onopen = () => {
+      terminal.writeln(`\r\n\x1b[32m✓ Connected to ${node.name}  (${node.host})\x1b[0m`)
+      terminal.writeln(`\x1b[36m正在进入作业 ${jobId} 的容器...\x1b[0m\r\n`)
+      fitAddon.fit()
+      setTabs(prev => prev.map(t => t.id === tabId ? { ...t, terminal, fitAddon, websocket: ws, connected: true, status: 'connected' } : t))
+      ws.send(JSON.stringify({ type: 'resize', cols: terminal.cols, rows: terminal.rows }))
+      terminal.onData((d: string) => ws.readyState === WebSocket.OPEN && ws.send(JSON.stringify({ type: 'input', data: d })))
+      terminal.onResize(({ cols, rows }: { cols: number; rows: number }) => ws.readyState === WebSocket.OPEN && ws.send(JSON.stringify({ type: 'resize', cols, rows })))
+    }
+    ws.onmessage = e => {
+      try { 
+        const m = JSON.parse(e.data)
+        if (m.type === 'output') {
+          terminal.write(m.data)
+        } else if (m.type === 'connected') {
+          terminal.writeln(`\x1b[90m认证方式: ${m.data?.auth_method === 'private_key' ? '私钥' : '密码'}\x1b[0m\r\n`)
+          // 连接成功后，自动执行进入容器的命令
+          if (!containerEntered) {
+            containerEntered = true
+            setTimeout(() => {
+              // 使用 srun 进入容器
+              const enterCmd = `srun --jobid=${jobId} --pty bash\\n`
+              ws.send(JSON.stringify({ type: 'input', data: enterCmd }))
+            }, 500)
+          }
+        } else if (m.type === 'auth_required') {
+          terminal.writeln('\r\n\x1b[33m⚠ 需要密码认证\x1b[0m')
+          terminal.writeln('\x1b[90m提示：请先配置SSH密钥或使用密码连接\x1b[0m\r\n')
+          ws.close()
+          setTabs(prev => prev.map(t => t.id === tabId ? { ...t, connected: false, status: 'auth_required' } : t))
+        }
+      }
+      catch { terminal.write(e.data) }
+    }
+    ws.onerror = () => { 
+      terminal.writeln('\r\n\x1b[31m✗ Connection error\x1b[0m')
+      setTabs(prev => prev.map(t => t.id === tabId ? { ...t, connected: false, status: 'error' } : t))
+    }
+    ws.onclose = () => { 
+      terminal.writeln('\r\n\x1b[33m─── Connection closed ───\x1b[0m')
+      setTabs(prev => prev.map(t => t.id === tabId ? { ...t, connected: false, status: 'disconnected' } : t))
+    }
   }, [createTerm])
 
   const handleNodeClick = (node: Node) => { 
@@ -264,6 +740,21 @@ export default function WebShell() {
   }
 
   const activeTab = tabs.find(t => t.id === activeTabId)
+
+  // 当切换 tab 时，自动聚焦到终端
+  useEffect(() => {
+    if (!activeTabId) return
+    
+    const tab = tabs.find(t => t.id === activeTabId)
+    if (tab?.terminal) {
+      // 使用 requestAnimationFrame 确保 DOM 完全渲染后再聚焦
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          tab.terminal.focus()
+        }, 100)
+      })
+    }
+  }, [activeTabId, tabs])
 
   // ── 快捷键 ─────────────────────────────────────────────────
   // 用 ref 持有最新的 tabs / activeTabId，避免 stale closure
@@ -428,18 +919,32 @@ export default function WebShell() {
                 return (
                   <div
                     key={node.name}
-                    onClick={() => handleNodeClick(node)}
-                    style={{ padding: '9px 11px', marginBottom: 4, background: isConn ? '#f6ffed' : '#fff', border: `1px solid ${isConn ? '#b7eb8f' : '#e8e8e8'}`, borderRadius: 6, cursor: 'pointer', transition: 'all 0.15s' }}
-                    onMouseEnter={e => { if (!isConn) { e.currentTarget.style.borderColor = '#d9d9d9'; e.currentTarget.style.background = '#fafafa' } }}
-                    onMouseLeave={e => { if (!isConn) { e.currentTarget.style.borderColor = '#e8e8e8'; e.currentTarget.style.background = '#fff' } }}
+                    style={{ padding: '9px 11px', marginBottom: 4, background: isConn ? '#f6ffed' : '#fff', border: `1px solid ${isConn ? '#b7eb8f' : '#e8e8e8'}`, borderRadius: 6, transition: 'all 0.15s' }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <div style={{ minWidth: 0 }}>
+                      <div 
+                        style={{ minWidth: 0, flex: 1, cursor: 'pointer' }}
+                        onClick={() => handleNodeClick(node)}
+                      >
                         <div style={{ fontSize: 13, fontWeight: 600, color: '#1f2937' }}>{node.name}</div>
                         <div style={{ fontSize: 11, color: '#6b7280', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{node.host}</div>
                         {node.description && <div style={{ fontSize: 10, color: '#9ca3af', marginTop: 1 }}>{node.description}</div>}
                       </div>
-                      {isConn && <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#52c41a', marginLeft: 8, flexShrink: 0 }} />}
+                      <Space size={4}>
+                        {isConn && <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#52c41a', flexShrink: 0 }} />}
+                        <Tooltip title="文件管理">
+                          <Button
+                            type="text"
+                            size="small"
+                            icon={<FolderOutlined />}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              openFilesPanel(node)
+                            }}
+                            style={{ padding: '2px 4px', height: 24 }}
+                          />
+                        </Tooltip>
+                      </Space>
                     </div>
                   </div>
                 )
@@ -498,21 +1003,140 @@ export default function WebShell() {
 
               {/* xterm 容器 */}
               <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-                {tabs.map(tab => (
-                  <div
-                    key={tab.id}
-                    style={{ position: 'absolute', inset: 0, padding: 4, display: activeTabId === tab.id ? 'block' : 'none' }}
-                  >
+                {tabs.map(tab => {
+                  const isActive = activeTabId === tab.id
+                  return (
                     <div
-                      style={{ width: '100%', height: '100%' }}
-                      ref={el => { if (el) termRefs.current.set(tab.id, el as HTMLDivElement) }}
-                    />
-                  </div>
-                ))}
+                      key={tab.id}
+                      style={{ position: 'absolute', inset: 0, padding: 4, display: isActive ? 'block' : 'none' }}
+                      ref={el => {
+                        // 当容器显示时，自动聚焦终端
+                        if (el && isActive && tab.terminal) {
+                          requestAnimationFrame(() => {
+                            tab.terminal.focus()
+                          })
+                        }
+                      }}
+                    >
+                      <div
+                        style={{ width: '100%', height: '100%' }}
+                        ref={el => { if (el) termRefs.current.set(tab.id, el as HTMLDivElement) }}
+                      />
+                    </div>
+                  )
+                })}
               </div>
             </>
           )}
         </div>
+
+        {/* 文件管理面板 */}
+        {filesPanelOpen && (
+          <div style={{
+            width: filesPanelWidth,
+            borderLeft: '1px solid #e8e8e8',
+            background: '#fff',
+            display: 'flex',
+            flexDirection: 'column',
+            flexShrink: 0
+          }}>
+            {/* 文件面板头部 */}
+            <div style={{
+              padding: '10px 12px',
+              borderBottom: '1px solid #e8e8e8',
+              background: '#fafafa',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
+              <Space>
+                <FolderOutlined style={{ color: '#1890ff' }} />
+                <span style={{ fontSize: 13, fontWeight: 600 }}>文件管理</span>
+                {currentNode && (
+                  <span style={{ fontSize: 11, color: '#888' }}>({currentNode.name})</span>
+                )}
+              </Space>
+              <Button
+                type="text"
+                size="small"
+                icon={<CloseOutlined />}
+                onClick={() => setFilesPanelOpen(false)}
+              />
+            </div>
+
+            {/* 主机切换 */}
+            <div style={{ padding: '8px 12px', borderBottom: '1px solid #f0f0f0', background: '#fff' }}>
+              <div style={{ fontSize: 11, color: '#888', marginBottom: 4 }}>切换主机</div>
+              <Select
+                value={currentNode?.name}
+                onChange={(nodeName) => {
+                  const node = nodes.find(n => n.name === nodeName)
+                  if (node) openFilesPanel(node)
+                }}
+                style={{ width: '100%' }}
+                size="small"
+              >
+                {nodes.map(node => (
+                  <Select.Option key={node.name} value={node.name}>
+                    {node.name} - {node.host}
+                  </Select.Option>
+                ))}
+              </Select>
+            </div>
+
+            {/* 路径导航 */}
+            <div style={{ padding: '8px 12px', borderBottom: '1px solid #f0f0f0', background: '#fff' }}>
+              <Space size={4}>
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<ArrowLeftOutlined />}
+                  onClick={goBack}
+                  disabled={!currentPath || currentPath === '/'}
+                />
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<HomeOutlined />}
+                  onClick={() => changeDirectory(`/home/${user?.username || ''}`)}
+                />
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<ReloadOutlined />}
+                  onClick={() => currentNode && loadFiles(currentNode, currentPath)}
+                  loading={filesLoading}
+                />
+              </Space>
+              <div style={{ fontSize: 11, color: '#666', marginTop: 4, wordBreak: 'break-all' }}>
+                {currentPath || '/'}
+              </div>
+            </div>
+
+            {/* 上传区域 */}
+            <div style={{ padding: '8px 12px', borderBottom: '1px solid #f0f0f0', background: '#fff' }}>
+              <Upload.Dragger {...uploadProps} style={{ padding: '12px 0' }}>
+                <div style={{ fontSize: 11 }}>
+                  <UploadOutlined style={{ marginRight: 4 }} />
+                  拖拽文件到此处或点击上传
+                </div>
+              </Upload.Dragger>
+            </div>
+
+            {/* 文件列表 */}
+            <div style={{ flex: 1, overflow: 'auto' }}>
+              <Table
+                columns={fileColumns}
+                dataSource={files}
+                rowKey="path"
+                loading={filesLoading}
+                pagination={false}
+                size="small"
+                locale={{ emptyText: '目录为空' }}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── 认证弹窗 ── */}
@@ -740,6 +1364,169 @@ export default function WebShell() {
           </div>
         )}
       </Modal>
+
+      {/* 上传进度面板 */}
+      {uploadTasks.length > 0 && (
+        <div style={{
+          position: 'fixed',
+          bottom: 0,
+          right: filesPanelOpen ? filesPanelWidth + 20 : 20,
+          width: 420,
+          maxHeight: 300,
+          background: '#fff',
+          border: '1px solid #d9d9d9',
+          borderRadius: '8px 8px 0 0',
+          boxShadow: '0 -2px 8px rgba(0,0,0,0.15)',
+          transition: 'right 0.25s',
+          zIndex: 1000,
+          display: 'flex',
+          flexDirection: 'column'
+        }}>
+          {/* 头部 */}
+          <div style={{
+            padding: '8px 12px',
+            borderBottom: '1px solid #f0f0f0',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            background: '#fafafa',
+            borderRadius: '8px 8px 0 0'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <UploadOutlined style={{ color: '#1890ff' }} />
+              <span style={{ fontSize: 13, fontWeight: 600 }}>
+                传输列表 ({uploadTasks.filter(t => t.status === 'uploading').length}/{uploadTasks.length})
+              </span>
+            </div>
+            <Space size="small">
+              {uploadTasks.some(t => t.status === 'completed') && (
+                <Button
+                  type="text"
+                  size="small"
+                  onClick={clearCompletedTasks}
+                  style={{ fontSize: 11 }}
+                >
+                  清除已完成
+                </Button>
+              )}
+              <Button
+                type="text"
+                size="small"
+                icon={<CloseOutlined />}
+                onClick={() => setShowUploadPanel(false)}
+              />
+            </Space>
+          </div>
+
+          {/* 任务列表 */}
+          <div style={{
+            flex: 1,
+            overflowY: 'auto',
+            padding: 8
+          }}>
+            {uploadTasks.map(task => (
+              <div
+                key={task.id}
+                style={{
+                  padding: '10px 12px',
+                  marginBottom: 8,
+                  background: '#fafafa',
+                  borderRadius: 6,
+                  border: '1px solid #f0f0f0'
+                }}
+              >
+                {/* 文件名和状态 */}
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: 6
+                }}>
+                  <div style={{
+                    flex: 1,
+                    fontSize: 12,
+                    fontWeight: 500,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    marginRight: 8
+                  }}>
+                    <FileTextOutlined style={{ marginRight: 4, color: '#1890ff' }} />
+                    {task.fileName}
+                  </div>
+                  <div style={{ fontSize: 11 }}>
+                    {task.status === 'uploading' && (
+                      <span style={{ color: '#1890ff' }}>⏫ 上传中</span>
+                    )}
+                    {task.status === 'completed' && (
+                      <span style={{ color: '#52c41a' }}>✓ 完成</span>
+                    )}
+                    {task.status === 'error' && (
+                      <span style={{ color: '#ff4d4f' }}>✗ 失败</span>
+                    )}
+                    {task.status === 'paused' && (
+                      <span style={{ color: '#faad14' }}>⏸ 暂停</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* 进度条 */}
+                <div style={{
+                  width: '100%',
+                  height: 4,
+                  background: '#f0f0f0',
+                  borderRadius: 2,
+                  overflow: 'hidden',
+                  marginBottom: 6
+                }}>
+                  <div style={{
+                    width: `${task.progress}%`,
+                    height: '100%',
+                    background: task.status === 'error' ? '#ff4d4f' : 
+                               task.status === 'completed' ? '#52c41a' : '#1890ff',
+                    transition: 'width 0.3s'
+                  }} />
+                </div>
+
+                {/* 传输信息 */}
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  fontSize: 11,
+                  color: '#666'
+                }}>
+                  <div>
+                    {formatFileSize(task.uploadedSize)} / {formatFileSize(task.fileSize)}
+                    {task.status === 'uploading' && task.speed > 0 && (
+                      <span style={{ marginLeft: 8, color: '#1890ff' }}>
+                        {formatSpeed(task.speed)}
+                      </span>
+                    )}
+                  </div>
+                  <div>
+                    {task.progress}%
+                  </div>
+                </div>
+
+                {/* 错误信息 */}
+                {task.error && (
+                  <div style={{
+                    marginTop: 6,
+                    fontSize: 11,
+                    color: '#ff4d4f',
+                    background: '#fff2f0',
+                    padding: '4px 8px',
+                    borderRadius: 4
+                  }}>
+                    {task.error}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
