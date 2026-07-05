@@ -260,10 +260,10 @@ func GetCurrentUser(c *gin.Context) {
 		return
 	}
 
-	log.Printf("GetCurrentUser: Successfully retrieved user: %s", user.Username)
+	log.Printf("GetCurrentUser: Successfully retrieved user: %s (HomeDir: %s)", user.Username, user.HomeDir)
 	// 清除敏感字段再返回
 	user.Password = ""
-	user.HomeDir = ""
+	// 保留 HomeDir，前端需要用它来定位文件管理的起始目录
 	c.JSON(http.StatusOK, gin.H{"data": user})
 }
 

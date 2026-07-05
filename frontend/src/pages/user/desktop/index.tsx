@@ -34,9 +34,18 @@ interface ResourcePreset { label: string; cpus: number; memory: number }
 interface RemoteApp { id: number; name: string; icon?: string; cmd: string; modules?: string; desc?: string }
 
 const DESKTOP_ENVS = [
-  { value: 'xfce4', label: 'Xfce4', icon: '🪟' },
-  { value: 'gnome', label: 'GNOME', icon: '🔵' },
-  { value: 'kde',   label: 'KDE',   icon: '🟦' },
+  { value: 'xfce4', label: 'XFCE4桌面', icon: '🪟' },
+]
+
+const RESOLUTIONS = [
+  { value: 'auto', label: '自动（跟随浏览器窗口）' },
+  { value: '1920x1080', label: '1920×1080' },
+  { value: '1680x1050', label: '1680×1050' },
+  { value: '1600x900', label: '1600×900' },
+  { value: '1440x900', label: '1440×900' },
+  { value: '1366x768', label: '1366×768' },
+  { value: '1280x1024', label: '1280×1024' },
+  { value: '1280x720', label: '1280×720' },
 ]
 
 const STATUS_MAP: Record<string, { text: string; color: string }> = {
@@ -70,6 +79,7 @@ export default function RemoteDesktop() {
   // 表单
   const [createMode, setCreateMode]     = useState<'desktop' | 'app'>('desktop')
   const [desktopEnv, setDesktopEnv]     = useState('xfce4')
+  const [resolution, setResolution]     = useState('auto')
   const [sessionName, setSessionName]   = useState('')
   const [partition, setPartition]       = useState('')
   const [presetIndex, setPresetIndex]   = useState(1)
@@ -205,7 +215,7 @@ export default function RemoteDesktop() {
         type: createMode === 'desktop' ? desktopEnv : undefined,
         appCommand: createMode === 'app' ? appCommand : undefined,
         modules: createMode === 'app' ? modules : undefined,
-        resolution: 'auto',
+        resolution,
         duration,
         cpus: preset.cpus,
         memory: preset.memory,
@@ -225,7 +235,7 @@ export default function RemoteDesktop() {
   }
 
   const resetCreateForm = () => {
-    setSessionName(''); setCreateMode('desktop'); setDesktopEnv('xfce4')
+    setSessionName(''); setCreateMode('desktop'); setDesktopEnv('xfce4'); setResolution('auto')
     setAppCommand(''); setModules(''); setSelectedAppId(null)
     setDuration(4); setGpus(0); setPresetIndex(1)
   }
@@ -607,7 +617,7 @@ export default function RemoteDesktop() {
           <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 10 }}>会话模式</div>
           <div style={{ display: 'flex', gap: 12 }}>
             {[
-              { value: 'desktop', icon: '🖥️', label: '完整桌面', desc: '启动完整桌面环境（xfce4/gnome/kde）' },
+              { value: 'desktop', icon: '🖥️', label: '完整桌面', desc: '启动完整桌面环境（XFCE4）' },
               { value: 'app',     icon: '📦', label: '发布应用', desc: '直接启动单个应用，更轻量' },
             ].map(m => (
               <div
@@ -623,20 +633,38 @@ export default function RemoteDesktop() {
           </div>
         </div>
 
-        {/* 桌面环境选择 */}
+        {/* 桌面设置 */}
         {createMode === 'desktop' && (
           <div style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 8 }}>桌面环境</div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              {DESKTOP_ENVS.map(e => (
-                <div
-                  key={e.value}
-                  onClick={() => setDesktopEnv(e.value)}
-                  style={{ padding: '8px 16px', border: `1.5px solid ${desktopEnv === e.value ? '#1890ff' : '#e8e8e8'}`, borderRadius: 6, cursor: 'pointer', background: desktopEnv === e.value ? '#e6f7ff' : '#fff', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}
-                >
-                  {e.icon} {e.label}
-                </div>
-              ))}
+            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12, color: '#333' }}>桌面设置</div>
+            
+            {/* 桌面环境 */}
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 8 }}>桌面环境</div>
+              <Radio.Group value={desktopEnv} onChange={e => setDesktopEnv(e.target.value)}>
+                {DESKTOP_ENVS.map(e => (
+                  <Radio key={e.value} value={e.value}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      {e.icon} {e.label}
+                    </span>
+                  </Radio>
+                ))}
+              </Radio.Group>
+            </div>
+
+            {/* 分辨率 */}
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 6 }}>分辨率</div>
+              <Select 
+                value={resolution} 
+                onChange={setResolution} 
+                style={{ width: '100%' }}
+                placeholder="请选择分辨率"
+              >
+                {RESOLUTIONS.map(r => (
+                  <Select.Option key={r.value} value={r.value}>{r.label}</Select.Option>
+                ))}
+              </Select>
             </div>
           </div>
         )}

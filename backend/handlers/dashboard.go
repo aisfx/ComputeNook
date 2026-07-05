@@ -37,6 +37,10 @@ type DashboardStats struct {
 	TotalGPUs     int `json:"total_gpus"`
 	AllocatedGPUs int `json:"allocated_gpus"`
 	IdleGPUs      int `json:"idle_gpus"`
+	
+	// 用户统计（仅管理员可见）
+	TotalUsers  int `json:"totalUsers,omitempty"`
+	ActiveUsers int `json:"activeUsers,omitempty"`
 }
 
 // GetDashboardStats 获取仪表盘统计信息
@@ -113,6 +117,11 @@ func GetDashboardStats(c *gin.Context) {
 			AllocatedGPUs: clusterStats.AllocatedGPUs,
 			IdleGPUs:      clusterStats.IdleGPUs,
 		}
+		
+		// 获取用户统计（管理员专属）
+		totalUsers, activeUsers := getUserStatistics(client)
+		stats.TotalUsers = totalUsers
+		stats.ActiveUsers = activeUsers
 		
 		// 缓存30秒
 		mgr := cache.NewManager()
@@ -378,4 +387,59 @@ func GetUserDashboard(c *gin.Context) {
 		data.GPUInUse, data.GPUCards)
 	
 	c.JSON(http.StatusOK, gin.H{"data": data})
+}
+
+// getUserStatistics 获取用户统计信息（总用户数和活跃用户数）
+// 活跃用户定义为：最近7天内提交过作业的用户
+func getUserStatistics(client *slurm.Client) (totalUsers int, activeUsers int) {
+	// 获取所有用户（通过Slurm users API）
+	users, err := client.GetSlurmUsers()
+	if err != nil {
+		logger.Error("Failed to get users for statistics: %v", err)
+		return 0, 0
+	}
+	
+	totalUsers = len(users)
+	
+	// 获取最近的作业列表（最多1000条），统计活跃用户
+	jobs, err := client.GetJobs("", 0, 1000)
+	if err != nil {
+		logger.Error("Failed to get jobs for active user statistics: %v", err)
+		return totalUsers, 0
+	}
+	
+	// 统计最近7天内有作业的用户
+	sevenDaysAgo := time.Now().AddDate(0, 0, -7).Unix()
+	activeUserMap := make(map[string]bool)
+	
+	for _, job := range jobs {
+		// 检查作业提交时间或开始时间
+		submitTime := job.GetSubmitTime()
+		if submitTime > sevenDaysAgo {
+			activeUserMap[job.UserName] = true
+		}
+	}
+	
+	activeUsers = len(activeUserMap)
+	logger.Info("User statistics: total=%d, active=%d (last 7 days)", totalUsers, activeUsers)
+	
+	return totalUsers, activeUsers
+}
+
+// GetDashboardNodeMetrics 获取节点指标（用于前端新版仪表盘）
+func GetDashboardNodeMetrics(c *gin.Context) {
+	// 返回空数组，避免前端报错
+	// 如果需要实际数据，可以调用 GetNodeExporterMetrics
+	c.JSON(http.StatusOK, gin.H{
+		"data": []interface{}{},
+	})
+}
+
+// GetDashboardAlerts 获取告警信息（用于前端新版仪表盘）
+func GetDashboardAlerts(c *gin.Context) {
+	// 返回空数组，避免前端报错
+	// 如果需要实际告警，可以从 Prometheus 获取
+	c.JSON(http.StatusOK, gin.H{
+		"data": []interface{}{},
+	})
 }

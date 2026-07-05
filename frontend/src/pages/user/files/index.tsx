@@ -95,14 +95,13 @@ export default function FileManager() {
   const [saving, setSaving] = useState(false)
   
   // 加载目录
-  const loadDirectory = useCallback(async (path?: string) => {
-    const targetPath = path || currentPath
-    if (!targetPath) return
+  const loadDirectory = useCallback(async (path: string) => {
+    if (!path) return
     
     setLoading(true)
     setSelectedRowKeys([])
     try {
-      const res = await axios.get('/filemanager/list', { params: { path: targetPath } })
+      const res = await axios.get('/filemanager/list', { params: { path } })
       setFiles(res.data.files || [])
     } catch (e: any) {
       message.error(e.response?.data?.error || '读取目录失败')
@@ -110,16 +109,24 @@ export default function FileManager() {
     } finally {
       setLoading(false)
     }
-  }, [currentPath])
+  }, [])
   
   // 初始化：设置并加载主目录
   useEffect(() => {
     const homePath = (user as any)?.homeDir || `/home/${user?.username || ''}`
-    if (homePath) {
+    if (homePath && !currentPath) {
       setCurrentPath(homePath)
-      loadDirectory(homePath)
     }
-  }, [user, loadDirectory])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user])
+  
+  // 当 currentPath 变化时加载目录
+  useEffect(() => {
+    if (currentPath) {
+      loadDirectory(currentPath)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPath])
   
   // 面包屑导航
   const homePath = (user as any)?.homeDir || `/home/${user?.username || ''}`
@@ -202,7 +209,7 @@ export default function FileManager() {
       })
       message.success('保存成功')
       setIsEditing(false)
-      loadDirectory()
+      loadDirectory(currentPath)
     } catch (e: any) {
       message.error(e.response?.data?.error || '保存失败')
     } finally {
@@ -234,7 +241,7 @@ export default function FileManager() {
         try {
           await axios.delete('/filemanager/delete', { params: { path: file.path } })
           message.success('删除成功')
-          loadDirectory()
+          loadDirectory(currentPath)
         } catch (e: any) {
           message.error(e.response?.data?.error || '删除失败')
         }
@@ -264,7 +271,7 @@ export default function FileManager() {
         }
         message.success(`成功删除 ${successCount} 个文件`)
         setSelectedRowKeys([])
-        loadDirectory()
+        loadDirectory(currentPath)
       },
     })
   }
@@ -297,7 +304,7 @@ export default function FileManager() {
             new_path: newPath,
           })
           message.success('重命名成功')
-          loadDirectory()
+          loadDirectory(currentPath)
         } catch (e: any) {
           message.error(e.response?.data?.error || '重命名失败')
         }
@@ -331,7 +338,7 @@ export default function FileManager() {
             path: `${currentPath}/${folderName}`,
           })
           message.success('创建成功')
-          loadDirectory()
+          loadDirectory(currentPath)
         } catch (e: any) {
           message.error(e.response?.data?.error || '创建失败')
           return Promise.reject()
@@ -367,7 +374,7 @@ export default function FileManager() {
             content: '',
           })
           message.success('创建成功')
-          loadDirectory()
+          loadDirectory(currentPath)
         } catch (e: any) {
           message.error(e.response?.data?.error || '创建失败')
           return Promise.reject()
@@ -390,7 +397,7 @@ export default function FileManager() {
     onChange(info: any) {
       if (info.file.status === 'done') {
         message.success(`${info.file.name} 上传成功`)
-        loadDirectory()
+        loadDirectory(currentPath)
       } else if (info.file.status === 'error') {
         message.error(`${info.file.name} 上传失败`)
       }
@@ -499,7 +506,7 @@ export default function FileManager() {
             />
             <Button
               icon={<ReloadOutlined />}
-              onClick={() => loadDirectory()}
+              onClick={() => loadDirectory(currentPath)}
               loading={loading}
               title="刷新"
             />

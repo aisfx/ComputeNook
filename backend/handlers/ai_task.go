@@ -199,9 +199,9 @@ func submitAITaskJob(task *AITask) (int64, error) {
 	}
 
 	script := task.Script
-	// 如果指定了容器镜像，在脚本 #!/bin/bash 后插入 --container-image
+	// 如果指定了容器镜像，在脚本 #!/bin/bash 后插入 --container-image 和 --container-mounts
 	if task.Image != "" {
-		containerLine := fmt.Sprintf("#SBATCH --container-image=%s\n", task.Image)
+		containerLine := fmt.Sprintf("#SBATCH --container-image=%s\n#SBATCH --container-mounts=/etc/slurm:/etc/slurm\n", task.Image)
 		if len(script) >= 11 && script[:11] == "#!/bin/bash" {
 			nlIdx := 11
 			for nlIdx < len(script) && script[nlIdx] != '\n' {
