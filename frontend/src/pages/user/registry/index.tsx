@@ -6,7 +6,7 @@ import {
 import {
   ReloadOutlined, SearchOutlined, DatabaseOutlined, LockOutlined,
   UnlockOutlined, UserOutlined, GlobalOutlined, CopyOutlined,
-  DeleteOutlined, QuestionCircleOutlined
+  DeleteOutlined, QuestionCircleOutlined, SaveOutlined
 } from '@ant-design/icons'
 import axios from 'axios'
 import { getUser } from '@/utils/auth'
@@ -42,6 +42,17 @@ interface ImageTag {
   size?: number
 }
 
+interface SaveTask {
+  task_id: string
+  status: string // pending / running / done / error
+  step: number
+  total_steps: number
+  step_desc: string
+  target_image: string
+  error?: string
+  updated_at: number
+}
+
 export default function RegistryManagement() {
   const user = getUser()
   const [loading, setLoading] = useState(false)
@@ -51,6 +62,11 @@ export default function RegistryManagement() {
   const [loadingRepos, setLoadingRepos] = useState(false)
   const [searchText, setSearchText] = useState('')
   const [harborUrl, setHarborUrl] = useState('')
+  
+  // 保存任务相关
+  const [saveTasks, setSaveTasks] = useState<SaveTask[]>([])
+  const [loadingTasks, setLoadingTasks] = useState(false)
+  const [showTasks, setShowTasks] = useState(false)
 
   // 加载项目列表
   const loadProjects = useCallback(async () => {
@@ -78,6 +94,20 @@ export default function RegistryManagement() {
       setHarborUrl(res.data.harbor_url || '')
     } catch (e: any) {
       console.error('加载Harbor配置失败:', e)
+    }
+  }, [])
+
+  // 加载保存任务列表
+  const loadSaveTasks = useCallback(async () => {
+    setLoadingTasks(true)
+    try {
+      const res = await axios.get('/registry/images/save/tasks')
+      setSaveTasks(res.data.data || [])
+    } catch (e: any) {
+      console.error('加载保存任务失败:', e)
+      Message.error(e.response?.data?.error || '加载保存任务失败')
+    } finally {
+      setLoadingTasks(false)
     }
   }, [])
 
@@ -149,7 +179,20 @@ export default function RegistryManagement() {
   useEffect(() => {
     loadProjects()
     loadHarborConfig()
-  }, [loadProjects, loadHarborConfig])
+    loadSaveTasks()
+  }, [loadProjects, loadHarborConfig, loadSaveTasks])
+
+  // 自动刷新进行中的任务
+  useEffect(() => {
+    const hasPendingTasks = saveTasks.some(t => t.status === 'pending' || t.status === 'running')
+    if (!hasPendingTasks) return
+
+    const timer = setInterval(() => {
+      loadSaveTasks()
+    }, 3000) // 每3秒刷新一次
+
+    return () => clearInterval(timer)
+  }, [saveTasks, loadSaveTasks])
 
   // 当选中项目变化时，加载仓库列表
   useEffect(() => {
@@ -167,6 +210,35 @@ export default function RegistryManagement() {
       month: '2-digit', 
       day: '2-digit' 
     })
+  }
+
+  // 格式化任务时间戳（Unix秒）
+  const formatTaskTime = (timestamp?: number) => {
+    if (!timestamp) return '-'
+    const date = new Date(timestamp * 1000)
+    return date.toLocaleString('zh-CN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    })
+  }
+
+  // 渲染任务状态
+  const renderTaskStatus = (task: SaveTask) => {
+    const statusConfig: Record<string, { color: string; icon: string; text: string }> = {
+      pending: { color: 'default', icon: '⏳', text: '等待中' },
+      running: { color: 'processing', icon: '🔄', text: '进行中' },
+      done: { color: 'success', icon: '✅', text: '已完成' },
+      error: { color: 'error', icon: '❌', text: '失败' }
+    }
+    const config = statusConfig[task.status] || statusConfig.pending
+    return (
+      <Tag color={config.color}>
+        {config.icon} {config.text}
+      </Tag>
+    )
   }
 
   // 复制镜像地址
@@ -248,12 +320,112 @@ export default function RegistryManagement() {
   })
 
   return (
-    <div style={{ 
-      display: 'flex', 
-      height: '100%', 
-      gap: 0,
-      overflow: 'hidden'
-    }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: 0, overflow: 'hidden' }}>
+      {/* 顶部：保存任务卡片（可展开/折叠） */}
+      {saveTasks.length > 0 && (
+        <Card
+          size="small"
+          style={{
+            borderRadius: 0,
+            borderLeft: 0,
+            borderRight: 0,
+            borderTop: 0,
+            marginBottom: 0
+          }}
+          bodyStyle={{ padding: '12px 24px' }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Space>
+              <SaveOutlined style={{ fontSize: 16, color: '#1890ff' }} />
+              <Text strong>镜像保存任务</Text>
+              <Tag color="blue">{saveTasks.length}</Tag>
+              {saveTasks.some(t => t.status === 'running' || t.status === 'pending') && (
+                <Tag color="processing">进行中</Tag>
+              )}
+            </Space>
+            <Space>
+              <Button
+                type="text"
+                size="small"
+                icon={<ReloadOutlined />}
+                onClick={loadSaveTasks}
+                loading={loadingTasks}
+              >
+                刷新
+              </Button>
+              <Button
+                type="text"
+                size="small"
+                onClick={() => setShowTasks(!showTasks)}
+              >
+                {showTasks ? '收起' : '展开'}
+              </Button>
+            </Space>
+          </div>
+
+          {showTasks && (
+            <div style={{ marginTop: 16 }}>
+              <Space direction="vertical" size={8} style={{ width: '100%' }}>
+                {saveTasks.map((task) => (
+                  <Card
+                    key={task.task_id}
+                    size="small"
+                    style={{
+                      background: task.status === 'error' ? '#fff2f0' : task.status === 'done' ? '#f6ffed' : '#fafafa',
+                      border: task.status === 'error' ? '1px solid #ffccc7' : task.status === 'done' ? '1px solid #b7eb8f' : '1px solid #e8e8e8'
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                      {/* 状态 */}
+                      <div style={{ minWidth: 90 }}>
+                        {renderTaskStatus(task)}
+                      </div>
+
+                      {/* 镜像名称 */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <Text strong style={{ fontSize: 13, display: 'block' }}>
+                          {task.target_image}
+                        </Text>
+                        <Text type="secondary" style={{ fontSize: 11 }}>
+                          {task.step_desc}
+                        </Text>
+                      </div>
+
+                      {/* 进度 */}
+                      {(task.status === 'running' || task.status === 'pending') && (
+                        <div style={{ minWidth: 100 }}>
+                          <Text type="secondary" style={{ fontSize: 12 }}>
+                            步骤 {task.step}/{task.total_steps}
+                          </Text>
+                        </div>
+                      )}
+
+                      {/* 错误信息 */}
+                      {task.status === 'error' && task.error && (
+                        <Tooltip title={task.error}>
+                          <Button type="text" size="small" danger>
+                            查看错误
+                          </Button>
+                        </Tooltip>
+                      )}
+
+                      {/* 时间 */}
+                      <div style={{ minWidth: 140 }}>
+                        <Text type="secondary" style={{ fontSize: 11 }}>
+                          {formatTaskTime(task.updated_at)}
+                        </Text>
+                      </div>
+                    </div>
+                  </Card>
+                ))}
+              </Space>
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* 主内容：项目和仓库列表 */}
+      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
       {/* 左侧项目列表 */}
       <div style={{ 
         width: 240, 
@@ -519,5 +691,6 @@ export default function RegistryManagement() {
         </div>
       </div>
     </div>
+  </div>
   )
 }

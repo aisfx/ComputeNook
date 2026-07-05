@@ -58,6 +58,32 @@ func GetSaveImageTask(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": t})
 }
 
+// ListSaveImageTasks 列出所有保存镜像任务（按更新时间倒序）
+func ListSaveImageTasks(c *gin.Context) {
+	saveImageTasksMu.RLock()
+	defer saveImageTasksMu.RUnlock()
+
+	// 复制到切片并按时间倒序排序
+	tasks := make([]*SaveImageTask, 0, len(saveImageTasks))
+	for _, t := range saveImageTasks {
+		tasks = append(tasks, t)
+	}
+
+	// 按 UpdatedAt 倒序（最新的在前）
+	for i := 0; i < len(tasks)-1; i++ {
+		for j := i + 1; j < len(tasks); j++ {
+			if tasks[i].UpdatedAt < tasks[j].UpdatedAt {
+				tasks[i], tasks[j] = tasks[j], tasks[i]
+			}
+		}
+	}
+
+	if tasks == nil {
+		tasks = []*SaveImageTask{}
+	}
+	c.JSON(http.StatusOK, gin.H{"data": tasks})
+}
+
 // harborAdmin 用管理员凭证向 Harbor API 发起请求
 // 权限控制由我们的后端逻辑负责，不依赖 Harbor 自身的用户权限
 func harborAdmin(method, path string, body io.Reader) (*http.Response, error) {
@@ -416,8 +442,22 @@ func SaveContainerImage(c *gin.Context) {
 	harborURL := strings.TrimSpace(os.Getenv("HARBOR_URL"))
 	harborHost := strings.TrimPrefix(strings.TrimPrefix(harborURL, "https://"), "http://")
 	harborHost = strings.TrimRight(harborHost, "/")
-	harborUser := os.Getenv("HARBOR_ADMIN_USER")
-	harborPass := os.Getenv("HARBOR_ADMIN_PASS")
+	harborUser := strings.TrimSpace(os.Getenv("HARBOR_ADMIN_USER"))
+	harborPass := strings.TrimSpace(os.Getenv("HARBOR_ADMIN_PASS"))
+
+	// 验证 Harbor 配置
+	if harborURL == "" {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "HARBOR_URL 环境变量未配置"})
+		return
+	}
+	if harborUser == "" {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "HARBOR_ADMIN_USER 环境变量未配置"})
+		return
+	}
+	if harborPass == "" {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "HARBOR_ADMIN_PASS 环境变量未配置"})
+		return
+	}
 
 	// 目标镜像推到用户自己的私有项目
 	targetImage := fmt.Sprintf("%s/%s/%s:%s", harborHost, username, req.ImageName, req.Tag)
@@ -461,12 +501,12 @@ func SaveContainerImage(c *gin.Context) {
 		return
 	}
 
-	// 找节点 SSH 地址（从 WEBSHELL_NODES 配置里查，找不到就直接用节点名）
-	// enroot list/export 在登录节点上执行（pyxis 实例挂载在提交用户的登录节点空间）
+	// 使用登录节点 SSH + srun 方式在计算节点上执行命令
+	// 因为计算节点通常不允许直接 SSH 访问
 	nodeHost := nodeName
 	nodePort := 22
 	nodes, _ := loadNodesFromEnv()
-	// 优先使用登录节点（WEBSHELL_NODES 第一个 enabled 节点）
+	// 使用登录节点
 	for _, n := range nodes {
 		if n.Enabled {
 			nodeHost = n.Host
@@ -535,40 +575,48 @@ func SaveContainerImage(c *gin.Context) {
 		defer client.Close()
 
 		// 分步执行，每步单独 SSH session 以便实时更新进度
+		// 步骤1-3: 使用 srun --jobid --overlap 在计算节点上执行
+		// 步骤4: 在登录节点上执行（skopeo 通常只在登录节点安装）
 		steps := []struct {
-			step int
-			desc string
-			cmd  string
+			step      int
+			desc      string
+			cmd       string
+			useComputeNode bool // true=计算节点(srun), false=登录节点(直接执行)
 		}{
 			{1, "导出容器 squashfs...", fmt.Sprintf(
-				`CONTAINER=$(enroot list 2>/dev/null | grep "^pyxis_%d\." | head -1); `+
+				`srun --jobid=%d --overlap bash -c '`+
+					`CONTAINER=$(enroot list 2>/dev/null | grep "^pyxis_%d\." | head -1); `+
 					`if [ -z "$CONTAINER" ]; then echo "ERROR: 未找到容器实例 pyxis_%d.*" >&2; exit 1; fi; `+
-					`enroot export --output "%s" "$CONTAINER"`,
-				req.JobID, req.JobID, exportPath)},
+					`enroot export --output "%s" "$CONTAINER"'`,
+				req.JobID, req.JobID, req.JobID, exportPath), true},
 			{2, "解压 rootfs...", fmt.Sprintf(
-				`unsquashfs -f -d "%s" "%s"`,
-				rootfsDir, exportPath)},
+				`srun --jobid=%d --overlap bash -c 'unsquashfs -f -d "%s" "%s"'`,
+				req.JobID, rootfsDir, exportPath), true},
 			{3, "构建 docker archive...", fmt.Sprintf(
-				`tar -C "%s" -cf "%s" . && `+
-					`LAYER_SHA=$(sha256sum "%s" | awk '{print $1}') && `+
+				`srun --jobid=%d --overlap bash -c '`+
+					`tar -C "%s" -cf "%s" . && `+
+					`LAYER_SHA=$(sha256sum "%s" | awk '"'"'{print $1}'"'"') && `+
 					`CONFIG_JSON="{\"architecture\":\"amd64\",\"os\":\"linux\",\"rootfs\":{\"type\":\"layers\",\"diff_ids\":[\"sha256:$LAYER_SHA\"]}}" && `+
-					`CONFIG_SHA=$(echo -n "$CONFIG_JSON" | sha256sum | awk '{print $1}') && `+
+					`CONFIG_SHA=$(echo -n "$CONFIG_JSON" | sha256sum | awk '"'"'{print $1}'"'"') && `+
 					`mkdir -p "%s" && `+
 					`echo -n "$CONFIG_JSON" > "%s/${CONFIG_SHA}.json" && `+
 					`cp "%s" "%s/${LAYER_SHA}.tar" && `+
 					`echo "[{\"Config\":\"${CONFIG_SHA}.json\",\"RepoTags\":[\"%s\"],\"Layers\":[\"${LAYER_SHA}.tar\"]}]" > "%s/manifest.json" && `+
-					`tar -C "%s" -cf "%s" .`,
+					`tar -C "%s" -cf "%s" .'`,
+				req.JobID,
 				rootfsDir, layerTar,
 				layerTar,
 				ociWorkDir,
 				ociWorkDir, layerTar, ociWorkDir,
 				targetImage, ociWorkDir,
-				ociWorkDir, dockerTar)},
+				ociWorkDir, dockerTar), true},
 			{4, "推送到 Harbor...", fmt.Sprintf(
-				`skopeo copy --insecure-policy --dest-creds "%s:%s" --dest-tls-verify=false docker-archive:"%s" docker://%s && `+
-					`rm -rf "%s" "%s" "%s" "%s" "%s"`,
-				harborUser, harborPass, dockerTar, targetImage,
-				exportPath, rootfsDir, layerTar, ociWorkDir, dockerTar)},
+				`srun --jobid=%d --overlap bash -c 'HARBOR_USER=%s HARBOR_PASS=%s skopeo copy --insecure-policy --dest-creds "$HARBOR_USER:$HARBOR_PASS" --dest-tls-verify=false docker-archive:%s docker://%s && `+
+					`rm -rf %s %s %s %s %s'`,
+				req.JobID,
+				singleQuoteEscape(harborUser), singleQuoteEscape(harborPass),
+				dockerTar, targetImage,
+				exportPath, rootfsDir, layerTar, ociWorkDir, dockerTar), true},
 		}
 
 		for _, s := range steps {
@@ -578,6 +626,7 @@ func SaveContainerImage(c *gin.Context) {
 				updateTask(s.step, s.desc, "error", "创建 SSH session 失败: "+err.Error())
 				return
 			}
+			
 			out, err := sess.CombinedOutput("bash -c " + shellescape(s.cmd))
 			sess.Close()
 			if err != nil {
@@ -603,5 +652,11 @@ func SaveContainerImage(c *gin.Context) {
 
 // shellescape 对 shell 脚本内容做单引号转义，安全传给 bash -c
 func shellescape(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
+}
+
+// singleQuoteEscape 对字符串中的单引号进行转义，用于在单引号包围的 bash 字符串中使用
+// 例如: foo'bar 变成 'foo'\''bar'
+func singleQuoteEscape(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
 }
