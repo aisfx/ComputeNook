@@ -58,6 +58,7 @@ type Job struct {
 	WorkingDirectory string `json:"working_directory"`
 	Stdout           string `json:"stdout"`
 	Stderr           string `json:"stderr"`
+	Comment          string `json:"comment"` // 作业注释
 	
 	// 容器相关字段（slurmdb 返回字符串，slurmctld 返回对象，用 RawMessage 兼容）
 	Container   json.RawMessage `json:"container"`
@@ -139,24 +140,55 @@ func (j *Job) GetWorkingDirectory() string {
 
 // IsContainerJob 判断是否为容器作业
 func (j *Job) IsContainerJob() bool {
-	// 方法1: 检查环境变量中是否包含 SLURM_CONTAINER_IMAGE
+	// 最优先：检查我们设置的 comment 标记
+	if j.Comment == "CONTAINER_JOB" {
+		return true
+	}
+	
+	// 其次：检查我们自己添加的环境变量标记
 	for _, env := range j.Environment {
-		if strings.HasPrefix(env, "SLURM_CONTAINER_IMAGE=") {
+		if env == "COMPUTENOOK_CONTAINER_JOB=true" {
 			return true
 		}
 	}
 	
-	// 方法2: 检查 Container 字段是否不为空
-	if len(j.Container) > 0 && string(j.Container) != "null" && string(j.Container) != "{}" {
-		return true
+	// 方法3: 检查环境变量中是否包含 SLURM_CONTAINER_IMAGE
+	for _, env := range j.Environment {
+		if strings.HasPrefix(env, "SLURM_CONTAINER_IMAGE=") {
+			value := strings.TrimPrefix(env, "SLURM_CONTAINER_IMAGE=")
+			// 只有当值不为空时才认为是容器作业
+			if value != "" {
+				return true
+			}
+		}
 	}
 	
-	// 方法3: 检查作业脚本内容是否包含容器相关参数
-	// 检查 stdout 路径或作业名称是否暗示这是容器作业
-	scriptContent := j.StandardOutput + j.StandardError
-	if strings.Contains(scriptContent, "--container-image") || 
-	   strings.Contains(scriptContent, "Container job started") {
-		return true
+	// 方法4: 检查 Container 字段是否包含有效内容
+	if len(j.Container) > 0 {
+		containerStr := strings.TrimSpace(string(j.Container))
+		// 排除空字符串、null、{}、[]等无效值
+		if containerStr != "" && 
+		   containerStr != "null" && 
+		   containerStr != "{}" && 
+		   containerStr != "[]" {
+			// 尝试解析为 JSON 对象
+			var containerData map[string]interface{}
+			if err := json.Unmarshal(j.Container, &containerData); err == nil {
+				// 检查是否包含实际的容器配置（如 image 字段）
+				if image, ok := containerData["image"].(string); ok && image != "" {
+					return true
+				}
+				// 检查其他容器相关字段
+				if len(containerData) > 0 {
+					// 如果有多个字段，可能是有效的容器配置
+					for key := range containerData {
+						if key == "image" || key == "bundle" || key == "id" {
+							return true
+						}
+					}
+				}
+			}
+		}
 	}
 	
 	return false
@@ -593,6 +625,13 @@ func (c *Client) SubmitJob(params JobSubmitParams) (int64, error) {
 		"tasks":     1, // 默认1个任务
 	}
 	
+	// 检测容器作业并添加comment标记
+	isContainerJob := strings.Contains(params.Script, "--container-image")
+	if isContainerJob {
+		job["comment"] = "CONTAINER_JOB"
+		logger.Info("✓ Detected container job, added comment marker")
+	}
+	
 	// 用户名 - v0.0.43不支持user_name字段，通过environment传递
 	// 工作目录（必需）
 	if params.WorkDir != "" {
@@ -610,6 +649,13 @@ func (c *Client) SubmitJob(params JobSubmitParams) (int64, error) {
 	} else {
 		logger.Info("⚠ USER environment variable: not set")
 	}
+	
+	// 检测容器作业：如果脚本包含 --container-image，添加标记环境变量
+	if strings.Contains(params.Script, "--container-image") {
+		envVars = append(envVars, "COMPUTENOOK_CONTAINER_JOB=true")
+		logger.Info("✓ Detected container job, added COMPUTENOOK_CONTAINER_JOB marker")
+	}
+	
 	if len(envVars) > 0 {
 		job["environment"] = envVars
 	}

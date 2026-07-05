@@ -1,14 +1,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Card, Table, Button, Space, Input, Select, Tag, Modal, Form, Row, Col,
-  Statistic, Checkbox, message as Message, App, Empty, Typography, Spin
+  Statistic, Checkbox, message as Message, App, Empty, Typography, Spin, notification
 } from 'antd'
 import type { TableColumnsType } from 'antd'
 import {
   PlusOutlined, ReloadOutlined, SearchOutlined, PlayCircleOutlined,
   PauseCircleOutlined, StopOutlined, FolderOutlined, EyeOutlined,
   ExportOutlined, SettingOutlined, CheckCircleOutlined, CloseCircleOutlined,
-  HourglassOutlined, SyncOutlined, DatabaseOutlined
+  HourglassOutlined, SyncOutlined, DatabaseOutlined, SaveOutlined
 } from '@ant-design/icons'
 import axios from 'axios'
 import dayjs from 'dayjs'
@@ -151,7 +151,9 @@ export default function JobManagement() {
   // 提交作业抽屉
   const [submitOpen, setSubmitOpen] = useState(false)
   const [submitTab, setSubmitTab] = useState<'manual' | 'template'>('manual')
-  const [jobMode, setJobMode] = useState<'normal' | 'container'>('normal') // 作业模式
+  const [jobMode, setJobMode] = useState<'normal' | 'container'>('normal') // 作业模式：普通、容器
+  const [previewScript, setPreviewScript] = useState('') // 脚本预览
+  const [showPreview, setShowPreview] = useState(false) // 是否显示预览
   
   // 当前表单资源统计
   const [currentResources, setCurrentResources] = useState({
@@ -189,6 +191,11 @@ export default function JobManagement() {
   // 作业详情
   const [detailOpen, setDetailOpen] = useState(false)
   const [selectedJob, setSelectedJob] = useState<Job | null>(null)
+  
+  // 容器保存为镜像
+  const [saveContainerOpen, setSaveContainerOpen] = useState(false)
+  const [saveContainerForm] = Form.useForm()
+  const [savingContainer, setSavingContainer] = useState(false)
   
   // 作业日志
   const [jobLogLoading, setJobLogLoading] = useState(false)
@@ -228,6 +235,7 @@ export default function JobManagement() {
           nodeNames = expandHostList(job.nodes)
         }
         if (nodeNames.length === 0 && job.batch_host) nodeNames = [job.batch_host]
+        
         
         return {
           id: job.job_id || job.id,
@@ -277,11 +285,6 @@ export default function JobManagement() {
         userHeld: currentJobs.filter((j: Job) => j.status === 'SUSPENDED').length,
         sysHeld: 0
       })
-      
-      // 如果有容器作业，在控制台输出统计
-      if (containerJobsCount > 0) {
-        console.log(`🐳 容器作业: ${containerJobsCount} / ${currentJobs.length}`)
-      }
     } catch (e: any) {
       Message.error(e.response?.data?.error || '加载作业列表失败')
     } finally {
@@ -298,7 +301,7 @@ export default function JobManagement() {
   // 加载分区列表
   const loadPartitions = useCallback(async () => {
     try {
-      const res = await axios.get('/partitions')
+      const res = await axios.get('/jobs/partitions/list')
       setPartitions((res.data.data || []).map((p: any) => p.name).filter(Boolean))
     } catch (e) {
       setPartitions(['compute', 'gpu', 'memory', 'debug'])
@@ -358,22 +361,16 @@ export default function JobManagement() {
   const loadAvailableImages = useCallback(async () => {
     setLoadingAvailableImages(true)
     try {
-      console.log('=== 开始加载镜像列表 ===')
-      
       // 获取Harbor配置
       const configRes = await axios.get('/registry/config')
       const harborUrl = configRes.data.harbor_url || 'harbor.example.com'
       const harborHost = harborUrl.replace(/^https?:\/\//, '')
-      console.log('1. Harbor URL:', harborUrl, '→', harborHost)
       
       // 获取所有项目
       const projectsRes = await axios.get('/registry/projects')
       const projects = projectsRes.data.data || []
-      console.log('2. 获取到项目列表:', projects.length, '个项目')
-      console.log('   项目详情:', projects.map((p: any) => ({ name: p.name, public: p.public })))
       
       if (projects.length === 0) {
-        console.error('❌ 项目列表为空！')
         Message.warning('未找到可访问的镜像项目')
         setAvailableImages([])
         return
@@ -383,13 +380,10 @@ export default function JobManagement() {
       const allImages: any[] = []
       for (const project of projects) {
         try {
-          console.log(`3. 加载项目 [${project.name}] 的仓库...`)
           const reposRes = await axios.get(`/registry/projects/${project.name}/repositories`)
           const repos = reposRes.data.data || []
-          console.log(`   → ${repos.length} 个仓库`)
           
           if (repos.length === 0) {
-            console.log(`   ⚠️ 项目 [${project.name}] 没有仓库`)
             continue
           }
           
@@ -398,11 +392,9 @@ export default function JobManagement() {
             
             // 获取该仓库的标签
             try {
-              console.log(`   4. 加载仓库 [${cleanRepoName}] 的标签...`)
               // 重要：使用cleanRepoName而不是repo.name，因为API路径已经包含了项目名
               const tagsRes = await axios.get(`/registry/projects/${project.name}/repositories/${encodeURIComponent(cleanRepoName)}/tags`)
               const artifacts = tagsRes.data.data || []
-              console.log(`      → 返回 ${artifacts.length} 个artifact`)
               
               // Harbor V2 API返回的是artifacts数组，每个artifact包含tags数组
               let allTags: any[] = []
@@ -411,11 +403,8 @@ export default function JobManagement() {
                   allTags = allTags.concat(artifact.tags)
                 }
               }
-              
-              console.log(`      → 共有 ${allTags.length} 个标签`)
-              
+                            
               if (allTags.length === 0) {
-                console.log(`      ⚠️ 仓库 [${cleanRepoName}] 没有标签`)
                 continue
               }
               
@@ -432,21 +421,17 @@ export default function JobManagement() {
                   updateTime: tag.push_time
                 }
                 allImages.push(imageInfo)
-                console.log(`      ✓ 添加镜像: ${imageInfo.displayName}`)
               }
             } catch (e: any) {
-              console.error(`      ❌ 加载仓库 [${cleanRepoName}] 的标签失败:`, e.response?.data || e.message)
+              // 静默处理仓库标签加载失败
             }
           }
         } catch (e: any) {
-          console.error(`   ❌ 加载项目 [${project.name}] 的仓库失败:`, e.response?.data || e.message)
+          // 静默处理项目仓库加载失败
         }
       }
       
-      console.log('5. 最终获取到的镜像数量:', allImages.length)
-      
       if (allImages.length === 0) {
-        console.error('❌ 没有找到任何可用镜像！')
         Message.warning('未找到可用的容器镜像，请检查镜像仓库')
       }
       
@@ -458,10 +443,8 @@ export default function JobManagement() {
       })
       
       setAvailableImages(allImages)
-      console.log('=== 镜像列表加载完成 ===')
       
     } catch (e: any) {
-      console.error('❌ 加载镜像列表失败:', e)
       console.error('   错误详情:', e.response?.data || e.message)
       Message.error('加载镜像列表失败: ' + (e.response?.data?.error || e.message))
     } finally {
@@ -612,6 +595,79 @@ export default function JobManagement() {
     })
   }, [selectedRowKeys, modal])
   
+  // 生成脚本预览
+  const generateScriptPreview = useCallback((values: any) => {
+    if (jobMode !== 'container') return ''
+    
+    const name = values.name || 'container-job'
+    const partition = values.partition || 'compute'
+    const nodes = values.nodes || 1
+    const cpus = values.cpus || 1
+    const memory = values.memory || 0
+    const timeHours = values.time_hours || 0
+    const gpus = values.gpus || 0
+    const containerImage = values.containerImage || ''
+    const mountDir = values.mountDir || ''
+    const workdir = values.workdir || ''
+    const command = values.command || ''
+    
+    // 构建挂载列表
+    let mountPaths = '/etc/slurm:/etc/slurm'
+    if (mountDir) {
+      mountPaths += ',' + mountDir
+    }
+    
+    let script = '#!/bin/bash\n'
+    script += `#SBATCH --job-name=${name}\n`
+    script += `#SBATCH --partition=${partition}\n`
+    script += `#SBATCH --ntasks=${nodes}\n`
+    script += `#SBATCH --cpus-per-task=${cpus}\n`
+    
+    if (memory > 0) {
+      script += `#SBATCH --mem=${memory}G\n`
+    }
+    
+    if (timeHours > 0) {
+      const hours = Math.floor(timeHours)
+      const mins = Math.round((timeHours - hours) * 60)
+      script += `#SBATCH --time=${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}:00\n`
+    }
+    
+    if (gpus > 0) {
+      script += `#SBATCH --gres=gpu:${gpus}\n`
+    }
+    
+    script += `#SBATCH --comment=CONTAINER_JOB\n`
+    
+    script += '\n'
+    script += 'echo "Container job started: $(date)"\n'
+    script += 'echo "Image: ' + containerImage + '"\n'
+    script += '\n'
+    
+    if (command) {
+      script += '# 执行用户命令\n'
+      script += 'srun --container-image=' + containerImage
+      script += ' --container-mounts=' + mountPaths
+      if (workdir) {
+        script += ' --container-workdir=' + workdir
+      }
+      script += ' ' + command + '\n'
+    } else {
+      script += '# 交互模式 - 保持容器运行，可通过 Web Shell 连接\n'
+      script += 'srun --container-image=' + containerImage
+      script += ' --container-mounts=' + mountPaths
+      if (workdir) {
+        script += ' --container-workdir=' + workdir
+      }
+      script += ' sleep infinity\n'
+    }
+    
+    script += '\n'
+    script += 'echo "Container job finished: $(date)"\n'
+    
+    return script
+  }, [jobMode])
+  
   // 提交作业
   const handleSubmit = useCallback(async (values: any) => {
     try {
@@ -647,10 +703,10 @@ export default function JobManagement() {
         }
         
         let script = '#!/bin/bash\n'
-        script += `#SBATCH -J ${name}\n`
-        script += `#SBATCH -p ${partition}\n`
-        script += `#SBATCH -N ${nodes}\n`
-        script += `#SBATCH -c ${cpus}\n`
+        script += `#SBATCH --job-name=${name}\n`
+        script += `#SBATCH --partition=${partition}\n`
+        script += `#SBATCH --ntasks=${nodes}\n`
+        script += `#SBATCH --cpus-per-task=${cpus}\n`
         
         if (memory > 0) {
           script += `#SBATCH --mem=${memory}G\n`
@@ -659,31 +715,37 @@ export default function JobManagement() {
         if (timeHours > 0) {
           const hours = Math.floor(timeHours)
           const mins = Math.round((timeHours - hours) * 60)
-          script += `#SBATCH -t ${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}:00\n`
+          script += `#SBATCH --time=${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}:00\n`
         }
         
         if (gpus > 0) {
           script += `#SBATCH --gres=gpu:${gpus}\n`
         }
         
-        // 添加容器镜像到 SBATCH 参数中，这样 Slurm 会设置 SLURM_CONTAINER_IMAGE 环境变量
-        script += `#SBATCH --container-image=${containerImage}\n`
-        script += `#SBATCH --container-mounts=${mountPaths}\n`
-        if (workdir) {
-          script += `#SBATCH --container-workdir=${workdir}\n`
-        }
+        // 添加容器作业标记
+        script += `#SBATCH --comment=CONTAINER_JOB\n`
         
         script += '\n'
         script += 'echo "Container job started: $(date)"\n'
-        script += `echo "Image: ${containerImage}"\n`
+        script += 'echo "Image: ' + containerImage + '"\n'
         script += '\n'
         
         if (command) {
           script += '# 执行用户命令\n'
-          script += `srun bash -c "${command}"\n`
+          script += 'srun --container-image=' + containerImage
+          script += ' --container-mounts=' + mountPaths
+          if (workdir) {
+            script += ' --container-workdir=' + workdir
+          }
+          script += ' ' + command + '\n'
         } else {
-          script += '# 交互模式 - 通过 Web Shell 连接到此作业节点\n'
-          script += 'srun sleep infinity\n'
+          script += '# 交互模式 - 保持容器运行，可通过 Web Shell 连接\n'
+          script += 'srun --container-image=' + containerImage
+          script += ' --container-mounts=' + mountPaths
+          if (workdir) {
+            script += ' --container-workdir=' + workdir
+          }
+          script += ' sleep infinity\n'
         }
         
         script += '\n'
@@ -917,7 +979,7 @@ export default function JobManagement() {
     })
   }, [modal, loadTemplates])
   const applyTemplate = useCallback((tpl: Template) => {
-    // 检查是否是容器作业模板
+    // 检查作业类型
     if (tpl.jobType === 'container') {
       // 容器作业模板
       setJobMode('container')
@@ -1025,6 +1087,77 @@ export default function JobManagement() {
     setDetailOpen(true)
   }, [])
   
+  // 打开保存容器对话框
+  const openSaveContainer = useCallback((job: Job) => {
+    setSelectedJob(job)
+    // 预填充默认值
+    saveContainerForm.setFieldsValue({
+      imageName: `${job.name}-custom`,
+      imageTag: new Date().toISOString().split('T')[0].replace(/-/g, ''),
+      description: `从作业 ${job.id} 保存的容器镜像`
+    })
+    setSaveContainerOpen(true)
+  }, [saveContainerForm])
+  
+  // 保存容器为镜像
+  const handleSaveContainer = useCallback(async () => {
+    try {
+      const values = await saveContainerForm.validateFields()
+      setSavingContainer(true)
+      
+      if (!selectedJob) return
+      
+      // 调用后端 API 保存容器（使用已有的 registry API）
+      const response = await axios.post(`/registry/images/save`, {
+        job_id: selectedJob.id,
+        image_name: values.imageName,
+        tag: values.imageTag
+        // description 字段当前后端不支持，可以后续添加
+      })
+      
+      // 获取任务 ID（如果后端返回）
+      const taskId = response.data?.data?.task_id || response.data?.task_id
+      
+      // 显示成功通知，带关闭按钮
+      notification.success({
+        message: '✓ 容器保存任务已提交',
+        description: (
+          <div>
+            <div style={{ marginBottom: 8 }}>
+              {taskId 
+                ? `任务ID: ${taskId}，请前往"镜像仓库"页面查看进度` 
+                : '请前往"镜像仓库"页面查看处理进度'}
+            </div>
+            <a 
+              href="#/dashboard/registry" 
+              style={{ color: '#1890ff', textDecoration: 'underline', fontSize: 13 }}
+              onClick={(e) => {
+                e.preventDefault()
+                navigate('/dashboard/registry')
+              }}
+            >
+              前往镜像仓库查看 →
+            </a>
+          </div>
+        ),
+        duration: 8,
+        placement: 'topRight'
+      })
+      
+      setSaveContainerOpen(false)
+      saveContainerForm.resetFields()
+      loadJobs() // 刷新作业列表
+    } catch (error: any) {
+      if (error.errorFields) {
+        // 表单验证错误，不显示消息
+        return
+      }
+      Message.error(error.response?.data?.error || '保存容器失败')
+    } finally {
+      setSavingContainer(false)
+    }
+  }, [selectedJob, saveContainerForm, loadJobs])
+  
   // 获取作业日志
   const fetchJobLog = useCallback(async (job: Job) => {
     setJobLogLoading(true)
@@ -1071,15 +1204,11 @@ export default function JobManagement() {
       Message.error('只能连接正在运行的容器作业')
       return
     }
-    if (!job.nodeNames || job.nodeNames.length === 0) {
-      Message.error('无法获取作业节点信息')
-      return
-    }
     
-    // 跳转到 WebShell 页面，并传递作业信息
-    const nodeParam = encodeURIComponent(job.nodeNames[0])
+    // 跳转到 WebShell 页面，并传递作业 ID
+    // WebShell 页面会自动显示详细的连接指引
     const jobIdParam = encodeURIComponent(String(job.id))
-    navigate(`/dashboard/webshell?node=${nodeParam}&jobId=${jobIdParam}&container=true`)
+    navigate(`/dashboard/webshell?jobId=${jobIdParam}&container=true`)
   }, [navigate])
   
   // 过滤作业
@@ -1206,52 +1335,73 @@ export default function JobManagement() {
       title: '操作',
       width: 280,
       fixed: 'right',
-      render: (_, record) => (
-        <Space size="small" wrap>
-          <Button
-            type="link"
-            size="small"
-            icon={<EyeOutlined />}
-            onClick={() => viewJobDetail(record)}
-          >
-            详情
-          </Button>
-          {record.isContainer && record.status === 'RUNNING' && (
-            <Button
-              type="primary"
-              size="small"
-              icon={<DatabaseOutlined />}
-              onClick={() => enterContainer(record)}
-              style={{ 
-                background: '#13c2c2',
-                borderColor: '#13c2c2'
-              }}
-            >
-              🐳 进入容器
-            </Button>
-          )}
-          {(record.status === 'RUNNING' || record.status === 'PENDING') &&
-            (admin || record.user === user?.username) && (
+      render: (_, record) => {
+        return (
+          <Space size="small" wrap>
             <Button
               type="link"
               size="small"
-              danger
-              icon={<StopOutlined />}
-              onClick={() => cancelJob(record)}
+              icon={<EyeOutlined />}
+              onClick={() => viewJobDetail(record)}
             >
-              取消
+              详情
             </Button>
-          )}
-          <Button
-            type="link"
-            size="small"
-            icon={<FolderOutlined />}
-            onClick={() => openDirectory(record)}
-          >
-            目录
-          </Button>
-        </Space>
-      )
+            {/* 容器作业按钮：RUNNING 状态显示所有按钮，PENDING 状态只显示但禁用 */}
+            {record.isContainer && (record.status === 'RUNNING' || record.status === 'PENDING') && (
+              <>
+                <Button
+                  type="primary"
+                  size="small"
+                  icon={<DatabaseOutlined />}
+                  onClick={() => enterContainer(record)}
+                  disabled={record.status !== 'RUNNING'}
+                  style={{ 
+                    background: record.status === 'RUNNING' ? '#13c2c2' : '#d9d9d9',
+                    borderColor: record.status === 'RUNNING' ? '#13c2c2' : '#d9d9d9'
+                  }}
+                  title={record.status === 'PENDING' ? '作业运行后可进入容器' : '进入运行中的容器'}
+                >
+                  🐳 进入容器
+                </Button>
+                <Button
+                  type="primary"
+                  size="small"
+                  icon={<SaveOutlined />}
+                  onClick={() => openSaveContainer(record)}
+                  disabled={record.status !== 'RUNNING'}
+                  style={{ 
+                    background: record.status === 'RUNNING' ? '#faad14' : '#d9d9d9',
+                    borderColor: record.status === 'RUNNING' ? '#faad14' : '#d9d9d9'
+                  }}
+                  title={record.status === 'PENDING' ? '作业运行后可保存容器' : '保存运行中的容器为镜像'}
+                >
+                  💾 保存容器
+                </Button>
+              </>
+            )}
+            {(record.status === 'RUNNING' || record.status === 'PENDING') &&
+              (admin || record.user === user?.username) && (
+              <Button
+                type="link"
+                size="small"
+                danger
+                icon={<StopOutlined />}
+                onClick={() => cancelJob(record)}
+              >
+                取消
+              </Button>
+            )}
+            <Button
+              type="link"
+              size="small"
+              icon={<FolderOutlined />}
+              onClick={() => openDirectory(record)}
+            >
+              目录
+            </Button>
+          </Space>
+        )
+      }
     }
   ]
   
@@ -1274,12 +1424,16 @@ export default function JobManagement() {
       }}>
       {/* 统计卡片 */}
       <Row gutter={16}>
-        <Col span={4}>
+        <Col span={6}>
           <Card 
             size="small" 
             style={{ height: 120, cursor: 'pointer' }}
             hoverable
-            onClick={() => setContainerFilter('all')}
+            onClick={() => {
+              setContainerFilter('all')
+              setStatusFilter('') // 清除状态筛选
+              setPagination(prev => ({ ...prev, current: 1 }))
+            }}
           >
             <Statistic
               title="作业总数"
@@ -1288,32 +1442,52 @@ export default function JobManagement() {
             />
           </Card>
         </Col>
-        <Col span={4}>
+        <Col span={6}>
+          <Card 
+            size="small" 
+            style={{ height: 120, cursor: 'pointer' }}
+            hoverable
+            onClick={() => {
+              setStatusFilter('RUNNING')
+              setContainerFilter('all') // 清除容器筛选
+              setPagination(prev => ({ ...prev, current: 1 }))
+            }}
+          >
+            <Statistic
+              title="运行中"
+              value={stats.running}
+              prefix={<PlayCircleOutlined />}
+              valueStyle={{ fontSize: 28, fontWeight: 700, color: '#10b981' }}
+            />
+          </Card>
+        </Col>
+        <Col span={6}>
           <Card 
             size="small" 
             style={{ height: 120, cursor: 'pointer' }}
             hoverable
             onClick={() => {
               setStatusFilter('PENDING')
+              setContainerFilter('all') // 清除容器筛选
               setPagination(prev => ({ ...prev, current: 1 }))
             }}
           >
             <Statistic
-              title="等待资源"
+              title="等待中"
               value={stats.pending}
               prefix={<HourglassOutlined />}
               valueStyle={{ fontSize: 28, fontWeight: 700, color: '#f59e0b' }}
             />
-            <Tag color="warning" style={{ marginTop: 8 }}>等待</Tag>
           </Card>
         </Col>
-        <Col span={4}>
+        <Col span={6}>
           <Card 
             size="small" 
             style={{ height: 120, cursor: 'pointer' }}
             hoverable
             onClick={() => {
               setContainerFilter('container')
+              setStatusFilter('') // 清除状态筛选
               setPagination(prev => ({ ...prev, current: 1 }))
             }}
           >
@@ -1323,82 +1497,6 @@ export default function JobManagement() {
               prefix={<DatabaseOutlined />}
               valueStyle={{ fontSize: 28, fontWeight: 700, color: '#13c2c2' }}
             />
-            <Tag 
-              color="cyan" 
-              style={{ marginTop: 8 }}
-              icon={<DatabaseOutlined />}
-            >
-              🐳 容器
-            </Tag>
-          </Card>
-        </Col>
-        <Col span={4}>
-          <Card size="small" style={{ height: 120 }}>
-            <Statistic
-              title="作业调度"
-              value={stats.queued}
-              prefix={<SyncOutlined />}
-              valueStyle={{ fontSize: 28, fontWeight: 700, color: '#3b82f6' }}
-            />
-            <Tag color="processing" style={{ marginTop: 8 }}>排队</Tag>
-          </Card>
-        </Col>
-        <Col span={6}>
-          <Card size="small" style={{ height: 120 }}>
-            <div style={{ marginBottom: 8, fontSize: 12, color: '#64748b', fontWeight: 500 }}>
-              作业执行
-            </div>
-            <Row gutter={8}>
-              <Col span={8}>
-                <Statistic
-                  title={<span style={{ fontSize: 11 }}>运行</span>}
-                  value={stats.running}
-                  prefix={<PlayCircleOutlined />}
-                  valueStyle={{ fontSize: 20, fontWeight: 700, color: '#10b981' }}
-                />
-              </Col>
-              <Col span={8}>
-                <Statistic
-                  title={<span style={{ fontSize: 11 }}>用户挂起</span>}
-                  value={stats.userHeld}
-                  prefix={<PauseCircleOutlined />}
-                  valueStyle={{ fontSize: 20, fontWeight: 700, color: '#6366f1' }}
-                />
-              </Col>
-              <Col span={8}>
-                <Statistic
-                  title={<span style={{ fontSize: 11 }}>系统挂起</span>}
-                  value={stats.sysHeld}
-                  prefix={<PauseCircleOutlined />}
-                  valueStyle={{ fontSize: 20, fontWeight: 700, color: '#6366f1' }}
-                />
-              </Col>
-            </Row>
-          </Card>
-        </Col>
-        <Col span={6}>
-          <Card size="small" style={{ height: 120 }}>
-            <div style={{ marginBottom: 8, fontSize: 12, color: '#64748b', fontWeight: 500 }}>
-              作业完成
-            </div>
-            <Row gutter={8}>
-              <Col span={12}>
-                <Statistic
-                  title={<span style={{ fontSize: 11 }}>完成</span>}
-                  value={stats.completed}
-                  prefix={<CheckCircleOutlined />}
-                  valueStyle={{ fontSize: 20, fontWeight: 700, color: '#10b981' }}
-                />
-              </Col>
-              <Col span={12}>
-                <Statistic
-                  title={<span style={{ fontSize: 11 }}>失败</span>}
-                  value={stats.failed}
-                  prefix={<CloseCircleOutlined />}
-                  valueStyle={{ fontSize: 20, fontWeight: 700, color: '#ef4444' }}
-                />
-              </Col>
-            </Row>
           </Card>
         </Col>
       </Row>
@@ -2033,7 +2131,7 @@ export default function JobManagement() {
                         <Form.Item
                           label="运行命令（可选）"
                           name="command"
-                          tooltip="留空 = 交互模式（sleep infinity），可通过【进入容器】连接"
+                          tooltip="留空 = 交互模式（保持容器运行），可通过【进入容器】连接"
                         >
                           <TextArea
                             rows={6}
@@ -2056,12 +2154,74 @@ export default function JobManagement() {
                                 提示
                               </div>
                               <Text type="secondary" style={{ fontSize: 12, lineHeight: 1.5 }}>
-                                • 留空命令 = 交互模式（sleep infinity），可通过【🐳 进入容器】按钮连接<br/>
+                                • 留空命令 = 交互模式（保持容器运行），可通过【🐳 进入容器】按钮连接<br/>
                                 • 填写命令 = 批处理模式，运行指定命令后自动退出
                               </Text>
                             </div>
                           </Space>
                         </div>
+                        
+                        {/* 脚本预览区域 */}
+                        {jobMode === 'container' && (
+                          <div style={{ marginBottom: 16 }}>
+                            <Button
+                              type="dashed"
+                              size="small"
+                              onClick={() => {
+                                const values = submitForm.getFieldsValue()
+                                const script = generateScriptPreview(values)
+                                setPreviewScript(script)
+                                setShowPreview(!showPreview)
+                              }}
+                              style={{ marginBottom: showPreview ? 12 : 0 }}
+                            >
+                              {showPreview ? '隐藏脚本预览' : '📄 预览提交脚本'}
+                            </Button>
+                            
+                            {showPreview && previewScript && (
+                              <div style={{
+                                background: '#f5f5f5',
+                                border: '1px solid #d9d9d9',
+                                borderRadius: 4,
+                                padding: 12
+                              }}>
+                                <div style={{
+                                  display: 'flex',
+                                  justifyContent: 'space-between',
+                                  alignItems: 'center',
+                                  marginBottom: 8
+                                }}>
+                                  <span style={{ fontSize: 12, color: '#666', fontWeight: 500 }}>
+                                    将要提交的 Slurm 脚本：
+                                  </span>
+                                  <Button
+                                    type="text"
+                                    size="small"
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(previewScript)
+                                      Message.success('脚本已复制到剪贴板')
+                                    }}
+                                  >
+                                    📋 复制
+                                  </Button>
+                                </div>
+                                <pre style={{
+                                  margin: 0,
+                                  padding: 12,
+                                  background: '#1e1e1e',
+                                  color: '#d4d4d4',
+                                  borderRadius: 4,
+                                  fontSize: 12,
+                                  lineHeight: 1.6,
+                                  overflowX: 'auto',
+                                  fontFamily: '"Cascadia Code", "Fira Code", Consolas, monospace'
+                                }}>
+{previewScript}
+                                </pre>
+                              </div>
+                            )}
+                          </div>
+                        )}
                         
                         <Form.Item>
                           <Space>
@@ -2949,23 +3109,38 @@ echo "Job finished: $(date)"`}
               关闭
             </Button>
             {selectedJob?.isContainer && selectedJob.status === 'RUNNING' && (
-              <Button 
-                type="primary"
-                icon={<DatabaseOutlined />}
-                onClick={() => {
-                  if (selectedJob) {
-                    enterContainer(selectedJob)
-                  }
-                }}
-                style={{
-                  background: '#13c2c2',
-                  borderColor: '#13c2c2',
-                  fontWeight: 600
-                }}
-                size="large"
-              >
-                🐳 进入容器
-              </Button>
+              <>
+                <Button 
+                  type="primary"
+                  icon={<DatabaseOutlined />}
+                  onClick={() => {
+                    if (selectedJob) {
+                      enterContainer(selectedJob)
+                    }
+                  }}
+                  style={{
+                    background: '#13c2c2',
+                    borderColor: '#13c2c2'
+                  }}
+                >
+                  🐳 进入容器
+                </Button>
+                <Button 
+                  icon={<SaveOutlined />}
+                  onClick={() => {
+                    if (selectedJob) {
+                      openSaveContainer(selectedJob)
+                      setDetailOpen(false)
+                    }
+                  }}
+                  style={{
+                    borderColor: '#13c2c2',
+                    color: '#13c2c2'
+                  }}
+                >
+                  💾 保存为镜像
+                </Button>
+              </>
             )}
             {selectedJob && (selectedJob.status === 'RUNNING' || selectedJob.status === 'PENDING') &&
               (admin || selectedJob.user === user?.username) && (
@@ -3226,6 +3401,85 @@ echo "Job finished: $(date)"`}
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* 保存容器为镜像对话框 */}
+      <Modal
+        title="💾 保存容器为镜像"
+        open={saveContainerOpen}
+        onCancel={() => {
+          setSaveContainerOpen(false)
+          saveContainerForm.resetFields()
+        }}
+        onOk={handleSaveContainer}
+        confirmLoading={savingContainer}
+        width={600}
+        okText="保存"
+        cancelText="取消"
+      >
+        <div style={{ marginBottom: 16, padding: 12, background: '#e6f7ff', borderRadius: 6, border: '1px solid #91d5ff' }}>
+          <div style={{ fontSize: 13, lineHeight: 1.6, color: '#0050b3' }}>
+            ℹ️ 将当前容器的修改保存为新镜像并上传到 Harbor 仓库。<br/>
+            保存的镜像可以在提交作业时选择使用。
+          </div>
+        </div>
+        
+        {selectedJob && (
+          <div style={{ marginBottom: 16, padding: 12, background: '#f5f5f5', borderRadius: 6 }}>
+            <div><strong>作业 ID:</strong> {selectedJob.id}</div>
+            <div><strong>原始镜像:</strong> <code style={{ fontSize: 12 }}>{selectedJob.containerImage}</code></div>
+          </div>
+        )}
+        
+        <Form
+          form={saveContainerForm}
+          layout="vertical"
+        >
+          <Form.Item
+            label="镜像名称"
+            name="imageName"
+            rules={[
+              { required: true, message: '请输入镜像名称' },
+              { pattern: /^[a-z0-9-]+$/, message: '只能包含小写字母、数字和连字符' }
+            ]}
+          >
+            <Input 
+              placeholder="my-custom-image" 
+              prefix="harbor.example.com/library/"
+            />
+          </Form.Item>
+          
+          <Form.Item
+            label="镜像标签"
+            name="imageTag"
+            rules={[
+              { required: true, message: '请输入镜像标签' },
+              { pattern: /^[a-zA-Z0-9._-]+$/, message: '只能包含字母、数字、点、下划线和连字符' }
+            ]}
+          >
+            <Input placeholder="v1.0 或 20260704" />
+          </Form.Item>
+          
+          <Form.Item
+            label="描述"
+            name="description"
+            rules={[{ required: true, message: '请输入描述' }]}
+          >
+            <Input.TextArea 
+              rows={3} 
+              placeholder="描述此镜像的用途和修改内容"
+            />
+          </Form.Item>
+        </Form>
+        
+        <div style={{ marginTop: 16, padding: 12, background: '#fffbe6', borderRadius: 6, border: '1px solid #ffe58f' }}>
+          <div style={{ fontSize: 12, lineHeight: 1.6, color: '#ad6800' }}>
+            ⚠️ 注意：<br/>
+            • 保存操作将在后台执行，可能需要几分钟时间<br/>
+            • 确保容器当前没有正在运行的进程<br/>
+            • 镜像将保存到 Harbor 的 library 项目下
+          </div>
+        </div>
       </Modal>
     </div>
   )
