@@ -21,6 +21,7 @@ import {
   BarChartOutlined,
   LineChartOutlined,
   FundOutlined,
+  RobotOutlined,
 } from '@ant-design/icons'
 import { logout, getUser } from '@/utils/auth'
 import { useTheme } from '@/hooks/useTheme'
@@ -41,6 +42,7 @@ import AdminPartitions from '@/pages/admin/partitions'
 import AdminSSHLogs from '@/pages/admin/ssh-logs'
 import AdminWebShellLogs from '@/pages/admin/webshell-logs'
 import AdminReports from '@/pages/admin/reports'
+import AdminAIAssistant from '@/pages/admin/ai-assistant'
 import Monitoring from '@/pages/user/monitoring'
 
 const { Sider, Header, Content } = Layout
@@ -62,6 +64,11 @@ const menuItems: MenuItem[] = [
     key: '/admin/overview',
     icon: <DashboardOutlined />,
     label: '总览',
+  },
+  {
+    key: '/admin/ai-assistant',
+    icon: <RobotOutlined />,
+    label: 'AI 助手',
   },
   {
     key: '/admin/monitoring',
@@ -270,6 +277,7 @@ export default function AdminLayout() {
           <Routes>
             <Route path="/" element={<Navigate to="overview" replace />} />
             <Route path="overview" element={<AdminOverview />} />
+            <Route path="ai-assistant" element={<AdminAIAssistant />} />
             <Route path="monitoring" element={<Monitoring />} />
             <Route path="users" element={<AdminUsers />} />
             <Route path="groups" element={<AdminGroups />} />

@@ -173,53 +173,73 @@ export default function AdminBilling() {
     {
       title: 'QoS 名称',
       dataIndex: 'qos_name',
-      width: 160,
-      render: (name) => <Text strong>{name}</Text>,
+      width: 140,
+      fixed: 'left',
+      render: (name) => <Text strong style={{ color: '#1890ff', fontFamily: 'monospace' }}>{name}</Text>,
     },
     {
       title: '累计充值（小时）',
       dataIndex: 'total_recharged',
       width: 160,
-      render: (v) => <Text>{v?.toLocaleString() ?? '-'}</Text>,
+      render: (v) => <Text style={{ fontWeight: 600 }}>{v?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) ?? '0.00'}</Text>,
+      sorter: (a, b) => (a.total_recharged || 0) - (b.total_recharged || 0),
     },
     {
       title: '已使用（小时）',
       width: 160,
       render: (_, a) => {
         const used = a.total_recharged - a.current_balance
-        return <Text type={used > a.total_recharged * 0.8 ? 'warning' : undefined}>{Math.max(0, used).toLocaleString()}</Text>
+        return (
+          <Text type={used > a.total_recharged * 0.8 ? 'warning' : undefined} style={{ fontWeight: 600 }}>
+            {Math.max(0, used).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </Text>
+        )
+      },
+      sorter: (a, b) => {
+        const usedA = a.total_recharged - a.current_balance
+        const usedB = b.total_recharged - b.current_balance
+        return usedA - usedB
       },
     },
     {
       title: '当前余额（小时）',
       dataIndex: 'current_balance',
       width: 160,
-      render: (v) => <Text style={{ color: '#6366f1', fontWeight: 600 }}>{v?.toLocaleString() ?? '-'}</Text>,
+      render: (v) => (
+        <Text style={{ color: v > 0 ? '#10b981' : '#ef4444', fontWeight: 700, fontSize: 15 }}>
+          {v?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) ?? '0.00'}
+        </Text>
+      ),
+      sorter: (a, b) => (a.current_balance || 0) - (b.current_balance || 0),
     },
     {
       title: '使用率',
-      width: 200,
+      width: 220,
       render: (_, a) => {
         const pct = usagePct(a)
         return (
-          <Space size={8}>
+          <Space size={8} style={{ width: '100%' }}>
             <Progress
               percent={pct}
               size="small"
               strokeColor={progressColor(pct)}
-              style={{ width: 100, marginBottom: 0 }}
+              style={{ flex: 1, marginBottom: 0 }}
             />
             {statusTag(pct)}
           </Space>
         )
       },
+      sorter: (a, b) => usagePct(a) - usagePct(b),
     },
     {
       title: '操作',
       width: 100,
+      fixed: 'right',
+      align: 'center',
       render: (_, a) => (
         <Button
-          type="link"
+          type="primary"
+          size="small"
           icon={<PlusOutlined />}
           onClick={() => openRecharge(a)}
         >
@@ -232,36 +252,64 @@ export default function AdminBilling() {
   // ─── 充值历史列 ────────────────────────────────────────
   const historyColumns: ColumnsType<RechargeRecord> = [
     {
-      title: '时间',
+      title: '充值时间',
       dataIndex: 'created_at',
       width: 160,
-      render: (v) => dayjs(v).format('YYYY-MM-DD HH:mm'),
+      render: (v) => (
+        <Text style={{ fontSize: 12, fontFamily: 'monospace' }}>
+          {dayjs(v).format('YYYY-MM-DD HH:mm')}
+        </Text>
+      ),
+      sorter: (a, b) => dayjs(a.created_at).unix() - dayjs(b.created_at).unix(),
     },
-    { title: 'QoS', dataIndex: 'qos_name', width: 120 },
+    { 
+      title: 'QoS 名称', 
+      dataIndex: 'qos_name', 
+      width: 120,
+      render: (v) => <Text strong style={{ color: '#1890ff', fontFamily: 'monospace' }}>{v}</Text>
+    },
     {
       title: '充值金额（小时）',
       dataIndex: 'amount',
-      width: 140,
-      render: (v) => <Text style={{ color: '#10b981', fontWeight: 600 }}>+{v?.toLocaleString()}</Text>,
+      width: 150,
+      render: (v) => (
+        <Text style={{ color: '#10b981', fontWeight: 700, fontSize: 14 }}>
+          +{v?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        </Text>
+      ),
+      sorter: (a, b) => a.amount - b.amount,
     },
     {
       title: '充值前（小时）',
       dataIndex: 'before_total',
-      width: 130,
-      render: (v) => v?.toLocaleString(),
+      width: 140,
+      render: (v) => (
+        <Text style={{ fontSize: 13, color: '#666' }}>
+          {v?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        </Text>
+      ),
     },
     {
       title: '充值后（小时）',
       dataIndex: 'after_total',
-      width: 130,
-      render: (v) => v?.toLocaleString(),
+      width: 140,
+      render: (v) => (
+        <Text style={{ fontSize: 13, fontWeight: 600 }}>
+          {v?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        </Text>
+      ),
     },
-    { title: '操作人', dataIndex: 'operator', width: 100 },
+    { 
+      title: '操作人', 
+      dataIndex: 'operator', 
+      width: 100,
+      render: (v) => <Text style={{ fontSize: 12 }}>{v}</Text>
+    },
     {
       title: '备注',
       dataIndex: 'notes',
       ellipsis: true,
-      render: (v) => v || <Text type="secondary">-</Text>,
+      render: (v) => v ? <Text style={{ fontSize: 12 }}>{v}</Text> : <Text type="secondary" style={{ fontSize: 12 }}>-</Text>,
     },
   ]
 
@@ -271,66 +319,88 @@ export default function AdminBilling() {
   const totalUsed = totalRecharged - totalBalance
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: 16 }}>
       {/* 页头 */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontSize: 16, fontWeight: 600 }}>⏱️ 机时管理</span>
-        <Space>
-          <Button icon={<SyncOutlined />} loading={syncing} onClick={handleSync}>
-            从 Slurm 同步
-          </Button>
-          <Button icon={<ReloadOutlined />} onClick={loadAccounts} loading={accountsLoading}>
-            刷新
-          </Button>
-        </Space>
-      </div>
+      <Card size="small" bordered={false}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Space>
+            <span style={{ fontSize: 18, fontWeight: 600 }}>⏱️ 机时管理</span>
+            <Tag color="blue">{accounts.length} 个账户</Tag>
+          </Space>
+          <Space>
+            <Button icon={<SyncOutlined />} loading={syncing} onClick={handleSync}>
+              从 Slurm 同步
+            </Button>
+            <Button icon={<ReloadOutlined />} onClick={loadAccounts} loading={accountsLoading}>
+              刷新
+            </Button>
+          </Space>
+        </div>
+      </Card>
 
       {/* 汇总统计 */}
-      <Row gutter={[16, 16]}>
+      <Row gutter={16}>
         <Col xs={24} sm={8}>
-          <Card size="small" bordered={false} style={{ borderRadius: 10 }}>
+          <Card bordered={false} style={{ 
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            borderRadius: 10
+          }}>
             <Statistic
-              title="累计充值总量"
-              value={totalRecharged}
+              title={<span style={{ color: '#fff', fontSize: 13 }}>累计充值总量</span>}
+              value={totalRecharged.toFixed(2)}
               suffix="小时"
               prefix={<ClockCircleOutlined />}
-              valueStyle={{ color: '#6366f1', fontWeight: 700 }}
+              valueStyle={{ color: '#fff', fontWeight: 700, fontSize: 28 }}
             />
           </Card>
         </Col>
         <Col xs={24} sm={8}>
-          <Card size="small" bordered={false} style={{ borderRadius: 10 }}>
+          <Card bordered={false} style={{ 
+            background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+            borderRadius: 10
+          }}>
             <Statistic
-              title="已消耗机时"
-              value={Math.max(0, totalUsed)}
+              title={<span style={{ color: '#fff', fontSize: 13 }}>已消耗机时</span>}
+              value={Math.max(0, totalUsed).toFixed(2)}
               suffix="小时"
-              valueStyle={{ color: '#f59e0b', fontWeight: 700 }}
+              valueStyle={{ color: '#fff', fontWeight: 700, fontSize: 28 }}
             />
           </Card>
         </Col>
         <Col xs={24} sm={8}>
-          <Card size="small" bordered={false} style={{ borderRadius: 10 }}>
+          <Card bordered={false} style={{ 
+            background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+            borderRadius: 10
+          }}>
             <Statistic
-              title="当前总余额"
-              value={totalBalance}
+              title={<span style={{ color: '#fff', fontSize: 13 }}>当前总余额</span>}
+              value={totalBalance.toFixed(2)}
               suffix="小时"
-              valueStyle={{ color: '#10b981', fontWeight: 700 }}
+              valueStyle={{ color: '#fff', fontWeight: 700, fontSize: 28 }}
             />
           </Card>
         </Col>
       </Row>
 
       {/* 主内容 Tabs */}
-      <Card>
+      <Card bordered={false} style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+        styles={{ body: { flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', padding: 0 } }}>
         <Tabs
           activeKey={activeTab}
           onChange={setActiveTab}
+          style={{ flex: 1, display: 'flex', flexDirection: 'column' }}
           items={[
             {
               key: 'accounts',
-              label: <Space><ClockCircleOutlined />机时账户</Space>,
+              label: (
+                <Space>
+                  <ClockCircleOutlined />
+                  机时账户
+                  <Tag color="blue">{accounts.length}</Tag>
+                </Space>
+              ),
               children: (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '16px' }}>
                   <Input.Search
                     placeholder="搜索 QoS 名称"
                     style={{ maxWidth: 280 }}
@@ -346,7 +416,11 @@ export default function AdminBilling() {
                     rowKey="qos_name"
                     loading={accountsLoading}
                     size="small"
-                    pagination={{ pageSize: 20, showSizeChanger: false }}
+                    pagination={{ 
+                      pageSize: 20, 
+                      showSizeChanger: true,
+                      showTotal: (total) => `共 ${total} 个账户`
+                    }}
                     scroll={{ x: 800 }}
                     locale={{ emptyText: '暂无机时账户数据' }}
                   />
@@ -355,15 +429,22 @@ export default function AdminBilling() {
             },
             {
               key: 'history',
-              label: <Space><HistoryOutlined />充值历史</Space>,
+              label: (
+                <Space>
+                  <HistoryOutlined />
+                  充值历史
+                  {history.length > 0 && <Tag color="green">{history.length}</Tag>}
+                </Space>
+              ),
               children: (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '16px' }}>
                   <Input.Search
                     placeholder="按 QoS 名称筛选"
                     style={{ maxWidth: 280 }}
                     value={historyQos}
                     onSearch={(v) => setHistoryQos(v)}
                     onChange={(e) => !e.target.value && setHistoryQos('')}
+                    enterButton="筛选"
                     allowClear
                   />
                   <Table
@@ -372,7 +453,11 @@ export default function AdminBilling() {
                     rowKey="id"
                     loading={historyLoading}
                     size="small"
-                    pagination={{ pageSize: 20, showSizeChanger: true }}
+                    pagination={{ 
+                      pageSize: 20, 
+                      showSizeChanger: true,
+                      showTotal: (total) => `共 ${total} 条记录`
+                    }}
                     scroll={{ x: 900 }}
                     locale={{ emptyText: '暂无充值记录' }}
                   />

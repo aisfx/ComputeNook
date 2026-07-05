@@ -611,7 +611,7 @@ func SaveContainerImage(c *gin.Context) {
 				targetImage, ociWorkDir,
 				ociWorkDir, dockerTar), true},
 			{4, "推送到 Harbor...", fmt.Sprintf(
-				`srun --jobid=%d --overlap bash -c 'export USER=%s && HARBOR_USER=%s HARBOR_PASS=%s skopeo copy --insecure-policy --dest-creds "$HARBOR_USER:$HARBOR_PASS" --dest-tls-verify=false docker-archive:%s docker://%s && `+
+				`srun --jobid=%d --overlap bash -c 'export USER=%s && skopeo copy --insecure-policy --dest-creds %s:%s --dest-tls-verify=false docker-archive:%s docker://%s && `+
 					`rm -rf %s %s %s %s %s'`,
 				req.JobID, username,
 				singleQuoteEscape(harborUser), singleQuoteEscape(harborPass),

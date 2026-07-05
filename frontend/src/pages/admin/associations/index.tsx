@@ -123,136 +123,188 @@ export default function AdminAssociations() {
 
   const columns: ColumnsType<Association> = [
     {
-      title: '用户', dataIndex: 'user', width: 130,
-      render: v => v ? <strong>{v}</strong> : <Tag color="default">账户级</Tag>,
+      title: '用户', dataIndex: 'user', width: 120,
+      render: v => v ? <span style={{ fontWeight: 600 }}>{v}</span> : <Tag color="default" style={{ margin: 0 }}>账户级</Tag>,
     },
-    { title: '账户', dataIndex: 'account', width: 130 },
-    { title: '集群', dataIndex: 'cluster', width: 100, render: v => v || '-' },
-    { title: '分区', dataIndex: 'partition', width: 100, render: v => v || '-' },
+    { title: '账户', dataIndex: 'account', width: 120, render: v => <span style={{ fontWeight: 500 }}>{v}</span> },
+    { title: '集群', dataIndex: 'cluster', width: 100, render: v => <span style={{ fontSize: 12, color: '#666' }}>{v || '-'}</span> },
+    { title: '分区', dataIndex: 'partition', width: 100, render: v => <span style={{ fontSize: 12, color: '#666' }}>{v || '-'}</span> },
     {
-      title: 'QoS', dataIndex: 'qos',
-      render: (v: string[]) => (v || []).length
-        ? <Space size={4} wrap>{(v || []).map(q => <Tag key={q} color="purple">{q}</Tag>)}</Space>
-        : '-',
+      title: 'QoS', dataIndex: 'qos', width: 200,
+      render: (v: string[]) => {
+        if (!v || v.length === 0) return <span style={{ color: '#ccc' }}>-</span>
+        return (
+          <Space size={4} wrap>
+            {v.slice(0, 3).map(q => <Tag key={q} color="purple" style={{ margin: 0, fontSize: 11 }}>{q}</Tag>)}
+            {v.length > 3 && <Tag style={{ margin: 0, fontSize: 11 }}>+{v.length - 3}</Tag>}
+          </Space>
+        )
+      },
     },
     {
-      title: '操作', width: 120, fixed: 'right',
+      title: '操作', width: 80, fixed: 'right', align: 'center',
       render: (_, a) => (
-        <Space>
-          <Button type="link" icon={<EditOutlined />} onClick={() => openEdit(a)}>编辑</Button>
-          <Button type="link" danger icon={<DeleteOutlined />} onClick={() => handleDelete(a)}>删除</Button>
+        <Space size={0}>
+          <Button type="text" size="small" icon={<EditOutlined />} onClick={() => openEdit(a)} title="编辑" />
+          <Button type="text" size="small" danger icon={<DeleteOutlined />} onClick={() => handleDelete(a)} title="删除" />
         </Space>
       ),
     },
   ]
 
   return (
-    <div style={{
-      display: 'flex',
-      width: '100%',
-      height: '100%',
-      gap: 16,
-      overflow: 'hidden'
-    }}>
-      <div style={{
-        flex: 1,
-        minWidth: 0,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 16,
-        overflowY: 'auto'
-      }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: 16 }}>
+      {/* 页面头部 */}
+      <Card size="small" bordered={false}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: 16, fontWeight: 600 }}>🔗 资源绑定管理</span>
+          <Space>
+            <span style={{ fontSize: 18, fontWeight: 600 }}>🔗 资源绑定管理</span>
+            <Tag color="blue">{list.length} 条绑定</Tag>
+          </Space>
           <Space>
             <Button icon={<ReloadOutlined />} onClick={load} loading={loading}>刷新</Button>
-            <Button type="primary" icon={<PlusOutlined />} onClick={openAdd}
-              style={{ background: '#6366f1', borderColor: '#6366f1' }}>创建绑定</Button>
+            <Button type="primary" icon={<PlusOutlined />} onClick={openAdd}>创建绑定</Button>
           </Space>
         </div>
-        <Card>
-          <Table columns={columns} dataSource={list} rowKey={assocKey}
-            loading={loading} size="small" scroll={{ x: 800 }} pagination={{ pageSize: 20 }} />
+      </Card>
+
+      {/* 主内容区域 */}
+      <div style={{ display: 'flex', gap: 16, flex: 1, minHeight: 0 }}>
+        {/* 左侧：绑定列表 */}
+        <Card 
+          bordered={false} 
+          style={{ 
+            flex: modalOpen ? '0 0 calc(100% - 480px)' : 1,
+            transition: 'flex 0.3s',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden'
+          }}
+          styles={{ body: { flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', padding: 0 } }}
+        >
+          <div style={{ flex: 1, overflow: 'auto' }}>
+            <Table 
+              columns={columns} 
+              dataSource={list} 
+              rowKey={assocKey}
+              loading={loading} 
+              size="small" 
+              scroll={{ x: 800 }} 
+              pagination={{ 
+                pageSize: 20, 
+                showSizeChanger: true,
+                showTotal: (total) => `共 ${total} 条绑定`
+              }} 
+            />
+          </div>
         </Card>
+
+        {/* 右侧：添加/编辑面板 */}
+        {modalOpen && (
+          <Card
+            bordered={false}
+            style={{
+              width: 460,
+              flexShrink: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+              animation: 'slideInRight 0.3s',
+              maxHeight: '100%',
+              overflow: 'hidden'
+            }}
+            styles={{ body: { flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', padding: 0 } }}
+          >
+            {/* 面板头部 */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '16px 20px',
+              borderBottom: '1px solid #f0f0f0',
+              background: '#fafafa'
+            }}>
+              <span style={{ fontSize: 16, fontWeight: 600 }}>
+                {isEdit ? '📝 编辑资源绑定' : '➕ 创建资源绑定'}
+              </span>
+              <Button
+                type="text"
+                size="small"
+                onClick={() => { setModalOpen(false); form.resetFields() }}
+                style={{ fontSize: 18 }}
+              >
+                ×
+              </Button>
+            </div>
+            
+            {/* 面板内容 */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
+              <Form form={form} layout="vertical">
+                <Form.Item name="user" label="用户">
+                  <Select 
+                    placeholder="选择 Slurm 用户（留空为账户级绑定）" 
+                    allowClear 
+                    showSearch 
+                    disabled={isEdit}
+                  >
+                    {users.map(u => <Select.Option key={u.name} value={u.name}>{u.name}</Select.Option>)}
+                  </Select>
+                </Form.Item>
+                <Form.Item 
+                  name="account" 
+                  label="账户" 
+                  rules={[{ required: true, message: '请选择账户' }]}
+                >
+                  <Select placeholder="选择账户" showSearch disabled={isEdit}>
+                    {accounts.map(a => <Select.Option key={a.name} value={a.name}>{a.name}</Select.Option>)}
+                  </Select>
+                </Form.Item>
+                <Space style={{ width: '100%' }} align="start">
+                  <Form.Item name="cluster" label="集群" style={{ flex: 1 }}>
+                    <Input placeholder="cluster" disabled={isEdit} />
+                  </Form.Item>
+                  <Form.Item name="partition" label="分区（可选）" style={{ flex: 1 }}>
+                    <Input placeholder="留空表示全部" />
+                  </Form.Item>
+                </Space>
+                <Form.Item name="qos" label="QoS（逗号分隔）">
+                  <Input placeholder="normal, high, gpu" />
+                </Form.Item>
+              </Form>
+            </div>
+
+            {/* 面板底部按钮 */}
+            <div style={{
+              padding: '16px 20px',
+              borderTop: '1px solid #f0f0f0',
+              background: '#fafafa',
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: 8
+            }}>
+              <Button onClick={() => { setModalOpen(false); form.resetFields() }}>
+                取消
+              </Button>
+              <Button type="primary" onClick={handleSave} loading={saving}>
+                {isEdit ? '保存' : '创建'}
+              </Button>
+            </div>
+          </Card>
+        )}
       </div>
 
-      {modalOpen && (
-        <div style={{
-          width: 440,
-          flexShrink: 0,
-          display: 'flex',
-          flexDirection: 'column',
-          background: '#fff',
-          border: '1px solid #d9d9d9',
-          borderRadius: 8,
-          overflow: 'hidden',
-          height: 'fit-content',
-          maxHeight: '100%'
-        }}>
-          <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            padding: '12px 16px',
-            borderBottom: '1px solid #d9d9d9',
-            flexShrink: 0
-          }}>
-            <span style={{ fontSize: 15, fontWeight: 600 }}>
-              {isEdit ? '编辑资源绑定' : '创建资源绑定'}
-            </span>
-            <Button
-              type="text"
-              size="small"
-              onClick={() => { setModalOpen(false); form.resetFields() }}
-              style={{ fontSize: '1rem', padding: '4px 8px' }}
-            >
-              ✕
-            </Button>
-          </div>
-          
-          <div style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
-            <Form form={form} layout="vertical">
-              <Form.Item name="user" label="用户">
-                <Select placeholder="选择 Slurm 用户" allowClear showSearch disabled={isEdit}>
-                  {users.map(u => <Select.Option key={u.name} value={u.name}>{u.name}</Select.Option>)}
-                </Select>
-              </Form.Item>
-              <Form.Item name="account" label="账户" rules={[{ required: true }]}>
-                <Select placeholder="选择账户" showSearch disabled={isEdit}>
-                  {accounts.map(a => <Select.Option key={a.name} value={a.name}>{a.name}</Select.Option>)}
-                </Select>
-              </Form.Item>
-              <Space style={{ width: '100%' }} align="start">
-                <Form.Item name="cluster" label="集群" style={{ flex: 1 }}>
-                  <Input placeholder="cluster" disabled={isEdit} />
-                </Form.Item>
-                <Form.Item name="partition" label="分区（可选）" style={{ flex: 1 }}>
-                  <Input placeholder="留空表示全部" />
-                </Form.Item>
-              </Space>
-              <Form.Item name="qos" label="QoS（逗号分隔）">
-                <Input placeholder="normal, high, gpu" />
-              </Form.Item>
-            </Form>
-          </div>
-
-          <div style={{
-            padding: '12px 16px',
-            borderTop: '1px solid #d9d9d9',
-            display: 'flex',
-            justifyContent: 'flex-end',
-            gap: 8,
-            flexShrink: 0
-          }}>
-            <Button onClick={() => { setModalOpen(false); form.resetFields() }}>
-              取消
-            </Button>
-            <Button type="primary" onClick={handleSave} loading={saving}>
-              保存
-            </Button>
-          </div>
-        </div>
-      )}
+      <style>{`
+        @keyframes slideInRight {
+          from {
+            transform: translateX(100%);
+            opacity: 0;
+          }
+          to {
+            transform: translateX(0);
+            opacity: 1;
+          }
+        }
+      `}</style>
     </div>
   )
 }

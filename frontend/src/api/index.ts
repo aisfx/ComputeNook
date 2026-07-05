@@ -155,11 +155,11 @@ export const billingAPI = {
     return res.data.data as any[]
   },
   recharge: async (params: { qos_name: string; amount: number; notes?: string }) => {
-    const res = await axios.post('/billing/recharge', params)
+    const res = await axios.post('/billing/v2/recharge', params)
     return res.data
   },
   getRechargeHistory: async (qosName?: string, limit?: number) => {
-    const res = await axios.get('/billing/recharge/history', {
+    const res = await axios.get('/billing/v2/recharge/records', {
       params: { qos_name: qosName, limit },
     })
     return res.data.data as any[]

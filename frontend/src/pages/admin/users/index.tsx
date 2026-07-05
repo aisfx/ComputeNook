@@ -191,45 +191,85 @@ export default function AdminUsers() {
   ]
 
   const columns: ColumnsType<User> = [
-    { title: '用户名', dataIndex: 'username', width: 120, render: (v) => <strong>{v}</strong> },
-    { title: 'UID', dataIndex: 'uid', width: 70 },
-    { title: '中文名', dataIndex: 'cnName', width: 100 },
-    { title: '邮箱', dataIndex: 'email', width: 160, render: (v) => v || '-' },
-    { title: '电话', dataIndex: 'phone', width: 120, render: (v) => v || '-' },
-    {
-      title: '管理员',
-      dataIndex: 'isAdmin',
+    { 
+      title: '用户名', 
+      dataIndex: 'username', 
+      width: 140,
+      fixed: 'left',
+      render: (v) => <span style={{ fontFamily: 'monospace', fontWeight: 600, color: '#1890ff' }}>{v}</span>
+    },
+    { 
+      title: 'UID', 
+      dataIndex: 'uid', 
       width: 80,
-      render: (v) => v ? <Tag color="purple">是</Tag> : <Tag>否</Tag>,
+      render: (v) => <span style={{ fontFamily: 'monospace', fontSize: 12, color: '#666' }}>{v}</span>
+    },
+    { 
+      title: '中文名', 
+      dataIndex: 'cnName', 
+      width: 100,
+      render: (v) => <span style={{ fontWeight: 500 }}>{v || '-'}</span>
+    },
+    { 
+      title: '邮箱', 
+      dataIndex: 'email', 
+      width: 180, 
+      render: (v) => <span style={{ fontSize: 12, color: '#666' }}>{v || '-'}</span>
+    },
+    { 
+      title: '电话', 
+      dataIndex: 'phone', 
+      width: 120, 
+      render: (v) => <span style={{ fontSize: 12, color: '#666' }}>{v || '-'}</span>
     },
     {
-      title: '状态',
-      width: 140,
+      title: '角色',
+      dataIndex: 'isAdmin',
+      width: 90,
+      render: (v) => v ? <Tag color="purple" icon={<LockOutlined />}>管理员</Tag> : <Tag>普通用户</Tag>,
+    },
+    {
+      title: '账号状态',
+      width: 180,
       render: (_, u) => (
         <Space size={4}>
-          {u.disabled ? <Tag color="error">已禁用</Tag> : <Tag color="success">正常</Tag>}
-          {u.passwordMustChange && <Tag color="warning">需改密码</Tag>}
+          {u.disabled ? (
+            <Tag color="error" icon={<LockOutlined />}>已禁用</Tag>
+          ) : (
+            <Tag color="success" icon={<UnlockOutlined />}>正常</Tag>
+          )}
+          {u.passwordMustChange && <Tag color="warning" icon={<KeyOutlined />}>需改密</Tag>}
         </Space>
       ),
     },
     {
       title: 'MFA',
-      width: 80,
+      width: 100,
       render: (_, u) =>
         mfaStatus[u.username]?.confirmed ? (
-          <Tag color="blue">已绑定</Tag>
+          <Tag color="blue">✓ 已绑定</Tag>
         ) : (
-          <Tag>未绑定</Tag>
+          <Tag color="default">未绑定</Tag>
         ),
     },
     {
       title: '操作',
-      width: 70,
+      width: 80,
       fixed: 'right',
+      align: 'center',
       render: (_, u) => (
-        <Dropdown menu={{ items: getRowMenu(u) }} trigger={['click']}>
-          <Button type="text" icon={<MoreOutlined />} />
-        </Dropdown>
+        <Space size={0}>
+          <Button 
+            type="text" 
+            size="small"
+            icon={<EditOutlined />} 
+            onClick={() => openEdit(u)}
+            title="编辑"
+          />
+          <Dropdown menu={{ items: getRowMenu(u) }} trigger={['click']}>
+            <Button type="text" size="small" icon={<MoreOutlined />} />
+          </Dropdown>
+        </Space>
       ),
     },
   ]
@@ -239,153 +279,217 @@ export default function AdminUsers() {
   )
 
   return (
-    <div style={{
-      display: 'flex',
-      width: '100%',
-      height: '100%',
-      gap: 16,
-      overflow: 'hidden'
-    }}>
-      {/* 左侧：用户列表 */}
-      <div style={{
-        flex: 1,
-        minWidth: 0,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 16,
-        overflowY: 'auto'
-      }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: 16 }}>
+      {/* 页面头部 */}
+      <Card size="small" bordered={false}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: 16, fontWeight: 600 }}>👥 用户管理</span>
           <Space>
-            <Button icon={<ReloadOutlined />} onClick={loadUsers} loading={loading}>刷新</Button>
-            <Button type="primary" icon={<PlusOutlined />} onClick={openAdd}
-              style={{ background: '#6366f1', borderColor: '#6366f1' }}>
-              添加用户
-            </Button>
+            <span style={{ fontSize: 18, fontWeight: 600 }}>👥 用户账号管理</span>
+            <Tag color="blue">{filtered.length} 个用户</Tag>
           </Space>
-        </div>
-
-        <Card>
-          <div style={{ marginBottom: 12 }}>
+          <Space>
             <Input.Search
               placeholder="搜索用户名、中文名"
-              style={{ maxWidth: 280 }}
+              style={{ width: 240 }}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               allowClear
             />
-          </div>
-          <Table
-            columns={columns}
-            dataSource={filtered}
-            rowKey="username"
-            loading={loading}
-            size="small"
-            scroll={{ x: 900 }}
-            pagination={{ pageSize: 20, showSizeChanger: true }}
-          />
-        </Card>
-      </div>
-
-      {/* 右侧：添加/编辑面板 */}
-      {modalOpen && (
-        <div style={{
-          width: 460,
-          flexShrink: 0,
-          display: 'flex',
-          flexDirection: 'column',
-          background: '#fff',
-          border: '1px solid #d9d9d9',
-          borderRadius: 8,
-          overflow: 'hidden',
-          height: 'fit-content',
-          maxHeight: '100%'
-        }}>
-          {/* 面板头部 */}
-          <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            padding: '12px 16px',
-            borderBottom: '1px solid #d9d9d9',
-            flexShrink: 0
-          }}>
-            <span style={{ fontSize: 15, fontWeight: 600 }}>
-              {isEdit ? '编辑用户' : '添加用户'}
-            </span>
-            <Button
-              type="text"
-              size="small"
-              onClick={() => { setModalOpen(false); form.resetFields() }}
-              style={{ fontSize: '1rem', padding: '4px 8px' }}
+            <Button icon={<ReloadOutlined />} onClick={loadUsers} loading={loading}>
+              刷新
+            </Button>
+            <Button 
+              type="primary" 
+              icon={<PlusOutlined />} 
+              onClick={openAdd}
             >
-              ✕
+              添加用户
             </Button>
-          </div>
-          
-          {/* 面板内容 */}
-          <div style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
-            <Form form={form} layout="vertical">
-              <Form.Item name="username" label="用户名" rules={[{ required: true }]}>
-                <Input disabled={isEdit} placeholder="login_name" />
-              </Form.Item>
-              <Form.Item name="cnName" label="中文名" rules={[{ required: true, message: '请输入中文名' }]}>
-                <Input placeholder="张三" />
-              </Form.Item>
-              <Space style={{ width: '100%' }} align="start">
-                <Form.Item name="uid" label="UID" rules={[{ required: true }]} style={{ flex: 1 }}>
-                  <InputNumber style={{ width: '100%' }} min={1000} />
-                </Form.Item>
-                <Form.Item name="gid" label="GID" rules={[{ required: true }]} style={{ flex: 1 }}>
-                  <InputNumber style={{ width: '100%' }} min={1000} />
-                </Form.Item>
-              </Space>
-              <Form.Item name="email" label="邮箱">
-                <Input type="email" placeholder="user@example.com" />
-              </Form.Item>
-              <Form.Item name="phone" label="电话">
-                <Input placeholder="138xxxx" />
-              </Form.Item>
-              <Form.Item name="shell" label="Shell">
-                <Input placeholder="/bin/bash" />
-              </Form.Item>
-              <Form.Item name="homeDir" label="家目录" rules={[{ required: true }]}>
-                <Input placeholder="/home/username" />
-              </Form.Item>
-              {!isEdit && (
-                <Form.Item name="password" label="初始密码" rules={[{ required: true }, { min: 6, message: '至少 6 位' }]}>
-                  <Input.Password placeholder="至少 6 位" />
-                </Form.Item>
-              )}
-              <Form.Item name="isAdmin" label="管理员权限" valuePropName="checked">
-                <Switch />
-              </Form.Item>
-            </Form>
-          </div>
-
-          {/* 面板底部按钮 */}
-          <div style={{
-            padding: '12px 16px',
-            borderTop: '1px solid #d9d9d9',
-            display: 'flex',
-            justifyContent: 'flex-end',
-            gap: 8,
-            flexShrink: 0
-          }}>
-            <Button onClick={() => { setModalOpen(false); form.resetFields() }}>
-              取消
-            </Button>
-            <Button type="primary" onClick={handleSave} loading={saving}>
-              保存
-            </Button>
-          </div>
+          </Space>
         </div>
-      )}
+      </Card>
+
+      {/* 主内容区域 */}
+      <div style={{ display: 'flex', gap: 16, flex: 1, minHeight: 0 }}>
+        {/* 左侧：用户列表 */}
+        <Card 
+          bordered={false} 
+          style={{ 
+            flex: modalOpen ? '0 0 calc(100% - 480px)' : 1,
+            transition: 'flex 0.3s',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden'
+          }}
+          styles={{ body: { flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', padding: 0 } }}
+        >
+          <div style={{ flex: 1, overflow: 'auto' }}>
+            <Table
+              columns={columns}
+              dataSource={filtered}
+              rowKey="username"
+              loading={loading}
+              size="small"
+              scroll={{ x: 1100 }}
+              pagination={{ 
+                pageSize: 20, 
+                showSizeChanger: true,
+                showTotal: (total) => `共 ${total} 个用户`
+              }}
+            />
+          </div>
+        </Card>
+
+        {/* 右侧：添加/编辑面板 */}
+        {modalOpen && (
+          <Card
+            bordered={false}
+            style={{
+              width: 460,
+              flexShrink: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+              animation: 'slideInRight 0.3s',
+              maxHeight: '100%',
+              overflow: 'hidden'
+            }}
+            styles={{ body: { flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', padding: 0 } }}
+          >
+            {/* 面板头部 */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '16px 20px',
+              borderBottom: '1px solid #f0f0f0',
+              background: '#fafafa'
+            }}>
+              <span style={{ fontSize: 16, fontWeight: 600 }}>
+                {isEdit ? '📝 编辑用户' : '➕ 添加用户'}
+              </span>
+              <Button
+                type="text"
+                size="small"
+                onClick={() => { setModalOpen(false); form.resetFields() }}
+                style={{ fontSize: 18 }}
+              >
+                ×
+              </Button>
+            </div>
+            
+            {/* 面板内容 */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
+              <Form form={form} layout="vertical">
+                <Form.Item 
+                  name="username" 
+                  label="用户名" 
+                  rules={[
+                    { required: true, message: '请输入用户名' },
+                    { pattern: /^[a-z_][a-z0-9_-]*$/, message: '只能包含小写字母、数字、下划线和连字符，且以字母或下划线开头' }
+                  ]}
+                >
+                  <Input disabled={isEdit} placeholder="login_name" />
+                </Form.Item>
+                
+                <Form.Item 
+                  name="cnName" 
+                  label="中文名" 
+                  rules={[{ required: true, message: '请输入中文名' }]}
+                >
+                  <Input placeholder="张三" />
+                </Form.Item>
+                
+                <Space style={{ width: '100%' }} align="start">
+                  <Form.Item 
+                    name="uid" 
+                    label="UID" 
+                    rules={[{ required: true, message: '请输入UID' }]} 
+                    style={{ flex: 1 }}
+                  >
+                    <InputNumber style={{ width: '100%' }} min={1000} placeholder="1000" />
+                  </Form.Item>
+                  <Form.Item 
+                    name="gid" 
+                    label="GID" 
+                    rules={[{ required: true, message: '请输入GID' }]} 
+                    style={{ flex: 1 }}
+                  >
+                    <InputNumber style={{ width: '100%' }} min={1000} placeholder="1000" />
+                  </Form.Item>
+                </Space>
+                
+                <Form.Item 
+                  name="email" 
+                  label="邮箱"
+                  rules={[{ type: 'email', message: '请输入有效的邮箱地址' }]}
+                >
+                  <Input type="email" placeholder="user@example.com" />
+                </Form.Item>
+                
+                <Form.Item name="phone" label="电话">
+                  <Input placeholder="138xxxx" />
+                </Form.Item>
+                
+                <Form.Item name="shell" label="Shell">
+                  <Input placeholder="/bin/bash" />
+                </Form.Item>
+                
+                <Form.Item 
+                  name="homeDir" 
+                  label="家目录" 
+                  rules={[{ required: true, message: '请输入家目录路径' }]}
+                >
+                  <Input placeholder="/home/username" />
+                </Form.Item>
+                
+                {!isEdit && (
+                  <Form.Item 
+                    name="password" 
+                    label="初始密码" 
+                    rules={[
+                      { required: true, message: '请输入初始密码' }, 
+                      { min: 6, message: '至少 6 位' }
+                    ]}
+                  >
+                    <Input.Password placeholder="至少 6 位" />
+                  </Form.Item>
+                )}
+                
+                <Form.Item name="isAdmin" label="管理员权限" valuePropName="checked">
+                  <Switch />
+                </Form.Item>
+              </Form>
+            </div>
+
+            {/* 面板底部按钮 */}
+            <div style={{
+              padding: '16px 20px',
+              borderTop: '1px solid #f0f0f0',
+              background: '#fafafa',
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: 8
+            }}>
+              <Button onClick={() => { setModalOpen(false); form.resetFields() }}>
+                取消
+              </Button>
+              <Button type="primary" onClick={handleSave} loading={saving}>
+                {isEdit ? '保存' : '创建'}
+              </Button>
+            </div>
+          </Card>
+        )}
+      </div>
 
       {/* 重置密码弹窗保持Modal */}
       <Modal
-        title={`重置密码 — ${pwdTarget}`}
+        title={
+          <span>
+            <KeyOutlined style={{ marginRight: 8, color: '#1890ff' }} />
+            重置密码 — <span style={{ color: '#1890ff' }}>{pwdTarget}</span>
+          </span>
+        }
         open={pwdModalOpen}
         onCancel={() => setPwdModalOpen(false)}
         onOk={handleResetPwd}
@@ -395,11 +499,31 @@ export default function AdminUsers() {
         destroyOnClose
       >
         <Form form={pwdForm} layout="vertical">
-          <Form.Item name="newPassword" label="新密码" rules={[{ required: true }, { min: 6 }]}>
-            <Input.Password placeholder="至少 6 位" />
+          <Form.Item 
+            name="newPassword" 
+            label="新密码" 
+            rules={[
+              { required: true, message: '请输入新密码' }, 
+              { min: 6, message: '至少 6 位' }
+            ]}
+          >
+            <Input.Password placeholder="至少 6 位" autoComplete="new-password" />
           </Form.Item>
         </Form>
       </Modal>
+
+      <style>{`
+        @keyframes slideInRight {
+          from {
+            transform: translateX(100%);
+            opacity: 0;
+          }
+          to {
+            transform: translateX(0);
+            opacity: 1;
+          }
+        }
+      `}</style>
     </div>
   )
 }

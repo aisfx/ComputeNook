@@ -241,16 +241,34 @@ export default function AdminOverview() {
 
     chart.setOption({
       backgroundColor: 'transparent',
-      grid: { top: 8, right: 12, bottom: 24, left: 12 },
-      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+      grid: { top: 10, right: 16, bottom: 30, left: 40 },
+      tooltip: { 
+        trigger: 'axis', 
+        axisPointer: { type: 'shadow' },
+        formatter: (params: any) => {
+          const data = params[0]
+          return `${data.name}<br/>作业数: ${data.value}`
+        }
+      },
       xAxis: { 
         type: 'category', 
         data: userJobStats.map((u) => u.username), 
-        axisLabel: { color: chartTextColor, fontSize: 10, rotate: 0 },
+        axisLabel: { 
+          color: chartTextColor, 
+          fontSize: 11,
+          rotate: 0,
+          interval: 0, // 强制显示所有标签
+          formatter: (value: string) => {
+            // 如果用户名太长，截断显示
+            return value.length > 8 ? value.substring(0, 7) + '...' : value
+          }
+        },
         axisLine: { lineStyle: { color: splitLineColor } },
+        axisTick: { show: true }
       },
       yAxis: { 
-        type: 'value', 
+        type: 'value',
+        minInterval: 1, // 确保Y轴步长至少为1
         axisLabel: { color: chartTextColor, fontSize: 10 }, 
         splitLine: { lineStyle: { color: splitLineColor } },
       },
@@ -259,6 +277,12 @@ export default function AdminOverview() {
         data: userJobStats.map((u) => u.job_count),
         barMaxWidth: 32,
         itemStyle: { color: getChartColor('primary'), borderRadius: [4, 4, 0, 0] },
+        label: {
+          show: true,
+          position: 'top',
+          color: chartTextColor,
+          fontSize: 10
+        }
       }],
     })
   }, [userJobStats, isDark, mode, chartTextColor, splitLineColor])
@@ -297,23 +321,30 @@ export default function AdminOverview() {
 
     chart.setOption({
       backgroundColor: 'transparent',
-      grid: { top: 8, right: 12, bottom: 24, left: 12 },
+      grid: { top: 10, right: 16, bottom: 30, left: 40 },
       tooltip: {
         trigger: 'axis',
         formatter: (params: any) => {
           const n = sorted[params[0].dataIndex]
-          return `${getShortNodeName(n?.name)}<br/>CPU: ${n?.cpu_allocated}/${n?.cpu_total}`
+          return `${getShortNodeName(n?.name)}<br/>CPU 使用率: ${params[0].value}%<br/>已分配: ${n?.cpu_allocated}/${n?.cpu_total} 核`
         },
       },
       xAxis: {
         type: 'category',
         data: sorted.map((n) => getShortNodeName(n.name)),
-        axisLabel: { color: chartTextColor, fontSize: 10, rotate: 0 },
+        axisLabel: { 
+          color: chartTextColor, 
+          fontSize: 11, 
+          rotate: 0,
+          interval: 0 // 强制显示所有标签
+        },
         axisLine: { lineStyle: { color: splitLineColor } },
+        axisTick: { show: true }
       },
       yAxis: { 
         type: 'value', 
-        max: 100, 
+        max: 100,
+        minInterval: 10,
         axisLabel: { color: chartTextColor, fontSize: 10, formatter: '{value}%' }, 
         splitLine: { lineStyle: { color: splitLineColor } },
       },
@@ -322,6 +353,13 @@ export default function AdminOverview() {
         data: sorted.map((n) => n.cpu_total > 0 ? Math.round((n.cpu_allocated / n.cpu_total) * 100) : 0),
         barMaxWidth: 32,
         itemStyle: { color: getChartColor('warning'), borderRadius: [4, 4, 0, 0] },
+        label: {
+          show: true,
+          position: 'top',
+          color: chartTextColor,
+          fontSize: 10,
+          formatter: '{c}%'
+        }
       }],
     })
   }, [nodes, isDark, mode, chartTextColor, splitLineColor])
@@ -370,16 +408,34 @@ export default function AdminOverview() {
 
     chart.setOption({
       backgroundColor: 'transparent',
-      grid: { top: 8, right: 12, bottom: 24, left: 12 },
-      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+      grid: { top: 10, right: 16, bottom: 30, left: 40 },
+      tooltip: { 
+        trigger: 'axis', 
+        axisPointer: { type: 'shadow' },
+        formatter: (params: any) => {
+          const data = params[0]
+          return `${data.name}<br/>运行作业数: ${data.value}`
+        }
+      },
       xAxis: { 
         type: 'category', 
         data: partData.map(([p]) => p), 
-        axisLabel: { color: chartTextColor, fontSize: 10, rotate: 0 },
+        axisLabel: { 
+          color: chartTextColor, 
+          fontSize: 11, 
+          rotate: 0,
+          interval: 0, // 强制显示所有标签
+          formatter: (value: string) => {
+            // 如果分区名太长，截断显示
+            return value.length > 10 ? value.substring(0, 9) + '...' : value
+          }
+        },
         axisLine: { lineStyle: { color: splitLineColor } },
+        axisTick: { show: true }
       },
       yAxis: { 
-        type: 'value', 
+        type: 'value',
+        minInterval: 1, // 确保Y轴步长至少为1
         axisLabel: { color: chartTextColor, fontSize: 10 }, 
         splitLine: { lineStyle: { color: splitLineColor } },
       },
@@ -388,6 +444,12 @@ export default function AdminOverview() {
         data: partData.map(([, v]) => v),
         barMaxWidth: 32,
         itemStyle: { color: getChartColor('success'), borderRadius: [4, 4, 0, 0] },
+        label: {
+          show: true,
+          position: 'top',
+          color: chartTextColor,
+          fontSize: 10
+        }
       }],
     })
   }, [nodes, isDark, mode, chartTextColor, splitLineColor])
@@ -569,7 +631,7 @@ export default function AdminOverview() {
             title={
               <Space>
                 <TeamOutlined />
-                用户活跃 TOP10
+                用户作业 TOP10
               </Space>
             }
             bordered={false}

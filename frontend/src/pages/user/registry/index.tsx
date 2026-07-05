@@ -313,6 +313,29 @@ export default function RegistryManagement() {
     })
   }
 
+  // 删除仓库
+  const handleDeleteRepo = (projectName: string, repoName: string) => {
+    Modal.confirm({
+      title: '确认删除',
+      content: `确定要删除镜像 "${repoName}" 吗？此操作不可恢复！`,
+      okText: '删除',
+      okType: 'danger',
+      cancelText: '取消',
+      onOk: async () => {
+        try {
+          await axios.delete(`/registry/projects/${projectName}/repositories/${encodeURIComponent(repoName)}`)
+          Message.success('删除成功')
+          // 重新加载当前项目的仓库列表
+          if (selectedProject) {
+            loadRepositories(selectedProject)
+          }
+        } catch (e: any) {
+          Message.error(e.response?.data?.error || '删除失败')
+        }
+      }
+    })
+  }
+
   // 过滤仓库
   const filteredRepos = repositories.filter(r => {
     if (!searchText.trim()) return true
@@ -675,8 +698,9 @@ export default function RegistryManagement() {
                           size="small"
                           danger
                           icon={<DeleteOutlined />}
-                          disabled
-                          title="需要管理员权限"
+                          onClick={() => handleDeleteRepo(selectedProject.name, cleanName)}
+                          disabled={selectedProject.public && !user?.isAdmin}
+                          title={selectedProject.public && !user?.isAdmin ? "公共项目仅管理员可删除" : "删除此镜像"}
                           style={{ fontSize: 12, height: 28, borderRadius: 4 }}
                         >
                           删除

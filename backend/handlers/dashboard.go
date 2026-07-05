@@ -547,8 +547,9 @@ func GetDashboardUserJobStats(c *gin.Context) {
 	for _, job := range jobs {
 		state := job.GetJobState()
 		logger.Info("Job %s: user=%s, state=%s", job.JobID, job.UserName, state)
-		// 统计运行中、挂起、完成的作业
-		if state == "RUNNING" || state == "PENDING" || state == "COMPLETING" {
+		// 统计运行中、挂起、完成、失败的作业（展示更全面的用户活跃度）
+		if state == "RUNNING" || state == "PENDING" || state == "COMPLETING" || 
+		   state == "COMPLETED" || state == "FAILED" || state == "CANCELLED" {
 			userJobCount[job.UserName]++
 		}
 	}

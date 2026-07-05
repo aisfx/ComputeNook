@@ -159,11 +159,11 @@ vagrant up
 
 ### 在线体验
 
-访问地址：http://202.189.51.151:18080/
+访问地址：https://taixuvoild.com
 
 测试账号：
 - **普通用户**：test1 / test1
-- **管理员**：hpc-admin / hpc-admin
+- **管理员**：admin / admin
 
 ---
 
