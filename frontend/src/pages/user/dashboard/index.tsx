@@ -769,7 +769,7 @@ export default function UserDashboard() {
                 历史记录 →
               </Button>
             }
-            bodyStyle={{ height: 140 }}
+            styles={{ body: { height: 140 } }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 24, height: '100%' }}>
               {/* 左侧：大数字 */}
@@ -854,7 +854,7 @@ export default function UserDashboard() {
                 </Select>
               )
             }
-            bodyStyle={{ height: 140 }}
+            styles={{ body: { height: 140 } }}
           >
             {accountQuotas.length > 0 ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 20, height: '100%' }}>
@@ -957,7 +957,7 @@ export default function UserDashboard() {
                 </Button>
               )
             }
-            bodyStyle={{ height: 140 }}
+            styles={{ body: { height: 140 } }}
           >
             {machineTimeList.length > 1 && (
               <div style={{ marginBottom: 8, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
@@ -1061,7 +1061,7 @@ export default function UserDashboard() {
                 存储配额
               </Space>
             }
-            bodyStyle={{ height: 140 }}
+            styles={{ body: { height: 140 } }}
           >
             {storageQuota.has_data ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: 20, height: '100%' }}>

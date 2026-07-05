@@ -81,6 +81,24 @@ func (l *Logger) Log(log models.AuditLog) error {
 	l.nextID++
 	log.Timestamp = time.Now()
 
+	// 写入数据库
+	if models.DB != nil {
+		insertSQL := `
+			INSERT INTO audit_logs (
+				timestamp, username, user_role, action, resource, resource_id,
+				details, ip_address, access_host, user_agent, status, error_msg, duration, created_at
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`
+		_, err := models.DB.Exec(insertSQL,
+			log.Timestamp, log.Username, log.UserRole, log.Action, log.Resource, log.ResourceID,
+			log.Details, log.IPAddress, log.AccessHost, log.UserAgent, log.Status, log.ErrorMsg, log.Duration, time.Now(),
+		)
+		if err != nil {
+			// 记录错误但不中断（文件日志仍然会被保存）
+			fmt.Printf("Failed to insert audit log to database: %v\n", err)
+		}
+	}
+
 	// 写入文件
 	if l.logFile != nil {
 		logJSON, err := json.Marshal(log)

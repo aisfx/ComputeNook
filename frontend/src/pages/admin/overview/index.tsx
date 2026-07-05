@@ -27,32 +27,38 @@ const TOP10_HEIGHT = 320
 
 // ─── 类型 ─────────────────────────────────────────────────
 interface ClusterStats {
-  totalNodes: number
-  runningJobs: number
-  pendingJobs: number
-  completedJobs: number
-  cpuUtil: number
-  memUtil: number
-  activeUsers: number
-  totalUsers: number
-  totalGpus: number
-  allocGpus: number
-  totalCpus: number
-  allocCpus: number
-  totalMemGb: number
-  freeMemGb: number
+  total_nodes: number
+  online_nodes: number
+  idle_nodes: number
+  down_nodes: number
+  total_cpus: number
+  allocated_cpus: number
+  idle_cpus: number
+  cpu_usage_percent: number
+  total_memory_gb: number
+  allocated_memory_gb: number
+  free_memory_gb: number
+  memory_usage_percent: number
+  total_gpus: number
+  allocated_gpus: number
+  idle_gpus: number
+  total_users?: number
+  active_users?: number
 }
 
 interface NodeInfo {
   name: string
   state: string
-  cpuTotal: number
-  cpuAlloc: number
-  memTotal: number
-  memAlloc: number
-  gpuTotal?: number
-  gpuAlloc?: number
-  partition?: string
+  cpu_total: number
+  cpu_allocated: number
+  cpu_usage_percent: number
+  memory_total_mb: number
+  memory_allocated_mb: number
+  memory_usage_percent: number
+  gpu_info?: string
+  gpu_used?: string
+  partitions?: string[]
+  running_jobs?: number
 }
 
 interface AlertItem {
@@ -81,6 +87,7 @@ export default function AdminOverview() {
   const [stats, setStats] = useState<ClusterStats | null>(null)
   const [nodes, setNodes] = useState<NodeInfo[]>([])
   const [alerts, setAlerts] = useState<AlertItem[]>([])
+  const [userJobStats, setUserJobStats] = useState<{ username: string; job_count: number }[]>([])
 
   // ECharts refs
   const cpuChartRef = useRef<HTMLDivElement>(null)
@@ -121,15 +128,29 @@ export default function AdminOverview() {
     setLoading(true)
     setError('')
     try {
-      const [statsData, nodeData, alertData] = await Promise.allSettled([
+      const [statsData, nodeData, alertData, userJobData] = await Promise.allSettled([
         dashboardAPI.getStats(),
         dashboardAPI.getNodeMetrics(),
         dashboardAPI.getAlerts(),
+        dashboardAPI.getUserJobStats(),
       ])
-      if (statsData.status === 'fulfilled') setStats(statsData.value)
-      if (nodeData.status === 'fulfilled') setNodes(nodeData.value || [])
-      if (alertData.status === 'fulfilled') setAlerts(alertData.value || [])
-    } catch {
+      
+      if (statsData.status === 'fulfilled') {
+        setStats(statsData.value)
+      }
+      
+      if (nodeData.status === 'fulfilled') {
+        setNodes(nodeData.value || [])
+      }
+      
+      if (alertData.status === 'fulfilled') {
+        setAlerts(alertData.value || [])
+      }
+      
+      if (userJobData.status === 'fulfilled') {
+        setUserJobStats(userJobData.value || [])
+      }
+    } catch (err) {
       setError('加载数据失败，请刷新重试')
     } finally {
       setLoading(false)
@@ -175,7 +196,7 @@ export default function AdminOverview() {
           smooth: true,
           symbol: 'circle',
           symbolSize: 6,
-          data: Array.from({ length: 12 }, () => Math.round((stats?.cpuUtil ?? 60) + Math.random() * 10 - 5)),
+          data: Array.from({ length: 12 }, () => Math.round((stats?.cpu_usage_percent ?? 60) + Math.random() * 10 - 5)),
           lineStyle: { color: getChartColor('cpu'), width: 2 },
           areaStyle: { color: `${getChartColor('cpu')}20` },
           itemStyle: { color: getChartColor('cpu') },
@@ -186,7 +207,7 @@ export default function AdminOverview() {
           smooth: true,
           symbol: 'circle',
           symbolSize: 6,
-          data: Array.from({ length: 12 }, () => Math.round((stats?.memUtil ?? 40) + Math.random() * 8 - 4)),
+          data: Array.from({ length: 12 }, () => Math.round((stats?.memory_usage_percent ?? 40) + Math.random() * 8 - 4)),
           lineStyle: { color: getChartColor('memory'), width: 2 },
           areaStyle: { color: `${getChartColor('memory')}15` },
           itemStyle: { color: getChartColor('memory') },
@@ -201,26 +222,46 @@ export default function AdminOverview() {
     if (!userTop10Chart.current) userTop10Chart.current = echarts.init(userTop10Ref.current)
     const chart = userTop10Chart.current
 
-    // 从 nodes 中统计各用户（这里用模拟数据，实际从 jobs API 聚合）
-    const users = Array.from({ length: 8 }, (_, i) => ({
-      name: `user${i + 1}`,
-      count: Math.floor(Math.random() * 30) + 1,
-    })).sort((a, b) => b.count - a.count)
+    if (!userJobStats || userJobStats.length === 0) {
+      chart.setOption({
+        backgroundColor: 'transparent',
+        graphic: [{
+          type: 'text',
+          left: 'center',
+          top: 'middle',
+          style: {
+            text: '暂无数据',
+            fontSize: 14,
+            fill: chartTextColor,
+          },
+        }],
+      })
+      return
+    }
 
     chart.setOption({
       backgroundColor: 'transparent',
-      grid: { top: 8, right: 12, bottom: 4, left: 56 },
+      grid: { top: 8, right: 12, bottom: 24, left: 12 },
       tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-      xAxis: { type: 'value', axisLabel: { color: chartTextColor, fontSize: 10 }, splitLine: { lineStyle: { color: splitLineColor } } },
-      yAxis: { type: 'category', data: users.map((u) => u.name), axisLabel: { color: chartTextColor, fontSize: 10 } },
+      xAxis: { 
+        type: 'category', 
+        data: userJobStats.map((u) => u.username), 
+        axisLabel: { color: chartTextColor, fontSize: 10, rotate: 0 },
+        axisLine: { lineStyle: { color: splitLineColor } },
+      },
+      yAxis: { 
+        type: 'value', 
+        axisLabel: { color: chartTextColor, fontSize: 10 }, 
+        splitLine: { lineStyle: { color: splitLineColor } },
+      },
       series: [{
         type: 'bar',
-        data: users.map((u) => u.count),
-        barMaxWidth: 16,
-        itemStyle: { color: getChartColor('primary'), borderRadius: [0, 4, 4, 0] },
+        data: userJobStats.map((u) => u.job_count),
+        barMaxWidth: 32,
+        itemStyle: { color: getChartColor('primary'), borderRadius: [4, 4, 0, 0] },
       }],
     })
-  }, [nodes, isDark, mode])
+  }, [userJobStats, isDark, mode, chartTextColor, splitLineColor])
 
   // 节点使用 TOP10
   useEffect(() => {
@@ -228,34 +269,62 @@ export default function AdminOverview() {
     if (!nodeTop10Chart.current) nodeTop10Chart.current = echarts.init(nodeTop10Ref.current)
     const chart = nodeTop10Chart.current
 
+    if (!nodes || nodes.length === 0) {
+      chart.setOption({
+        backgroundColor: 'transparent',
+        graphic: [{
+          type: 'text',
+          left: 'center',
+          top: 'middle',
+          style: {
+            text: '暂无数据',
+            fontSize: 14,
+            fill: chartTextColor,
+          },
+        }],
+      })
+      return
+    }
+
     const sorted = [...nodes]
-      .sort((a, b) => (b.cpuAlloc / (b.cpuTotal || 1)) - (a.cpuAlloc / (a.cpuTotal || 1)))
+      .sort((a, b) => (b.cpu_allocated / (b.cpu_total || 1)) - (a.cpu_allocated / (a.cpu_total || 1)))
       .slice(0, 8)
+
+    // 提取节点名称的短名称（域名第一个点之前的部分）
+    const getShortNodeName = (name: string) => {
+      return name.split('.')[0]
+    }
 
     chart.setOption({
       backgroundColor: 'transparent',
-      grid: { top: 8, right: 12, bottom: 4, left: 64 },
+      grid: { top: 8, right: 12, bottom: 24, left: 12 },
       tooltip: {
         trigger: 'axis',
         formatter: (params: any) => {
           const n = sorted[params[0].dataIndex]
-          return `${n?.name}<br/>CPU: ${n?.cpuAlloc}/${n?.cpuTotal}`
+          return `${getShortNodeName(n?.name)}<br/>CPU: ${n?.cpu_allocated}/${n?.cpu_total}`
         },
       },
-      xAxis: { type: 'value', max: 100, axisLabel: { color: chartTextColor, fontSize: 10, formatter: '{value}%' }, splitLine: { lineStyle: { color: splitLineColor } } },
-      yAxis: {
+      xAxis: {
         type: 'category',
-        data: sorted.map((n) => n.name),
-        axisLabel: { color: chartTextColor, fontSize: 10 },
+        data: sorted.map((n) => getShortNodeName(n.name)),
+        axisLabel: { color: chartTextColor, fontSize: 10, rotate: 0 },
+        axisLine: { lineStyle: { color: splitLineColor } },
+      },
+      yAxis: { 
+        type: 'value', 
+        max: 100, 
+        axisLabel: { color: chartTextColor, fontSize: 10, formatter: '{value}%' }, 
+        splitLine: { lineStyle: { color: splitLineColor } },
       },
       series: [{
         type: 'bar',
-        data: sorted.map((n) => n.cpuTotal > 0 ? Math.round((n.cpuAlloc / n.cpuTotal) * 100) : 0),
-        barMaxWidth: 16,
-        itemStyle: { color: getChartColor('warning'), borderRadius: [0, 4, 4, 0] },
+        data: sorted.map((n) => n.cpu_total > 0 ? Math.round((n.cpu_allocated / n.cpu_total) * 100) : 0),
+        barMaxWidth: 32,
+        itemStyle: { color: getChartColor('warning'), borderRadius: [4, 4, 0, 0] },
       }],
     })
-  }, [nodes, isDark, mode])
+  }, [nodes, isDark, mode, chartTextColor, splitLineColor])
 
   // 分区作业 TOP10
   useEffect(() => {
@@ -263,30 +332,65 @@ export default function AdminOverview() {
     if (!partitionTop10Chart.current) partitionTop10Chart.current = echarts.init(partitionTop10Ref.current)
     const chart = partitionTop10Chart.current
 
-    // 按分区聚合节点数（实际应从作业统计）
+    // 按分区聚合运行作业的节点数
     const partMap: Record<string, number> = {}
     nodes.forEach((n) => {
-      const p = n.partition || 'default'
-      partMap[p] = (partMap[p] || 0) + (n.cpuAlloc > 0 ? 1 : 0)
+      const parts = n.partitions || []
+      if (parts.length === 0) return
+      parts.forEach(p => {
+        if (!partMap[p]) partMap[p] = 0
+        // 统计该分区下运行作业的节点数量
+        if (n.running_jobs && n.running_jobs > 0) {
+          partMap[p] += n.running_jobs
+        }
+      })
     })
+    
     const partData = Object.entries(partMap)
+      .filter(([_, v]) => v > 0) // 只显示有作业的分区
       .sort((a, b) => b[1] - a[1])
       .slice(0, 8)
 
+    if (partData.length === 0) {
+      chart.setOption({
+        backgroundColor: 'transparent',
+        graphic: [{
+          type: 'text',
+          left: 'center',
+          top: 'middle',
+          style: {
+            text: '暂无运行作业',
+            fontSize: 14,
+            fill: chartTextColor,
+          },
+        }],
+      })
+      return
+    }
+
     chart.setOption({
       backgroundColor: 'transparent',
-      grid: { top: 8, right: 12, bottom: 4, left: 72 },
+      grid: { top: 8, right: 12, bottom: 24, left: 12 },
       tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-      xAxis: { type: 'value', axisLabel: { color: chartTextColor, fontSize: 10 }, splitLine: { lineStyle: { color: splitLineColor } } },
-      yAxis: { type: 'category', data: partData.map(([p]) => p), axisLabel: { color: chartTextColor, fontSize: 10 } },
+      xAxis: { 
+        type: 'category', 
+        data: partData.map(([p]) => p), 
+        axisLabel: { color: chartTextColor, fontSize: 10, rotate: 0 },
+        axisLine: { lineStyle: { color: splitLineColor } },
+      },
+      yAxis: { 
+        type: 'value', 
+        axisLabel: { color: chartTextColor, fontSize: 10 }, 
+        splitLine: { lineStyle: { color: splitLineColor } },
+      },
       series: [{
         type: 'bar',
         data: partData.map(([, v]) => v),
-        barMaxWidth: 16,
-        itemStyle: { color: getChartColor('success'), borderRadius: [0, 4, 4, 0] },
+        barMaxWidth: 32,
+        itemStyle: { color: getChartColor('success'), borderRadius: [4, 4, 0, 0] },
       }],
     })
-  }, [nodes, isDark, mode])
+  }, [nodes, isDark, mode, chartTextColor, splitLineColor])
 
   // 响应 resize
   useEffect(() => {
@@ -302,16 +406,22 @@ export default function AdminOverview() {
 
   // 节点状态总览表格
   const nodeColumns: ColumnsType<NodeInfo> = [
-    { title: '节点', dataIndex: 'name', width: 120, fixed: 'left' },
+    { 
+      title: '节点', 
+      dataIndex: 'name', 
+      width: 120, 
+      fixed: 'left',
+      render: (name: string) => name.split('.')[0]
+    },
     { title: '状态', dataIndex: 'state', width: 90, render: nodeStateTag },
     {
       title: 'CPU',
       width: 180,
       render: (_, n) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 12, minWidth: 64, color: '#64748b' }}>{n.cpuAlloc}/{n.cpuTotal}</span>
+          <span style={{ fontSize: 12, minWidth: 64, color: '#64748b' }}>{n.cpu_allocated}/{n.cpu_total}</span>
           <Progress
-            percent={n.cpuTotal > 0 ? Math.round((n.cpuAlloc / n.cpuTotal) * 100) : 0}
+            percent={n.cpu_total > 0 ? Math.round((n.cpu_allocated / n.cpu_total) * 100) : 0}
             size="small"
             style={{ flex: 1, marginBottom: 0 }}
             strokeColor={mode === 'ocean' ? '#00b4d8' : '#6366f1'}
@@ -322,19 +432,23 @@ export default function AdminOverview() {
     {
       title: '内存',
       width: 180,
-      render: (_, n) => (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 12, minWidth: 64, color: '#64748b' }}>{n.memAlloc}/{n.memTotal}G</span>
-          <Progress
-            percent={n.memTotal > 0 ? Math.round((n.memAlloc / n.memTotal) * 100) : 0}
-            size="small"
-            style={{ flex: 1, marginBottom: 0 }}
-            strokeColor={mode === 'ocean' ? '#06ffa5' : '#10b981'}
-          />
-        </div>
-      ),
+      render: (_, n) => {
+        const memTotalGB = Math.round(n.memory_total_mb / 1024)
+        const memAllocGB = Math.round(n.memory_allocated_mb / 1024)
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 12, minWidth: 64, color: '#64748b' }}>{memAllocGB}/{memTotalGB}G</span>
+            <Progress
+              percent={n.memory_total_mb > 0 ? Math.round((n.memory_allocated_mb / n.memory_total_mb) * 100) : 0}
+              size="small"
+              style={{ flex: 1, marginBottom: 0 }}
+              strokeColor={mode === 'ocean' ? '#06ffa5' : '#10b981'}
+            />
+          </div>
+        )
+      },
     },
-    { title: '分区', dataIndex: 'partition', width: 100, render: (v) => v || '-' },
+    { title: '分区', dataIndex: 'partitions', width: 120, render: (v) => v?.join(', ') || '-' },
   ]
 
   if (loading && !stats) {
@@ -369,7 +483,7 @@ export default function AdminOverview() {
           <Card bordered={false} style={{ borderRadius: 10 }}>
             <Statistic
               title="总节点"
-              value={stats?.totalNodes ?? '-'}
+              value={stats?.total_nodes ?? '-'}
               suffix="台"
               prefix={<CloudServerOutlined style={{ color: mode === 'ocean' ? '#00b4d8' : '#3b82f6' }} />}
               valueStyle={{ fontSize: 24, fontWeight: 700, color: mode === 'ocean' ? '#00b4d8' : '#3b82f6' }}
@@ -379,9 +493,9 @@ export default function AdminOverview() {
         <Col xs={12} sm={8} lg={4}>
           <Card bordered={false} style={{ borderRadius: 10 }}>
             <Statistic
-              title="运行作业"
-              value={stats?.runningJobs ?? '-'}
-              suffix="个"
+              title="在线节点"
+              value={stats?.online_nodes ?? '-'}
+              suffix="台"
               prefix={<ThunderboltOutlined style={{ color: mode === 'ocean' ? '#06ffa5' : '#10b981' }} />}
               valueStyle={{ fontSize: 24, fontWeight: 700, color: mode === 'ocean' ? '#06ffa5' : '#10b981' }}
             />
@@ -390,9 +504,9 @@ export default function AdminOverview() {
         <Col xs={12} sm={8} lg={4}>
           <Card bordered={false} style={{ borderRadius: 10 }}>
             <Statistic
-              title="排队作业"
-              value={stats?.pendingJobs ?? '-'}
-              suffix="个"
+              title="空闲节点"
+              value={stats?.idle_nodes ?? '-'}
+              suffix="台"
               prefix={<BarChartOutlined style={{ color: mode === 'ocean' ? '#ffd166' : '#f59e0b' }} />}
               valueStyle={{ fontSize: 24, fontWeight: 700, color: mode === 'ocean' ? '#ffd166' : '#f59e0b' }}
             />
@@ -402,7 +516,7 @@ export default function AdminOverview() {
           <Card bordered={false} style={{ borderRadius: 10 }}>
             <Statistic
               title="CPU 利用率"
-              value={stats?.cpuUtil ?? '-'}
+              value={stats?.cpu_usage_percent != null ? stats.cpu_usage_percent.toFixed(2) : '-'}
               suffix="%"
               prefix={<DatabaseOutlined style={{ color: mode === 'ocean' ? '#00b4d8' : '#6366f1' }} />}
               valueStyle={{ fontSize: 24, fontWeight: 700, color: mode === 'ocean' ? '#00b4d8' : '#6366f1' }}
@@ -413,7 +527,7 @@ export default function AdminOverview() {
           <Card bordered={false} style={{ borderRadius: 10 }}>
             <Statistic
               title="内存利用率"
-              value={stats?.memUtil ?? '-'}
+              value={stats?.memory_usage_percent != null ? stats.memory_usage_percent.toFixed(2) : '-'}
               suffix="%"
               prefix={<DatabaseOutlined style={{ color: mode === 'ocean' ? '#06ffa5' : '#10b981' }} />}
               valueStyle={{ fontSize: 24, fontWeight: 700, color: mode === 'ocean' ? '#06ffa5' : '#10b981' }}
@@ -424,7 +538,7 @@ export default function AdminOverview() {
           <Card bordered={false} style={{ borderRadius: 10 }}>
             <Statistic
               title="活跃用户"
-              value={stats ? `${stats.activeUsers}/${stats.totalUsers}` : '-'}
+              value={stats ? `${stats.active_users ?? 0}/${stats.total_users ?? 0}` : '-'}
               prefix={<TeamOutlined style={{ color: mode === 'ocean' ? '#00b4d8' : '#8b5cf6' }} />}
               valueStyle={{ fontSize: 24, fontWeight: 700, color: mode === 'ocean' ? '#00b4d8' : '#8b5cf6' }}
             />

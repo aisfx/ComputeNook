@@ -54,6 +54,11 @@ func InitDatabase() error {
 		logger.Warn("Failed to create partition table: %v", err)
 	}
 
+	// 创建审计日志表
+	if err := createAuditTable(); err != nil {
+		logger.Warn("Failed to create audit_logs table: %v", err)
+	}
+
 	logger.Info("Database initialized successfully (type: %s)", dbType)
 	return nil
 }
@@ -319,5 +324,88 @@ func createBillingTables() error {
 	}
 
 	logger.Info("Billing tables created successfully")
+	return nil
+}
+
+// createAuditTable 创建审计日志表
+func createAuditTable() error {
+	dbType := os.Getenv("DB_TYPE")
+	if dbType == "" {
+		dbType = "sqlite"
+	}
+
+	var createSQL string
+	if dbType == "mysql" {
+		createSQL = `
+		CREATE TABLE IF NOT EXISTS audit_logs (
+			id BIGINT PRIMARY KEY AUTO_INCREMENT,
+			timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			username VARCHAR(255) NOT NULL,
+			user_role VARCHAR(50),
+			action VARCHAR(50) NOT NULL,
+			resource VARCHAR(100),
+			resource_id VARCHAR(255),
+			details TEXT,
+			ip_address VARCHAR(45),
+			access_host VARCHAR(255),
+			user_agent TEXT,
+			status VARCHAR(20) DEFAULT 'success',
+			error_msg TEXT,
+			duration BIGINT DEFAULT 0,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			INDEX idx_username (username),
+			INDEX idx_action (action),
+			INDEX idx_timestamp (timestamp),
+			INDEX idx_created_at (created_at)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+		`
+	} else {
+		createSQL = `
+		CREATE TABLE IF NOT EXISTS audit_logs (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+			username TEXT NOT NULL,
+			user_role TEXT,
+			action TEXT NOT NULL,
+			resource TEXT,
+			resource_id TEXT,
+			details TEXT,
+			ip_address TEXT,
+			access_host TEXT,
+			user_agent TEXT,
+			status TEXT DEFAULT 'success',
+			error_msg TEXT,
+			duration INTEGER DEFAULT 0,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		);
+		`
+		
+		// 创建索引
+		indexSQLs := []string{
+			`CREATE INDEX IF NOT EXISTS idx_audit_username ON audit_logs(username);`,
+			`CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_logs(action);`,
+			`CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_logs(timestamp);`,
+			`CREATE INDEX IF NOT EXISTS idx_audit_created_at ON audit_logs(created_at);`,
+		}
+		
+		if _, err := DB.Exec(createSQL); err != nil {
+			return fmt.Errorf("failed to create audit_logs table: %w", err)
+		}
+		
+		for _, sql := range indexSQLs {
+			if _, err := DB.Exec(sql); err != nil {
+				logger.Warn("Failed to create index: %v", err)
+			}
+		}
+		
+		logger.Info("audit_logs table created successfully")
+		return nil
+	}
+
+	if _, err := DB.Exec(createSQL); err != nil {
+		return fmt.Errorf("failed to create audit_logs table: %w", err)
+	}
+
+	logger.Info("audit_logs table created successfully")
 	return nil
 }

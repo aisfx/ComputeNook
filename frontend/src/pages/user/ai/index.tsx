@@ -289,10 +289,12 @@ export default function AIAssistant() {
           display: 'flex',
           flexDirection: 'column',
         }}
-        bodyStyle={{
-          flex: 1,
-          overflow: 'auto',
-          padding: messages.length === 0 ? 0 : 24,
+        styles={{
+          body: {
+            flex: 1,
+            overflow: 'auto',
+            padding: messages.length === 0 ? 0 : 24,
+          }
         }}
       >
         {messages.length === 0 ? (

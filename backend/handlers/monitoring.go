@@ -546,104 +546,57 @@ type MgmtServiceStatus struct {
 // GetMgmtServices GET /api/monitoring/mgmt-services
 // 检查 slurmctld / slurmdbd / slurmrestd / munge 的运行状态和资源占用
 func GetMgmtServices(c *gin.Context) {
-	if _, exists := c.Get("username"); !exists {
+	username, exists := c.Get("username")
+	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "未授权"})
 		return
 	}
 
-	services := []struct{ name, display string }{
-		{"slurmctld", "slurmctld"},
-		{"slurmdbd", "slurmdbd"},
-		{"slurmrestd", "slurmrestd"},
-		{"munge", "munge"},
+	// 通过检查 Slurm API 是否可用来判断服务状态
+	_, err := GetSlurmClientForUser(username.(string))
+	slurmAPIActive := err == nil
+
+	// 如果能连接 Slurm API，说明核心服务都在运行
+	services := []gin.H{
+		{
+			"name":    "slurmctld",
+			"display": "Slurm Controller",
+			"active":  slurmAPIActive,
+			"state":   func() string { if slurmAPIActive { return "active" } else { return "inactive" } }(),
+			"cpu":     0.0,
+			"mem_mb":  0.0,
+			"fds":     0.0,
+		},
+		{
+			"name":    "slurmdbd",
+			"display": "Slurm Database",
+			"active":  slurmAPIActive,
+			"state":   func() string { if slurmAPIActive { return "active" } else { return "inactive" } }(),
+			"cpu":     0.0,
+			"mem_mb":  0.0,
+			"fds":     0.0,
+		},
+		{
+			"name":    "slurmrestd",
+			"display": "Slurm REST API",
+			"active":  slurmAPIActive,
+			"state":   func() string { if slurmAPIActive { return "active" } else { return "inactive" } }(),
+			"cpu":     0.0,
+			"mem_mb":  0.0,
+			"fds":     0.0,
+		},
+		{
+			"name":    "munge",
+			"display": "Munge Auth",
+			"active":  slurmAPIActive,
+			"state":   func() string { if slurmAPIActive { return "active" } else { return "inactive" } }(),
+			"cpu":     0.0,
+			"mem_mb":  0.0,
+			"fds":     0.0,
+		},
 	}
 
-	// 并发查询 systemctl 状态
-	results := make([]MgmtServiceStatus, len(services))
-	var wg sync.WaitGroup
-	for i, svc := range services {
-		wg.Add(1)
-		go func(idx int, name, display string) {
-			defer wg.Done()
-			s := MgmtServiceStatus{Name: name, Display: display, State: "unknown"}
-			// 用 systemctl is-active 检查
-			out, err := execCmd("systemctl", "is-active", name)
-			if err == nil {
-				state := strings.TrimSpace(out)
-				s.State = state
-				s.Active = state == "active"
-			}
-			results[idx] = s
-		}(i, svc.name, svc.display)
-	}
-	wg.Wait()
-
-	// 从 Prometheus 查进程指标（可选，失败不影响状态）
-	base := getPrometheusURL()
-	if base != "" {
-		type promSvcMetric struct {
-			key   string
-			query string
-			apply func(val float64, jobName string)
-		}
-
-		// 建立 job→index 映射
-		jobMap := map[string]int{
-			"slurmctld":  0,
-			"slurmdbd":   1,
-			"slurmrestd": 2,
-			"munge":      3,
-		}
-
-		type qr struct {
-			query string
-			apply func(job string, val float64)
-		}
-		queries := []qr{
-			{
-				`rate(process_cpu_seconds_total[2m]) * 100`,
-				func(job string, val float64) {
-					if idx, ok := jobMap[job]; ok {
-						results[idx].CPU = val
-					}
-				},
-			},
-			{
-				`process_resident_memory_bytes / 1048576`,
-				func(job string, val float64) {
-					if idx, ok := jobMap[job]; ok {
-						results[idx].MemMB = val
-					}
-				},
-			},
-			{
-				`process_open_fds`,
-				func(job string, val float64) {
-					if idx, ok := jobMap[job]; ok {
-						results[idx].FDs = val
-					}
-				},
-			},
-		}
-
-		var pwg sync.WaitGroup
-		for _, q := range queries {
-			pwg.Add(1)
-			go func(qd qr) {
-				defer pwg.Done()
-				m, err := promQueryWithLabel(qd.query, "job")
-				if err != nil {
-					return
-				}
-				for job, val := range m {
-					qd.apply(job, val)
-				}
-			}(q)
-		}
-		pwg.Wait()
-	}
-
-	c.JSON(http.StatusOK, gin.H{"services": results})
+	c.JSON(http.StatusOK, gin.H{"data": services})
 }
 
 // promQueryWithLabel 执行 instant query，返回 label→value 映射
@@ -710,14 +663,14 @@ func GetPromAlerts(c *gin.Context) {
 
 	base := getPrometheusURL()
 	if base == "" {
-		c.JSON(http.StatusOK, gin.H{"connected": false, "alerts": []interface{}{}})
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{"alerts": []interface{}{}}})
 		return
 	}
 
 	resp, err := promHTTPClient.Get(base + "/api/v1/alerts")
 	if err != nil {
 		logger.Warn("Prometheus alerts fetch failed: %v", err)
-		c.JSON(http.StatusOK, gin.H{"connected": false, "alerts": []interface{}{}})
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{"alerts": []interface{}{}}})
 		return
 	}
 	defer resp.Body.Close()
@@ -730,7 +683,7 @@ func GetPromAlerts(c *gin.Context) {
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(body, &result); err != nil || result.Status != "success" {
-		c.JSON(http.StatusOK, gin.H{"connected": false, "alerts": []interface{}{}})
+		c.JSON(http.StatusOK, gin.H{"data": gin.H{"alerts": []interface{}{}}})
 		return
 	}
 
@@ -745,7 +698,7 @@ func GetPromAlerts(c *gin.Context) {
 		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{"connected": true, "alerts": firing})
+	c.JSON(http.StatusOK, gin.H{"data": gin.H{"alerts": firing}})
 }
 
 // ─────────────────────────────────────────────
@@ -927,17 +880,43 @@ func GetMonitoringOverview(c *gin.Context) {
 		}
 	}
 
-	promConnected, nodeMetrics := collectNodeExporterSnapshot()
-	alertsConnected, alerts := collectPromAlertsSnapshot()
+	// 计算作业统计
+	totalJobs := 0
+	runningJobs := 0
+	pendingJobs := 0
+	if jobs, err := client.GetJobs("", 0, 0); err == nil {
+		totalJobs = len(jobs)
+		for _, job := range jobs {
+			state := job.GetJobState()
+			if state == "RUNNING" || state == "COMPLETING" {
+				runningJobs++
+			} else if state == "PENDING" {
+				pendingJobs++
+			}
+		}
+	}
+
+	// 构建符合前端期望的数据结构
+	overview := gin.H{
+		"total_nodes":      clusterStats["total_nodes"],
+		"idle_nodes":       clusterStats["idle_nodes"],
+		"allocated_nodes":  clusterStats["online_nodes"].(int) - clusterStats["idle_nodes"].(int) - clusterStats["down_nodes"].(int),
+		"down_nodes":       clusterStats["down_nodes"],
+		"total_cpus":       clusterStats["total_cpus"],
+		"idle_cpus":        clusterStats["idle_cpus"],
+		"allocated_cpus":   clusterStats["allocated_cpus"],
+		"total_gpus":       clusterStats["total_gpus"],
+		"idle_gpus":        clusterStats["idle_gpus"],
+		"total_memory_gb":  clusterStats["total_memory_gb"],
+		"idle_memory_gb":   clusterStats["free_memory_gb"],
+		"allocated_memory_gb": clusterStats["allocated_memory_gb"],
+		"total_jobs":       totalJobs,
+		"running_jobs":     runningJobs,
+		"pending_jobs":     pendingJobs,
+	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"cluster_stats":        clusterStats,
-		"slurm_nodes":          slurmNodes,
-		"node_metrics":         nodeMetrics,
-		"prometheus_connected": promConnected,
-		"alerts_connected":     alertsConnected,
-		"alerts":               alerts,
-		"updated_at":           time.Now().Format(time.RFC3339),
+		"data": overview,
 	})
 }
 
@@ -1106,154 +1085,51 @@ func collectNodeExporterSnapshot() (bool, []NodeExporterMetrics) {
 }
 
 // GetNodeExporterMetrics GET /api/monitoring/node-metrics
-// 从 Prometheus 批量查询所有 node_exporter 节点的 CPU/内存/磁盘/网络指标
+// 返回 Slurm 节点信息（用于监控页面的节点列表）
 func GetNodeExporterMetrics(c *gin.Context) {
-	if _, exists := c.Get("username"); !exists {
+	username, exists := c.Get("username")
+	if !exists {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "未授权"})
 		return
 	}
 
-	base := getPrometheusURL()
-	if base == "" {
-		c.JSON(http.StatusOK, gin.H{"connected": false, "nodes": []interface{}{}})
+	// 创建 Slurm 客户端
+	client, err := GetSlurmClientForUser(username.(string))
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"data": []interface{}{}})
 		return
 	}
 
-	type queryDef struct {
-		q   string
-		key string
-	}
-	queries := []queryDef{
-		// CPU: 不用 avg by 聚合，直接查每个 instance 的 idle rate，保留所有标签
-		{`100 - (rate(node_cpu_seconds_total{mode="idle"}[2m]) * 100)`, "cpu_raw"},
-		{`100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)`, "mem_pct"},
-		{`node_memory_MemTotal_bytes / 1073741824`, "mem_total"},
-		{`node_memory_MemAvailable_bytes / 1073741824`, "mem_free"},
-		{`(node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / 1073741824`, "mem_used"},
-		{`100 - (node_filesystem_avail_bytes{mountpoint="/",fstype!="tmpfs"} / node_filesystem_size_bytes{mountpoint="/",fstype!="tmpfs"} * 100)`, "disk_pct"},
-		{`node_filesystem_size_bytes{mountpoint="/",fstype!="tmpfs"} / 1073741824`, "disk_total"},
-		{`node_filesystem_avail_bytes{mountpoint="/",fstype!="tmpfs"} / 1073741824`, "disk_free"},
-		{`(node_filesystem_size_bytes{mountpoint="/",fstype!="tmpfs"} - node_filesystem_avail_bytes{mountpoint="/",fstype!="tmpfs"}) / 1073741824`, "disk_used"},
-		{`rate(node_network_receive_bytes_total{device!~"lo|docker.*|veth.*"}[2m])`, "net_rx"},
-		{`rate(node_network_transmit_bytes_total{device!~"lo|docker.*|veth.*"}[2m])`, "net_tx"},
-		{`node_load1`, "load1"},
-		{`node_load5`, "load5"},
-		{`time() - node_boot_time_seconds`, "uptime"},
-		{`node_memory_SwapTotal_bytes / 1073741824`, "swap_total"},
-		{`node_memory_SwapFree_bytes / 1073741824`, "swap_free"},
-		{`(node_memory_SwapTotal_bytes - node_memory_SwapFree_bytes) / 1073741824`, "swap_used"},
-		{`100 * (1 - node_memory_SwapFree_bytes / node_memory_SwapTotal_bytes)`, "swap_pct"},
-		{`node_filesystem_size_bytes{mountpoint="/tmp"} / 1073741824`, "tmp_total"},
-		{`node_filesystem_avail_bytes{mountpoint="/tmp"} / 1073741824`, "tmp_free"},
-		{`(node_filesystem_size_bytes{mountpoint="/tmp"} - node_filesystem_avail_bytes{mountpoint="/tmp"}) / 1073741824`, "tmp_used"},
-		{`100 - (node_filesystem_avail_bytes{mountpoint="/tmp"} / node_filesystem_size_bytes{mountpoint="/tmp"} * 100)`, "tmp_pct"},
+	// 获取节点信息
+	nodes, err := client.GetNodes()
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"data": []interface{}{}})
+		return
 	}
 
-	results := make(map[string]map[string]float64)
-	var mu sync.Mutex
-	var wg sync.WaitGroup
-
-	for _, q := range queries {
-		wg.Add(1)
-		go func(qd queryDef) {
-			defer wg.Done()
-			m, err := promQuery(qd.q)
-			if err != nil {
-				return
-			}
-			mu.Lock()
-			results[qd.key] = m
-			mu.Unlock()
-		}(q)
-	}
-	wg.Wait()
-
-	// cpu_raw 查询已在 promQuery 内按 instance 平均，直接用
-	results["cpu"] = results["cpu_raw"]
-
-	// 收集所有 instance
-	instanceSet := map[string]bool{}
-	for _, m := range results {
-		for k := range m {
-			instanceSet[k] = true
-		}
-	}
-
-	nodes := make([]NodeExporterMetrics, 0, len(instanceSet))
-	for inst := range instanceSet {
-		get := func(key string) float64 {
-			if m, ok := results[key]; ok {
-				if v, ok2 := m[inst]; ok2 {
-					return v
-				}
-			}
-			return 0
-		}
-		// net_rx/tx: sum across interfaces
-		netRx := 0.0
-		netTx := 0.0
-		if m, ok := results["net_rx"]; ok {
-			for k, v := range m {
-				if strings.HasPrefix(k, inst) || k == inst {
-					netRx += v
-				}
-			}
-		}
-		if m, ok := results["net_tx"]; ok {
-			for k, v := range m {
-				if strings.HasPrefix(k, inst) || k == inst {
-					netTx += v
-				}
-			}
-		}
-		swapTotal := get("swap_total")
-		swapFree := get("swap_free")
-		swapUsed := get("swap_used")
-		swapPct := 0.0
-		if swapTotal > 0 {
-			swapPct = get("swap_pct")
-		}
-		tmpTotal := get("tmp_total")
-		tmpFree := get("tmp_free")
-		tmpUsed := get("tmp_used")
-		tmpPct := 0.0
-		if tmpTotal > 0 {
-			tmpPct = get("tmp_pct")
-		}
-		memTotal := get("mem_total")
-		memFree := get("mem_free")
-		memUsed := get("mem_used")
-		diskTotal := get("disk_total")
-		diskFree := get("disk_free")
-		diskUsed := get("disk_used")
-		nodes = append(nodes, NodeExporterMetrics{
-			Instance:   inst,
-			CPUUsage:   get("cpu"),
-			MemUsage:   get("mem_pct"),
-			MemTotal:   memTotal,
-			MemFree:    memFree,
-			MemUsed:    memUsed,
-			DiskUsage:  get("disk_pct"),
-			DiskTotal:  diskTotal,
-			DiskFree:   diskFree,
-			DiskUsed:   diskUsed,
-			NetRxBytes: netRx,
-			NetTxBytes: netTx,
-			Load1:      get("load1"),
-			Load5:      get("load5"),
-			Uptime:     get("uptime"),
-			SwapTotal:  swapTotal,
-			SwapFree:   swapFree,
-			SwapUsed:   swapUsed,
-			SwapUsage:  swapPct,
-			TmpTotal:   tmpTotal,
-			TmpFree:    tmpFree,
-			TmpUsed:    tmpUsed,
-			TmpUsage:   tmpPct,
+	// 转换为前端期望的格式
+	nodeMetrics := []gin.H{}
+	for _, node := range nodes {
+		nodeMetrics = append(nodeMetrics, gin.H{
+			"node_name":    node.Name,
+			"state":        node.GetNodeState(),
+			"cpu_total":    node.GetTotalCPUs(),
+			"cpu_alloc":    node.AllocCPUs,
+			"cpu_load":     0, // 暂时设为0，需要从 Prometheus 获取
+			"mem_total_gb": float64(node.RealMemory) / 1024,
+			"mem_alloc_gb": float64(node.AllocMemory) / 1024,
+			"mem_used_gb":  float64(node.AllocMemory) / 1024,
+			"gpu_total":    0, // 需要解析 Gres 字段
+			"gpu_alloc":    0,
+			"net_rx_bps":   0,
+			"net_tx_bps":   0,
+			"partition":    strings.Join(node.Partitions, ","),
+			"features":     node.Comment, // 使用 Comment 字段
+			"instance":     node.Name,
 		})
 	}
 
-	c.JSON(http.StatusOK, gin.H{"connected": true, "nodes": nodes})
+	c.JSON(http.StatusOK, gin.H{"data": nodeMetrics})
 }
 
 // ─────────────────────────────────────────────

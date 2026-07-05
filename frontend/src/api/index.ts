@@ -2,8 +2,8 @@ import axios from 'axios'
 
 // ─── 认证 ────────────────────────────────────────────────
 export const authAPI = {
-  login: async (username: string, password: string, captchaId?: string, captchaAnswer?: string) => {
-    const res = await axios.post('/login', { username, password, captchaId, captchaAnswer })
+  login: async (username: string, password: string, captchaId?: string, captchaVal?: string, rememberMe?: boolean) => {
+    const res = await axios.post('/login', { username, password, captchaId, captchaVal, rememberMe })
     return res.data
   },
   getCurrentUser: async () => {
@@ -267,11 +267,15 @@ export const dashboardAPI = {
     return res.data.data
   },
   getNodeMetrics: async () => {
-    const res = await axios.get('/dashboard/node-metrics')
+    const res = await axios.get('/dashboard/nodes')
     return res.data.data
   },
   getAlerts: async () => {
     const res = await axios.get('/dashboard/alerts')
+    return res.data.data
+  },
+  getUserJobStats: async () => {
+    const res = await axios.get('/dashboard/user-job-stats')
     return res.data.data
   },
 }
@@ -285,5 +289,13 @@ export const usageAPI = {
   getAllUsersRecords: async (startTime: string, endTime: string) => {
     const res = await axios.get('/usage/all-records', { params: { start_time: startTime, end_time: endTime } })
     return res.data
+  },
+}
+
+// ─── 系统配置 ─────────────────────────────────────────────
+export const configAPI = {
+  getSystemConfig: async () => {
+    const res = await axios.get('/api/config')
+    return res.data.data
   },
 }

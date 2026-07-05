@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Card, Table, Button, Modal, Form, Input, Select, Space, Tag, App } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { PlusOutlined, ReloadOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
-import { associationAPI, slurmUserAPI, slurmAccountAPI } from '@/api'
+import { associationAPI, slurmUserAPI, slurmAccountAPI, configAPI } from '@/api'
 
 interface Association {
   user?: string
@@ -28,6 +28,7 @@ export default function AdminAssociations() {
   const [original, setOriginal] = useState<Association | null>(null)
   const [form] = Form.useForm()
   const [saving, setSaving] = useState(false)
+  const [clusterName, setClusterName] = useState('cluster')
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -46,13 +47,23 @@ export default function AdminAssociations() {
     finally { setLoading(false) }
   }, [])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => { 
+    load()
+    // Fetch cluster name from config
+    configAPI.getSystemConfig().then(config => {
+      if (config?.cluster_name) {
+        setClusterName(config.cluster_name)
+      }
+    }).catch(() => {
+      // Silently fail, use default value
+    })
+  }, [load])
 
   const openAdd = async () => {
     setIsEdit(false)
     setOriginal(null)
     form.resetFields()
-    form.setFieldsValue({ cluster: 'cluster' })
+    form.setFieldsValue({ cluster: clusterName })
     try {
       const [u, a] = await Promise.all([slurmUserAPI.getUsers(), slurmAccountAPI.getAccounts()])
       setUsers(u || [])

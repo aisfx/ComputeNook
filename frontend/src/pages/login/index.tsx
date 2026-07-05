@@ -59,7 +59,8 @@ export default function LoginPage() {
         values.username,
         values.password,
         captcha?.captchaId,
-        values.captcha
+        values.captcha,
+        rememberMe
       )
 
       if (res.mfaRequired) {
@@ -177,7 +178,13 @@ export default function LoginPage() {
 
               {error && <div className="error-alert">{error}</div>}
 
-              <Form form={form} onFinish={onFinish} layout="vertical" requiredMark={false}>
+              <Form 
+                form={form} 
+                onFinish={onFinish} 
+                layout="vertical" 
+                requiredMark={false}
+                initialValues={{ username: '', password: '', captcha: '' }}
+              >
                 <div className="field">
                   <label htmlFor="username">用户名</label>
                   <Form.Item name="username" rules={[{ required: true, message: '请输入用户名' }]} noStyle>

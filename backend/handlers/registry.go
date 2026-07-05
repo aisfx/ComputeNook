@@ -584,16 +584,16 @@ func SaveContainerImage(c *gin.Context) {
 			useComputeNode bool // true=计算节点(srun), false=登录节点(直接执行)
 		}{
 			{1, "导出容器 squashfs...", fmt.Sprintf(
-				`srun --jobid=%d --overlap bash -c '`+
+				`srun --jobid=%d --overlap bash -c 'export USER=%s && `+
 					`CONTAINER=$(enroot list 2>/dev/null | grep "^pyxis_%d\." | head -1); `+
 					`if [ -z "$CONTAINER" ]; then echo "ERROR: 未找到容器实例 pyxis_%d.*" >&2; exit 1; fi; `+
 					`enroot export --output "%s" "$CONTAINER"'`,
-				req.JobID, req.JobID, req.JobID, exportPath), true},
+				req.JobID, username, req.JobID, req.JobID, exportPath), true},
 			{2, "解压 rootfs...", fmt.Sprintf(
-				`srun --jobid=%d --overlap bash -c 'unsquashfs -f -d "%s" "%s"'`,
-				req.JobID, rootfsDir, exportPath), true},
+				`srun --jobid=%d --overlap bash -c 'export USER=%s && unsquashfs -f -d "%s" "%s"'`,
+				req.JobID, username, rootfsDir, exportPath), true},
 			{3, "构建 docker archive...", fmt.Sprintf(
-				`srun --jobid=%d --overlap bash -c '`+
+				`srun --jobid=%d --overlap bash -c 'export USER=%s && `+
 					`tar -C "%s" -cf "%s" . && `+
 					`LAYER_SHA=$(sha256sum "%s" | awk '"'"'{print $1}'"'"') && `+
 					`CONFIG_JSON="{\"architecture\":\"amd64\",\"os\":\"linux\",\"rootfs\":{\"type\":\"layers\",\"diff_ids\":[\"sha256:$LAYER_SHA\"]}}" && `+
@@ -603,7 +603,7 @@ func SaveContainerImage(c *gin.Context) {
 					`cp "%s" "%s/${LAYER_SHA}.tar" && `+
 					`echo "[{\"Config\":\"${CONFIG_SHA}.json\",\"RepoTags\":[\"%s\"],\"Layers\":[\"${LAYER_SHA}.tar\"]}]" > "%s/manifest.json" && `+
 					`tar -C "%s" -cf "%s" .'`,
-				req.JobID,
+				req.JobID, username,
 				rootfsDir, layerTar,
 				layerTar,
 				ociWorkDir,
@@ -611,9 +611,9 @@ func SaveContainerImage(c *gin.Context) {
 				targetImage, ociWorkDir,
 				ociWorkDir, dockerTar), true},
 			{4, "推送到 Harbor...", fmt.Sprintf(
-				`srun --jobid=%d --overlap bash -c 'HARBOR_USER=%s HARBOR_PASS=%s skopeo copy --insecure-policy --dest-creds "$HARBOR_USER:$HARBOR_PASS" --dest-tls-verify=false docker-archive:%s docker://%s && `+
+				`srun --jobid=%d --overlap bash -c 'export USER=%s && HARBOR_USER=%s HARBOR_PASS=%s skopeo copy --insecure-policy --dest-creds "$HARBOR_USER:$HARBOR_PASS" --dest-tls-verify=false docker-archive:%s docker://%s && `+
 					`rm -rf %s %s %s %s %s'`,
-				req.JobID,
+				req.JobID, username,
 				singleQuoteEscape(harborUser), singleQuoteEscape(harborPass),
 				dockerTar, targetImage,
 				exportPath, rootfsDir, layerTar, ociWorkDir, dockerTar), true},

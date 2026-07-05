@@ -332,7 +332,7 @@ export default function RegistryManagement() {
             borderTop: 0,
             marginBottom: 0
           }}
-          bodyStyle={{ padding: '12px 24px' }}
+          styles={{ body: { padding: '12px 24px' } }}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <Space>
@@ -477,7 +477,7 @@ export default function RegistryManagement() {
                     borderColor: selectedProject?.project_id === project.project_id ? '#1890ff' : '#f0f0f0',
                     transition: 'all 0.2s'
                   }}
-                  bodyStyle={{ padding: 12 }}
+                  styles={{ body: { padding: 12 } }}
                   hoverable
                 >
                   <Space direction="vertical" size={8} style={{ width: '100%' }}>
@@ -600,7 +600,7 @@ export default function RegistryManagement() {
                       boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
                       height: 'fit-content'
                     }}
-                    bodyStyle={{ padding: 16 }}
+                    styles={{ body: { padding: 16 } }}
                   >
                     <Space direction="vertical" size={10} style={{ width: '100%' }}>
                       {/* 仓库名称和图标 */}

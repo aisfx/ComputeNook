@@ -102,6 +102,9 @@ func main() {
 
 	// 运行时配置（前端通过 /config.js 读取）
 	r.GET("/config.js", handlers.GetRuntimeConfig)
+	
+	// 系统配置（前端通过 /api/config 读取）
+	r.GET("/api/config", handlers.GetSystemConfig)
 
 	// API 文档（公开访问）
 	r.GET("/api", handlers.GetAPIDocs)
@@ -436,6 +439,7 @@ func main() {
 		{
 			dashboard.GET("/stats", cache.CacheMiddleware(cache.PrefixDashboard+"stats:", 30*time.Second), handlers.GetDashboardStats)
 			dashboard.GET("/nodes", cache.CacheMiddleware(cache.PrefixDashboard+"nodes:", 30*time.Second), handlers.GetDashboardNodes)
+			dashboard.GET("/user-job-stats", cache.CacheMiddleware(cache.PrefixDashboard+"user-job-stats:", 30*time.Second), handlers.GetDashboardUserJobStats)
 			// 前端新增接口（返回空数据或从监控接口获取）
 			dashboard.GET("/node-metrics", cache.CacheMiddleware(cache.PrefixDashboard+"node-metrics:", 30*time.Second), handlers.GetDashboardNodeMetrics)
 			dashboard.GET("/alerts", cache.CacheMiddleware(cache.PrefixDashboard+"alerts:", 30*time.Second), handlers.GetDashboardAlerts)

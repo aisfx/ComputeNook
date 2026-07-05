@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 	
@@ -9,6 +10,7 @@ import (
 	"hpc-backend/cache"
 	"hpc-backend/slurm"
 	"hpc-backend/logger"
+	"hpc-backend/models"
 )
 
 // DashboardStats 仪表盘统计信息
@@ -39,8 +41,8 @@ type DashboardStats struct {
 	IdleGPUs      int `json:"idle_gpus"`
 	
 	// 用户统计（仅管理员可见）
-	TotalUsers  int `json:"totalUsers,omitempty"`
-	ActiveUsers int `json:"activeUsers,omitempty"`
+	TotalUsers  int `json:"total_users,omitempty"`
+	ActiveUsers int `json:"active_users,omitempty"`
 }
 
 // GetDashboardStats 获取仪表盘统计信息
@@ -396,32 +398,106 @@ func getUserStatistics(client *slurm.Client) (totalUsers int, activeUsers int) {
 	users, err := client.GetSlurmUsers()
 	if err != nil {
 		logger.Error("Failed to get users for statistics: %v", err)
-		return 0, 0
+		// 尝试从数据库获取用户总数
+		if models.DB != nil {
+			var count int
+			err := models.DB.QueryRow("SELECT COUNT(*) FROM users").Scan(&count)
+			if err == nil {
+				totalUsers = count
+				logger.Info("Got total users from DB: %d", totalUsers)
+			} else {
+				logger.Error("Failed to count users from DB: %v", err)
+			}
+		}
+	} else {
+		totalUsers = len(users)
+		logger.Info("Got total users from Slurm: %d", totalUsers)
 	}
 	
-	totalUsers = len(users)
-	
-	// 获取最近的作业列表（最多1000条），统计活跃用户
-	jobs, err := client.GetJobs("", 0, 1000)
-	if err != nil {
-		logger.Error("Failed to get jobs for active user statistics: %v", err)
-		return totalUsers, 0
+	// 统计最近24小时内登录过平台的用户（从数据库查询）
+	if models.DB != nil {
+		yesterday := time.Now().Add(-24 * time.Hour)
+		
+		// 先检查 audit_logs 表是否存在以及是否有数据
+		var tableExists int
+		checkTableSQL := `SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='audit_logs'`
+		if err := models.DB.QueryRow(checkTableSQL).Scan(&tableExists); err != nil {
+			logger.Error("Failed to check audit_logs table: %v", err)
+		} else if tableExists == 0 {
+			logger.Warn("audit_logs table does not exist")
+		} else {
+			// 查询表中总记录数
+			var totalRecords int
+			if err := models.DB.QueryRow("SELECT COUNT(*) FROM audit_logs").Scan(&totalRecords); err == nil {
+				logger.Info("audit_logs table has %d total records", totalRecords)
+			}
+			
+			// 查询最近24小时的登录记录数
+			var recentLogins int
+			recentQuery := `SELECT COUNT(*) FROM audit_logs WHERE action = 'login' AND created_at > ?`
+			if err := models.DB.QueryRow(recentQuery, yesterday).Scan(&recentLogins); err == nil {
+				logger.Info("Found %d login records in last 24h", recentLogins)
+			}
+		}
+		
+		// 查询最近24小时内登录的唯一用户
+		query := `
+			SELECT COUNT(DISTINCT username) 
+			FROM audit_logs 
+			WHERE action = 'login' 
+			AND created_at > ? 
+			AND username != ''
+		`
+		
+		var count int
+		err := models.DB.QueryRow(query, yesterday).Scan(&count)
+		if err != nil {
+			logger.Error("Failed to count active users from audit logs: %v", err)
+			activeUsers = 0
+		} else {
+			activeUsers = count
+			logger.Info("Counted %d active users in last 24h", activeUsers)
+		}
+		
+		// 调试：查询具体的活跃用户
+		if activeUsers > 0 {
+			usersQuery := `
+				SELECT DISTINCT username 
+				FROM audit_logs 
+				WHERE action = 'login' 
+				AND created_at > ? 
+				AND username != ''
+				LIMIT 10
+			`
+			rows, err := models.DB.Query(usersQuery, yesterday)
+			if err == nil {
+				var usernames []string
+				for rows.Next() {
+					var username string
+					if err := rows.Scan(&username); err == nil {
+						usernames = append(usernames, username)
+					}
+				}
+				rows.Close()
+				logger.Info("Active users in last 24h: %v", usernames)
+			}
+		} else {
+			logger.Info("No active users found in last 24h")
+		}
+	} else {
+		logger.Error("Database connection is nil")
 	}
 	
-	// 统计最近7天内有作业的用户
-	sevenDaysAgo := time.Now().AddDate(0, 0, -7).Unix()
-	activeUserMap := make(map[string]bool)
-	
-	for _, job := range jobs {
-		// 检查作业提交时间或开始时间
-		submitTime := job.GetSubmitTime()
-		if submitTime > sevenDaysAgo {
-			activeUserMap[job.UserName] = true
+	// 如果总用户数为0，从数据库获取
+	if totalUsers == 0 && models.DB != nil {
+		var count int
+		err := models.DB.QueryRow("SELECT COUNT(*) FROM users").Scan(&count)
+		if err == nil {
+			totalUsers = count
 		}
 	}
 	
-	activeUsers = len(activeUserMap)
-	logger.Info("User statistics: total=%d, active=%d (last 7 days)", totalUsers, activeUsers)
+	logger.Info("User statistics: total=%d, active=%d (last 24 hours)", totalUsers, activeUsers)
 	
 	return totalUsers, activeUsers
 }
@@ -442,4 +518,67 @@ func GetDashboardAlerts(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"data": []interface{}{},
 	})
+}
+
+// GetDashboardUserJobStats 获取用户作业统计（用于用户活跃 TOP10）
+func GetDashboardUserJobStats(c *gin.Context) {
+	username, _ := c.Get("username")
+	
+	// 创建 Slurm 客户端
+	client, err := GetSlurmClientForUser(username.(string))
+	if err != nil {
+		logger.Error("Failed to create Slurm client: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to connect to Slurm"})
+		return
+	}
+	
+	// 获取最近的作业（不限制时间，获取所有作业）
+	jobs, err := client.GetJobs("", 0, 0)
+	if err != nil {
+		logger.Error("Failed to get jobs: %v", err)
+		c.JSON(http.StatusOK, gin.H{"data": []interface{}{}})
+		return
+	}
+	
+	logger.Info("Total jobs retrieved for user stats: %d", len(jobs))
+	
+	// 统计每个用户的作业数（包括运行中和最近完成的）
+	userJobCount := make(map[string]int)
+	for _, job := range jobs {
+		state := job.GetJobState()
+		logger.Info("Job %s: user=%s, state=%s", job.JobID, job.UserName, state)
+		// 统计运行中、挂起、完成的作业
+		if state == "RUNNING" || state == "PENDING" || state == "COMPLETING" {
+			userJobCount[job.UserName]++
+		}
+	}
+	
+	// 转换为数组并排序
+	type UserJobStat struct {
+		Username string `json:"username"`
+		JobCount int    `json:"job_count"`
+	}
+	
+	stats := make([]UserJobStat, 0, len(userJobCount))
+	for username, count := range userJobCount {
+		if count > 0 {
+			stats = append(stats, UserJobStat{
+				Username: username,
+				JobCount: count,
+			})
+		}
+	}
+	
+	// 按作业数排序
+	sort.Slice(stats, func(i, j int) bool {
+		return stats[i].JobCount > stats[j].JobCount
+	})
+	
+	// 只返回前10个
+	if len(stats) > 10 {
+		stats = stats[:10]
+	}
+	
+	logger.Info("User job stats: %d users with active jobs", len(stats))
+	c.JSON(http.StatusOK, gin.H{"data": stats})
 }

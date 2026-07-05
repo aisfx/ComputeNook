@@ -28,3 +28,17 @@ func GetRuntimeConfig(c *gin.Context) {
 	c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
 	c.String(http.StatusOK, js)
 }
+
+// GetSystemConfig 返回系统配置信息（公开接口，无需认证）
+func GetSystemConfig(c *gin.Context) {
+	clusterName := os.Getenv("SLURM_CLUSTER_NAME")
+	if clusterName == "" {
+		clusterName = "cluster" // 默认值
+	}
+	
+	c.JSON(http.StatusOK, gin.H{
+		"data": gin.H{
+			"cluster_name": clusterName,
+		},
+	})
+}

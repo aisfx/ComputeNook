@@ -150,6 +150,21 @@ func AuditMiddleware() gin.HandlerFunc {
 					userRole = role
 				}
 			}
+		} else if usernameVal, exists := c.Get("username"); exists {
+			// 从认证中间件设置的 username 获取
+			if un, ok := usernameVal.(string); ok && un != "" {
+				username = un
+			}
+		}
+		
+		// 如果是登录请求且用户名仍然是 anonymous，尝试从请求体获取
+		if username == "anonymous" && strings.Contains(c.FullPath(), "/login") && len(requestBody) > 0 {
+			var loginReq map[string]interface{}
+			if err := json.Unmarshal(requestBody, &loginReq); err == nil {
+				if un, ok := loginReq["username"].(string); ok && un != "" {
+					username = un
+				}
+			}
 		}
 
 		// 解析操作和资源

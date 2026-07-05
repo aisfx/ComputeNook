@@ -58,10 +58,10 @@ type Job struct {
 	WorkingDirectory string `json:"working_directory"`
 	Stdout           string `json:"stdout"`
 	Stderr           string `json:"stderr"`
-	Comment          string `json:"comment"` // 作业注释
 	
 	// 容器相关字段（slurmdb 返回字符串，slurmctld 返回对象，用 RawMessage 兼容）
 	Container   json.RawMessage `json:"container"`
+	Comment     json.RawMessage `json:"comment"` // 作业注释（可能是字符串或对象）
 	Environment []string        `json:"environment"`
 }
 
@@ -118,6 +118,36 @@ func (j *Job) GetEndTime() int64 {
 	return j.Time.End
 }
 
+// GetComment 获取作业注释（兼容字符串和对象格式）
+func (j *Job) GetComment() string {
+	if len(j.Comment) == 0 {
+		return ""
+	}
+	
+	// 尝试解析为字符串
+	var commentStr string
+	if err := json.Unmarshal(j.Comment, &commentStr); err == nil {
+		return commentStr
+	}
+	
+	// 如果是对象，尝试提取 administrator 或 user 字段
+	var commentObj struct {
+		Administrator string `json:"administrator"`
+		User          string `json:"user"`
+	}
+	if err := json.Unmarshal(j.Comment, &commentObj); err == nil {
+		if commentObj.Administrator != "" {
+			return commentObj.Administrator
+		}
+		if commentObj.User != "" {
+			return commentObj.User
+		}
+	}
+	
+	// 返回原始 JSON 字符串
+	return string(j.Comment)
+}
+
 // GetUser 获取用户名
 func (j *Job) GetUser() string {
 	// 优先使用新版本API的字段
@@ -141,7 +171,7 @@ func (j *Job) GetWorkingDirectory() string {
 // IsContainerJob 判断是否为容器作业
 func (j *Job) IsContainerJob() bool {
 	// 最优先：检查我们设置的 comment 标记
-	if j.Comment == "CONTAINER_JOB" {
+	if j.GetComment() == "CONTAINER_JOB" {
 		return true
 	}
 	
@@ -257,6 +287,10 @@ func (c *Client) GetJobs(username string, startTime, endTime int64) ([]Job, erro
 			logger.Info("Slurm API returned errors for running jobs: %s", runningResponse.Errors[0].Error)
 		} else {
 			logger.Info("Found %d running jobs", len(runningResponse.Jobs))
+			// 调试：打印每个运行中作业的详细信息
+			for i, job := range runningResponse.Jobs {
+				logger.Info("Running job[%d]: JobID=%d, User=%s, State=%v", i, job.JobID, job.UserName, job.JobState)
+			}
 			allJobs = append(allJobs, runningResponse.Jobs...)
 		}
 	}
@@ -338,21 +372,50 @@ func (c *Client) GetJobs(username string, startTime, endTime int64) ([]Job, erro
 	
 	// 去重（根据job_id）
 	jobMap := make(map[int64]Job)
+	skippedCount := 0
 	for _, job := range jobs {
+		// 跳过无效的作业ID
+		if job.JobID == 0 {
+			logger.Warn("Skipping job with invalid JobID=0, User=%s, State=%s", job.UserName, job.GetJobState())
+			skippedCount++
+			continue
+		}
+		
+		logger.Info("Processing job for dedup: JobID=%d, User=%s, State=%s", job.JobID, job.UserName, job.GetJobState())
 		// 如果已存在，保留状态更新的（运行中的优先）
 		if existingJob, exists := jobMap[job.JobID]; exists {
-			// 如果新作业是运行中的，替换旧的
-			if job.GetJobState() == "RUNNING" || job.GetJobState() == "PENDING" {
+			logger.Info("  -> Job %d already exists, comparing...", job.JobID)
+			// 优先保留有用户名的作业
+			if job.UserName != "" && existingJob.UserName == "" {
+				logger.Info("  -> Replacing with new job (has username)")
+				jobMap[job.JobID] = job
+			} else if job.UserName == "" && existingJob.UserName != "" {
+				// 保留已存在的有用户名的作业
+				logger.Info("  -> Keeping existing job (has username)")
+				continue
+			} else if job.GetJobState() == "RUNNING" || job.GetJobState() == "PENDING" {
+				// 如果新作业是运行中的，替换旧的
+				logger.Info("  -> Replacing with new job (RUNNING/PENDING)")
 				jobMap[job.JobID] = job
 			} else if existingJob.GetJobState() != "RUNNING" && existingJob.GetJobState() != "PENDING" {
 				// 两个都是完成状态，保留提交时间更晚的
 				if job.GetSubmitTime() > existingJob.GetSubmitTime() {
+					logger.Info("  -> Replacing with new job (newer)")
 					jobMap[job.JobID] = job
+				} else {
+					logger.Info("  -> Keeping existing job (newer)")
 				}
+			} else {
+				logger.Info("  -> Keeping existing job (default)")
 			}
 		} else {
+			logger.Info("  -> Adding new job to map")
 			jobMap[job.JobID] = job
 		}
+	}
+	
+	if skippedCount > 0 {
+		logger.Info("Skipped %d jobs with invalid JobID=0", skippedCount)
 	}
 	
 	// 转换回数组
@@ -362,6 +425,12 @@ func (c *Client) GetJobs(username string, startTime, endTime int64) ([]Job, erro
 	}
 	
 	logger.Info("GetJobs returned %d unique jobs (from %d total)", len(uniqueJobs), len(allJobs))
+	
+	// 调试：打印每个唯一作业的信息
+	for _, job := range uniqueJobs {
+		logger.Info("Unique job: ID=%d, User=%s, State=%s", job.JobID, job.UserName, job.GetJobState())
+	}
+	
 	return uniqueJobs, nil
 }
 

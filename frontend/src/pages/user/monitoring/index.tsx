@@ -54,18 +54,18 @@ function Gauge({ value, warn = 80, label }: { value: number; warn?: number; labe
 function SparkLine({ data, color = '#6366f1', height = 48 }: { data: number[]; color?: string; height?: number }) {
   if (!data.length) return <div style={{ height }} />
   const max = Math.max(...data, 1)
-  const min = Math.min(...data)
+  const min = Math.min(...data, 0)
   const w = 200, h = height
   const pts = data.map((v, i) => {
     const x = (i / (data.length - 1 || 1)) * w
-    const y = h - ((v - min) / ((max - min) || 1)) * (h - 4) - 2
+    const y = h - ((v - min) / ((max - min) || 1)) * (h - 8) - 4
     return `${x},${y}`
   }).join(' ')
   return (
     <svg viewBox={`0 0 ${w} ${h}`} style={{ width: '100%', height }}>
-      <polyline points={pts} fill="none" stroke={color} strokeWidth="2" />
-      <text x="2" y={h - 2} fontSize="9" fill="#888">{min.toFixed(1)}</text>
-      <text x="2" y="10" fontSize="9" fill="#888">{max.toFixed(1)}</text>
+      <polyline points={pts} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <text x="4" y={h - 4} fontSize="10" fill="#888" fontFamily="monospace">{min.toFixed(0)}</text>
+      <text x="4" y="12" fontSize="10" fill="#888" fontFamily="monospace">{max.toFixed(0)}</text>
     </svg>
   )
 }
